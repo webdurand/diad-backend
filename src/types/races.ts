@@ -1,6 +1,6 @@
 import { LanguageType } from './languages';
 import { HabilityScores } from './stats';
-import { Subrace, SubraceNameEnum } from './subraces';
+import { Subrace } from './subraces';
 import { TraitNameType } from './traits';
 
 export enum RaceNameEnum {
