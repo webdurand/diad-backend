@@ -10,7 +10,8 @@ type ChoiceType =
   | 'draconic_ancestry'
   | 'stat_increase'
   | 'skill_proficiency'
-  | 'feat';
+  | 'feat'
+  | 'cantrip';
 
 interface ChoiceOption {
   label: string;
@@ -36,7 +37,8 @@ interface Subrace {
   name: SubraceNameEnum;
   additional_stats: Partial<HabilityScores>;
   override_base_stats?: Partial<HabilityScores>;
-  additional_traits: string[];
+  override_speed?: number;
+  additional_traits: TraitNameType[];
   choices?: RaceChoice[];
 }
 
@@ -62,7 +64,7 @@ export const races: Race[] = [
     fixed_traits: [
       'Visão no Escuro',
       'Resiliência Anã',
-      'Treinamento Anão com Armaduras',
+      'Treinamento Anão em Combate',
       'Especialização em Rochas',
     ],
     fixed_skills: [],
@@ -103,18 +105,24 @@ export const races: Race[] = [
       {
         name: SubraceNameEnum.HIGH_ELF,
         additional_stats: { intelligence: 1 },
-        additional_traits: [
-          'Treinamento Élfico com Armas',
-          'Truque Extra (Mago)',
+        additional_traits: ['Treinamento Élfico com Armas', 'Truque'],
+        choices: [
+          { type: 'language', amount: 1, options: 'all' },
+          {
+            type: 'cantrip',
+            amount: 1,
+            options: 'all',
+            description: 'Truque da lista de Mago',
+          },
         ],
-        choices: [{ type: 'language', amount: 1, options: 'all' }],
       },
       {
         name: SubraceNameEnum.WOOD_ELF,
         additional_stats: { wisdom: 1 },
+        override_speed: 10.5,
         additional_traits: [
           'Treinamento Élfico com Armas',
-          'Pés Ligeiros (+1.5m deslocamento)',
+          'Pés Ligeiros',
           'Máscara da Natureza',
         ],
       },
@@ -171,7 +179,14 @@ export const races: Race[] = [
     subraces: [
       {
         name: SubraceNameEnum.HUMAN_VARIANT,
-        override_base_stats: {},
+        override_base_stats: {
+          strength: 0,
+          dexterity: 0,
+          constitution: 0,
+          intelligence: 0,
+          wisdom: 0,
+          charisma: 0,
+        },
         additional_stats: {},
         additional_traits: [],
         choices: [
@@ -194,7 +209,11 @@ export const races: Race[] = [
     speed: 9.0,
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.DRACONIC],
-    fixed_traits: ['Arma de Sopro', 'Resistência a Dano'],
+    fixed_traits: [
+      'Ancestral Dracônico',
+      'Arma de Sopro',
+      'Resistência a Dano',
+    ],
     fixed_skills: [],
     choices: [
       {
@@ -284,7 +303,11 @@ export const races: Race[] = [
     speed: 9.0,
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.ELVISH],
-    fixed_traits: ['Visão no Escuro', 'Ancestral Feérico'],
+    fixed_traits: [
+      'Visão no Escuro',
+      'Ancestral Feérico',
+      'Versatilidade em Perícias',
+    ],
     fixed_skills: [],
     choices: [
       {
@@ -308,6 +331,7 @@ export const races: Race[] = [
       'Visão no Escuro',
       'Resistência Implacável',
       'Ataques Selvagens',
+      'Ameaçador',
     ],
     fixed_skills: ['Intimidação'],
     choices: [],

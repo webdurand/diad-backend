@@ -2,12 +2,16 @@ export type TraitNameType =
   | 'Visão no Escuro'
   | 'Resiliência Anã'
   | 'Especialização em Rochas'
+  | 'Treinamento Anão em Combate'
   | 'Treinamento Anão com Armaduras'
   | 'Tenacidade Anã'
   | 'Sentidos Aguçados'
   | 'Ancestral Feérico'
   | 'Transe'
   | 'Treinamento Élfico com Armas'
+  | 'Treinamento Drow com Armas'
+  | 'Pés Ligeiros'
+  | 'Truque'
   | 'Máscara da Natureza'
   | 'Visão no Escuro Superior'
   | 'Sensibilidade à Luz Solar'
@@ -32,7 +36,9 @@ export type TraitNameType =
   | 'Resistência Infernal'
   | 'Legado Infernal'
   | 'Resistência Duergar'
-  | 'Magia Duergar';
+  | 'Magia Duergar'
+  | 'Versatilidade em Perícias'
+  | 'Idiomas Adicionais';
 
 interface TraitDefinition {
   id: string;
@@ -45,30 +51,36 @@ export const traitsDefinitions: TraitDefinition[] = [
     id: 'darkvision',
     name: 'Visão no Escuro',
     description:
-      'Acostumado à vida subterrânea, você tem uma visão superior no escuro e na penumbra. Você enxerga na penumbra a até 18 metros como se fosse luz plena, e no escuro como se fosse na penumbra. Você não pode discernir cores no escuro, apenas tons de cinza.',
+      'Você enxerga na penumbra a até 18 metros como se fosse luz plena, e no escuro como se fosse na penumbra. Você não pode discernir cores no escuro.',
   },
   {
     id: 'dwarven_resilience',
     name: 'Resiliência Anã',
     description:
-      'Você possui vantagem em testes de resistência contra venenos e resistência contra dano de veneno.',
+      'Vantagem em testes de resistência contra venenos e resistência contra dano de veneno.',
   },
   {
     id: 'stonecunning',
     name: 'Especialização em Rochas',
     description:
-      'Sempre que você realizar um teste de Inteligência (História) relacionado à origem de um trabalho em pedra, você é considerado proficiente na perícia História e adiciona o dobro do seu bônus de proficiência ao teste.',
+      'O dobro do bônus de proficiência em testes de História (Int) relacionados à origem de trabalhos em pedra.',
   },
   {
-    id: 'dwarven_armor_training', // Sub-raça: Anão da Montanha
+    id: 'dwarven_combat_training',
+    name: 'Treinamento Anão em Combate',
+    description:
+      'Proficiência com machados de batalha, machadinhas, martelos leves e martelos de guerra.',
+  },
+  {
+    id: 'dwarven_armor_training',
     name: 'Treinamento Anão com Armaduras',
     description: 'Você adquire proficiência em armaduras leves e médias.',
   },
   {
-    id: 'dwarven_toughness', // Sub-raça: Anão da Colina (Regra geral 5e, inferida do contexto de sub-raças de PV)
+    id: 'dwarven_toughness',
     name: 'Tenacidade Anã',
     description:
-      'Seu máximo de pontos de vida aumenta em 1, e aumenta em 1 novamente a cada vez que você sobe de nível.',
+      'Seu máximo de PV aumenta em 1, e aumenta em 1 a cada nível seguinte.',
   },
   {
     id: 'keen_senses',
@@ -79,205 +91,162 @@ export const traitsDefinitions: TraitDefinition[] = [
     id: 'fey_ancestry',
     name: 'Ancestral Feérico',
     description:
-      'Você tem vantagem nos testes de resistência para resistir a ser enfeitiçado e magias não podem colocá-lo para dormir.',
+      'Vantagem contra ser enfeitiçado e magias não podem colocá-lo para dormir.',
   },
   {
     id: 'trance',
     name: 'Transe',
     description:
-      'Elfos não precisam dormir. Ao invés disso, eles meditam profundamente durante 4 horas por dia. Depois de descansar dessa forma, você ganha os mesmos benefícios que um humano depois de 8 horas de sono.',
+      'Elfos meditam por 4 horas em vez de dormir, obtendo o benefício de 8 horas de sono.',
   },
   {
     id: 'elf_weapon_training',
     name: 'Treinamento Élfico com Armas',
     description:
-      'Você possui proficiência com espadas longas, espadas curtas, arcos longos e arcos curtos.',
+      'Proficiência com espadas longas, espadas curtas, arcos longos e arcos curtos.',
   },
   {
-    id: 'mask_of_the_wild', // Sub-raça: Elfo da Floresta
+    id: 'drow_weapon_training',
+    name: 'Treinamento Drow com Armas',
+    description: 'Proficiência com rapieiras, espadas curtas e bestas de mão.',
+  },
+  {
+    id: 'fleet_of_foot',
+    name: 'Pés Ligeiros',
+    description: 'Seu deslocamento base de caminhada aumenta para 10,5 metros.',
+  },
+  {
+    id: 'extra_cantrip',
+    name: 'Truque',
+    description:
+      'Você conhece um truque à sua escolha da lista de magias do mago. Inteligência é a sua habilidade de conjuração.',
+  },
+  {
+    id: 'mask_of_the_wild',
     name: 'Máscara da Natureza',
     description:
-      'Você pode tentar se esconder mesmo quando estiver apenas levemente obscurecido por folhagem, chuva forte, neve caindo, névoa e outros fenômenos naturais.',
+      'Você pode tentar se esconder mesmo quando estiver apenas levemente obscurecido por fenômenos naturais.',
   },
   {
-    id: 'superior_darkvision', // Sub-raça: Drow / Gnomo das Profundezas [5, 8]
+    id: 'superior_darkvision',
     name: 'Visão no Escuro Superior',
-    description: 'Sua visão no escuro tem alcance de 36 metros de raio.',
+    description: 'Sua visão no escuro tem alcance de 36 metros.',
   },
   {
-    id: 'sunlight_sensitivity', // Sub-raça: Drow / Duergar [8, 9]
+    id: 'sunlight_sensitivity',
     name: 'Sensibilidade à Luz Solar',
     description:
-      'Você possui desvantagem nas jogadas de ataque e testes de Sabedoria (Percepção) relacionados a visão quando você, o alvo do seu ataque, ou qualquer coisa que você está tentando perceber, esteja sob luz solar direta.',
+      'Desvantagem em ataques e Percepção visual sob luz solar direta.',
   },
   {
-    id: 'drow_magic', // Sub-raça: Drow
+    id: 'drow_magic',
     name: 'Magia Drow',
     description:
-      'Você conhece o truque Globos de Luz. No 3º nível, pode conjurar Fogo das Fadas. No 5º nível, pode conjurar Escuridão. Carisma é sua habilidade de conjuração para essas magias.',
+      'Você conhece Globos de Luz. No 3º nível: Fogo das Fadas. No 5º nível: Escuridão.',
   },
-
-  // --- HALFLING [Fonte: 48, 50, 51] ---
   {
     id: 'lucky',
     name: 'Sorte',
     description:
-      'Quando você rolar um 1 no d20 em uma jogada de ataque, teste de habilidade ou teste de resistência, você pode jogar de novo o dado e deve utilizar o novo resultado.',
+      'Ao rolar um 1 natural no d20, você pode relançar o dado e deve usar o novo resultado.',
   },
   {
     id: 'brave',
     name: 'Bravura',
-    description:
-      'Você tem vantagem em testes de resistência contra ficar amedrontado.',
+    description: 'Vantagem em testes de resistência contra ficar amedrontado.',
   },
   {
     id: 'halfling_nimbleness',
     name: 'Agilidade Halfling',
     description:
-      'Você pode mover-se através do espaço de qualquer criatura que for de um tamanho maior que o seu.',
+      'Você pode se mover pelo espaço de qualquer criatura maior que você.',
   },
   {
-    id: 'naturally_stealthy', // Sub-raça: Pés-Leves
+    id: 'naturally_stealthy',
     name: 'Furtividade Natural',
     description:
-      'Você pode tentar se esconder mesmo quando possuir apenas a cobertura de uma criatura que for no mínimo um tamanho maior que o seu.',
+      'Você pode tentar se esconder atrás de uma criatura que seja pelo menos um tamanho maior que você.',
   },
   {
-    id: 'stout_resilience', // Sub-raça: Robusto
+    id: 'stout_resilience',
     name: 'Resiliência dos Robustos',
-    description:
-      'Você tem vantagem em testes de resistência contra veneno e tem resistência contra dano de veneno.',
+    description: 'Vantagem contra veneno e resistência a dano de veneno.',
   },
-
-  // --- DRACONATO (Dragonborn) [Fonte: 66, 67] ---
   {
-    id: 'draconic_ancestry_trait', // Vinculado à escolha da cor
+    id: 'draconic_ancestry_trait',
     name: 'Ancestral Dracônico',
     description:
-      'Você possui um ancestral dracônico que determina o tipo de dano da sua arma de sopro e da sua resistência.',
+      'Define o tipo de dano da sua arma de sopro e sua resistência.',
   },
   {
     id: 'breath_weapon',
     name: 'Arma de Sopro',
     description:
-      'Você pode usar uma ação para exalar energia destrutiva. O tipo de dano e a área são determinados pelo seu ancestral. O teste de resistência é CD 8 + Con + Prof. O dano é 2d6 (aumenta nos níveis 6, 11 e 16). Recupera com descanso curto ou longo.',
+      'Exala energia destrutiva baseada no seu ancestral. Dano 2d6 (escala no nível).',
   },
   {
     id: 'damage_resistance',
     name: 'Resistência a Dano',
-    description:
-      'Você possui resistência ao tipo de dano associado ao seu ancestral dracônico.',
+    description: 'Resistência ao dano associado ao seu ancestral dracônico.',
   },
-
-  // --- GNOMO [Fonte: 70, 71, 72, 659] ---
   {
     id: 'gnome_cunning',
     name: 'Esperteza Gnômica',
-    description:
-      'Você possui vantagem em todos os testes de resistência de Inteligência, Sabedoria e Carisma contra magia.',
+    description: 'Vantagem em testes de Int, Sab e Car contra magia.',
   },
   {
-    id: 'natural_illusionist', // Sub-raça: Floresta
+    id: 'natural_illusionist',
     name: 'Ilusionista Nato',
-    description:
-      'Você conhece o truque Ilusão Menor. Inteligência é a sua habilidade usada para conjurá-lo.',
+    description: 'Você conhece o truque Ilusão Menor.',
   },
   {
-    id: 'speak_with_small_beasts', // Sub-raça: Floresta
+    id: 'speak_with_small_beasts',
     name: 'Falar com Bestas Pequenas',
-    description:
-      'Através de sons e gestos, você pode comunicar ideias simples para bestas Pequenas ou menores.',
+    description: 'Comunica ideias simples para feras pequenas ou menores.',
   },
   {
-    id: 'artificers_lore', // Sub-raça: Rochas
+    id: 'artificers_lore',
     name: 'Conhecimento de Artífice',
     description:
-      'Sempre que você fizer um teste de Inteligência (História) relacionado a itens mágicos, objetos alquímicos ou tecnológicos, você adiciona o dobro do seu bônus de proficiência.',
+      'Dobro de proficiência em História (Int) para itens mágicos ou tecnológicos.',
   },
   {
-    id: 'tinker', // Sub-raça: Rochas
+    id: 'tinker',
     name: 'Engenhocas',
     description:
-      'Você possui proficiência com ferramentas de engenhoqueiro e pode gastar 1 hora e 10 po em materiais para construir dispositivos mecânicos (brinquedo, isqueiro ou caixa de música).',
+      'Proficiência com ferramentas de engenhoqueiro para construir dispositivos mecânicos.',
   },
-  {
-    id: 'stone_camouflage', // Sub-raça: Gnomo das Profundezas (MM p. 171/659)
-    name: 'Camuflagem Rochosa',
-    description:
-      'O gnomo possui vantagem em testes de Destreza (Furtividade) feitos para se esconder em terreno rochoso.',
-  },
-
-  // --- MEIO-ORC (Half-Orc) [Fonte: 77] ---
   {
     id: 'relentless_endurance',
     name: 'Resistência Implacável',
     description:
-      'Quando você é reduzido a 0 pontos de vida mas não é completamente morto, você pode voltar para 1 ponto de vida. Você precisa terminar um descanso longo para usar essa característica novamente.',
+      'Ao cair a 0 PV, você pode voltar para 1 PV (1x por descanso longo).',
   },
   {
     id: 'savage_attacks',
     name: 'Ataques Selvagens',
     description:
-      'Quando você atinge um ataque crítico com uma arma corpo-a-corpo, você pode rolar um dos dados de dano da arma mais uma vez e adicioná-lo ao dano extra causado pelo acerto crítico.',
+      'Em um crítico corpo-a-corpo, adicione um dado extra de dano da arma.',
   },
   {
     id: 'menacing',
     name: 'Ameaçador',
-    description: 'Você ganha proficiência na perícia Intimidação.',
+    description: 'Proficiência na perícia Intimidação.',
   },
-
-  // --- TIEFLING [Fonte: 81] ---
   {
     id: 'hellish_resistance',
     name: 'Resistência Infernal',
-    description: 'Você possui resistência a dano de fogo.',
+    description: 'Resistência a dano de fogo.',
   },
   {
     id: 'infernal_legacy',
     name: 'Legado Infernal',
     description:
-      'Você conhece o truque Taumaturgia. No 3º nível, pode conjurar Repreensão Infernal. No 5º nível, pode conjurar Escuridão. Carisma é sua habilidade de conjuração.',
-  },
-
-  // --- TRAÇOS EXTRAS DE MONSTROS/SUB-RAÇAS ESPECÍFICAS DO MM ---
-  // Fonte: Manual dos Monstros (Duergar, Grimlock, etc.)
-  {
-    id: 'duergar_resilience', // Sub-raça: Duergar (MM p. 594)
-    name: 'Resistência Duergar',
-    description:
-      'O duergar tem vantagem em testes de resistência contra venenos, magias e ilusões, assim como para resistir a ser enfeitiçado ou paralisado.',
+      'Conhece Taumaturgia. No 3º nível: Repreensão Infernal. No 5º nível: Escuridão.',
   },
   {
-    id: 'duergar_magic', // Sub-raça: Duergar
-    name: 'Magia Duergar',
-    description:
-      'Permite aumentar de tamanho e ficar invisível (consulte as regras de Duergar).',
+    id: 'skill_versatility',
+    name: 'Versatilidade em Perícias',
+    description: 'Ganha proficiência em duas perícias à sua escolha.',
   },
-  //   {
-  //     id: 'amphibious', // Genérico para Tritões/Povo do Mar/Kuo-toa/Bullywug
-  //     name: 'Anfíbio',
-  //     description: 'A criatura pode respirar ar e água.',
-  //     source: { type: 'monster', name: 'anfíbio' },
-  //   },
-  //   {
-  //     id: 'slippery', // Kuo-toa (MM p. 687)
-  //     name: 'Escorregadio',
-  //     description:
-  //       'Vantagem em testes de habilidade e testes de resistência para escapar de um agarrão.',
-  //     source: { type: 'monster', name: 'kuo-toa' },
-  //   },
-  //   {
-  //     id: 'chameleon_carapace', // Thri-kreen (MM p. 823)
-  //     name: 'Carapaça de Camaleão',
-  //     description:
-  //       'Pode mudar a cor da carapaça para combinar com o ambiente, ganhando vantagem em Furtividade.',
-  //     source: { type: 'monster', name: 'thri-kreen' },
-  //   },
-  //   {
-  //     id: 'standing_leap', // Thri-kreen (MM p. 823)
-  //     name: 'Salto Parado',
-  //     description:
-  //       'O salto à distância vai até 9m e em altura até 4,5m, com ou sem corrida.',
-  //     source: { type: 'monster', name: 'thri-kreen' },
-  //   },
 ];
