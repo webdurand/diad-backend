@@ -2,6 +2,7 @@ import { LanguageNameEnum, LanguageType } from 'src/types/languages';
 import { RaceNameEnum, RaceType } from 'src/types/races';
 import { HabilityScores } from 'src/types/stats';
 import { SubraceNameEnum } from 'src/types/subraces';
+import { TraitNameType } from './traits';
 
 type ChoiceType =
   | 'language'
@@ -44,7 +45,7 @@ export interface Race {
   base_stats: Partial<HabilityScores>;
   speed: number;
   size: 'Small' | 'Medium' | 'Large';
-  fixed_traits: string[];
+  fixed_traits: TraitNameType[];
   fixed_skills: string[];
   choices: RaceChoice[];
   languages: LanguageType[];
@@ -61,7 +62,7 @@ export const races: Race[] = [
     fixed_traits: [
       'Visão no Escuro',
       'Resiliência Anã',
-      'Treinamento Anão em Combate',
+      'Treinamento Anão com Armaduras',
       'Especialização em Rochas',
     ],
     fixed_skills: [],
@@ -193,7 +194,7 @@ export const races: Race[] = [
     speed: 9.0,
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.DRACONIC],
-    fixed_traits: ['Ataque de Sopro', 'Resistência a Dano'],
+    fixed_traits: ['Arma de Sopro', 'Resistência a Dano'],
     fixed_skills: [],
     choices: [
       {
