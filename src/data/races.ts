@@ -1,58 +1,6 @@
-import { LanguageNameEnum, LanguageType } from 'src/types/languages';
-import { RaceNameEnum, RaceType } from 'src/types/races';
-import { HabilityScores } from 'src/types/stats';
+import { LanguageNameEnum } from 'src/types/languages';
+import { Race, RaceNameEnum } from 'src/types/races';
 import { SubraceNameEnum } from 'src/types/subraces';
-import { TraitNameType } from './traits';
-
-type ChoiceType =
-  | 'language'
-  | 'tool_proficiency'
-  | 'draconic_ancestry'
-  | 'stat_increase'
-  | 'skill_proficiency'
-  | 'feat'
-  | 'cantrip';
-
-interface ChoiceOption {
-  label: string;
-  value: string;
-  metadata?: Record<string, any>;
-}
-
-interface ChoiceRestriction {
-  exclude?: string[];
-  includeOnly?: string[];
-  unique?: boolean;
-}
-
-interface RaceChoice {
-  type: ChoiceType;
-  amount: number;
-  description?: string;
-  options?: ChoiceOption[] | 'all';
-  restriction?: ChoiceRestriction;
-}
-
-interface Subrace {
-  name: SubraceNameEnum;
-  additional_stats: Partial<HabilityScores>;
-  override_base_stats?: Partial<HabilityScores>;
-  override_speed?: number;
-  additional_traits: TraitNameType[];
-  choices?: RaceChoice[];
-}
-
-export interface Race {
-  race: RaceType;
-  base_stats: Partial<HabilityScores>;
-  speed: number;
-  size: 'Small' | 'Medium' | 'Large';
-  fixed_traits: TraitNameType[];
-  fixed_skills: string[];
-  choices: RaceChoice[];
-  languages: LanguageType[];
-  subraces: Subrace[];
-}
 
 export const races: Race[] = [
   {

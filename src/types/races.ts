@@ -1,3 +1,8 @@
+import { LanguageType } from './languages';
+import { HabilityScores } from './stats';
+import { Subrace, SubraceNameEnum } from './subraces';
+import { TraitNameType } from './traits';
+
 export enum RaceNameEnum {
   // --- Raças do Livro do Jogador (Core) ---
   DWARF = 'Anão', // [1, 2] Inclui da Colina, da Montanha e Duergar (MM)
@@ -39,3 +44,44 @@ export enum RaceNameEnum {
 }
 
 export type RaceType = `${RaceNameEnum}`;
+
+export type ChoiceType =
+  | 'language'
+  | 'tool_proficiency'
+  | 'draconic_ancestry'
+  | 'stat_increase'
+  | 'skill_proficiency'
+  | 'feat'
+  | 'cantrip';
+
+export interface ChoiceOption {
+  label: string;
+  value: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ChoiceRestriction {
+  exclude?: string[];
+  includeOnly?: string[];
+  unique?: boolean;
+}
+
+export interface RaceChoice {
+  type: ChoiceType;
+  amount: number;
+  description?: string;
+  options?: ChoiceOption[] | 'all';
+  restriction?: ChoiceRestriction;
+}
+
+export interface Race {
+  race: RaceType;
+  base_stats: Partial<HabilityScores>;
+  speed: number;
+  size: 'Small' | 'Medium' | 'Large';
+  fixed_traits: TraitNameType[];
+  fixed_skills: string[];
+  choices: RaceChoice[];
+  languages: LanguageType[];
+  subraces: Subrace[];
+}

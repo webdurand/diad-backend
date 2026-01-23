@@ -1,3 +1,7 @@
+import { RaceChoice } from './races';
+import { HabilityScores } from './stats';
+import { TraitNameType } from './traits';
+
 export enum SubraceNameEnum {
   // --- ANÃO (Dwarf) ---
   // Fonte: Livro do Jogador [1-3] & Manual dos Monstros [4]
@@ -50,3 +54,12 @@ export enum SubraceNameEnum {
 }
 
 export type SubraceType = `${SubraceNameEnum}`;
+
+export interface Subrace {
+  name: SubraceNameEnum;
+  additional_stats: Partial<HabilityScores>;
+  override_base_stats?: Partial<HabilityScores>;
+  override_speed?: number;
+  additional_traits: TraitNameType[];
+  choices?: RaceChoice[];
+}

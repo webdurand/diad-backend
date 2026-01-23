@@ -1,0 +1,47 @@
+export type TraitNameType =
+  | 'Visão no Escuro'
+  | 'Resiliência Anã'
+  | 'Especialização em Rochas'
+  | 'Treinamento Anão em Combate'
+  | 'Treinamento Anão com Armaduras'
+  | 'Tenacidade Anã'
+  | 'Sentidos Aguçados'
+  | 'Ancestral Feérico'
+  | 'Transe'
+  | 'Treinamento Élfico com Armas'
+  | 'Treinamento Drow com Armas'
+  | 'Pés Ligeiros'
+  | 'Truque'
+  | 'Máscara da Natureza'
+  | 'Visão no Escuro Superior'
+  | 'Sensibilidade à Luz Solar'
+  | 'Magia Drow'
+  | 'Sorte'
+  | 'Bravura'
+  | 'Agilidade Halfling'
+  | 'Furtividade Natural'
+  | 'Resiliência dos Robustos'
+  | 'Ancestral Dracônico'
+  | 'Arma de Sopro'
+  | 'Resistência a Dano'
+  | 'Esperteza Gnômica'
+  | 'Ilusionista Nato'
+  | 'Falar com Bestas Pequenas'
+  | 'Conhecimento de Artífice'
+  | 'Engenhocas'
+  | 'Camuflagem Rochosa'
+  | 'Resistência Implacável'
+  | 'Ataques Selvagens'
+  | 'Ameaçador'
+  | 'Resistência Infernal'
+  | 'Legado Infernal'
+  | 'Resistência Duergar'
+  | 'Magia Duergar'
+  | 'Versatilidade em Perícias'
+  | 'Idiomas Adicionais';
+
+export interface TraitDefinition {
+  id: string;
+  name: TraitNameType;
+  description: string;
+}
