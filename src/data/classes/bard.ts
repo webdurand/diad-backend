@@ -4,6 +4,7 @@ import {
   WeaponTypeEnum,
   WeaponNameEnum,
   ToolNameEnum,
+  ArmorNameEnum,
 } from 'src/types/items';
 import { SkillNameEnum } from 'src/types/skills';
 import { StatNameEnum } from 'src/types/stats';
@@ -20,13 +21,11 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
   subclass_label: 'Colégio de Bardo', // [8]
 
   // Requisitos de Multiclasse: Carisma 13 [9]
-
   multiclass_req: {
     [StatNameEnum.CHARISMA]: 13,
   },
 
   // Proficiências de Multiclasse: Armadura leve, uma perícia, um instrumento [5]
-
   multiclass_proficiencies: {
     armor: [ArmorTypeEnum.LIGHT],
     weapons: [],
@@ -36,9 +35,8 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
 
   // Equipamento Fixo: Armadura de couro e uma adaga [10]
   fixed_equipment: [
-    { id: 'leather_armor', amount: 1 },
-
-    { id: 'dagger', amount: 1 },
+    { id: ArmorNameEnum.LEATHER, amount: 1 },
+    { id: WeaponNameEnum.DAGGER, amount: 1 },
   ],
 
   starting_gold_formula: '5d4 x 10', // [4]

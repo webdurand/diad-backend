@@ -17,7 +17,7 @@ export const Barbarian: ClassDefinition = {
 
   fixed_equipment: [
     { id: 'explorers_pack', amount: 1 },
-    { id: 'javelin', amount: 4 },
+    { id: WeaponNameEnum.JAVELIN, amount: 4 },
   ],
 
   proficiencies: {
