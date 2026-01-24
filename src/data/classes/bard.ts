@@ -3,13 +3,13 @@ import {
   ArmorTypeEnum,
   WeaponTypeEnum,
   WeaponNameEnum,
-  ToolNameEnum,
   ArmorNameEnum,
+  ToolTypeEnum,
 } from 'src/types/items';
 import { SkillNameEnum } from 'src/types/skills';
 import { StatNameEnum } from 'src/types/stats';
 import { SubclassNameEnum } from 'src/types/subclasses';
-import { SIMPLE_WEAPONS_OPTIONS } from '../items';
+import { MUSICAL_INSTRUMENTS_OPTIONS, SIMPLE_WEAPONS_OPTIONS } from '../items';
 
 export const BARD_CLASS_DEFINITION: ClassDefinition = {
   id: ClassNameEnum.BARD,
@@ -44,7 +44,6 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
   // Proficiências Iniciais [6]
   proficiencies: {
     armor: [ArmorTypeEnum.LIGHT],
-
     weapons: [
       WeaponTypeEnum.SIMPLE,
       WeaponNameEnum.HAND_CROSSBOW,
@@ -52,15 +51,13 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
       WeaponNameEnum.RAPIER, // Rapieiras
       WeaponNameEnum.SHORTSWORD, // Espadas curtas
     ],
-    tools: [], // O Bardo escolhe 3 instrumentos musicais (lógica específica de escolha)
+    tools: [ToolTypeEnum.MUSICAL], // O Bardo escolhe 3 instrumentos musicais (lógica específica de escolha)
     saving_throws: [StatNameEnum.DEXTERITY, StatNameEnum.CHARISMA],
   },
 
   // Escolhas de Perícia: Escolha três quaisquer [6]
-
   skill_choices: {
     amount: 3,
-
     list: [
       SkillNameEnum.ACROBATICS,
       SkillNameEnum.ANIMAL_HANDLING,
@@ -88,11 +85,7 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
       type: 'equipment',
       amount: 1,
       description: 'Arma Marcial ou Simples',
-      options: [
-        { label: 'Rapieira', value: WeaponNameEnum.RAPIER },
-        { label: 'Espada Longa', value: WeaponNameEnum.LONGSWORD },
-        ...SIMPLE_WEAPONS_OPTIONS, // (c) qualquer arma simples
-      ],
+      options: [...SIMPLE_WEAPONS_OPTIONS],
     },
 
     {
@@ -104,28 +97,11 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
         { label: 'Pacote de Artista', value: 'entertainers_pack' },
       ],
     },
-
     {
       type: 'equipment',
       amount: 1,
       description: 'Instrumento Musical',
-      options: [
-        { label: 'Alaúde', value: ToolNameEnum.LUTE },
-        {
-          label: 'Outro Instrumento Musical',
-          value: 'musical_instrument_generic',
-        },
-      ],
-    },
-    {
-      type: 'tool',
-      amount: 3,
-      description: 'Instrumentos Musicais',
-      options: [
-        { label: 'Alaúde', value: ToolNameEnum.LUTE },
-        { label: 'Flauta', value: ToolNameEnum.FLUTE },
-        // ... usar o spread de uma const MUSICAL_INSTRUMENTS_OPTIONS
-      ],
+      options: [...MUSICAL_INSTRUMENTS_OPTIONS],
     },
   ],
 

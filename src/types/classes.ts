@@ -2,7 +2,9 @@ import { StatNameEnum } from './stats'; // 'str', 'dex', etc.
 import { DiceType } from './common'; // 'd6', 'd8', etc.
 import {
   ArmorType,
+  ToolName,
   ToolNameEnum,
+  ToolType,
   WeaponName,
   WeaponNameEnum,
   WeaponType,
@@ -89,7 +91,7 @@ export interface ClassDefinition {
   multiclass_proficiencies: {
     armor: ArmorType[];
     weapons: (WeaponType | WeaponName)[];
-    tools: ToolNameEnum[];
+    tools: (ToolType | ToolName)[];
     skill_amount?: number;
   };
 
@@ -97,7 +99,7 @@ export interface ClassDefinition {
   proficiencies: {
     armor: ArmorType[];
     weapons: (WeaponType | WeaponName)[];
-    tools: ToolNameEnum[];
+    tools: (ToolType | ToolName)[];
     saving_throws: StatNameEnum[];
   };
 

@@ -40,6 +40,7 @@ export enum ArmorNameEnum {
 export enum WeaponTypeEnum {
   SIMPLE = 'simple', // Simples Corpo-a-Corpo
   MARTIAL = 'martial', // Marcial à Distância
+  INSTRUMENTAL = 'instrumental', // Instrumento Musical
 }
 
 export type WeaponType = `${WeaponTypeEnum}`;
@@ -155,3 +156,5 @@ export enum ToolNameEnum {
   VEHICLES_LAND = 'vehicles_land', // Veículos (Terrestres)
   VEHICLES_WATER = 'vehicles_water', // Veículos (Aquáticos)
 }
+
+export type ToolName = `${ToolNameEnum}`;

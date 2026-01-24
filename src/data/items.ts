@@ -1,4 +1,4 @@
-import { WeaponNameEnum } from 'src/types/items';
+import { ToolNameEnum, WeaponNameEnum } from 'src/types/items';
 
 export const SIMPLE_WEAPONS_OPTIONS = [
   { label: 'Adaga', value: WeaponNameEnum.DAGGER },
@@ -37,4 +37,17 @@ export const MARTIAL_MELEE_OPTIONS = [
   { label: 'Picareta de Guerra', value: WeaponNameEnum.WAR_PICK },
   { label: 'Rapieira', value: WeaponNameEnum.RAPIER },
   { label: 'Tridente', value: WeaponNameEnum.TRIDENT },
+];
+
+export const MUSICAL_INSTRUMENTS_OPTIONS = [
+  { label: 'Alaúde', value: ToolNameEnum.LUTE },
+  { label: 'Flauta', value: ToolNameEnum.FLUTE },
+  { label: 'Flauta de Pã', value: ToolNameEnum.PAN_FLUTE },
+  { label: 'Gaita de Foles', value: ToolNameEnum.BAGPIPES },
+  { label: 'Lira', value: ToolNameEnum.LYRE },
+  { label: 'Oboé', value: ToolNameEnum.SHAWM },
+  { label: 'Tambor', value: ToolNameEnum.DRUM },
+  { label: 'Trombeta', value: ToolNameEnum.HORN },
+  { label: 'Violino', value: ToolNameEnum.VIOL },
+  { label: 'Xilofone', value: ToolNameEnum.DULCIMER },
 ];
