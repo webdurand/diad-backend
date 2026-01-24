@@ -1,6 +1,12 @@
 import { StatNameEnum } from './stats'; // 'str', 'dex', etc.
 import { DiceType } from './common'; // 'd6', 'd8', etc.
-import { ArmorType, ToolNameEnum, WeaponNameEnum, WeaponType } from './items';
+import {
+  ArmorType,
+  ToolNameEnum,
+  WeaponName,
+  WeaponNameEnum,
+  WeaponType,
+} from './items';
 import { SkillNameEnum } from './skills';
 import { SubclassNameEnum } from './subclasses';
 
@@ -54,7 +60,7 @@ export interface LevelEntry {
   // Ladino: { sneak_attack_dice: "1d6" }
   // Monge: { ki: 5, movement_bonus: 3 }
   // Mago: { sorcery_points: 0 } (para feiticeiro)
-  specifics: Record<string, number | string>;
+  specifics: Record<string, number | string | number[]>;
 
   // Apenas para conjuradores (Espaços de Magia)
   // Array com 9 posições. Ex: [4, 2, 0, 0...] para nv 3
@@ -82,7 +88,7 @@ export interface ClassDefinition {
   multiclass_req: Partial<Record<StatNameEnum, number>>;
   multiclass_proficiencies: {
     armor: ArmorType[];
-    weapons: WeaponType[];
+    weapons: (WeaponType | WeaponName)[];
     tools: ToolNameEnum[];
     skill_amount?: number;
   };
@@ -90,7 +96,7 @@ export interface ClassDefinition {
   // Proficiências Iniciais
   proficiencies: {
     armor: ArmorType[];
-    weapons: WeaponType[];
+    weapons: (WeaponType | WeaponName)[];
     tools: ToolNameEnum[];
     saving_throws: StatNameEnum[];
   };

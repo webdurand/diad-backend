@@ -92,6 +92,8 @@ export enum WeaponNameEnum {
   NET = 'net', // Rede
 }
 
+export type WeaponName = `${WeaponNameEnum}`;
+
 // =============================================================================
 // FERRAMENTAS (Tools) - Fonte: Livro do Jogador, Cap. 5
 // =============================================================================
