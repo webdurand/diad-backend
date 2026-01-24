@@ -54,6 +54,8 @@ export type ChoiceType =
   | 'feat'
   | 'cantrip';
 
+export type Size = 'Small' | 'Medium' | 'Large';
+
 export interface ChoiceOption {
   label: string;
   value: string;
@@ -78,7 +80,7 @@ export interface Race {
   race: RaceType;
   base_stats: Partial<HabilityScores>;
   speed: number;
-  size: 'Small' | 'Medium' | 'Large';
+  size: Size;
   fixed_traits: TraitNameType[];
   fixed_skills: string[];
   choices: RaceChoice[];
