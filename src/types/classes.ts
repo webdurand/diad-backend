@@ -2,6 +2,7 @@ import { StatNameEnum } from './stats'; // 'str', 'dex', etc.
 import { DiceType } from './common'; // 'd6', 'd8', etc.
 import { ArmorType, ToolNameEnum, WeaponNameEnum, WeaponType } from './items';
 import { SkillNameEnum } from './skills';
+import { SubclassNameEnum } from './subclasses';
 
 export enum ClassNameEnum {
   BARBARIAN = 'Bárbaro',
@@ -110,4 +111,5 @@ export interface ClassDefinition {
     preparation_type: 'prepared' | 'known' | 'spellbook';
     multiplier: number;
   };
+  subclasses: SubclassNameEnum[];
 }

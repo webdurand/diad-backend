@@ -3,7 +3,7 @@ import { ArmorTypeEnum, WeaponNameEnum, WeaponTypeEnum } from 'src/types/items';
 import { SkillNameEnum } from 'src/types/skills';
 import { StatNameEnum } from 'src/types/stats';
 import { MARTIAL_MELEE_OPTIONS, SIMPLE_WEAPONS_OPTIONS } from '../items';
-import { SubclassDefinition } from 'src/types/subclasses';
+import { SubclassDefinition, SubclassNameEnum } from 'src/types/subclasses';
 
 export const Barbarian: ClassDefinition = {
   id: ClassNameEnum.BARBARIAN,
@@ -46,41 +46,33 @@ export const Barbarian: ClassDefinition = {
   },
 
   equipment_choices: [
-    // Opção 1: (a) Machado Grande ou (b) Qualquer Arma Marcial Corpo-a-Corpo [7]
     {
       type: 'equipment',
       amount: 1,
       description: 'Arma Principal',
       options: [
-        // Opção A: Item específico
         {
           label: 'Machado Grande',
           value: WeaponNameEnum.GREATAXE,
         },
-        // Opção B: Espalha todas as opções da categoria marcial corpo-a-corpo
         ...MARTIAL_MELEE_OPTIONS,
       ],
     },
-
-    // Opção 2: (a) Dois Machados de Mão ou (b) Qualquer Arma Simples [8]
     {
       type: 'equipment',
       amount: 1, // O jogador faz 1 escolha entre A ou B
       description: 'Armas Secundárias',
       options: [
-        // Opção A: Item específico com quantidade
         {
           label: 'Dois Machados de Mão',
           value: WeaponNameEnum.HANDAXE,
           metadata: { quantity: 2 }, // O sistema deve ler isso e adicionar 2 itens
         },
-        // Opção B: Qualquer arma simples (corpo-a-corpo ou distância)
         ...SIMPLE_WEAPONS_OPTIONS,
       ],
     },
   ],
 
-  // TABELA O BÁRBARO [1-3]
   progression: [
     {
       level: 1,
@@ -97,13 +89,13 @@ export const Barbarian: ClassDefinition = {
     {
       level: 3,
       pb: 2,
-      features: ['primal_path'], // Escolha do Subclasse (Furioso ou Totêmico)
+      features: ['primal_path'],
       specifics: { rages: 3, rage_damage: 2 },
     },
     {
       level: 4,
       pb: 2,
-      features: ['asi_4'], // Ability Score Improvement
+      features: ['asi_4'],
       specifics: { rages: 3, rage_damage: 2 },
     },
     {
@@ -115,7 +107,7 @@ export const Barbarian: ClassDefinition = {
     {
       level: 6,
       pb: 3,
-      features: ['path_feature_6'], // Feature da subclasse escolhida
+      features: ['path_feature_6'],
       specifics: { rages: 4, rage_damage: 2 },
     },
     {
@@ -133,7 +125,7 @@ export const Barbarian: ClassDefinition = {
     {
       level: 9,
       pb: 4,
-      features: ['brutal_critical_1'], // +1 dado
+      features: ['brutal_critical_1'],
       specifics: { rages: 4, rage_damage: 3 },
     },
     {
@@ -157,7 +149,7 @@ export const Barbarian: ClassDefinition = {
     {
       level: 13,
       pb: 5,
-      features: ['brutal_critical_2'], // +2 dados
+      features: ['brutal_critical_2'],
       specifics: { rages: 5, rage_damage: 3 },
     },
     {
@@ -181,7 +173,7 @@ export const Barbarian: ClassDefinition = {
     {
       level: 17,
       pb: 6,
-      features: ['brutal_critical_3'], // +3 dados
+      features: ['brutal_critical_3'],
       specifics: { rages: 6, rage_damage: 4 },
     },
     {
@@ -200,15 +192,16 @@ export const Barbarian: ClassDefinition = {
       level: 20,
       pb: 6,
       features: ['primal_champion'],
-      specifics: { rages: 99, rage_damage: 4 }, // 99 representa "Ilimitado" [3]
+      specifics: { rages: 99, rage_damage: 4 },
     },
   ],
-  subclass_label: '',
+  subclass_label: 'Caminho Primal',
+  subclasses: [SubclassNameEnum.Berserker, SubclassNameEnum.TotemWarrior], // <--- REFERÊNCIA AQUI
 };
 
 export const BarbarianSubclasses: SubclassDefinition[] = [
   {
-    id: 'berserker',
+    id: SubclassNameEnum.Berserker,
     parent_class_id: ClassNameEnum.BARBARIAN,
     name: 'Caminho do Furioso',
     description:
@@ -245,49 +238,11 @@ export const BarbarianSubclasses: SubclassDefinition[] = [
     ],
   },
   {
-    id: 'berserker',
-    parent_class_id: ClassNameEnum.BARBARIAN,
-    name: 'Caminho do Furioso',
-    description:
-      'Para alguns bárbaros, a fúria é um meio para um fim – esse fim sendo a morte. O Caminho do Furioso é um caminho de violência desenfreada, carregado de sangue.',
-    features: [
-      {
-        level: 3,
-        id: 'frenzy',
-        name: 'Frenesi',
-        description:
-          'Você pode entrar em um frenesi quando entra em fúria. Pela duração da fúria, você pode realizar um único ataque corpo-a-corpo com arma com uma ação bônus em cada um de seus turnos. Ao terminar, você sofre um nível de exaustão.',
-      },
-      {
-        level: 6,
-        id: 'mindless_rage',
-        name: 'Fúria Inconsciente',
-        description:
-          'Você não pode ser enfeitiçado ou amedrontado enquanto estiver em fúria. Se você já estiver sob um desses efeitos ao entrar em fúria, o efeito é suspenso pela duração da fúria.',
-      },
-      {
-        level: 10,
-        id: 'intimidating_presence',
-        name: 'Presença Intimidante',
-        description:
-          'Você pode usar sua ação para amedrontar alguém com sua presença. Escolha uma criatura a até 9m. Se ela falhar num teste de Sabedoria (CD 8 + prof + Carisma), ficará amedrontada até o fim do próximo turno.',
-      },
-      {
-        level: 14,
-        id: 'retaliation',
-        name: 'Retaliação',
-        description:
-          'Quando você sofrer dano de uma criatura que esteja a até 1,5m de você, você pode usar sua reação para realizar um ataque corpo-a-corpo com arma contra essa criatura.',
-      },
-    ],
-  },
-  {
-    id: 'totem_warrior',
+    id: SubclassNameEnum.TotemWarrior,
     parent_class_id: ClassNameEnum.BARBARIAN,
     name: 'Caminho do Guerreiro Totêmico',
     description:
       'O Caminho do Guerreiro Totêmico é uma jornada espiritual, a partir do momento que o bárbaro aceita um espírito animal como seu guia, protetor e inspiração. Em batalha, seu espírito totêmico preenche você com força sobrenatural.',
-    // Nota: Esta subclasse concede rituais, você pode mapear isso em 'additional_spells' se sua interface suportar
     features: [
       {
         level: 3,
