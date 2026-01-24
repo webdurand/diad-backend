@@ -30,7 +30,8 @@ export type ClassChoiceType =
   | 'fighting_style'
   | 'spell'
   | 'expertize'
-  | 'asi'; // Ability Score Improvement
+  | 'asi'
+  | 'subclass_feature_option'; // Ability Score Improvement
 
 export interface ClassChoice {
   type: ClassChoiceType;
