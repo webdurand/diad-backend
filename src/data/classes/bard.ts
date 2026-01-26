@@ -9,10 +9,10 @@ import {
 } from 'src/types/items';
 import { SkillNameEnum } from 'src/types/skills';
 import { StatNameEnum } from 'src/types/stats';
-import { SubclassNameEnum } from 'src/types/subclasses';
+import { SubclassDefinition, SubclassNameEnum } from 'src/types/subclasses';
 import { MUSICAL_INSTRUMENTS_OPTIONS, SIMPLE_WEAPONS_OPTIONS } from '../items';
 
-export const BARD_CLASS_DEFINITION: ClassDefinition = {
+export const bard: ClassDefinition = {
   id: ClassNameEnum.BARD,
   name: ClassNameEnum.BARD,
   hit_die: 'd8', // [6]
@@ -334,3 +334,85 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
     },
   ],
 };
+
+export const BardSubclasses: SubclassDefinition[] = [
+  {
+    id: SubclassNameEnum.CollegeOfLore,
+    parent_class_id: ClassNameEnum.BARD,
+    name: 'Colégio do Conhecimento',
+    description:
+      'Bardos do Colégio do Conhecimento sabem algo sobre quase tudo, coletando pedaços de sabedoria de fontes tão diversas quanto tomos antigos e contos de camponeses.',
+    features: [
+      {
+        level: 3,
+        id: 'lore_bonus_proficiencies',
+        name: 'Proficiências Adicionais',
+        description: 'Você ganha proficiência em três perícias à sua escolha.',
+        choices: {
+          type: 'skill', // Ajustado para o padrão do seu sistema
+          amount: 3,
+          options: Object.values(SkillNameEnum).map((skill) => ({
+            label: skill.toString(),
+            value: skill,
+          })),
+        },
+      },
+      {
+        level: 3,
+        id: 'cutting_words',
+        name: 'Palavras de Corte',
+        description:
+          'Você aprende como usar sua sagacidade para distrair e minar outros. Quando uma criatura realizar uma jogada de ataque, teste de habilidade ou dano, você pode usar sua reação e gastar um dado de Inspiração Bárdica para subtrair do total.',
+      },
+      {
+        level: 6,
+        id: 'additional_magical_secrets',
+        name: 'Segredos Mágicos Adicionais',
+        description:
+          'Você aprende duas magias de qualquer classe. Elas contam como magias de bardo para você.',
+      },
+      {
+        level: 14,
+        id: 'peerless_skill',
+        name: 'Perícia Incomparável',
+        description:
+          'Quando fizer um teste de habilidade, você pode gastar um uso de Inspiração Bárdica para adicionar o dado ao total.',
+      },
+    ],
+  },
+  {
+    id: SubclassNameEnum.CollegeOfValor,
+    parent_class_id: ClassNameEnum.BARD,
+    name: 'Colégio da Bravura',
+    description:
+      'Os bardos do Colégio da Bravura são poetas ousados cujas canções mantêm viva a memória dos grandes heróis do passado.',
+    // Usando o campo que você definiu na interface para bônus de proficiência
+    extra_proficiencies: {
+      armor: [ArmorTypeEnum.MEDIUM, ArmorTypeEnum.SHIELD],
+      weapons: [WeaponTypeEnum.MARTIAL],
+    },
+    features: [
+      {
+        level: 3,
+        id: 'combat_inspiration',
+        name: 'Inspiração de Combate',
+        description:
+          'Uma criatura pode adicionar o dado de Inspiração Bárdica ao dano de arma ou à CA contra um ataque (usando reação).',
+      },
+      {
+        level: 6,
+        id: 'extra_attack',
+        name: 'Ataque Extra',
+        description:
+          'Você pode atacar duas vezes, em vez de uma, sempre que realizar a ação de Ataque.',
+      },
+      {
+        level: 14,
+        id: 'battle_magic',
+        name: 'Magia de Combate',
+        description:
+          'Quando você usa sua ação para conjurar uma magia de bardo, você pode realizar um ataque com arma como uma ação bônus.',
+      },
+    ],
+  },
+];

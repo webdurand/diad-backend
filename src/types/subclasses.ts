@@ -8,6 +8,7 @@ export enum SubclassNameEnum {
 
   // Bardo [4]
   CollegeOfValor = 'college_of_valor', // Colégio da Bravura
+  CollegeOfLore = 'college_of_lore', // Colégio do Conhecimento
   // Nota: O Colégio do Conhecimento não foi detalhado nos trechos fornecidos.
 
   // Bruxo [5-8]
