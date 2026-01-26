@@ -9,11 +9,12 @@ import { SkillNameEnum } from 'src/types/skills';
 import { StatNameEnum } from 'src/types/stats';
 import { MARTIAL_MELEE_OPTIONS, SIMPLE_WEAPONS_OPTIONS } from '../items';
 import { SubclassDefinition, SubclassNameEnum } from 'src/types/subclasses';
+import { DiceTypeEnum } from 'src/types/common';
 
 export const Barbarian: ClassDefinition = {
   id: ClassNameEnum.BARBARIAN,
   name: ClassNameEnum.BARBARIAN,
-  hit_die: 'd12',
+  hit_die: DiceTypeEnum.D12,
   subclasses_available_at_level: 3,
 
   multiclass_req: {
