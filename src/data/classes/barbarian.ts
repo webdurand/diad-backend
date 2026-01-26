@@ -1,5 +1,10 @@
 import { ClassDefinition, ClassNameEnum } from 'src/types/classes';
-import { ArmorTypeEnum, WeaponNameEnum, WeaponTypeEnum } from 'src/types/items';
+import {
+  ArmorTypeEnum,
+  EquipmentPackNameEnum,
+  WeaponNameEnum,
+  WeaponTypeEnum,
+} from 'src/types/items';
 import { SkillNameEnum } from 'src/types/skills';
 import { StatNameEnum } from 'src/types/stats';
 import { MARTIAL_MELEE_OPTIONS, SIMPLE_WEAPONS_OPTIONS } from '../items';
@@ -16,7 +21,7 @@ export const Barbarian: ClassDefinition = {
   },
 
   fixed_equipment: [
-    { id: 'explorers_pack', amount: 1 },
+    { id: EquipmentPackNameEnum.EXPLORERS_PACK, amount: 1 },
     { id: WeaponNameEnum.JAVELIN, amount: 4 },
   ],
 
