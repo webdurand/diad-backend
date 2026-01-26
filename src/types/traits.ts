@@ -1,47 +1,44 @@
-export type TraitNameType =
-  | 'Visão no Escuro'
-  | 'Resiliência Anã'
-  | 'Especialização em Rochas'
-  | 'Treinamento Anão em Combate'
-  | 'Treinamento Anão com Armaduras'
-  | 'Tenacidade Anã'
-  | 'Sentidos Aguçados'
-  | 'Ancestral Feérico'
-  | 'Transe'
-  | 'Treinamento Élfico com Armas'
-  | 'Treinamento Drow com Armas'
-  | 'Pés Ligeiros'
-  | 'Truque'
-  | 'Máscara da Natureza'
-  | 'Visão no Escuro Superior'
-  | 'Sensibilidade à Luz Solar'
-  | 'Magia Drow'
-  | 'Sorte'
-  | 'Bravura'
-  | 'Agilidade Halfling'
-  | 'Furtividade Natural'
-  | 'Resiliência dos Robustos'
-  | 'Ancestral Dracônico'
-  | 'Arma de Sopro'
-  | 'Resistência a Dano'
-  | 'Esperteza Gnômica'
-  | 'Ilusionista Nato'
-  | 'Falar com Bestas Pequenas'
-  | 'Conhecimento de Artífice'
-  | 'Engenhocas'
-  | 'Camuflagem Rochosa'
-  | 'Resistência Implacável'
-  | 'Ataques Selvagens'
-  | 'Ameaçador'
-  | 'Resistência Infernal'
-  | 'Legado Infernal'
-  | 'Resistência Duergar'
-  | 'Magia Duergar'
-  | 'Versatilidade em Perícias'
-  | 'Idiomas Adicionais';
-
-export interface TraitDefinition {
-  id: string;
-  name: TraitNameType;
-  description: string;
+export enum TraitNameEnum {
+  DARKVISION = 'darkvision',
+  DWARVEN_RESILIENCE = 'dwarven_resilience',
+  DWARVEN_COMBAT_TRAINING = 'dwarven_combat_training',
+  STONE_CUNNING = 'stone_cunning',
+  DWARVEN_ARMOR_TRAINING = 'dwarven_armor_training',
+  DWARVEN_TOUGHNESS = 'dwarven_toughness',
+  KEEN_SENSES = 'keen_senses',
+  FEY_ANCESTRY = 'fey_ancestry',
+  TRANCE = 'trance',
+  ELVEN_WEAPON_TRAINING = 'elven_weapon_training',
+  FLEET_OF_FOOT = 'fleet_of_foot',
+  MASK_OF_THE_WILD = 'mask_of_the_wild',
+  SUPERIOR_DARKVISION = 'superior_darkvision',
+  SUNLIGHT_SENSITIVITY = 'sunlight_sensitivity',
+  DROW_MAGIC = 'drow_magic',
+  DROW_WEAPON_TRAINING = 'drow_weapon_training',
+  LUCKY = 'lucky',
+  BRAVE = 'brave',
+  HALFLING_NIMBLENESS = 'halfling_nimbleness',
+  NATURALLY_STEALTHY = 'naturally_stealthy',
+  STOUT_RESILIENCE = 'stout_resilience',
+  DRACONIC_ANCESTRY = 'draconic_ancestry',
+  BREATH_WEAPON = 'breath_weapon',
+  DAMAGE_RESISTANCE = 'damage_resistance',
+  GNOME_CUNNING = 'gnome_cunning',
+  NATURAL_ILLUSIONIST = 'natural_illusionist',
+  SPEAK_WITH_SMALL_BEASTS = 'speak_with_small_beasts',
+  ARTIFICERS_LORE = 'artificers_lore',
+  TINKER = 'tinker',
+  STONE_CAMOUFLAGE = 'stone_camouflage',
+  RELENTLESS_ENDURANCE = 'relentless_endurance',
+  SAVAGE_ATTACKS = 'savage_attacks',
+  MENACING = 'menacing',
+  HELLISH_RESISTANCE = 'hellish_resistance',
+  INFERNAL_LEGACY = 'infernal_legacy',
+  DUERGAR_RESILIENCE = 'duergar_resilience',
+  DUERGAR_MAGIC = 'duergar_magic',
+  SKILL_VERSATILITY = 'skill_versatility',
+  EXTRA_LANGUAGES = 'extra_languages',
+  CANTRIP = 'cantrip',
 }
+
+export type TraitNameType = `${TraitNameEnum}`;

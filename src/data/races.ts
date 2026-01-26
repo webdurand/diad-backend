@@ -1,6 +1,9 @@
 import { LanguageNameEnum } from 'src/types/languages';
 import { Race, RaceNameEnum } from 'src/types/races';
 import { SubraceNameEnum } from 'src/types/subraces';
+import { TraitNameEnum } from 'src/types/traits';
+import { SkillNameEnum } from 'src/types/skills';
+import { ToolNameEnum } from 'src/types/items';
 
 export const races: Race[] = [
   {
@@ -10,10 +13,10 @@ export const races: Race[] = [
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.DWARVISH],
     fixed_traits: [
-      'Visão no Escuro',
-      'Resiliência Anã',
-      'Treinamento Anão em Combate',
-      'Especialização em Rochas',
+      TraitNameEnum.DARKVISION,
+      TraitNameEnum.DWARVEN_RESILIENCE,
+      TraitNameEnum.DWARVEN_COMBAT_TRAINING,
+      TraitNameEnum.STONE_CUNNING,
     ],
     fixed_skills: [],
     choices: [
@@ -21,9 +24,12 @@ export const races: Race[] = [
         type: 'tool_proficiency',
         amount: 1,
         options: [
-          { label: 'Ferramentas de Ferreiro', value: 'smith_tools' },
-          { label: 'Suprimentos de Cervejeiro', value: 'brewer_supplies' },
-          { label: 'Ferramentas de Pedreiro', value: 'mason_tools' },
+          { label: 'Ferramentas de Ferreiro', value: ToolNameEnum.SMITH_TOOLS },
+          {
+            label: 'Suprimentos de Cervejeiro',
+            value: ToolNameEnum.BREWER_SUPPLIES,
+          },
+          { label: 'Ferramentas de Pedreiro', value: ToolNameEnum.MASON_TOOLS },
         ],
       },
     ],
@@ -31,12 +37,12 @@ export const races: Race[] = [
       {
         name: SubraceNameEnum.HILL_DWARF,
         additional_stats: { wisdom: 1 },
-        additional_traits: ['Tenacidade Anã'],
+        additional_traits: [TraitNameEnum.DWARVEN_TOUGHNESS],
       },
       {
         name: SubraceNameEnum.MOUNTAIN_DWARF,
         additional_stats: { strength: 2 },
-        additional_traits: ['Treinamento Anão com Armaduras'],
+        additional_traits: [TraitNameEnum.DWARVEN_ARMOR_TRAINING],
       },
     ],
   },
@@ -46,14 +52,21 @@ export const races: Race[] = [
     speed: 9.0,
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.ELVISH],
-    fixed_traits: ['Visão no Escuro', 'Ancestral Feérico', 'Transe'],
-    fixed_skills: ['Percepção'],
+    fixed_traits: [
+      TraitNameEnum.DARKVISION,
+      TraitNameEnum.FEY_ANCESTRY,
+      TraitNameEnum.TRANCE,
+    ],
+    fixed_skills: [SkillNameEnum.PERCEPTION],
     choices: [],
     subraces: [
       {
         name: SubraceNameEnum.HIGH_ELF,
         additional_stats: { intelligence: 1 },
-        additional_traits: ['Treinamento Élfico com Armas', 'Truque'],
+        additional_traits: [
+          TraitNameEnum.ELVEN_WEAPON_TRAINING,
+          TraitNameEnum.CANTRIP,
+        ],
         choices: [
           { type: 'language', amount: 1, options: 'all' },
           {
@@ -69,19 +82,19 @@ export const races: Race[] = [
         additional_stats: { wisdom: 1 },
         override_speed: 10.5,
         additional_traits: [
-          'Treinamento Élfico com Armas',
-          'Pés Ligeiros',
-          'Máscara da Natureza',
+          TraitNameEnum.ELVEN_WEAPON_TRAINING,
+          TraitNameEnum.FLEET_OF_FOOT,
+          TraitNameEnum.MASK_OF_THE_WILD,
         ],
       },
       {
         name: SubraceNameEnum.DROW,
         additional_stats: { charisma: 1 },
         additional_traits: [
-          'Visão no Escuro Superior',
-          'Sensibilidade à Luz Solar',
-          'Magia Drow',
-          'Treinamento Drow com Armas',
+          TraitNameEnum.SUPERIOR_DARKVISION,
+          TraitNameEnum.SUNLIGHT_SENSITIVITY,
+          TraitNameEnum.DROW_MAGIC,
+          TraitNameEnum.DROW_WEAPON_TRAINING,
         ],
       },
     ],
@@ -92,19 +105,23 @@ export const races: Race[] = [
     speed: 7.5,
     size: 'Small',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.HALFLING],
-    fixed_traits: ['Sorte', 'Bravura', 'Agilidade Halfling'],
+    fixed_traits: [
+      TraitNameEnum.LUCKY,
+      TraitNameEnum.BRAVE,
+      TraitNameEnum.HALFLING_NIMBLENESS,
+    ],
     fixed_skills: [],
     choices: [],
     subraces: [
       {
         name: SubraceNameEnum.LIGHTFOOT_HALFLING,
         additional_stats: { charisma: 1 },
-        additional_traits: ['Furtividade Natural'],
+        additional_traits: [TraitNameEnum.NATURALLY_STEALTHY],
       },
       {
         name: SubraceNameEnum.STOUT_HALFLING,
         additional_stats: { constitution: 1 },
-        additional_traits: ['Resiliência dos Robustos'],
+        additional_traits: [TraitNameEnum.STOUT_RESILIENCE],
       },
     ],
   },
@@ -158,9 +175,9 @@ export const races: Race[] = [
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.DRACONIC],
     fixed_traits: [
-      'Ancestral Dracônico',
-      'Arma de Sopro',
-      'Resistência a Dano',
+      TraitNameEnum.DRACONIC_ANCESTRY,
+      TraitNameEnum.BREATH_WEAPON,
+      TraitNameEnum.DAMAGE_RESISTANCE,
     ],
     fixed_skills: [],
     choices: [
@@ -229,19 +246,25 @@ export const races: Race[] = [
     speed: 7.5,
     size: 'Small',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.GNOMISH],
-    fixed_traits: ['Visão no Escuro', 'Esperteza Gnômica'],
+    fixed_traits: [TraitNameEnum.DARKVISION, TraitNameEnum.GNOME_CUNNING],
     fixed_skills: [],
     choices: [],
     subraces: [
       {
         name: SubraceNameEnum.FOREST_GNOME,
         additional_stats: { dexterity: 1 },
-        additional_traits: ['Ilusionista Nato', 'Falar com Bestas Pequenas'],
+        additional_traits: [
+          TraitNameEnum.NATURAL_ILLUSIONIST,
+          TraitNameEnum.SPEAK_WITH_SMALL_BEASTS,
+        ],
       },
       {
         name: SubraceNameEnum.ROCK_GNOME,
         additional_stats: { constitution: 1 },
-        additional_traits: ['Conhecimento de Artífice', 'Engenhocas'],
+        additional_traits: [
+          TraitNameEnum.ARTIFICERS_LORE,
+          TraitNameEnum.TINKER,
+        ],
       },
     ],
   },
@@ -252,9 +275,9 @@ export const races: Race[] = [
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.ELVISH],
     fixed_traits: [
-      'Visão no Escuro',
-      'Ancestral Feérico',
-      'Versatilidade em Perícias',
+      TraitNameEnum.DARKVISION,
+      TraitNameEnum.FEY_ANCESTRY,
+      TraitNameEnum.SKILL_VERSATILITY,
     ],
     fixed_skills: [],
     choices: [
@@ -276,12 +299,12 @@ export const races: Race[] = [
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.ORC],
     fixed_traits: [
-      'Visão no Escuro',
-      'Resistência Implacável',
-      'Ataques Selvagens',
-      'Ameaçador',
+      TraitNameEnum.DARKVISION,
+      TraitNameEnum.RELENTLESS_ENDURANCE,
+      TraitNameEnum.SAVAGE_ATTACKS,
+      TraitNameEnum.MENACING,
     ],
-    fixed_skills: ['Intimidação'],
+    fixed_skills: [SkillNameEnum.INTIMIDATION],
     choices: [],
     subraces: [],
   },
@@ -292,9 +315,9 @@ export const races: Race[] = [
     size: 'Medium',
     languages: [LanguageNameEnum.COMMON, LanguageNameEnum.INFERNAL],
     fixed_traits: [
-      'Visão no Escuro',
-      'Resistência Infernal',
-      'Legado Infernal',
+      TraitNameEnum.DARKVISION,
+      TraitNameEnum.HELLISH_RESISTANCE,
+      TraitNameEnum.INFERNAL_LEGACY,
     ],
     fixed_skills: [],
     choices: [],
