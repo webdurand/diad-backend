@@ -1,5 +1,5 @@
 import { LanguageNameEnum } from 'src/types/languages';
-import { Race, RaceNameEnum } from 'src/types/races';
+import { ChoiceTypeEnum, Race, RaceNameEnum } from 'src/types/races';
 import { SubraceNameEnum } from 'src/types/subraces';
 import { TraitNameEnum } from 'src/types/traits';
 import { SkillNameEnum } from 'src/types/skills';
@@ -21,7 +21,7 @@ export const races: Race[] = [
     fixed_skills: [],
     choices: [
       {
-        type: 'tool_proficiency',
+        type: ChoiceTypeEnum.TOOL_PROFICIENCY,
         amount: 1,
         options: [
           { label: 'Ferramentas de Ferreiro', value: ToolNameEnum.SMITH_TOOLS },
@@ -68,9 +68,9 @@ export const races: Race[] = [
           TraitNameEnum.CANTRIP,
         ],
         choices: [
-          { type: 'language', amount: 1, options: 'all' },
+          { type: ChoiceTypeEnum.LANGUAGE, amount: 1, options: 'all' },
           {
-            type: 'cantrip',
+            type: ChoiceTypeEnum.CANTRIP,
             amount: 1,
             options: 'all',
             description: 'Truque da lista de Mago',
@@ -140,7 +140,7 @@ export const races: Race[] = [
     languages: [LanguageNameEnum.COMMON],
     fixed_traits: [],
     fixed_skills: [],
-    choices: [{ type: 'language', amount: 1, options: 'all' }],
+    choices: [{ type: ChoiceTypeEnum.LANGUAGE, amount: 1, options: 'all' }],
     subraces: [
       {
         name: SubraceNameEnum.HUMAN_VARIANT,
@@ -156,14 +156,14 @@ export const races: Race[] = [
         additional_traits: [],
         choices: [
           {
-            type: 'stat_increase',
+            type: ChoiceTypeEnum.STAT_INCREASE,
             amount: 2,
             options: 'all',
             restriction: { unique: true },
           },
-          { type: 'skill_proficiency', amount: 1, options: 'all' },
-          { type: 'feat', amount: 1, options: 'all' },
-          { type: 'language', amount: 1, options: 'all' },
+          { type: ChoiceTypeEnum.SKILL_PROFICIENCY, amount: 1, options: 'all' },
+          { type: ChoiceTypeEnum.FEAT, amount: 1, options: 'all' },
+          { type: ChoiceTypeEnum.LANGUAGE, amount: 1, options: 'all' },
         ],
       },
     ],
@@ -182,7 +182,7 @@ export const races: Race[] = [
     fixed_skills: [],
     choices: [
       {
-        type: 'draconic_ancestry',
+        type: ChoiceTypeEnum.DRACONIC_ANCESTRY,
         amount: 1,
         options: [
           {
@@ -282,13 +282,13 @@ export const races: Race[] = [
     fixed_skills: [],
     choices: [
       {
-        type: 'stat_increase',
+        type: ChoiceTypeEnum.STAT_INCREASE,
         amount: 2,
         options: 'all',
         restriction: { exclude: ['charisma'], unique: true },
       },
-      { type: 'skill_proficiency', amount: 2, options: 'all' },
-      { type: 'language', amount: 1, options: 'all' },
+      { type: ChoiceTypeEnum.SKILL_PROFICIENCY, amount: 2, options: 'all' },
+      { type: ChoiceTypeEnum.LANGUAGE, amount: 1, options: 'all' },
     ],
     subraces: [],
   },

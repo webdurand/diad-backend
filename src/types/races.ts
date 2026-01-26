@@ -45,6 +45,16 @@ export enum RaceNameEnum {
 
 export type RaceType = `${RaceNameEnum}`;
 
+export enum ChoiceTypeEnum {
+  LANGUAGE = 'language',
+  TOOL_PROFICIENCY = 'tool_proficiency',
+  DRACONIC_ANCESTRY = 'draconic_ancestry',
+  STAT_INCREASE = 'stat_increase',
+  SKILL_PROFICIENCY = 'skill_proficiency',
+  FEAT = 'feat',
+  CANTRIP = 'cantrip',
+}
+
 export type ChoiceType =
   | 'language'
   | 'tool_proficiency'
@@ -69,7 +79,7 @@ export interface ChoiceRestriction {
 }
 
 export interface RaceChoice {
-  type: ChoiceType;
+  type: ChoiceTypeEnum;
   amount: number;
   description?: string;
   options?: ChoiceOption[] | 'all';
