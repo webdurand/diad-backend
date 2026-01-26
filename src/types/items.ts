@@ -158,3 +158,62 @@ export enum ToolNameEnum {
 }
 
 export type ToolName = `${ToolNameEnum}`;
+
+// Fonte: Pacotes de Equipamento [1-4]
+export enum EquipmentPackNameEnum {
+  BurglarsPack = 'burglars_pack', // Pacote de Assaltante
+  DiplomatsPack = 'diplomats_pack', // Pacote de Diplomata
+  DungeoneersPack = 'dungeoneers_pack', // Pacote de Aventureiro
+  EntertainersPack = 'entertainers_pack', // Pacote de Artista
+  ExplorersPack = 'explorers_pack', // Pacote de Explorador
+  PriestsPack = 'priests_pack', // Pacote de Sacerdote
+  ScholarsPack = 'scholars_pack', // Pacote de Estudioso
+}
+
+// Fonte: Ferramentas de Artesão e Kits [5-7]
+export enum ToolNameEnum {
+  // Já existentes (Instrumentos)
+  Lute = 'lute',
+  Flute = 'flute',
+  PanFlute = 'pan_flute',
+  Bagpipes = 'bagpipes',
+  Lyre = 'lyre',
+  Shawm = 'shawm',
+  Drum = 'drum',
+  Horn = 'horn',
+  Viol = 'viol',
+  Dulcimer = 'dulcimer',
+
+  // Ferramentas de Artesão
+  AlchemistsSupplies = 'alchemists_supplies', // Suprimentos de alquimista
+  BrewersSupplies = 'brewers_supplies', // Suprimentos de cervejeiro
+  CalligraphersSupplies = 'calligraphers_supplies', // Suprimentos de caligrafia
+  CarpentersTools = 'carpenters_tools', // Ferramentas de carpinteiro
+  CartographersTools = 'cartographers_tools', // Ferramentas de cartógrafo
+  CobblersTools = 'cobblers_tools', // Ferramentas de sapateiro
+  CooksUtensils = 'cooks_utensils', // Utensílios de cozinheiro
+  GlassblowersTools = 'glassblowers_tools', // Ferramentas de vidreiro
+  JewelersTools = 'jewelers_tools', // Ferramentas de joalheiro
+  LeatherworkersTools = 'leatherworkers_tools', // Ferramentas de coureiro
+  MasonsTools = 'masons_tools', // Ferramentas de pedreiro
+  PaintersSupplies = 'painters_supplies', // Ferramentas de pintor
+  PottersTools = 'potters_tools', // Ferramentas de oleiro
+  SmithsTools = 'smiths_tools', // Ferramentas de ferreiro
+  TinkersTools = 'tinkers_tools', // Ferramentas de funileiro
+  WeaversTools = 'weavers_tools', // Ferramentas de costureiro (Tecelão)
+  WoodcarversTools = 'woodcarvers_tools', // Ferramentas de entalhador
+
+  // Kits de Jogo
+  DiceSet = 'dice_set', // Conjunto de dados
+  DragonChessSet = 'dragon_chess_set', // Xadrez do dragão
+  PlayingCardSet = 'playing_card_set', // Baralho de cartas
+  ThreeDragonAnteSet = 'three_dragon_ante_set', // Jogo dos três dragões
+
+  // Outras Ferramentas
+  DisguiseKit = 'disguise_kit', // Kit de disfarce
+  ForgeryKit = 'forgery_kit', // Kit de falsificação
+  HerbalismKit = 'herbalism_kit', // Kit de herbalismo
+  NavigatorsTools = 'navigators_tools', // Ferramentas de navegação
+  PoisonersKit = 'poisoners_kit', // Kit de venenos
+  ThievesTools = 'thieves_tools', // Ferramentas de ladrão
+}

@@ -5,6 +5,7 @@ import {
   WeaponNameEnum,
   ArmorNameEnum,
   ToolTypeEnum,
+  EquipmentPackNameEnum,
 } from 'src/types/items';
 import { SkillNameEnum } from 'src/types/skills';
 import { StatNameEnum } from 'src/types/stats';
@@ -85,16 +86,25 @@ export const BARD_CLASS_DEFINITION: ClassDefinition = {
       type: 'equipment',
       amount: 1,
       description: 'Arma Marcial ou Simples',
-      options: [...SIMPLE_WEAPONS_OPTIONS],
+      options: [
+        { label: 'Rapieira', value: WeaponNameEnum.RAPIER },
+        { label: 'Espada Longa', value: WeaponNameEnum.LONGSWORD },
+        ...SIMPLE_WEAPONS_OPTIONS,
+      ],
     },
-
     {
       type: 'equipment',
       amount: 1,
       description: 'Pacote de Equipamento',
       options: [
-        { label: 'Pacote de Diplomata', value: 'diplomats_pack' },
-        { label: 'Pacote de Artista', value: 'entertainers_pack' },
+        {
+          label: 'Pacote de Diplomata',
+          value: EquipmentPackNameEnum.DiplomatsPack,
+        },
+        {
+          label: 'Pacote de Artista',
+          value: EquipmentPackNameEnum.EntertainersPack,
+        },
       ],
     },
     {
