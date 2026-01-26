@@ -1,219 +1,162 @@
-// Categoria da Armadura (para regras de proficiência e cálculo de CA)
+// =============================================================================
+// ARMADURAS
+// =============================================================================
 export enum ArmorTypeEnum {
-  LIGHT = 'light', // Leve (Dex total)
-  MEDIUM = 'medium', // Média (Dex máx +2)
-  HEAVY = 'heavy', // Pesada (Sem Dex)
-  SHIELD = 'shield', // Escudo (+2 CA)
+  LIGHT = 'light',
+  MEDIUM = 'medium',
+  HEAVY = 'heavy',
+  SHIELD = 'shield',
 }
-
 export type ArmorType = `${ArmorTypeEnum}`;
 
-// Nomes Específicos das Armaduras (IDs para o banco de dados)
 export enum ArmorNameEnum {
-  // --- Leves ---
-  PADDED = 'padded', // Acolchoada
-  LEATHER = 'leather', // Couro
-  STUDDED_LEATHER = 'studded_leather', // Couro Batido
-
-  // --- Médias ---
-  HIDE = 'hide', // Gibão de Peles
-  CHAIN_SHIRT = 'chain_shirt', // Camisão de Malha
-  SCALE_MAIL = 'scale_mail', // Brunea
-  BREASTPLATE = 'breastplate', // Peitoral
-  HALF_PLATE = 'half_plate', // Meia-Armadura
-
-  // --- Pesadas ---
-  RING_MAIL = 'ring_mail', // Cota de Anéis
-  CHAIN_MAIL = 'chain_mail', // Cota de Malha
-  SPLINT = 'splint', // Cota de Talas
-  PLATE = 'plate', // Placas
-
-  // --- Escudo ---
-  SHIELD = 'shield', // Escudo
+  PADDED = 'padded',
+  LEATHER = 'leather',
+  STUDDED_LEATHER = 'studded_leather',
+  HIDE = 'hide',
+  CHAIN_SHIRT = 'chain_shirt',
+  SCALE_MAIL = 'scale_mail',
+  BREASTPLATE = 'breastplate',
+  HALF_PLATE = 'half_plate',
+  RING_MAIL = 'ring_mail',
+  CHAIN_MAIL = 'chain_mail',
+  SPLINT = 'splint',
+  PLATE = 'plate',
+  SHIELD = 'shield',
 }
+export type ArmorName = `${ArmorNameEnum}`;
 
 // =============================================================================
-// ARMAS (Weapons) - Fonte: Livro do Jogador, Cap. 5
+// ARMAS
 // =============================================================================
-
-// Categoria da Arma (para regras de proficiência)
 export enum WeaponTypeEnum {
-  SIMPLE = 'simple', // Simples Corpo-a-Corpo
-  MARTIAL = 'martial', // Marcial à Distância
-  INSTRUMENTAL = 'instrumental', // Instrumento Musical
+  SIMPLE = 'simple',
+  MARTIAL = 'martial',
 }
-
 export type WeaponType = `${WeaponTypeEnum}`;
 
-// Nomes Específicos das Armas
 export enum WeaponNameEnum {
-  // --- Simples Corpo-a-Corpo ---
-  CLUB = 'club', // Porrete
-  DAGGER = 'dagger', // Adaga
-  GREATCLUB = 'greatclub', // Clava Grande
-  HANDAXE = 'handaxe', // Machadinha
-  JAVELIN = 'javelin', // Azagaia
-  LIGHT_HAMMER = 'light_hammer', // Martelo Leve
-  MACE = 'mace', // Maça
-  QUARTERSTAFF = 'quarterstaff', // Bordão
-  SICKLE = 'sickle', // Foice Curta
-  SPEAR = 'spear', // Lança
-
-  // --- Simples à Distância ---
-  LIGHT_CROSSBOW = 'light_crossbow', // Besta Leve
-  DART = 'dart', // Dardo
-  SHORTBOW = 'shortbow', // Arco Curto
-  SLING = 'sling', // Funda
-
-  // --- Marciais Corpo-a-Corpo ---
-  BATTLEAXE = 'battleaxe', // Machado de Batalha
-  FLAIL = 'flail', // Mangual
-  GLAIVE = 'glaive', // Glaive
-  GREATAXE = 'greataxe', // Machado Grande
-  GREATSWORD = 'greatsword', // Espada Grande
-  HALBERD = 'halberd', // Alabarda
-  LANCE = 'lance', // Lança de Montaria
-  LONGSWORD = 'longsword', // Espada Longa
-  MAUL = 'maul', // Malho
-  MORNINGSTAR = 'morningstar', // Maça Estrela
-  PIKE = 'pike', // Lança Longa
-  RAPIER = 'rapier', // Rapieira
-  SCIMITAR = 'scimitar', // Cimitarra
-  SHORTSWORD = 'shortsword', // Espada Curta
-  TRIDENT = 'trident', // Tridente
-  WAR_PICK = 'war_pick', // Picareta de Guerra
-  WARHAMMER = 'warhammer', // Martelo de Guerra
-  WHIP = 'whip', // Chicote
-
-  // --- Marciais à Distância ---
-  BLOWGUN = 'blowgun', // Zarabatana
-  HAND_CROSSBOW = 'hand_crossbow', // Besta de Mão
-  HEAVY_CROSSBOW = 'heavy_crossbow', // Besta Pesada
-  LONGBOW = 'longbow', // Arco Longo
-  NET = 'net', // Rede
+  // Simples
+  CLUB = 'club',
+  DAGGER = 'dagger',
+  GREATCLUB = 'greatclub',
+  HANDAXE = 'handaxe',
+  JAVELIN = 'javelin',
+  LIGHT_HAMMER = 'light_hammer',
+  MACE = 'mace',
+  QUARTERSTAFF = 'quarterstaff',
+  SICKLE = 'sickle',
+  SPEAR = 'spear',
+  LIGHT_CROSSBOW = 'light_crossbow',
+  DART = 'dart',
+  SHORTBOW = 'shortbow',
+  SLING = 'sling',
+  // Marciais
+  BATTLEAXE = 'battleaxe',
+  FLAIL = 'flail',
+  GLAIVE = 'glaive',
+  GREATAXE = 'greataxe',
+  GREATSWORD = 'greatsword',
+  HALBERD = 'halberd',
+  LANCE = 'lance',
+  LONGSWORD = 'longsword',
+  MAUL = 'maul',
+  MORNINGSTAR = 'morningstar',
+  PIKE = 'pike',
+  RAPIER = 'rapier',
+  SCIMITAR = 'scimitar',
+  SHORTSWORD = 'shortsword',
+  TRIDENT = 'trident',
+  WAR_PICK = 'war_pick',
+  WARHAMMER = 'warhammer',
+  WHIP = 'whip',
+  BLOWGUN = 'blowgun',
+  HAND_CROSSBOW = 'hand_crossbow',
+  HEAVY_CROSSBOW = 'heavy_crossbow',
+  LONGBOW = 'longbow',
+  NET = 'net',
 }
-
 export type WeaponName = `${WeaponNameEnum}`;
 
 // =============================================================================
-// FERRAMENTAS (Tools) - Fonte: Livro do Jogador, Cap. 5
+// FERRAMENTAS (Consolidado)
 // =============================================================================
-
 export enum ToolTypeEnum {
-  ARTISAN = 'artisan', // Ferramentas de Artesão
-  GAMING = 'gaming', // Kits de Jogo
-  MUSICAL = 'musical', // Instrumentos Musicais
-  SPECIAL = 'special', // Kits Especiais (Ladrão, Navegação, etc)
+  ARTISAN = 'artisan',
+  GAMING = 'gaming',
+  MUSICAL = 'musical',
+  SPECIAL = 'special',
 }
-
 export type ToolType = `${ToolTypeEnum}`;
 
 export enum ToolNameEnum {
-  // --- Ferramentas de Artesão ---
-  ALCHEMIST_SUPPLIES = 'alchemist_supplies', // Suprimentos de Alquimista
-  BREWER_SUPPLIES = 'brewer_supplies', // Suprimentos de Cervejeiro
-  CALLIGRAPHER_SUPPLIES = 'calligrapher_supplies', // Suprimentos de Caligrafia
-  CARPENTER_TOOLS = 'carpenter_tools', // Ferramentas de Carpinteiro
-  CARTOGRAPHER_TOOLS = 'cartographer_tools', // Ferramentas de Cartógrafo
-  COBBLER_TOOLS = 'cobbler_tools', // Ferramentas de Sapateiro
-  COOK_UTENSILS = 'cook_utensils', // Utensílios de Cozinheiro
-  GLASSBLOWER_TOOLS = 'glassblower_tools', // Ferramentas de Vidreiro
-  JEWELER_TOOLS = 'jeweler_tools', // Ferramentas de Joalheiro
-  LEATHERWORKER_TOOLS = 'leatherworker_tools', // Ferramentas de Coureiro
-  MASON_TOOLS = 'mason_tools', // Ferramentas de Pedreiro
-  PAINTER_SUPPLIES = 'painter_supplies', // Suprimentos de Pintor
-  POTTER_TOOLS = 'potter_tools', // Ferramentas de Oleiro
-  SMITH_TOOLS = 'smith_tools', // Ferramentas de Ferreiro
-  TINKER_TOOLS = 'tinker_tools', // Ferramentas de Funileiro
-  WEAVER_TOOLS = 'weaver_tools', // Ferramentas de Tecelão
-  WOODCARVER_TOOLS = 'woodcarver_tools', // Ferramentas de Entalhador
-
-  // --- Kits de Jogo ---
-  DICE_SET = 'dice_set', // Conjunto de Dados
-  DRAGONCHESS_SET = 'dragonchess_set', // Xadrez do Dragão
-  PLAYING_CARD_SET = 'playing_card_set', // Baralho de Cartas
-  THREE_DRAGON_ANTE_SET = 'three_dragon_ante_set', // Jogo dos Três Dragões
-
-  // --- Instrumentos Musicais ---
-  BAGPIPES = 'bagpipes', // Gaita de Foles
-  DRUM = 'drum', // Tambor
-  DULCIMER = 'dulcimer', // Lira (ou Dulcimer)
-  FLUTE = 'flute', // Flauta
-  LUTE = 'lute', // Alaúde
-  LYRE = 'lyre', // Lira
-  HORN = 'horn', // Trombeta
-  PAN_FLUTE = 'pan_flute', // Flauta de Pã
-  SHAWM = 'shawm', // Oboé
-  VIOL = 'viol', // Violino
-
-  // --- Especiais ---
-  DISGUISE_KIT = 'disguise_kit', // Kit de Disfarce
-  FORGERY_KIT = 'forgery_kit', // Kit de Falsificação
-  HERBALISM_KIT = 'herbalism_kit', // Kit de Herbalismo
-  NAVIGATOR_TOOLS = 'navigator_tools', // Ferramentas de Navegador
-  POISONER_KIT = 'poisoner_kit', // Kit de Venenos
-  THIEVES_TOOLS = 'thieves_tools', // Ferramentas de Ladrão
-  VEHICLES_LAND = 'vehicles_land', // Veículos (Terrestres)
-  VEHICLES_WATER = 'vehicles_water', // Veículos (Aquáticos)
+  // Artesão
+  ALCHEMIST_SUPPLIES = 'alchemist_supplies',
+  BREWER_SUPPLIES = 'brewer_supplies',
+  CALLIGRAPHER_SUPPLIES = 'calligrapher_supplies',
+  CARPENTER_TOOLS = 'carpenter_tools',
+  CARTOGRAPHER_TOOLS = 'cartographer_tools',
+  COBBLER_TOOLS = 'cobbler_tools',
+  COOK_UTENSILS = 'cook_utensils',
+  GLASSBLOWER_TOOLS = 'glassblower_tools',
+  JEWELER_TOOLS = 'jeweler_tools',
+  LEATHERWORKER_TOOLS = 'leatherworker_tools',
+  MASON_TOOLS = 'mason_tools',
+  PAINTER_SUPPLIES = 'painter_supplies',
+  POTTER_TOOLS = 'potter_tools',
+  SMITH_TOOLS = 'smith_tools',
+  TINKER_TOOLS = 'tinker_tools',
+  WEAVER_TOOLS = 'weaver_tools',
+  WOODCARVER_TOOLS = 'woodcarver_tools',
+  // Jogos
+  DICE_SET = 'dice_set',
+  DRAGONCHESS_SET = 'dragonchess_set',
+  PLAYING_CARD_SET = 'playing_card_set',
+  THREE_DRAGON_ANTE_SET = 'three_dragon_ante_set',
+  // Instrumentos
+  BAGPIPES = 'bagpipes',
+  DRUM = 'drum',
+  DULCIMER = 'dulcimer',
+  FLUTE = 'flute',
+  LUTE = 'lute',
+  LYRE = 'lyre',
+  HORN = 'horn',
+  PAN_FLUTE = 'pan_flute',
+  SHAWM = 'shawm',
+  VIOL = 'viol',
+  // Especiais
+  DISGUISE_KIT = 'disguise_kit',
+  FORGERY_KIT = 'forgery_kit',
+  HERBALISM_KIT = 'herbalism_kit',
+  NAVIGATOR_TOOLS = 'navigator_tools',
+  POISONER_KIT = 'poisoner_kit',
+  THIEVES_TOOLS = 'thieves_tools',
 }
-
 export type ToolName = `${ToolNameEnum}`;
 
-// Fonte: Pacotes de Equipamento [1-4]
+// =============================================================================
+// ITENS GERAIS E PACOTES
+// =============================================================================
 export enum EquipmentPackNameEnum {
-  BurglarsPack = 'burglars_pack', // Pacote de Assaltante
-  DiplomatsPack = 'diplomats_pack', // Pacote de Diplomata
-  DungeoneersPack = 'dungeoneers_pack', // Pacote de Aventureiro
-  EntertainersPack = 'entertainers_pack', // Pacote de Artista
-  ExplorersPack = 'explorers_pack', // Pacote de Explorador
-  PriestsPack = 'priests_pack', // Pacote de Sacerdote
-  ScholarsPack = 'scholars_pack', // Pacote de Estudioso
+  BURGLARS_PACK = 'burglars_pack',
+  DIPLOMATS_PACK = 'diplomats_pack',
+  DUNGEONEERS_PACK = 'dungeoneers_pack',
+  ENTERTAINERS_PACK = 'entertainers_pack',
+  EXPLORERS_PACK = 'explorers_pack',
+  PRIESTS_PACK = 'priests_pack',
+  SCHOLARS_PACK = 'scholars_pack',
 }
+export type EquipmentPackName = `${EquipmentPackNameEnum}`;
 
-// Fonte: Ferramentas de Artesão e Kits [5-7]
-export enum ToolNameEnum {
-  // Já existentes (Instrumentos)
-  Lute = 'lute',
-  Flute = 'flute',
-  PanFlute = 'pan_flute',
-  Bagpipes = 'bagpipes',
-  Lyre = 'lyre',
-  Shawm = 'shawm',
-  Drum = 'drum',
-  Horn = 'horn',
-  Viol = 'viol',
-  Dulcimer = 'dulcimer',
-
-  // Ferramentas de Artesão
-  AlchemistsSupplies = 'alchemists_supplies', // Suprimentos de alquimista
-  BrewersSupplies = 'brewers_supplies', // Suprimentos de cervejeiro
-  CalligraphersSupplies = 'calligraphers_supplies', // Suprimentos de caligrafia
-  CarpentersTools = 'carpenters_tools', // Ferramentas de carpinteiro
-  CartographersTools = 'cartographers_tools', // Ferramentas de cartógrafo
-  CobblersTools = 'cobblers_tools', // Ferramentas de sapateiro
-  CooksUtensils = 'cooks_utensils', // Utensílios de cozinheiro
-  GlassblowersTools = 'glassblowers_tools', // Ferramentas de vidreiro
-  JewelersTools = 'jewelers_tools', // Ferramentas de joalheiro
-  LeatherworkersTools = 'leatherworkers_tools', // Ferramentas de coureiro
-  MasonsTools = 'masons_tools', // Ferramentas de pedreiro
-  PaintersSupplies = 'painters_supplies', // Ferramentas de pintor
-  PottersTools = 'potters_tools', // Ferramentas de oleiro
-  SmithsTools = 'smiths_tools', // Ferramentas de ferreiro
-  TinkersTools = 'tinkers_tools', // Ferramentas de funileiro
-  WeaversTools = 'weavers_tools', // Ferramentas de costureiro (Tecelão)
-  WoodcarversTools = 'woodcarvers_tools', // Ferramentas de entalhador
-
-  // Kits de Jogo
-  DiceSet = 'dice_set', // Conjunto de dados
-  DragonChessSet = 'dragon_chess_set', // Xadrez do dragão
-  PlayingCardSet = 'playing_card_set', // Baralho de cartas
-  ThreeDragonAnteSet = 'three_dragon_ante_set', // Jogo dos três dragões
-
-  // Outras Ferramentas
-  DisguiseKit = 'disguise_kit', // Kit de disfarce
-  ForgeryKit = 'forgery_kit', // Kit de falsificação
-  HerbalismKit = 'herbalism_kit', // Kit de herbalismo
-  NavigatorsTools = 'navigators_tools', // Ferramentas de navegação
-  PoisonersKit = 'poisoners_kit', // Kit de venenos
-  ThievesTools = 'thieves_tools', // Ferramentas de ladrão
+export enum AdventuringGearNameEnum {
+  COMPONENT_POUCH = 'component_pouch',
+  ARCANE_FOCUS_CRYSTAL = 'arcane_focus_crystal',
+  ARCANE_FOCUS_ORB = 'arcane_focus_orb',
+  ARCANE_FOCUS_ROD = 'arcane_focus_rod',
+  ARCANE_FOCUS_STAFF = 'arcane_focus_staff',
+  ARCANE_FOCUS_WAND = 'arcane_focus_wand',
+  HOLY_SYMBOL_AMULET = 'holy_symbol_amulet',
+  HOLY_SYMBOL_EMBLEM = 'holy_symbol_emblem',
+  HOLY_SYMBOL_RELIQUARY = 'holy_symbol_reliquary',
 }
+export type AdventuringGearName = `${AdventuringGearNameEnum}`;

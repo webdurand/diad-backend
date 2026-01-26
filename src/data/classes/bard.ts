@@ -99,11 +99,11 @@ export const bard: ClassDefinition = {
       options: [
         {
           label: 'Pacote de Diplomata',
-          value: EquipmentPackNameEnum.DiplomatsPack,
+          value: EquipmentPackNameEnum.DIPLOMATS_PACK,
         },
         {
           label: 'Pacote de Artista',
-          value: EquipmentPackNameEnum.EntertainersPack,
+          value: EquipmentPackNameEnum.ENTERTAINERS_PACK,
         },
       ],
     },

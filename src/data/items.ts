@@ -4,6 +4,8 @@ import {
   WeaponNameEnum,
 } from 'src/types/items';
 
+// Mantendo os que você já usa, mas garantindo que as chaves do Enum
+// estejam no novo padrão consolidado (SNAKE_CASE)
 export const SIMPLE_WEAPONS_OPTIONS = [
   { label: 'Adaga', value: WeaponNameEnum.DAGGER },
   { label: 'Azagaia', value: WeaponNameEnum.JAVELIN },
@@ -52,57 +54,62 @@ export const MUSICAL_INSTRUMENTS_OPTIONS = [
   { label: 'Tambor', value: ToolNameEnum.DRUM },
   { label: 'Trombeta', value: ToolNameEnum.HORN },
   { label: 'Violino', value: ToolNameEnum.VIOL },
-  { label: 'Xilofone', value: ToolNameEnum.DULCIMER },
+  { label: 'Lira (Dulcimer)', value: ToolNameEnum.DULCIMER },
 ];
 
-// Fonte: Pacotes de Equipamento [2-4]
+// --- AJUSTADOS PARA O NOVO PADRÃO ---
+
 export const EQUIPMENT_PACK_OPTIONS = [
-  { label: 'Pacote de Artista', value: EquipmentPackNameEnum.EntertainersPack },
-  { label: 'Pacote de Assaltante', value: EquipmentPackNameEnum.BurglarsPack },
+  {
+    label: 'Pacote de Artista',
+    value: EquipmentPackNameEnum.ENTERTAINERS_PACK,
+  },
+  { label: 'Pacote de Assaltante', value: EquipmentPackNameEnum.BURGLARS_PACK },
   {
     label: 'Pacote de Aventureiro',
-    value: EquipmentPackNameEnum.DungeoneersPack,
+    value: EquipmentPackNameEnum.DUNGEONEERS_PACK,
   },
-  { label: 'Pacote de Diplomata', value: EquipmentPackNameEnum.DiplomatsPack },
-  { label: 'Pacote de Estudioso', value: EquipmentPackNameEnum.ScholarsPack },
-  { label: 'Pacote de Explorador', value: EquipmentPackNameEnum.ExplorersPack },
-  { label: 'Pacote de Sacerdote', value: EquipmentPackNameEnum.PriestsPack },
+  { label: 'Pacote de Diplomata', value: EquipmentPackNameEnum.DIPLOMATS_PACK },
+  { label: 'Pacote de Estudioso', value: EquipmentPackNameEnum.SCHOLARS_PACK },
+  {
+    label: 'Pacote de Explorador',
+    value: EquipmentPackNameEnum.EXPLORERS_PACK,
+  },
+  { label: 'Pacote de Sacerdote', value: EquipmentPackNameEnum.PRIESTS_PACK },
 ];
 
-// Fonte: Ferramentas [5]
 export const ARTISAN_TOOLS_OPTIONS = [
-  { label: 'Ferramentas de Carpinteiro', value: ToolNameEnum.CarpentersTools },
+  { label: 'Ferramentas de Carpinteiro', value: ToolNameEnum.CARPENTER_TOOLS },
   {
     label: 'Ferramentas de Cartógrafo',
-    value: ToolNameEnum.CartographersTools,
+    value: ToolNameEnum.CARTOGRAPHER_TOOLS,
   },
-  { label: 'Ferramentas de Costureiro', value: ToolNameEnum.WeaversTools },
-  { label: 'Ferramentas de Coureiro', value: ToolNameEnum.LeatherworkersTools },
-  { label: 'Ferramentas de Entalhador', value: ToolNameEnum.WoodcarversTools },
-  { label: 'Ferramentas de Ferreiro', value: ToolNameEnum.SmithsTools },
-  { label: 'Ferramentas de Funileiro', value: ToolNameEnum.TinkersTools },
-  { label: 'Ferramentas de Joalheiro', value: ToolNameEnum.JewelersTools },
-  { label: 'Ferramentas de Oleiro', value: ToolNameEnum.PottersTools },
-  { label: 'Ferramentas de Pedreiro', value: ToolNameEnum.MasonsTools },
-  { label: 'Ferramentas de Pintor', value: ToolNameEnum.PaintersSupplies },
-  { label: 'Ferramentas de Sapateiro', value: ToolNameEnum.CobblersTools },
-  { label: 'Ferramentas de Vidreiro', value: ToolNameEnum.GlassblowersTools },
+  { label: 'Ferramentas de Costureiro', value: ToolNameEnum.WEAVER_TOOLS },
+  { label: 'Ferramentas de Coureiro', value: ToolNameEnum.LEATHERWORKER_TOOLS },
+  { label: 'Ferramentas de Entalhador', value: ToolNameEnum.WOODCARVER_TOOLS },
+  { label: 'Ferramentas de Ferreiro', value: ToolNameEnum.SMITH_TOOLS },
+  { label: 'Ferramentas de Funileiro', value: ToolNameEnum.TINKER_TOOLS },
+  { label: 'Ferramentas de Joalheiro', value: ToolNameEnum.JEWELER_TOOLS },
+  { label: 'Ferramentas de Oleiro', value: ToolNameEnum.POTTER_TOOLS },
+  { label: 'Ferramentas de Pedreiro', value: ToolNameEnum.MASON_TOOLS },
+  { label: 'Ferramentas de Pintor', value: ToolNameEnum.PAINTER_SUPPLIES },
+  { label: 'Ferramentas de Sapateiro', value: ToolNameEnum.COBBLER_TOOLS },
+  { label: 'Ferramentas de Vidreiro', value: ToolNameEnum.GLASSBLOWER_TOOLS },
   {
     label: 'Suprimentos de Alquimista',
-    value: ToolNameEnum.AlchemistsSupplies,
+    value: ToolNameEnum.ALCHEMIST_SUPPLIES,
   },
   {
     label: 'Suprimentos de Caligrafia',
-    value: ToolNameEnum.CalligraphersSupplies,
+    value: ToolNameEnum.CALLIGRAPHER_SUPPLIES,
   },
-  { label: 'Suprimentos de Cervejeiro', value: ToolNameEnum.BrewersSupplies },
-  { label: 'Utensílios de Cozinheiro', value: ToolNameEnum.CooksUtensils },
+  { label: 'Suprimentos de Cervejeiro', value: ToolNameEnum.BREWER_SUPPLIES },
+  { label: 'Utensílios de Cozinheiro', value: ToolNameEnum.COOK_UTENSILS },
 ];
 
-// Fonte: Ferramentas [6]
 export const GAMING_SET_OPTIONS = [
-  { label: 'Baralho de Cartas', value: ToolNameEnum.PlayingCardSet },
-  { label: 'Conjunto de Dados', value: ToolNameEnum.DiceSet },
-  { label: 'Jogo dos Três Dragões', value: ToolNameEnum.ThreeDragonAnteSet },
-  { label: 'Xadrez do Dragão', value: ToolNameEnum.DragonChessSet },
+  { label: 'Baralho de Cartas', value: ToolNameEnum.PLAYING_CARD_SET },
+  { label: 'Conjunto de Dados', value: ToolNameEnum.DICE_SET },
+  { label: 'Jogo dos Três Dragões', value: ToolNameEnum.THREE_DRAGON_ANTE_SET },
+  { label: 'Xadrez do Dragão', value: ToolNameEnum.DRAGONCHESS_SET },
 ];
