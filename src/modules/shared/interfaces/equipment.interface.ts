@@ -1,4 +1,4 @@
-import { APIReference } from './referente.interface';
+import { APIReference } from './api-reference.interface';
 
 export interface Cost {
   quantity: number;

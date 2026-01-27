@@ -1,5 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
-import { Equipment } from '../interfaces/equipament.interface';
+import { Equipment } from '../interfaces/equipment.interface';
 
 @Entity('equipment')
 export class EquipmentEntity implements Equipment {
