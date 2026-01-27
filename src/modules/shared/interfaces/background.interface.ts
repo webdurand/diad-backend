@@ -1,7 +1,8 @@
 import { AbilityScore } from './ability-score.interface';
-import { APIReference } from './api-reference.interface';
 import { Feat } from './feat.interface';
 import { Proficiency } from './proficiency.interface';
+import { Equipment } from './equipment.interface';
+import { EquipmentCategory } from './equipment-category.interface';
 
 export interface Background {
   id: string;
@@ -10,11 +11,9 @@ export interface Background {
   ability_scores: AbilityScore[];
   feat: Feat;
   proficiencies: Proficiency[];
-  equipment_options: EquipmentOptionWrapper[] | EquipmentChoiceGroup;
+  equipment_options: EquipmentOptionWrapper | EquipmentChoiceGroup;
   proficiency_choices?: ProficiencyChoice[];
 }
-
-// --- Estrutura de Equipamento ---
 
 export interface EquipmentOptionWrapper {
   option_type: OptionType;
@@ -42,7 +41,7 @@ export interface EquipmentOptionDefinition {
 export interface EquipmentItem {
   option_type: OptionType;
   count?: number;
-  of?: APIReference;
+  of?: Equipment;
   unit?: string;
   choice?: EquipmentCategoryChoice;
 }
@@ -55,10 +54,8 @@ export interface EquipmentCategoryChoice {
 
 export interface EquipmentCategorySet {
   option_set_type: string;
-  equipment_category: APIReference;
+  equipment_category: EquipmentCategory;
 }
-
-// --- Estrutura de Grupo de Escolha (Alternativa para equipment_options) ---
 
 export interface EquipmentChoiceGroup {
   choose: number;
@@ -76,10 +73,8 @@ export interface NestedEquipmentItem {
   items?: NestedEquipmentItem[];
   count?: number;
   unit?: string;
-  of?: APIReference;
+  of?: Equipment;
 }
-
-// --- Proficiências ---
 
 export interface ProficiencyChoice {
   choose: number;
@@ -94,7 +89,7 @@ export interface ProficiencyOptionSet {
 
 export interface ProficiencyChoiceOption {
   option_type: string;
-  item: APIReference; // Simplificado pois era redundante
+  item: Proficiency;
 }
 
 export enum OptionType {
