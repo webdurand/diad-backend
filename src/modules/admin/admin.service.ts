@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { AbilityScoreEntity } from '../shared/entities/ability-score.entity';
+import { AbilityScoreEntity } from '../shared/entities/ability-scores.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
