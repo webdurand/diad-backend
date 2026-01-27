@@ -1,4 +1,5 @@
 import { APIReference } from './api-reference.interface';
+import { Dc } from './common.interface';
 
 export enum Unit {
   Cp = 'cp',
@@ -25,12 +26,6 @@ export interface ArmorClass {
   base: number;
   dex_bonus: boolean;
   max_bonus?: number;
-}
-
-export interface Dc {
-  dc_type: APIReference;
-  dc_value?: number;
-  success_type: string;
 }
 
 export interface Utilize {

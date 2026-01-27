@@ -42,11 +42,7 @@ export interface PurpleOption {
   minimum_score: number;
 }
 
-export interface Proficiency {
-  index: string;
-  name: string;
-  url: string;
-}
+export interface Proficiency extends APIReference {}
 
 export interface MultiClassingPrerequisite {
   ability_score: Proficiency;
