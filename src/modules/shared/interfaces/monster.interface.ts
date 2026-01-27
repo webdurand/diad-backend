@@ -1,9 +1,10 @@
+import { Alignment } from './alignment.interface';
 import { APIReference } from './api-reference.interface';
 import { Dc } from './common.interface';
 export interface Monster extends APIReference {
   size: Size;
   type: MonsterType;
-  alignment: APIReference | Alignment;
+  alignment: Alignment[];
   armor_class: ArmorClass[];
   hit_points: number;
   hit_dice: string;
@@ -125,10 +126,10 @@ export interface ActionDamage {
 
 export interface DamageFrom {
   option_set_type: OptionSetType;
-  options: PurpleOption[];
+  options: DamageChoiceOption[];
 }
 
-export interface PurpleOption {
+export interface DamageChoiceOption {
   option_type: DamageType;
   damage_type: ConditionImmunity;
   damage_dice: string;
@@ -166,45 +167,26 @@ export enum OptionsType {
 }
 
 export interface ActionUsage {
-  type: PurpleType;
+  type: ActionUsageType;
   times?: number;
   dice?: Dice;
   min_value?: number;
-  rest_types?: RESTType[];
+  rest_types?: RestType[];
 }
 
 export enum Dice {
   The1D6 = '1d6',
 }
 
-export enum RESTType {
+export enum RestType {
   Long = 'long',
   Short = 'short',
 }
 
-export enum PurpleType {
+export enum ActionUsageType {
   PerDay = 'per day',
   RechargeAfterREST = 'recharge after rest',
   RechargeOnRoll = 'recharge on roll',
-}
-
-export enum Alignment {
-  AnyAlignment = 'any alignment',
-  AnyChaoticAlignment = 'any chaotic alignment',
-  AnyEvilAlignment = 'any evil alignment',
-  AnyNonGoodAlignment = 'any non-good alignment',
-  AnyNonLawfulAlignment = 'any non-lawful alignment',
-  ChaoticEvil = 'chaotic evil',
-  ChaoticGood = 'chaotic good',
-  ChaoticNeutral = 'chaotic neutral',
-  LawfulEvil = 'lawful evil',
-  LawfulGood = 'lawful good',
-  LawfulNeutral = 'lawful neutral',
-  Neutral = 'neutral',
-  NeutralEvil = 'neutral evil',
-  NeutralGood = 'neutral good',
-  NeutralGood50OrNeutralEvil50 = 'neutral good (50%) or neutral evil (50%)',
-  Unaligned = 'unaligned',
 }
 
 export interface ArmorClass {
@@ -312,19 +294,19 @@ export interface Spell {
 }
 
 export interface SpellUsage {
-  type: FluffyType;
+  type: SpellUsageType;
   times?: number;
 }
 
-export enum FluffyType {
+export enum SpellUsageType {
   AtWill = 'at will',
   PerDay = 'per day',
 }
 
 export interface SpecialAbilityUsage {
-  type: PurpleType;
+  type: ActionUsageType;
   times?: number;
-  rest_types?: RESTType[];
+  rest_types?: RestType[];
 }
 
 export interface Speed {

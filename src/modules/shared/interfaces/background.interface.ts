@@ -1,20 +1,18 @@
+import { AbilityScore } from './ability-score.interface';
 import { APIReference } from './api-reference.interface';
+import { Feat } from './feat.interface';
+import { Proficiency } from './proficiency.interface';
 
-export interface Background extends APIReference {
+export interface Background {
+  id: string;
+  index: string;
+  name: string;
   ability_scores: AbilityScore[];
   feat: Feat;
   proficiencies: Proficiency[];
   equipment_options: EquipmentOptionWrapper[] | EquipmentChoiceGroup;
   proficiency_choices?: ProficiencyChoice[];
 }
-
-interface AbilityScore extends APIReference {}
-
-export interface Feat extends APIReference {
-  note?: string;
-}
-
-interface Proficiency extends APIReference {}
 
 // --- Estrutura de Equipamento ---
 

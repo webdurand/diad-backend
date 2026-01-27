@@ -1,5 +1,12 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { Race } from '../interfaces/race.interface';
+import { AlignmentEntity } from './alignment.entity';
 
 @Entity('races')
 export class RaceEntity implements Race {
@@ -18,8 +25,9 @@ export class RaceEntity implements Race {
   @Column({ type: 'jsonb' })
   ability_bonuses: Race['ability_bonuses'];
 
-  @Column({ type: 'text' })
-  alignment: string;
+  @ManyToMany(() => AlignmentEntity)
+  @JoinTable()
+  alignment: AlignmentEntity[];
 
   @Column({ type: 'text' })
   age: string;

@@ -1,5 +1,15 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToMany,
+  JoinTable,
+  ManyToOne,
+} from 'typeorm';
 import { Background } from '../interfaces/background.interface';
+import { AbilityScoreEntity } from './ability-score.entity';
+import { FeatEntity } from './feat.entity';
+import { ProficiencyEntity } from './proficiency.entity';
 
 @Entity('backgrounds')
 export class BackgroundEntity implements Background {
@@ -12,14 +22,16 @@ export class BackgroundEntity implements Background {
   @Column()
   name: string;
 
-  @Column({ type: 'jsonb' })
-  ability_scores: Background['ability_scores'];
+  @ManyToMany(() => AbilityScoreEntity)
+  @JoinTable()
+  ability_scores: AbilityScoreEntity[];
 
-  @Column({ type: 'jsonb' })
-  feat: Background['feat'];
+  @ManyToOne(() => FeatEntity, { eager: true })
+  feat: FeatEntity;
 
-  @Column({ type: 'jsonb' })
-  proficiencies: Background['proficiencies'];
+  @ManyToMany(() => ProficiencyEntity)
+  @JoinTable()
+  proficiencies: ProficiencyEntity[];
 
   @Column({ type: 'jsonb' })
   equipment_options: Background['equipment_options'];

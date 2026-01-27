@@ -1,4 +1,4 @@
-import { AbilityScoreEntity } from './ability-scores.entity';
+import { AbilityScoreEntity } from './ability-score.entity';
 import { AlignmentEntity } from './alignment.entity';
 import { BackgroundEntity } from './background.entity';
 import { ClassEntity } from './class.entity';

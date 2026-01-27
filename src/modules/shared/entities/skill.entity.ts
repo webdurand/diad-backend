@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { Skill } from '../interfaces/skill.interface';
-import { AbilityScoreEntity } from './ability-scores.entity';
+import { AbilityScoreEntity } from './ability-score.entity';
 
 @Entity('skills')
 export class SkillEntity implements Skill {
