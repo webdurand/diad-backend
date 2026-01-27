@@ -18,7 +18,4 @@ export class SkillEntity implements Skill {
 
   @ManyToOne(() => AbilityScoreEntity, (abilityScore) => abilityScore.skills)
   ability_score: AbilityScoreEntity;
-
-  @Column()
-  url: string;
 }
