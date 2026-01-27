@@ -1,5 +1,7 @@
-import { APIReference } from './api-reference.interface';
-export interface Alignment extends APIReference {
+export interface Alignment {
+  id: string;
+  index: string;
+  name: string;
   abbreviation: string;
   description: string;
 }

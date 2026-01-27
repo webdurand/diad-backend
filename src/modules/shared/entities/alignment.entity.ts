@@ -17,7 +17,4 @@ export class AlignmentEntity implements Alignment {
 
   @Column({ type: 'text' })
   description: string;
-
-  @Column()
-  url: string;
 }
