@@ -1,6 +1,6 @@
 import { APIReference } from './api-reference.interface';
 
-export interface Welcome extends APIReference {
+export interface Spell extends APIReference {
   desc: string[];
   higher_level?: string[];
   range: Range;
