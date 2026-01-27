@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleAsyncOptions } from '@nestjs/typeorm';
+import { ENTITIES } from 'src/modules/shared/entities';
 
 export const TypeOrmConfig: TypeOrmModuleAsyncOptions = {
   inject: [ConfigService],
@@ -14,6 +15,7 @@ export const TypeOrmConfig: TypeOrmModuleAsyncOptions = {
       ssl: { rejectUnauthorized: false }, // 👈 obrigatório no Supabase
       logging: true,
       synchronize: true,
+      entities: [...ENTITIES],
     };
   },
 };
