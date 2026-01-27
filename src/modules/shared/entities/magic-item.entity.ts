@@ -15,7 +15,7 @@ export class MagicItemEntity implements MagicItem {
 
   // Categoria (Ex: Armor, Wondrous Item)
   @Column({ name: 'equipment_category', type: 'json' })
-  equipmentCategory: MagicItem['equipmentCategory'];
+  equipment_category: MagicItem['equipment_category'];
 
   // Rarity salva como objeto para manter compatibilidade com o JSON original
   @Column({ type: 'json' })

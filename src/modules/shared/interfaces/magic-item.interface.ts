@@ -18,7 +18,7 @@ export interface MagicItem {
   id?: number;
   index: string;
   name: string;
-  equipmentCategory: APIReference;
+  equipment_category: APIReference;
   rarity: {
     name: MagicItemRarity | string;
   };
