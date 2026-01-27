@@ -1,4 +1,4 @@
-export interface Welcome {
+export interface Race {
   index: string;
   name: string;
   speed: number;

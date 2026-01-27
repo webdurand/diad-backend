@@ -1,7 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Race } from '../interfaces/race.interface';
 
 @Entity('races')
-export class RaceEntity {
+export class RaceEntity implements Race {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -14,11 +15,8 @@ export class RaceEntity {
   @Column()
   speed: number;
 
-  @Column({ type: 'jsonb', nullable: true })
-  ability_bonuses: {
-    ability_score: { name: string; index: string; url: string };
-    bonus: number;
-  }[];
+  @Column({ type: 'jsonb' })
+  ability_bonuses: Race['ability_bonuses'];
 
   @Column({ type: 'text' })
   alignment: string;
@@ -33,20 +31,23 @@ export class RaceEntity {
   size_description: string;
 
   @Column({ type: 'jsonb' })
-  languages: { name: string; index: string; url: string }[];
-
-  @Column({ type: 'jsonb', nullable: true })
-  language_options: object;
+  languages: Race['languages'];
 
   @Column({ type: 'text' })
   language_desc: string;
 
   @Column({ type: 'jsonb' })
-  traits: { name: string; index: string; url: string }[];
+  traits: Race['traits'];
 
   @Column({ type: 'jsonb' })
-  subraces: { name: string; index: string; url: string }[];
-
+  subraces: Race['subraces'];
   @Column()
   url: string;
+
+  // Campos opcionais salvos como JSONB
+  @Column({ type: 'jsonb', nullable: true })
+  language_options?: Race['language_options'];
+
+  @Column({ type: 'jsonb', nullable: true })
+  ability_bonus_options?: Race['ability_bonus_options'];
 }
