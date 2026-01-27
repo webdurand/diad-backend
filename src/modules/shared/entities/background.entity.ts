@@ -36,9 +36,6 @@ export class BackgroundEntity implements Background {
   @Column({ type: 'jsonb' })
   equipment_options: Background['equipment_options'];
 
-  @Column()
-  url: string;
-
   @Column({ type: 'jsonb', nullable: true })
   proficiency_choices?: Background['proficiency_choices'];
 }
