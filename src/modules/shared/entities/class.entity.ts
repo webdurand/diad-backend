@@ -3,8 +3,8 @@ import { Class } from '../interfaces/class.interface';
 
 @Entity('classes')
 export class ClassEntity implements Class {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

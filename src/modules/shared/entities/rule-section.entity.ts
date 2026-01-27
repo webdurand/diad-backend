@@ -3,8 +3,8 @@ import { RuleSection } from '../interfaces/rule-section.interface';
 
 @Entity('rule_sections')
 export class RuleSectionEntity implements RuleSection {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

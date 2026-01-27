@@ -1,8 +1,8 @@
-import { APIReference } from './api-reference.interface';
+import { AbilityScore } from './ability-score.interface';
 
-export interface Skill extends APIReference {
+export interface Skill {
+  id: string;
+  name: string;
   description: string;
   ability_score: AbilityScore;
 }
-
-export interface AbilityScore extends APIReference {}

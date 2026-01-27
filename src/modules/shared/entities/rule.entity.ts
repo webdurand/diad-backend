@@ -3,8 +3,8 @@ import { Rule } from '../interfaces/rule.interface';
 
 @Entity('rules')
 export class RuleEntity implements Rule {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

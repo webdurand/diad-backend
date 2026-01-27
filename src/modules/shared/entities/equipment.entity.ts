@@ -3,8 +3,8 @@ import { Equipment } from '../interfaces/equipment.interface';
 
 @Entity('equipments')
 export class EquipmentEntity implements Equipment {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

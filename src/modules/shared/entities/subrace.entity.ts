@@ -3,8 +3,8 @@ import { Subrace, Race, AbilityBonus } from '../interfaces/subrace.interface'; /
 
 @Entity('subraces')
 export class SubraceEntity implements Subrace {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

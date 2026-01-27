@@ -1,10 +1,11 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
-import { Skill, AbilityScore } from '../interfaces/skill.interface';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import { Skill } from '../interfaces/skill.interface';
+import { AbilityScoreEntity } from './ability-scores.entity';
 
 @Entity('skills')
 export class SkillEntity implements Skill {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;
@@ -15,8 +16,8 @@ export class SkillEntity implements Skill {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ type: 'jsonb' })
-  ability_score: AbilityScore;
+  @ManyToOne(() => AbilityScoreEntity, (abilityScore) => abilityScore.skills)
+  ability_score: AbilityScoreEntity;
 
   @Column()
   url: string;

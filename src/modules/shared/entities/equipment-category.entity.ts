@@ -3,8 +3,8 @@ import { EquipmentCategory } from '../interfaces/equipment-category.interface';
 
 @Entity('equipment_categories')
 export class EquipmentCategoryEntity implements EquipmentCategory {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

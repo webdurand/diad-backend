@@ -3,8 +3,8 @@ import { Background } from '../interfaces/background.interface';
 
 @Entity('backgrounds')
 export class BackgroundEntity implements Background {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

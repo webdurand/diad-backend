@@ -7,8 +7,8 @@ import {
 
 @Entity('traits')
 export class TraitEntity implements Trait {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

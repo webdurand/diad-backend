@@ -3,8 +3,8 @@ import { Condition } from '../interfaces/condition.interface';
 
 @Entity('conditions')
 export class ConditionEntity implements Condition {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

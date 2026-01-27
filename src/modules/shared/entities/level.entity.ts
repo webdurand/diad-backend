@@ -3,8 +3,8 @@ import { Level } from '../interfaces/level.interface';
 
 @Entity('levels')
 export class LevelEntity implements Level {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Index({ unique: true })
   @Column()

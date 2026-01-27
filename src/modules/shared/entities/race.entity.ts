@@ -3,8 +3,8 @@ import { Race } from '../interfaces/race.interface';
 
 @Entity('races')
 export class RaceEntity implements Race {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

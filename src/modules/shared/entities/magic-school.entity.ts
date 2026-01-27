@@ -3,8 +3,8 @@ import { MagicSchool } from '../interfaces/magic-school.interface';
 
 @Entity('magic_schools')
 export class MagicSchoolEntity implements MagicSchool {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

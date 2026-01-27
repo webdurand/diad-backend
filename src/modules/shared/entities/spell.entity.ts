@@ -13,8 +13,8 @@ import {
 
 @Entity('spells')
 export class SpellEntity implements Spell {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

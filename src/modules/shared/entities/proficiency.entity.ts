@@ -3,8 +3,8 @@ import { Proficiency, Type } from '../interfaces/proficiency.interface';
 
 @Entity('proficiencies')
 export class ProficiencyEntity implements Proficiency {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

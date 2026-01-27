@@ -3,8 +3,8 @@ import { DamageType } from '../interfaces/damage-type.interface';
 
 @Entity('damage_types')
 export class DamageTypeEntity implements DamageType {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

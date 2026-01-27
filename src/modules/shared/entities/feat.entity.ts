@@ -3,8 +3,8 @@ import { Feat, FeatType } from '../interfaces/feat.interface';
 
 @Entity('feats')
 export class FeatEntity implements Feat {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

@@ -3,8 +3,8 @@ import { WeaponMasteryProperty } from '../interfaces/weapon-mastery-property.int
 
 @Entity('weapon__mastery_properties')
 export class WeaponMasteryPropertyEntity implements WeaponMasteryProperty {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

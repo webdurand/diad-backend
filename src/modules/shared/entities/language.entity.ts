@@ -3,8 +3,8 @@ import { Language } from '../interfaces/language.interface';
 
 @Entity('languages')
 export class LanguageEntity implements Language {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

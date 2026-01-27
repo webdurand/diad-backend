@@ -3,8 +3,8 @@ import { Class, Spell, Subclass } from '../interfaces/subclass.interface';
 
 @Entity('subclasses')
 export class SubclassEntity implements Subclass {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

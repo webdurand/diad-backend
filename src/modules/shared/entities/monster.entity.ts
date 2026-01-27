@@ -3,8 +3,8 @@ import { Monster, MonsterType, Size } from '../interfaces/monster.interface';
 
 @Entity('monsters')
 export class MonsterEntity implements Monster {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

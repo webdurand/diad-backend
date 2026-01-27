@@ -3,8 +3,8 @@ import { Alignment } from '../interfaces/alignment.interface';
 
 @Entity('alignments')
 export class AlignmentEntity implements Alignment {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ unique: true })
   index: string;

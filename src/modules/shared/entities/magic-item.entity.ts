@@ -3,8 +3,8 @@ import { MagicItem } from '../interfaces/magic-item.interface';
 
 @Entity('magic_items')
 export class MagicItemEntity implements MagicItem {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Index({ unique: true })
   @Column()
