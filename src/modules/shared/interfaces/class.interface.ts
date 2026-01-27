@@ -1,4 +1,5 @@
 import { APIReference } from './api-reference.interface';
+
 export interface Class extends APIReference {
   hit_die: number;
   proficiency_choices: ProficiencyChoice[];
@@ -13,96 +14,77 @@ export interface Class extends APIReference {
   spells?: string;
 }
 
+// --- MULTICLASSING ---
+
 export interface MultiClassing {
   prerequisites?: MultiClassingPrerequisite[];
   proficiencies: Proficiency[];
-  proficiency_choices?: ProficiencyChoiceElement[];
+  proficiency_choices?: MultiClassProficiencyChoice[];
   prerequisite_options?: PrerequisiteOptions;
 }
-
-export interface PrerequisiteOptions {
-  type: string;
-  choose: number;
-  from: PrerequisiteOptionsFrom;
-}
-
-export interface PrerequisiteOptionsFrom {
-  option_set_type: OptionSetType;
-  options: PurpleOption[];
-}
-
-export enum OptionSetType {
-  EquipmentCategory = 'equipment_category',
-  OptionsArray = 'options_array',
-}
-
-export interface PurpleOption {
-  option_type: string;
-  ability_score: Proficiency;
-  minimum_score: number;
-}
-
-export interface Proficiency extends APIReference {}
 
 export interface MultiClassingPrerequisite {
   ability_score: Proficiency;
   minimum_score: number;
 }
 
-export interface ProficiencyChoiceElement {
+export interface PrerequisiteOptions {
+  type: string;
+  choose: number;
+  from: PrerequisiteOptionSet;
+}
+
+export interface PrerequisiteOptionSet {
+  option_set_type: OptionSetType;
+  options: AbilityScorePrerequisiteOption[];
+}
+
+export interface AbilityScorePrerequisiteOption {
+  option_type: string;
+  ability_score: Proficiency;
+  minimum_score: number;
+}
+
+// --- PROFICIENCIES ---
+
+export interface Proficiency extends APIReference {}
+
+export interface MultiClassProficiencyChoice {
   desc?: string;
   choose: number;
   type: ProficiencyChoiceType;
-  from: PurpleFrom;
+  from: ProficiencyOptionSet;
 }
 
-export interface PurpleFrom {
+export interface ProficiencyOptionSet {
   option_set_type: OptionSetType;
-  options: FluffyOption[];
+  options: ProficiencyOption[];
 }
 
-export interface FluffyOption {
-  option_type: PurpleOptionType;
+export interface ProficiencyOption {
+  option_type: OptionReferenceType;
   item: Proficiency;
-}
-
-export enum PurpleOptionType {
-  Choice = 'choice',
-  Reference = 'reference',
-}
-
-export enum ProficiencyChoiceType {
-  Proficiencies = 'proficiencies',
 }
 
 export interface ProficiencyChoice {
   desc: string;
   choose: number;
   type: ProficiencyChoiceType;
-  from: FluffyFrom;
+  from: ClassProficiencyOptionSet;
 }
 
-export interface FluffyFrom {
+export interface ClassProficiencyOptionSet {
   option_set_type: OptionSetType;
-  options: TentacledOption[];
+  options: ProficiencyChoiceOption[];
 }
 
-export interface TentacledOption {
-  option_type: PurpleOptionType;
+export interface ProficiencyChoiceOption {
+  option_type: OptionReferenceType;
   item?: Proficiency;
-  choice?: ProficiencyChoiceElement;
+  choice?: MultiClassProficiencyChoice;
 }
 
-export interface Spellcasting {
-  level: number;
-  spellcasting_ability: Proficiency;
-  info: Info[];
-}
-
-export interface Info {
-  name: string;
-  desc: string[];
-}
+// --- EQUIPMENT ---
 
 export interface StartingEquipment {
   equipment: Proficiency;
@@ -113,54 +95,83 @@ export interface StartingEquipmentOption {
   desc: string;
   choose: number;
   type: StartingEquipmentOptionType;
-  from: StartingEquipmentOptionFrom;
+  from: StartingEquipmentOptionSet;
 }
 
-export interface StartingEquipmentOptionFrom {
+export interface StartingEquipmentOptionSet {
   option_set_type: OptionSetType;
-  options?: StickyOption[];
+  options?: EquipmentOption[];
   equipment_category?: Proficiency;
 }
 
-export interface StickyOption {
+export interface EquipmentOption {
   option_type: ItemOptionType;
   count?: number;
   of?: Proficiency;
-  choice?: ItemChoice;
+  choice?: EquipmentCategoryChoice;
   prerequisites?: OptionPrerequisite[];
   items?: Item[];
 }
 
-export interface ItemChoice {
+export interface EquipmentCategoryChoice {
   desc: string;
   choose: number;
   type: StartingEquipmentOptionType;
-  from: TentacledFrom;
+  from: EquipmentCategoryOptionSet;
 }
 
-export interface TentacledFrom {
+export interface EquipmentCategoryOptionSet {
   option_set_type: OptionSetType;
   equipment_category: Proficiency;
-}
-
-export enum StartingEquipmentOptionType {
-  Equipment = 'equipment',
 }
 
 export interface Item {
   option_type: ItemOptionType;
   count?: number;
   of?: Proficiency;
-  choice?: ItemChoice;
+  choice?: EquipmentCategoryChoice;
+}
+
+// --- SPELLCASTING & MISC ---
+
+export interface Spellcasting {
+  level: number;
+  spellcasting_ability: Proficiency;
+  info: SpellcastingInfo[];
+}
+
+export interface SpellcastingInfo {
+  name: string;
+  desc: string[];
+}
+
+export interface OptionPrerequisite {
+  type: string;
+  proficiency: Proficiency;
+}
+
+// --- ENUMS ---
+
+export enum OptionSetType {
+  EquipmentCategory = 'equipment_category',
+  OptionsArray = 'options_array',
+}
+
+export enum OptionReferenceType {
+  Choice = 'choice',
+  Reference = 'reference',
+}
+
+export enum ProficiencyChoiceType {
+  Proficiencies = 'proficiencies',
+}
+
+export enum StartingEquipmentOptionType {
+  Equipment = 'equipment',
 }
 
 export enum ItemOptionType {
   Choice = 'choice',
   CountedReference = 'counted_reference',
   Multiple = 'multiple',
-}
-
-export interface OptionPrerequisite {
-  type: string;
-  proficiency: Proficiency;
 }
