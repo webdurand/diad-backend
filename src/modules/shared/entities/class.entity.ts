@@ -1,5 +1,15 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToMany,
+  JoinTable,
+  OneToMany,
+} from 'typeorm';
 import { Class } from '../interfaces/class.interface';
+import { ProficiencyEntity } from './proficiency.entity';
+import { EquipmentEntity } from './equipment.entity';
+import { SubclassEntity } from './subclass.entity';
 
 @Entity('classes')
 export class ClassEntity implements Class {
@@ -18,16 +28,19 @@ export class ClassEntity implements Class {
   @Column({ type: 'jsonb' })
   proficiency_choices: Class['proficiency_choices'];
 
-  @Column({ type: 'jsonb' })
-  proficiencies: Class['proficiencies'];
+  @ManyToMany(() => ProficiencyEntity)
+  @JoinTable()
+  proficiencies: ProficiencyEntity[];
 
-  @Column({ type: 'jsonb' })
-  saving_throws: Class['saving_throws'];
+  @ManyToMany(() => ProficiencyEntity)
+  @JoinTable()
+  saving_throws: ProficiencyEntity[];
 
-  @Column({ type: 'jsonb' })
-  starting_equipment: Class['starting_equipment'];
+  @ManyToMany(() => EquipmentEntity)
+  @JoinTable()
+  starting_equipment: EquipmentEntity[];
 
-  @Column({ type: 'jsonb' })
+  @Column({ type: 'jsonb', nullable: true })
   starting_equipment_options: Class['starting_equipment_options'];
 
   @Column()
@@ -36,11 +49,8 @@ export class ClassEntity implements Class {
   @Column({ type: 'jsonb' })
   multi_classing: Class['multi_classing'];
 
-  @Column({ type: 'jsonb' })
-  subclasses: Class['subclasses'];
-
-  @Column()
-  url: string;
+  @OneToMany(() => SubclassEntity, (subclass) => subclass.class)
+  subclasses: SubclassEntity[];
 
   @Column({ type: 'jsonb', nullable: true })
   spellcasting?: Class['spellcasting'];

@@ -1,15 +1,20 @@
-import { APIReference } from './api-reference.interface';
+import { Proficiency } from './proficiency.interface';
+import { Equipment } from './equipment.interface';
+import { Subclass } from './subclass.interface';
 
-export interface Class extends APIReference {
+export interface Class {
+  id: string;
+  index: string;
+  name: string;
   hit_die: number;
   proficiency_choices: ProficiencyChoice[];
-  proficiencies: APIReference[];
-  saving_throws: APIReference[];
-  starting_equipment: StartingEquipment[];
+  proficiencies: Proficiency[];
+  saving_throws: Proficiency[];
+  starting_equipment: Equipment[];
   starting_equipment_options: StartingEquipmentOption[];
   class_levels: string;
   multi_classing: MultiClassing;
-  subclasses: APIReference[];
+  subclasses: Subclass[];
   spellcasting?: Spellcasting;
   spells?: string;
 }
@@ -46,8 +51,6 @@ export interface AbilityScorePrerequisiteOption {
 }
 
 // --- PROFICIENCIES ---
-
-export interface Proficiency extends APIReference {}
 
 export interface MultiClassProficiencyChoice {
   desc?: string;

@@ -1,5 +1,6 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
-import { Class, Spell, Subclass } from '../interfaces/subclass.interface';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import { Spell, Subclass } from '../interfaces/subclass.interface';
+import { ClassEntity } from './class.entity';
 
 @Entity('subclasses')
 export class SubclassEntity implements Subclass {
@@ -12,8 +13,8 @@ export class SubclassEntity implements Subclass {
   @Column()
   name: string;
 
-  @Column({ type: 'jsonb' })
-  class: Class;
+  @ManyToOne(() => ClassEntity, (classEntity) => classEntity.subclasses)
+  class: ClassEntity;
 
   @Column()
   subclass_flavor: string;
@@ -26,7 +27,4 @@ export class SubclassEntity implements Subclass {
 
   @Column({ type: 'jsonb', nullable: true })
   spells?: Spell[];
-
-  @Column()
-  url: string;
 }

@@ -1,15 +1,14 @@
-import { APIReference } from './api-reference.interface';
+import { Class } from './class.interface';
 
-export interface Subclass extends APIReference {
+export interface Subclass {
+  id: string;
+  index: string;
+  name: string;
   class: Class;
   subclass_flavor: string;
   desc: string[];
   subclass_levels: string;
   spells?: Spell[];
-}
-
-export interface Class extends APIReference {
-  type?: Type;
 }
 
 export enum Type {
