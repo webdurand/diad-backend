@@ -1,10 +1,9 @@
 import { APIReference } from './api-reference.interface';
 
-export interface AbilityScore {
-  index: string;
-  name: string;
+export interface AbilityScore extends APIReference {
   full_name: string;
   description: string;
-  skills: APIReference[];
-  url: string;
+  skills: Skills[];
 }
+
+interface Skills extends APIReference {}

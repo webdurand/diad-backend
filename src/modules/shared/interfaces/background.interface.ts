@@ -1,95 +1,106 @@
 import { APIReference } from './api-reference.interface';
+
 export interface Background extends APIReference {
-  ability_scores: APIReference[];
-  feat: APIReference;
-  proficiencies: APIReference[];
-  equipment_options: EquipmentOption[] | EquipmentOptionsClass;
+  ability_scores: AbilityScore[];
+  feat: Feat;
+  proficiencies: Proficiency[];
+  equipment_options: EquipmentOptionWrapper[] | EquipmentChoiceGroup;
   proficiency_choices?: ProficiencyChoice[];
 }
+
+interface AbilityScore extends APIReference {}
 
 export interface Feat extends APIReference {
   note?: string;
 }
 
-export interface EquipmentOption {
+interface Proficiency extends APIReference {}
+
+// --- Estrutura de Equipamento ---
+
+export interface EquipmentOptionWrapper {
   option_type: OptionType;
-  choice: EquipmentOptionChoice;
+  choice: EquipmentChoice;
 }
 
-export interface EquipmentOptionChoice {
+export interface EquipmentChoice {
   choose: number;
   type: string;
-  from: PurpleFrom;
+  from: EquipmentOptionSet;
 }
 
-export interface PurpleFrom {
+export interface EquipmentOptionSet {
   option_set_type: string;
-  options: PurpleOption[];
+  options: EquipmentOptionDefinition[];
 }
 
-export interface PurpleOption {
+export interface EquipmentOptionDefinition {
   option_type: string;
-  items?: Item[];
+  items?: EquipmentItem[];
   count?: number;
   unit?: string;
 }
 
-export interface Item {
+export interface EquipmentItem {
   option_type: OptionType;
   count?: number;
   of?: APIReference;
   unit?: string;
-  choice?: ItemChoice;
+  choice?: EquipmentCategoryChoice;
 }
 
-export interface ItemChoice {
+export interface EquipmentCategoryChoice {
   choose: number;
   type: string;
-  from: FluffyFrom;
+  from: EquipmentCategorySet;
 }
 
-export interface FluffyFrom {
+export interface EquipmentCategorySet {
   option_set_type: string;
   equipment_category: APIReference;
+}
+
+// --- Estrutura de Grupo de Escolha (Alternativa para equipment_options) ---
+
+export interface EquipmentChoiceGroup {
+  choose: number;
+  type: string;
+  from: EquipmentGroupOptionSet;
+}
+
+export interface EquipmentGroupOptionSet {
+  option_set_type: string;
+  options: NestedEquipmentItem[];
+}
+
+export interface NestedEquipmentItem {
+  option_type: string;
+  items?: NestedEquipmentItem[];
+  count?: number;
+  unit?: string;
+  of?: APIReference;
+}
+
+// --- Proficiências ---
+
+export interface ProficiencyChoice {
+  choose: number;
+  type: string;
+  from: ProficiencyOptionSet;
+}
+
+export interface ProficiencyOptionSet {
+  option_set_type: string;
+  options: ProficiencyChoiceOption[];
+}
+
+export interface ProficiencyChoiceOption {
+  option_type: string;
+  item: APIReference; // Simplificado pois era redundante
 }
 
 export enum OptionType {
   Choice = 'choice',
   CountedReference = 'counted_reference',
   Money = 'money',
-}
-
-export interface EquipmentOptionsClass {
-  choose: number;
-  type: string;
-  from: EquipmentOptionsFrom;
-}
-
-export interface EquipmentOptionsFrom {
-  option_set_type: string;
-  options: ItemElement[];
-}
-
-export interface ItemElement {
-  option_type: string;
-  items?: ItemElement[];
-  count?: number;
-  unit?: string;
-  of?: APIReference;
-}
-
-export interface ProficiencyChoice {
-  choose: number;
-  type: string;
-  from: ProficiencyChoiceFrom;
-}
-
-export interface ProficiencyChoiceFrom {
-  option_set_type: string;
-  options: FluffyOption[];
-}
-
-export interface FluffyOption {
-  option_type: string;
-  item: APIReference;
 }
