@@ -22,23 +22,19 @@ export interface AbilityBonusOptions {
 
 export interface AbilityBonusOptionsFrom {
   option_set_type: string;
-  options: PurpleOption[];
+  options: AbilityBonusOption[];
 }
 
-export interface PurpleOption {
+export interface AbilityBonusOption {
   option_type: string;
-  ability_score: Language;
+  ability_score: APIReference;
   bonus: number;
 }
 
-export interface Language {
-  index: string;
-  name: string;
-  url: string;
-}
+export interface Language extends APIReference {}
 
 export interface AbilityBonus {
-  ability_score: Language;
+  ability_score: APIReference;
   bonus: number;
 }
 
@@ -50,12 +46,12 @@ export interface LanguageOptions {
 
 export interface LanguageOptionsFrom {
   option_set_type: string;
-  options: FluffyOption[];
+  options: LanguageOption[];
 }
 
-export interface FluffyOption {
+export interface LanguageOption {
   option_type: OptionType;
-  item: Language;
+  item: APIReference;
 }
 
 export enum OptionType {
