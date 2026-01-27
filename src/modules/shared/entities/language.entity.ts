@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
-import { Language } from '../interfaces/race.interface';
+import { Language } from '../interfaces/language.interface';
 
 @Entity('languages')
 export class LanguageEntity implements Language {
@@ -16,7 +16,7 @@ export class LanguageEntity implements Language {
   url: string;
 
   @Column({ name: 'is_rare', type: 'boolean', default: false })
-  isRare: boolean;
+  is_rare: boolean;
 
   @Column({ type: 'text', nullable: true })
   note: string;

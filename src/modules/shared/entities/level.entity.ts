@@ -17,10 +17,10 @@ export class LevelEntity implements Level {
   url: string;
 
   @Column({ name: 'ability_score_bonuses', type: 'int', default: 0 })
-  abilityScoreBonuses: number;
+  ability_score_bonuses: number;
 
   @Column({ name: 'prof_bonus', type: 'int', nullable: true })
-  profBonus: number;
+  prof_bonus: number;
 
   // Armazena o array de referências de features como JSON
   @Column({ type: 'json' })
@@ -39,8 +39,8 @@ export class LevelEntity implements Level {
 
   // Campos específicos de classe que variam muito
   @Column({ name: 'class_specific', type: 'json', nullable: true })
-  classSpecific: Level['class_specific'];
+  class_specific: Level['class_specific'];
 
   @Column({ name: 'subclass_specific', type: 'json', nullable: true })
-  subclassSpecific: Level['subclass_specific'];
+  subclass_specific: Level['subclass_specific'];
 }
