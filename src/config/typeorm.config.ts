@@ -13,7 +13,7 @@ export const TypeOrmConfig: TypeOrmModuleAsyncOptions = {
       password: process.env.DB_PASSWORD,
       ssl: { rejectUnauthorized: false }, // 👈 obrigatório no Supabase
       logging: true,
-      synchronize: false,
+      synchronize: true,
     };
   },
 };
