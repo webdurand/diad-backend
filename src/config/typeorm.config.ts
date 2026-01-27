@@ -3,18 +3,17 @@ import { TypeOrmModuleAsyncOptions } from '@nestjs/typeorm';
 
 export const TypeOrmConfig: TypeOrmModuleAsyncOptions = {
   inject: [ConfigService],
-  useFactory: (configService: ConfigService) => {
+  useFactory: () => {
     return {
       type: 'postgres',
-      host: configService.get<string>('DB_HOST', 'localhost'),
-      port: configService.get<number>('DB_PORT', 5432),
-      database: configService.get<string>('DB_NAME', 'postgres'),
-      username: configService.get<string>('DB_USERNAME', 'postgres'),
-      password: configService.get<string>('DB_PASSWORD', 'postgres'),
-      entities: [],
-      // synchronize: parseBool(configService.get('DB_SYNC', false)),
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT),
+      database: process.env.DB_NAME,
+      username: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      ssl: { rejectUnauthorized: false }, // 👈 obrigatório no Supabase
       logging: true,
-      // ssl,
+      synchronize: false,
     };
   },
 };
