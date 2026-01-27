@@ -10,13 +10,10 @@ export interface Damage {
   damage_type: APIReference;
 }
 
-export interface Equipment {
-  index: string;
-  name: string;
+export interface Equipment extends APIReference {
   equipment_categories: APIReference[];
   cost: Cost;
   weight: number;
-  url: string;
   description?: string;
   image?: string;
 

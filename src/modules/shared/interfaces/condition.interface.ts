@@ -1,6 +1,4 @@
-export interface Condition {
-  index: string;
-  name: string;
+import { APIReference } from './api-reference.interface';
+export interface Condition extends APIReference {
   description: string;
-  url: string;
 }

@@ -1,8 +1,4 @@
 import { APIReference } from './api-reference.interface';
-
-export interface EquipmentCategory {
-  index: string;
-  name: string;
+export interface EquipmentCategory extends APIReference {
   equipment: APIReference[];
-  url: string;
 }

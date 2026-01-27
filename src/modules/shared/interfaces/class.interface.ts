@@ -1,16 +1,14 @@
-export interface Class {
-  index: string;
-  name: string;
+import { APIReference } from './api-reference.interface';
+export interface Class extends APIReference {
   hit_die: number;
   proficiency_choices: ProficiencyChoice[];
-  proficiencies: Proficiency[];
-  saving_throws: Proficiency[];
+  proficiencies: APIReference[];
+  saving_throws: APIReference[];
   starting_equipment: StartingEquipment[];
   starting_equipment_options: StartingEquipmentOption[];
   class_levels: string;
   multi_classing: MultiClassing;
-  subclasses: Proficiency[];
-  url: string;
+  subclasses: APIReference[];
   spellcasting?: Spellcasting;
   spells?: string;
 }

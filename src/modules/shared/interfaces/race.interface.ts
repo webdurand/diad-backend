@@ -1,17 +1,15 @@
-export interface Race {
-  index: string;
-  name: string;
+import { APIReference } from './api-reference.interface';
+export interface Race extends APIReference {
   speed: number;
   ability_bonuses: AbilityBonus[];
   alignment: string;
   age: string;
   size: string;
   size_description: string;
-  languages: Language[];
+  languages: APIReference[];
   language_desc: string;
-  traits: Language[];
-  subraces: Language[];
-  url: string;
+  traits: APIReference[];
+  subraces: APIReference[];
   language_options?: LanguageOptions;
   ability_bonus_options?: AbilityBonusOptions;
 }

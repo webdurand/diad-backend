@@ -1,18 +1,13 @@
-export interface Background {
-  index: string;
-  name: string;
-  ability_scores: Feat[];
-  feat: Feat;
-  proficiencies: Feat[];
+import { APIReference } from './api-reference.interface';
+export interface Background extends APIReference {
+  ability_scores: APIReference[];
+  feat: APIReference;
+  proficiencies: APIReference[];
   equipment_options: EquipmentOption[] | EquipmentOptionsClass;
-  url: string;
   proficiency_choices?: ProficiencyChoice[];
 }
 
-export interface Feat {
-  index: string;
-  name: string;
-  url: string;
+export interface Feat extends APIReference {
   note?: string;
 }
 
@@ -42,7 +37,7 @@ export interface PurpleOption {
 export interface Item {
   option_type: OptionType;
   count?: number;
-  of?: Feat;
+  of?: APIReference;
   unit?: string;
   choice?: ItemChoice;
 }
@@ -55,7 +50,7 @@ export interface ItemChoice {
 
 export interface FluffyFrom {
   option_set_type: string;
-  equipment_category: Feat;
+  equipment_category: APIReference;
 }
 
 export enum OptionType {
@@ -80,7 +75,7 @@ export interface ItemElement {
   items?: ItemElement[];
   count?: number;
   unit?: string;
-  of?: Feat;
+  of?: APIReference;
 }
 
 export interface ProficiencyChoice {
@@ -96,5 +91,5 @@ export interface ProficiencyChoiceFrom {
 
 export interface FluffyOption {
   option_type: string;
-  item: Feat;
+  item: APIReference;
 }
