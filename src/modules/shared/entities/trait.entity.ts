@@ -51,9 +51,6 @@ export class TraitEntity implements Trait {
   @Column({ type: 'jsonb', nullable: true })
   language_options?: ChoiceOption;
 
-  @ManyToOne(() => TraitEntity, { nullable: true, eager: true })
+  @ManyToOne(() => TraitEntity, { nullable: true }) // Removido { eager: true }
   parent?: TraitEntity;
-
-  @Column()
-  url: string;
 }

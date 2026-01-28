@@ -1,6 +1,7 @@
 import { Proficiency } from './proficiency.interface';
 import { Equipment } from './equipment.interface';
 import { Subclass } from './subclass.interface';
+import { AbilityScore } from './ability-score.interface';
 
 export interface Class {
   id: string;
@@ -9,7 +10,7 @@ export interface Class {
   hit_die: number;
   proficiency_choices: ProficiencyChoice[];
   proficiencies: Proficiency[];
-  saving_throws: Proficiency[];
+  saving_throws: AbilityScore[];
   starting_equipment: Equipment[];
   starting_equipment_options: StartingEquipmentOption[];
   class_levels: string;

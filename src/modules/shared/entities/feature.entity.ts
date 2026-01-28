@@ -33,11 +33,12 @@ export class FeatureEntity implements Feature {
   @Column({ type: 'jsonb' })
   prerequisites: Feature['prerequisites'];
 
-  @ManyToOne(() => SubclassEntity, { nullable: true, eager: true })
+  @ManyToOne(() => SubclassEntity, { nullable: true }) // Removido { eager: true }
   @JoinColumn({ name: 'subclass_id' })
-  subclass?: SubclassEntity; // SubclassEntity agora está alinhada com a interface
+  subclass?: SubclassEntity;
 
-  @ManyToOne(() => FeatureEntity, { nullable: true, eager: true })
+  // REMOVA O EAGER: TRUE
+  @ManyToOne(() => FeatureEntity, { nullable: true }) // Removido { eager: true }
   @JoinColumn({ name: 'parent_id' })
   parent?: FeatureEntity;
 

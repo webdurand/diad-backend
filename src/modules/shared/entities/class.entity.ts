@@ -10,6 +10,7 @@ import { Class } from '../interfaces/class.interface';
 import { ProficiencyEntity } from './proficiency.entity';
 import { EquipmentEntity } from './equipment.entity';
 import { SubclassEntity } from './subclass.entity';
+import { AbilityScoreEntity } from './ability-score.entity';
 
 @Entity('classes')
 export class ClassEntity implements Class {
@@ -32,9 +33,9 @@ export class ClassEntity implements Class {
   @JoinTable()
   proficiencies: ProficiencyEntity[];
 
-  @ManyToMany(() => ProficiencyEntity)
+  @ManyToMany(() => AbilityScoreEntity)
   @JoinTable()
-  saving_throws: ProficiencyEntity[];
+  saving_throws: AbilityScoreEntity[];
 
   @ManyToMany(() => EquipmentEntity)
   @JoinTable()
