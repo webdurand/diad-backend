@@ -5,7 +5,7 @@ import { SharedService } from '../shared/shared.service';
 export class CharacterCreationService {
   constructor(private readonly shared: SharedService) {}
 
-  async getAll(entity: string) {
+  async get(entity: string) {
     return this.shared.findAll(entity);
   }
 }
