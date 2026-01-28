@@ -19,10 +19,32 @@ import {
 export class SharedService {
   constructor(private readonly entityManager: EntityManager) {}
 
+  // Centralizamos a validação da classe da entidade aqui
+  private validateEntity(entityClass: EntityTarget<any>) {
+    if (!entityClass) {
+      throw new BadRequestException(
+        'A entidade fornecida é inválida ou não foi mapeada corretamente.',
+      );
+    }
+  }
+
+  async findAll<T>(
+    entityClass: EntityTarget<T>,
+    options?: FindManyOptions<T>,
+  ): Promise<T[]> {
+    this.validateEntity(entityClass); // Valida antes de tentar o find
+    try {
+      return await this.entityManager.find(entityClass, options);
+    } catch (error) {
+      this.handleErrors(error);
+    }
+  }
+
   async create<T>(
     entityClass: EntityTarget<T>,
     data: DeepPartial<T>,
   ): Promise<T> {
+    this.validateEntity(entityClass);
     try {
       const entity = this.entityManager.create(entityClass, data);
       return await this.entityManager.save(entity);
@@ -31,17 +53,11 @@ export class SharedService {
     }
   }
 
-  async findAll<T>(
-    entityClass: EntityTarget<T>,
-    options?: FindManyOptions<T>,
-  ): Promise<T[]> {
-    return await this.entityManager.find(entityClass, options);
-  }
-
   async findOne<T>(
     entityClass: EntityTarget<T>,
     options: FindOneOptions<T>,
   ): Promise<T> {
+    this.validateEntity(entityClass);
     const entity = await this.entityManager.findOne(entityClass, options);
     if (!entity) throw new NotFoundException('Registro não encontrado');
     return entity;
@@ -52,7 +68,9 @@ export class SharedService {
     id: any,
     data: DeepPartial<T>,
   ): Promise<T> {
-    // No EntityManager, o preload exige um pouco mais de cuidado com tipos
+    this.validateEntity(entityClass);
+
+    // Tentativa de preload
     const entity = await this.entityManager.preload(entityClass, {
       id,
       ...data,
@@ -72,23 +90,39 @@ export class SharedService {
     entityClass: EntityTarget<T>,
     id: any,
   ): Promise<DeleteResult> {
+    this.validateEntity(entityClass);
     try {
       const result = await this.entityManager.delete(entityClass, id);
       if (result.affected === 0)
         throw new NotFoundException('ID não encontrado');
-      return result; // Retornando o DeleteResult como solicitado
+      return result;
     } catch (error) {
       this.handleErrors(error);
     }
   }
 
   private handleErrors(error: any): never {
+    // Erros de violação de banco (TypeORM)
     if (error instanceof QueryFailedError) {
       const code = (error as any).code;
       if (code === '23505') throw new ConflictException('Registro duplicado.');
       if (code === '23503')
         throw new BadRequestException('Violação de dependência (FK).');
     }
-    throw new InternalServerErrorException('Erro no banco de dados');
+
+    // Se o erro já for uma HttpException (como o nosso BadRequest do validateEntity), apenas repassa
+    if (error.status && error.response) {
+      throw error;
+    }
+
+    // Erro de metadados do TypeORM (quando a entidade é lixo/null)
+    if (error.name === 'EntityMetadataNotFoundError') {
+      throw new BadRequestException(
+        'A entidade informada não existe no esquema do banco.',
+      );
+    }
+
+    console.error(error); // Log para debug interno
+    throw new InternalServerErrorException('Erro inesperado no servidor');
   }
 }

@@ -1,3 +1,30 @@
+import { AbilityScoreEntity } from '../entities/ability-score.entity';
+import { AlignmentEntity } from '../entities/alignment.entity';
+import { BackgroundEntity } from '../entities/background.entity';
+import { ClassEntity } from '../entities/class.entity';
+import { ConditionEntity } from '../entities/condition.entity';
+import { DamageTypeEntity } from '../entities/damage-type.entity';
+import { EquipmentEntity } from '../entities/equipment.entity';
+import { EquipmentCategoryEntity } from '../entities/equipment-category.entity';
+import { FeatEntity } from '../entities/feat.entity';
+import { FeatureEntity } from '../entities/feature.entity';
+import { LanguageEntity } from '../entities/language.entity';
+import { LevelEntity } from '../entities/level.entity';
+import { MagicItemEntity } from '../entities/magic-item.entity';
+import { MagicSchoolEntity } from '../entities/magic-school.entity';
+import { MonsterEntity } from '../entities/monster.entity';
+import { ProficiencyEntity } from '../entities/proficiency.entity';
+import { RaceEntity } from '../entities/race.entity';
+import { RuleEntity } from '../entities/rule.entity';
+import { RuleSectionEntity } from '../entities/rule-section.entity';
+import { SkillEntity } from '../entities/skill.entity';
+import { SpellEntity } from '../entities/spell.entity';
+import { SubclassEntity } from '../entities/subclass.entity';
+import { SubraceEntity } from '../entities/subrace.entity';
+import { TraitEntity } from '../entities/trait.entity';
+import { WeaponMasteryPropertyEntity } from '../entities/weapon-mastery-property.entity';
+import { WeaponPropertyEntity } from '../entities/weapon-property.entity';
+
 export enum Entities {
   AbilityScore = 'AbilityScoreEntity',
   Alignment = 'AlignmentEntity',
@@ -18,7 +45,6 @@ export enum Entities {
   Race = 'RaceEntity',
   Rule = 'RuleEntity',
   RuleSection = 'RuleSectionEntity',
-  Shared = 'SharedEntity',
   Skill = 'SkillEntity',
   Spell = 'SpellEntity',
   Subclass = 'SubclassEntity',
@@ -28,32 +54,31 @@ export enum Entities {
   WeaponProperty = 'WeaponPropertyEntity',
 }
 
-export const entityDictionary = {
-  [Entities.AbilityScore]: 'ability_scores',
-  [Entities.Alignment]: 'alignments',
-  [Entities.Background]: 'backgrounds',
-  [Entities.Class]: 'classes',
-  [Entities.Condition]: 'conditions',
-  [Entities.DamageType]: 'damage_types',
-  [Entities.Equipment]: 'equipment',
-  [Entities.EquipmentCategory]: 'equipment_categories',
-  [Entities.Feat]: 'feats',
-  [Entities.Feature]: 'features',
-  [Entities.Language]: 'languages',
-  [Entities.Level]: 'levels',
-  [Entities.MagicItem]: 'magic_items',
-  [Entities.MagicSchool]: 'magic_schools',
-  [Entities.Monster]: 'monsters',
-  [Entities.Proficiency]: 'proficiencies',
-  [Entities.Race]: 'races',
-  [Entities.Rule]: 'rules',
-  [Entities.RuleSection]: 'rule_sections',
-  [Entities.Shared]: 'shared',
-  [Entities.Skill]: 'skills',
-  [Entities.Spell]: 'spells',
-  [Entities.Subclass]: 'subclasses',
-  [Entities.Subrace]: 'subraces',
-  [Entities.Trait]: 'traits',
-  [Entities.WeaponMasteryProperty]: 'weapon_mastery_properties',
-  [Entities.WeaponProperty]: 'weapon_properties',
+export const entityMap = {
+  [Entities.AbilityScore]: AbilityScoreEntity,
+  [Entities.Alignment]: AlignmentEntity,
+  [Entities.Background]: BackgroundEntity,
+  [Entities.Class]: ClassEntity,
+  [Entities.Condition]: ConditionEntity,
+  [Entities.DamageType]: DamageTypeEntity,
+  [Entities.Equipment]: EquipmentEntity,
+  [Entities.EquipmentCategory]: EquipmentCategoryEntity,
+  [Entities.Feat]: FeatEntity,
+  [Entities.Feature]: FeatureEntity,
+  [Entities.Language]: LanguageEntity,
+  [Entities.Level]: LevelEntity,
+  [Entities.MagicItem]: MagicItemEntity,
+  [Entities.MagicSchool]: MagicSchoolEntity,
+  [Entities.Monster]: MonsterEntity,
+  [Entities.Proficiency]: ProficiencyEntity,
+  [Entities.Race]: RaceEntity,
+  [Entities.Rule]: RuleEntity,
+  [Entities.RuleSection]: RuleSectionEntity,
+  [Entities.Skill]: SkillEntity,
+  [Entities.Spell]: SpellEntity,
+  [Entities.Subclass]: SubclassEntity,
+  [Entities.Subrace]: SubraceEntity,
+  [Entities.Trait]: TraitEntity,
+  [Entities.WeaponMasteryProperty]: WeaponMasteryPropertyEntity,
+  [Entities.WeaponProperty]: WeaponPropertyEntity,
 };
