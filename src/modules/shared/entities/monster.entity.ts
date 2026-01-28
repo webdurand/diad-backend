@@ -74,7 +74,7 @@ export class MonsterEntity implements Monster {
   @Column({ type: 'text' })
   languages: string;
 
-  @Column()
+  @Column({ type: 'float' })
   challenge_rating: number;
 
   @Column()
@@ -106,7 +106,4 @@ export class MonsterEntity implements Monster {
 
   @Column({ type: 'jsonb', nullable: true })
   forms?: Monster['forms'];
-
-  @Column()
-  url: string;
 }

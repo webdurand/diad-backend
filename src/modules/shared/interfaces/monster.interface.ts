@@ -1,5 +1,4 @@
 import { AbilityScore } from './ability-score.interface';
-import { APIReference } from './api-reference.interface';
 import { Dc } from './common.interface';
 import { Condition } from './condition.interface';
 import { DamageType } from './damage-type.interface';
@@ -111,7 +110,10 @@ export enum MonsterType {
 // INTERFACES & TYPES
 // =========================
 
-export interface Monster extends APIReference {
+export interface Monster {
+  id: string;
+  index: string;
+  name: string;
   size: Size;
   type: MonsterType;
   alignment: string; // Pode ser "any alignment", "chaotic evil", "neutral good", etc.
@@ -143,7 +145,7 @@ export interface Monster extends APIReference {
   desc?: string;
   subtype?: string;
   reactions?: Reaction[];
-  forms?: APIReference[];
+  forms?: Monster[];
 }
 
 export interface MonsterAction {
@@ -197,8 +199,6 @@ export interface AttackDamage {
   damage_type: DamageType;
   damage_dice: string;
 }
-
-export type ConditionImmunity = APIReference;
 
 export interface ActionDamage {
   damage_type?: DamageType;
@@ -258,7 +258,7 @@ export interface LegendaryAction {
 
 export interface Proficiency {
   value: number;
-  proficiency: APIReference;
+  proficiency: Proficiency;
 }
 
 export interface Reaction {
