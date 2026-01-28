@@ -1,5 +1,4 @@
 import { AbilityScore } from './ability-score.interface';
-import { APIReference } from './api-reference.interface';
 import { Dc } from './common.interface';
 import { DamageType } from './damage-type.interface';
 import { EquipmentCategory } from './equipment-category.interface';
@@ -10,11 +9,6 @@ export enum Unit {
   Cp = 'cp',
   Sp = 'sp',
   Gp = 'gp',
-}
-
-export interface QuantityReference extends APIReference {
-  quantity?: number;
-  item?: APIReference; // Para casos onde um item aponta para outro dentro de um array
 }
 
 export interface Cost {
