@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToMany } from 'typeorm';
 import { EquipmentCategory } from '../interfaces/equipment-category.interface';
 import { EquipmentEntity } from './equipment.entity';
 
@@ -13,7 +13,7 @@ export class EquipmentCategoryEntity implements EquipmentCategory {
   @Column()
   name: string;
 
-  @OneToMany(
+  @ManyToMany(
     () => EquipmentEntity,
     (equipment) => equipment.equipment_categories,
   )

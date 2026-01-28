@@ -1,4 +1,10 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { Equipment } from '../interfaces/equipment.interface';
 import { EquipmentCategoryEntity } from './equipment-category.entity';
 
@@ -22,7 +28,10 @@ export class EquipmentEntity implements Equipment {
   @Column({ nullable: true })
   image?: string;
 
-  @ManyToOne(() => EquipmentCategoryEntity, (category) => category.equipment)
+  @ManyToMany(() => EquipmentCategoryEntity, (category) => category.equipment, {
+    cascade: true, // Permite criar/atualizar categorias se vierem no JSON
+  })
+  @JoinTable({ name: 'equipments_categories_relation' }) // Cria a tabela pivo automaticamente
   equipment_categories: EquipmentCategoryEntity[];
 
   @Column({ type: 'jsonb' })
