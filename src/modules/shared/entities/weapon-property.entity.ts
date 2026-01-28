@@ -14,7 +14,4 @@ export class WeaponPropertyEntity implements WeaponProperty {
 
   @Column({ type: 'text' })
   description: string;
-
-  @Column()
-  url: string;
 }

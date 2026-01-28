@@ -18,6 +18,9 @@ import { ProficiencyEntity } from '../shared/entities/proficiency.entity';
 import { AbilityScoreEntity } from '../shared/entities/ability-score.entity';
 import { RaceEntity } from '../shared/entities/race.entity';
 import { FeatureEntity } from '../shared/entities/feature.entity';
+import { MagicItemEntity } from '../shared/entities/magic-item.entity';
+import { RuleSectionEntity } from '../shared/entities/rule-section.entity';
+import { MagicSchoolEntity } from '../shared/entities/magic-school.entity';
 
 // Função smartMap atualizada para ler snake_case do banco e propertyName da classe
 async function smartMap<T extends ObjectLiteral>(
@@ -159,6 +162,72 @@ export class AdminService {
           }
         }
       });
+    } else if (entityName === 'RuleEntity') {
+      console.log('[AdminService] Vinculando Subsections para Rules...');
+
+      const sectionRepo = this.dataSource.getRepository(RuleSectionEntity);
+      // Otimização: Select apenas ID e Index
+      const allSections = await sectionRepo.find({
+        select: { id: true, index: true },
+      });
+      const sectionMap = new Map(allSections.map((s) => [s.index, s]));
+
+      dataArray.forEach((rule) => {
+        // Mapear Subsections (ManyToMany)
+        if (rule.subsections && Array.isArray(rule.subsections)) {
+          rule.subsections = rule.subsections
+            .map((subJson) => sectionMap.get(subJson.index))
+            .filter((f) => !!f);
+        }
+      });
+    } else if (entityName === 'MagicItemEntity') {
+      console.log(
+        ' -> Vinculando Equipment Categories e Variantes para Magic Items...',
+      );
+
+      // 1. Carregar Categories
+      const catRepo = this.dataSource.getRepository(EquipmentCategoryEntity);
+      const allCats = await catRepo.find({ select: { id: true, index: true } });
+      const catMap = new Map(allCats.map((c) => [c.index, c]));
+
+      // 2. Carregar Magic Items existentes (para vincular variantes na 2ª passada)
+      const magicItemRepo = this.dataSource.getRepository(MagicItemEntity);
+      const existingItems = await magicItemRepo.find({
+        select: { id: true, index: true },
+      });
+      const magicItemMap = new Map(existingItems.map((m) => [m.index, m]));
+
+      dataArray.forEach((item) => {
+        // Vincula Equipment Category
+        if (item.equipment_category && item.equipment_category.index) {
+          item.equipment_category = catMap.get(item.equipment_category.index);
+        }
+
+        // Vincula Variantes (Many-to-Many Auto-Relacionamento)
+        if (item.variants && Array.isArray(item.variants)) {
+          // Filtra e mapeia apenas os itens que JÁ existem no banco
+          item.variants = item.variants
+            .map((variantJson) => magicItemMap.get(variantJson.index))
+            .filter((v) => !!v);
+        }
+      });
+    } else if (
+      entityName === 'WeaponPropertyEntity' ||
+      entityName === 'WeaponMasteryPropertyEntity'
+    ) {
+      console.log(
+        `[AdminService] Normalizando descrição para ${entityName}...`,
+      );
+
+      dataArray.forEach((item) => {
+        // O JSON traz "desc", mas a Entity espera "description"
+        if (item.desc) {
+          // Se for array (padrão do SRD), junta com quebra de linha. Se for string, usa direto.
+          item.description = Array.isArray(item.desc)
+            ? item.desc.join('\n')
+            : item.desc;
+        }
+      });
     } else if (entityName === 'EquipmentEntity') {
       console.log('[AdminService] Vinculando Categorias para Equipamentos...');
       const catRepo = this.dataSource.getRepository(EquipmentCategoryEntity);
@@ -175,10 +244,71 @@ export class AdminService {
             .filter((found) => !!found);
         }
       });
-    }
+    } else if (entityName === 'RuleSectionEntity') {
+      console.log('[AdminService] Normalizando campos de RuleSection...');
 
-    // --- SUBRACE ---
-    else if (entityName === 'SubraceEntity') {
+      dataArray.forEach((section) => {
+        // O JSON traz "desc", mas a Entity espera "description"
+        if (section.desc && !section.description) {
+          section.description = section.desc;
+        }
+      });
+    } else if (entityName === 'SpellEntity') {
+      console.log(' -> Vinculando School, Classes e Subclasses para Spells...');
+
+      // 1. Carregar Escolas de Magia
+      const schoolRepo = this.dataSource.getRepository(MagicSchoolEntity);
+      const allSchools = await schoolRepo.find({
+        select: { id: true, index: true },
+      });
+      const schoolMap = new Map(allSchools.map((s) => [s.index, s]));
+
+      // 2. Carregar Classes
+      const classRepo = this.dataSource.getRepository(ClassEntity);
+      const allClasses = await classRepo.find({
+        select: { id: true, index: true },
+      });
+      const classMap = new Map(allClasses.map((c) => [c.index, c]));
+
+      // 3. Carregar Subclasses
+      const subclassRepo = this.dataSource.getRepository(SubclassEntity);
+      const allSubclasses = await subclassRepo.find({
+        select: { id: true, index: true },
+      });
+      const subclassMap = new Map(allSubclasses.map((s) => [s.index, s]));
+
+      dataArray.forEach((spell) => {
+        // Vincular Escola (ManyToOne)
+        if (spell.school && spell.school.index) {
+          spell.school = schoolMap.get(spell.school.index);
+        }
+
+        // Vincular Classes (ManyToMany)
+        if (spell.classes && Array.isArray(spell.classes)) {
+          spell.classes = spell.classes
+            .map((c) => classMap.get(c.index))
+            .filter((c) => !!c);
+        }
+
+        // Vincular Subclasses (ManyToMany)
+        if (spell.subclasses && Array.isArray(spell.subclasses)) {
+          spell.subclasses = spell.subclasses
+            .map((s) => subclassMap.get(s.index))
+            .filter((s) => !!s);
+        }
+
+        // --- Limpeza de campos opcionais que podem vir nulos ou vazios ---
+        // O JSON do SRD 5e às vezes omite campos em vez de mandar null.
+        // O TypeORM geralmente lida bem, mas para garantir:
+        if (!spell.higher_level) spell.higher_level = null;
+        if (!spell.material) spell.material = null;
+        if (!spell.attack_type) spell.attack_type = null;
+        if (!spell.damage) spell.damage = null;
+        if (!spell.dc) spell.dc = null;
+        if (!spell.heal_at_slot_level) spell.heal_at_slot_level = null;
+        if (!spell.area_of_effect) spell.area_of_effect = null;
+      });
+    } else if (entityName === 'SubraceEntity') {
       console.log(' -> Vinculando Race, Traits e Languages para Subraces...');
       const raceRepo = this.dataSource.getRepository(RaceEntity);
       const allRaces = await raceRepo.find({
