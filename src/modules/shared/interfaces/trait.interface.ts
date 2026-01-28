@@ -1,4 +1,5 @@
 import { APIReference } from './api-reference.interface';
+import { DamageType } from './damage-type.interface';
 
 export interface Trait extends APIReference {
   races: APIReference[];
@@ -30,7 +31,7 @@ export interface TraitOption {
 export interface TraitSpecific {
   spell_options?: ChoiceOption;
   subtrait_options?: ChoiceOption;
-  damage_type?: APIReference;
+  damage_type?: DamageType;
   breath_weapon?: BreathWeapon;
 }
 
@@ -49,7 +50,7 @@ export interface TraitAreaOfEffect {
 }
 
 export interface TraitDamage {
-  damage_type: APIReference;
+  damage_type: DamageType;
   // Dinâmico para suportar níveis como "2", "6", "11", etc.
   damage_at_character_level: { [level: string]: string };
 }

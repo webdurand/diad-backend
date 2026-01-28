@@ -1,4 +1,6 @@
-import { APIReference } from './api-reference.interface';
-export interface DamageType extends APIReference {
+export interface DamageType {
+  id: string;
+  index: string;
+  name: string;
   description: string;
 }

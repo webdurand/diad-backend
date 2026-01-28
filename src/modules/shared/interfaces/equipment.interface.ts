@@ -1,5 +1,7 @@
 import { APIReference } from './api-reference.interface';
 import { Dc } from './common.interface';
+import { DamageType } from './damage-type.interface';
+import { EquipmentCategory } from './equipment-category.interface';
 
 export enum Unit {
   Cp = 'cp',
@@ -19,7 +21,7 @@ export interface Cost {
 
 export interface Damage {
   damage_dice: string;
-  damage_type: APIReference;
+  damage_type: DamageType;
 }
 
 export interface ArmorClass {
@@ -33,12 +35,14 @@ export interface Utilize {
   dc: Dc;
 }
 
-export interface Equipment extends APIReference {
-  equipment_categories: APIReference[];
+export interface Equipment {
+  id: string;
+  index: string;
+  name: string;
+  equipment_categories: EquipmentCategory[];
   cost: Cost;
   weight: number;
   description?: string;
-  url: string;
   image?: string;
 
   // Propriedades Específicas

@@ -1,5 +1,6 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { Equipment } from '../interfaces/equipment.interface';
+import { EquipmentCategoryEntity } from './equipment-category.entity';
 
 @Entity('equipments')
 export class EquipmentEntity implements Equipment {
@@ -18,15 +19,11 @@ export class EquipmentEntity implements Equipment {
   @Column({ type: 'text', nullable: true })
   description?: string;
 
-  @Column()
-  url: string;
-
   @Column({ nullable: true })
   image?: string;
 
-  // Estruturas JSONB
-  @Column({ type: 'jsonb' })
-  equipment_categories: Equipment['equipment_categories'];
+  @ManyToOne(() => EquipmentCategoryEntity, (category) => category.equipment)
+  equipment_categories: EquipmentCategoryEntity[];
 
   @Column({ type: 'jsonb' })
   cost: Equipment['cost'];

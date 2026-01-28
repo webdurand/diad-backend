@@ -1,5 +1,6 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 import { EquipmentCategory } from '../interfaces/equipment-category.interface';
+import { EquipmentEntity } from './equipment.entity';
 
 @Entity('equipment_categories')
 export class EquipmentCategoryEntity implements EquipmentCategory {
@@ -12,10 +13,9 @@ export class EquipmentCategoryEntity implements EquipmentCategory {
   @Column()
   name: string;
 
-  // Armazena a lista de referências de itens como JSONB
-  @Column({ type: 'jsonb' })
-  equipment: EquipmentCategory['equipment'];
-
-  @Column()
-  url: string;
+  @OneToMany(
+    () => EquipmentEntity,
+    (equipment) => equipment.equipment_categories,
+  )
+  equipment: EquipmentEntity[];
 }

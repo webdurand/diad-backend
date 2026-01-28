@@ -14,7 +14,4 @@ export class DamageTypeEntity implements DamageType {
 
   @Column({ type: 'text' })
   description: string;
-
-  @Column()
-  url: string;
 }
