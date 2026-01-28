@@ -3,10 +3,10 @@ import {
   Column,
   PrimaryGeneratedColumn,
   ManyToOne,
-  JoinTable,
+  JoinColumn, // <--- 1. IMPORTAR ISSO
+  // JoinTable, <--- 2. REMOVER ISSO
 } from 'typeorm';
 import { Subclass } from '../interfaces/subclass.interface';
-// import { SpellEntity } from './spell.entity';
 import { ClassEntity } from './class.entity';
 
 @Entity('subclasses')
@@ -20,8 +20,11 @@ export class SubclassEntity implements Subclass {
   @Column()
   name: string;
 
+  // CORREÇÃO AQUI:
+  // ManyToOne SEMPRE usa JoinColumn para indicar que a FK (class_id) fica nesta tabela.
+  // JoinTable é só para ManyToMany.
   @ManyToOne(() => ClassEntity, (classEntity) => classEntity.subclasses)
-  @JoinTable()
+  @JoinColumn({ name: 'class_id' })
   class: ClassEntity;
 
   @Column()
@@ -33,8 +36,6 @@ export class SubclassEntity implements Subclass {
   @Column()
   subclass_levels: string;
 
-  // O campo spells deve seguir a interface Spell[] de subclass.interface.ts
-  // Portanto, armazenamos como JSON, não como relação
   @Column({ type: 'jsonb', nullable: true })
   spells?: Subclass['spells'];
 }

@@ -19,10 +19,10 @@ export class AdminController {
     return this.adminService.returnAll(entityName);
   }
 
-  @Post('relation-test')
-  async testEquipmentCategoryRelation() {
-    return this.adminService.testEquipmentCategoryRelation();
-  }
+  // @Post('relation-test')
+  // async testEquipmentCategoryRelation() {
+  //   return this.adminService.testEquipmentCategoryRelation();
+  // }
 
   @Post('clear-table')
   async clearTable(@Body() body: { entityName: string }) {
