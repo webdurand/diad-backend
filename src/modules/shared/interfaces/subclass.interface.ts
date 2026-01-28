@@ -1,4 +1,5 @@
 import { Class } from './class.interface';
+import { Feature } from './feature.interface';
 import { Spell } from './spell.interface';
 
 export interface Subclass {
@@ -18,6 +19,6 @@ export enum Type {
 }
 
 export interface SubclassSpell {
-  prerequisites: Class[];
+  prerequisites: (Class | Feature)[];
   spell: Spell;
 }
