@@ -1,5 +1,6 @@
-import { APIReference } from './api-reference.interface';
-
-export interface WeaponProperty extends APIReference {
+export interface WeaponProperty {
+  id: string;
+  index: string;
+  name: string;
   description: string;
 }

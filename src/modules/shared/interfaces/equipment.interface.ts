@@ -1,7 +1,10 @@
+import { AbilityScore } from './ability-score.interface';
 import { APIReference } from './api-reference.interface';
 import { Dc } from './common.interface';
 import { DamageType } from './damage-type.interface';
 import { EquipmentCategory } from './equipment-category.interface';
+import { WeaponMasteryProperty } from './weapon-mastery-property.interface';
+import { WeaponProperty } from './weapon-property.interface';
 
 export enum Unit {
   Cp = 'cp',
@@ -48,19 +51,19 @@ export interface Equipment {
   // Propriedades Específicas
   damage?: Damage;
   range?: { normal: number; long?: number };
-  properties?: APIReference[];
-  mastery?: APIReference;
+  properties?: WeaponProperty[];
+  mastery?: WeaponMasteryProperty;
   armor_class?: ArmorClass;
 
   // Novos campos 2024
   utilize?: Utilize[];
-  craft?: APIReference[];
-  ability?: APIReference;
+  craft?: Equipment[];
+  ability?: AbilityScore;
 
   // Containers e Ammuniton
-  contents?: QuantityReference[];
-  container?: APIReference[];
-  storage?: APIReference;
+  contents?: Equipment[];
+  container?: Equipment[];
+  storage?: Equipment;
   quantity?: number;
   notes?: string[];
 
