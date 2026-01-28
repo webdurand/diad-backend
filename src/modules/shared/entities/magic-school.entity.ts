@@ -14,7 +14,4 @@ export class MagicSchoolEntity implements MagicSchool {
 
   @Column({ type: 'text' })
   description: string;
-
-  @Column()
-  url: string;
 }

@@ -1,5 +1,6 @@
-import { APIReference } from './api-reference.interface';
-
-export interface MagicSchool extends APIReference {
+export interface MagicSchool {
+  id: string;
+  index: string;
+  name: string;
   description: string;
 }

@@ -1,5 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  Index,
+  ManyToOne,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { MagicItem } from '../interfaces/magic-item.interface';
+import { EquipmentCategoryEntity } from './equipment-category.entity';
 
 @Entity('magic_items')
 export class MagicItemEntity implements MagicItem {
@@ -13,22 +22,19 @@ export class MagicItemEntity implements MagicItem {
   @Column()
   name: string;
 
-  // Categoria (Ex: Armor, Wondrous Item)
-  @Column({ name: 'equipment_category', type: 'json' })
-  equipment_category: MagicItem['equipment_category'];
+  @ManyToOne(() => EquipmentCategoryEntity, { eager: true })
+  equipment_category: EquipmentCategoryEntity;
 
-  // Rarity salva como objeto para manter compatibilidade com o JSON original
   @Column({ type: 'json' })
   rarity: MagicItem['rarity'];
 
   @Column({ type: 'boolean', default: false })
   variant: boolean;
 
-  // Lista de referências para outras variantes deste item
-  @Column({ type: 'json' })
-  variants: MagicItem['variants'];
+  @ManyToMany(() => MagicItemEntity, { eager: true })
+  @JoinTable({ name: 'magic_item_variants' })
+  variants: MagicItemEntity[];
 
-  // Array de strings contendo a descrição e tabelas
   @Column({ type: 'json' })
   desc: string[];
 

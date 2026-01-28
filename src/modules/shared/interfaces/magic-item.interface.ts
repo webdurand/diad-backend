@@ -1,3 +1,5 @@
+import { EquipmentCategory } from './equipment-category.interface';
+
 export enum MagicItemRarity {
   Artifact = 'Artifact',
   Common = 'Common',
@@ -8,23 +10,16 @@ export enum MagicItemRarity {
   VeryRare = 'Very Rare',
 }
 
-export interface APIReference {
-  index: string;
-  name: string;
-  url: string;
-}
-
 export interface MagicItem {
-  id?: number;
+  id: string;
   index: string;
   name: string;
-  equipment_category: APIReference;
+  equipment_category: EquipmentCategory;
   rarity: {
     name: MagicItemRarity | string;
   };
-  variants: APIReference[];
+  variants: MagicItem[];
   variant: boolean;
   desc: string[];
   image?: string;
-  url: string;
 }

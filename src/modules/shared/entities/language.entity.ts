@@ -12,9 +12,6 @@ export class LanguageEntity implements Language {
   @Column()
   name: string;
 
-  @Column()
-  url: string;
-
   @Column({ name: 'is_rare', type: 'boolean', default: false })
   is_rare: boolean;
 

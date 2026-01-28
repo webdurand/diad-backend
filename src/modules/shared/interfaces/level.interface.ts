@@ -1,15 +1,16 @@
-import { APIReference } from './api-reference.interface';
+import { Class } from './class.interface';
+import { Feature } from './feature.interface';
+import { Subclass } from './subclass.interface';
 
 export interface Level {
-  id?: number;
+  id: string;
   index: string;
   level: number;
-  url: string;
   ability_score_bonuses?: number;
   prof_bonus?: number;
-  features: APIReference[];
-  class: APIReference;
-  subclass?: APIReference;
+  features: Feature[];
+  class: Class;
+  subclass?: Subclass;
   spellcasting?: { [key: string]: number };
   class_specific?: ClassSpecific;
   subclass_specific?: SubclassSpecific;

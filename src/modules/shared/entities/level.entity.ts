@@ -1,5 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  Index,
+  ManyToOne,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { Level } from '../interfaces/level.interface';
+import { FeatureEntity } from './feature.entity';
+import { ClassEntity } from './class.entity';
+import { SubclassEntity } from './subclass.entity';
 
 @Entity('levels')
 export class LevelEntity implements Level {
@@ -22,25 +33,22 @@ export class LevelEntity implements Level {
   @Column({ name: 'prof_bonus', type: 'int', nullable: true })
   prof_bonus: number;
 
-  // Armazena o array de referências de features como JSON
-  @Column({ type: 'json' })
-  features: Level['features'];
+  @ManyToMany(() => FeatureEntity, { eager: true })
+  @JoinTable({ name: 'level_features' })
+  features: FeatureEntity[];
 
-  // Objeto simples de classe (futuro relacionamento ManyToOne)
-  @Column({ type: 'json' })
-  class: Level['class'];
+  @ManyToOne(() => ClassEntity, { eager: true })
+  class: ClassEntity;
 
-  // Subclasse opcional
+  @ManyToOne(() => SubclassEntity, { nullable: true, eager: true })
+  subclass?: SubclassEntity;
+
   @Column({ type: 'json', nullable: true })
-  subclass: Level['subclass'];
-  // Dicionário de magias (ex: spell_slots_level_1: 2)
-  @Column({ type: 'json', nullable: true })
-  spellcasting: Level['spellcasting'];
+  spellcasting?: Level['spellcasting'];
 
-  // Campos específicos de classe que variam muito
   @Column({ name: 'class_specific', type: 'json', nullable: true })
-  class_specific: Level['class_specific'];
+  class_specific?: Level['class_specific'];
 
   @Column({ name: 'subclass_specific', type: 'json', nullable: true })
-  subclass_specific: Level['subclass_specific'];
+  subclass_specific?: Level['subclass_specific'];
 }
