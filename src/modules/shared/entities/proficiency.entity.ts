@@ -1,5 +1,13 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { Proficiency, Type } from '../interfaces/proficiency.interface';
+import { ClassEntity } from './class.entity';
+import { RaceEntity } from './race.entity';
 
 @Entity('proficiencies')
 export class ProficiencyEntity implements Proficiency {
@@ -18,18 +26,14 @@ export class ProficiencyEntity implements Proficiency {
   })
   type: Type;
 
-  // Lista de classes que podem ter essa proficiência
-  @Column({ type: 'jsonb' })
-  classes: Proficiency['classes'];
+  @ManyToMany(() => ClassEntity, (classEntity) => classEntity.proficiencies)
+  @JoinTable()
+  classes: ClassEntity[];
 
-  // Lista de raças que podem ter essa proficiência
-  @Column({ type: 'jsonb' })
-  races: Proficiency['races'];
+  @ManyToMany(() => RaceEntity)
+  races: RaceEntity[];
 
   // Referência para o objeto real (ex: link para a Skill ou para o Equipment)
   @Column({ type: 'jsonb' })
   reference: Proficiency['reference'];
-
-  @Column()
-  url: string;
 }

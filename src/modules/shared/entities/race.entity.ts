@@ -4,9 +4,12 @@ import {
   PrimaryGeneratedColumn,
   ManyToMany,
   JoinTable,
+  OneToMany,
 } from 'typeorm';
 import { Race } from '../interfaces/race.interface';
-import { AlignmentEntity } from './alignment.entity';
+import { LanguageEntity } from './language.entity';
+import { TraitEntity } from './trait.entity';
+import { SubraceEntity } from './subrace.entity';
 
 @Entity('races')
 export class RaceEntity implements Race {
@@ -25,9 +28,8 @@ export class RaceEntity implements Race {
   @Column({ type: 'jsonb' })
   ability_bonuses: Race['ability_bonuses'];
 
-  @ManyToMany(() => AlignmentEntity)
-  @JoinTable()
-  alignment: AlignmentEntity[];
+  @Column()
+  alignment: string;
 
   @Column({ type: 'text' })
   age: string;
@@ -38,19 +40,19 @@ export class RaceEntity implements Race {
   @Column({ type: 'text' })
   size_description: string;
 
-  @Column({ type: 'jsonb' })
-  languages: Race['languages'];
+  @ManyToMany(() => LanguageEntity, { eager: true })
+  @JoinTable()
+  languages: LanguageEntity[];
 
   @Column({ type: 'text' })
   language_desc: string;
 
-  @Column({ type: 'jsonb' })
-  traits: Race['traits'];
+  @ManyToMany(() => TraitEntity, { eager: true })
+  @JoinTable()
+  traits: TraitEntity[];
 
-  @Column({ type: 'jsonb' })
-  subraces: Race['subraces'];
-  @Column()
-  url: string;
+  @OneToMany(() => SubraceEntity, (subrace) => subrace.race, { eager: true })
+  subraces: SubraceEntity[];
 
   // Campos opcionais salvos como JSONB
   @Column({ type: 'jsonb', nullable: true })

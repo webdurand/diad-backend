@@ -1,15 +1,21 @@
-import { APIReference } from './api-reference.interface';
-export interface Race extends APIReference {
+import { AbilityScore } from './ability-score.interface';
+import { Language } from './language.interface';
+import { Subrace } from './subrace.interface';
+import { Trait } from './trait.interface';
+export interface Race {
+  id: string;
+  index: string;
+  name: string;
   speed: number;
   ability_bonuses: AbilityBonus[];
   alignment: string;
   age: string;
   size: string;
   size_description: string;
-  languages: APIReference[];
+  languages: Language[];
   language_desc: string;
-  traits: APIReference[];
-  subraces: APIReference[];
+  traits: Trait[];
+  subraces: Subrace[];
   language_options?: LanguageOptions;
   ability_bonus_options?: AbilityBonusOptions;
 }
@@ -27,14 +33,12 @@ export interface AbilityBonusOptionsFrom {
 
 export interface AbilityBonusOption {
   option_type: string;
-  ability_score: APIReference;
+  ability_score: AbilityScore;
   bonus: number;
 }
 
-export interface Language extends APIReference {}
-
 export interface AbilityBonus {
-  ability_score: APIReference;
+  ability_score: AbilityScore;
   bonus: number;
 }
 
@@ -51,7 +55,7 @@ export interface LanguageOptionsFrom {
 
 export interface LanguageOption {
   option_type: OptionType;
-  item: APIReference;
+  item: Language;
 }
 
 export enum OptionType {

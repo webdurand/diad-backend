@@ -14,7 +14,4 @@ export class RuleSectionEntity implements RuleSection {
 
   @Column({ type: 'text' })
   description: string;
-
-  @Column()
-  url: string;
 }

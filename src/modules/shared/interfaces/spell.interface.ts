@@ -1,24 +1,29 @@
 import { AbilityScore } from './ability-score.interface';
-import { APIReference } from './api-reference.interface';
+import { Class } from './class.interface';
 import { DamageType } from './damage-type.interface';
+import { MagicSchool } from './magic-school.interface';
+import { Subclass } from './subclass.interface';
 
-export interface Spell extends APIReference {
+export interface Spell {
+  id: string;
+  index: string;
+  name: string;
   desc: string[];
   higher_level?: string[];
-  range: Range;
+  range: string;
   components: Component[];
   material?: string;
   ritual: boolean;
   duration: string;
   concentration: boolean;
-  casting_time: CastingTime;
+  casting_time: string;
   level: number;
   attack_type?: AttackType;
   damage?: Damage;
-  school: School;
-  classes: School[];
-  subclasses: School[];
-  dc?: AbilityScore;
+  school: MagicSchool;
+  classes: Class[];
+  subclasses: Subclass[];
+  dc?: Dc;
   heal_at_slot_level?: { [key: string]: string };
   area_of_effect?: AreaOfEffect;
 }
@@ -39,18 +44,6 @@ export enum Type {
 export enum AttackType {
   Melee = 'melee',
   Ranged = 'ranged',
-}
-
-export enum CastingTime {
-  The10Minutes = '10 minutes',
-  The12Hours = '12 hours',
-  The1Action = '1 action',
-  The1BonusAction = '1 bonus action',
-  The1Hour = '1 hour',
-  The1Minute = '1 minute',
-  The1Reaction = '1 reaction',
-  The24Hours = '24 hours',
-  The8Hours = '8 hours',
 }
 
 export enum Component {
@@ -75,24 +68,4 @@ export enum DcSuccess {
   Half = 'half',
   None = 'none',
   Other = 'other',
-}
-
-export enum Range {
-  Self = 'Self',
-  Sight = 'Sight',
-  Special = 'Special',
-  The100Feet = '100 feet',
-  The10Feet = '10 feet',
-  The120Feet = '120 feet',
-  The150Feet = '150 feet',
-  The1Mile = '1 mile',
-  The300Feet = '300 feet',
-  The30Feet = '30 feet',
-  The500Feet = '500 feet',
-  The500Miles = '500 miles',
-  The5Feet = '5 feet',
-  The60Feet = '60 feet',
-  The90Feet = '90 feet',
-  Touch = 'Touch',
-  Unlimited = 'Unlimited',
 }

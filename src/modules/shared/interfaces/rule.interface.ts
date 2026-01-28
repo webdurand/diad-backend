@@ -1,8 +1,9 @@
-import { APIReference } from './api-reference.interface';
+import { RuleSection } from './rule-section.interface';
 
-export interface Rule extends APIReference {
+export interface Rule {
+  id: string;
+  index: string;
+  name: string;
   desc: string;
-  subsections: Subsection[];
+  subsections: RuleSection[];
 }
-
-export interface Subsection extends APIReference {}

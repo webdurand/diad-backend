@@ -1,5 +1,12 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { Rule } from '../interfaces/rule.interface';
+import { RuleSectionEntity } from './rule-section.entity';
 
 @Entity('rules')
 export class RuleEntity implements Rule {
@@ -15,8 +22,9 @@ export class RuleEntity implements Rule {
   @Column({ type: 'text' })
   desc: string;
 
-  @Column({ type: 'jsonb' })
-  subsections: Rule['subsections'];
+  @ManyToMany(() => RuleSectionEntity, { eager: true })
+  @JoinTable()
+  subsections: RuleSectionEntity[];
 
   @Column()
   url: string;
