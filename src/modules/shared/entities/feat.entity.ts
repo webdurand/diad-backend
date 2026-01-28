@@ -29,7 +29,4 @@ export class FeatEntity implements Feat {
 
   @Column({ type: 'jsonb', nullable: true })
   prerequisite_options?: Feat['prerequisite_options'];
-
-  @Column()
-  url: string;
 }

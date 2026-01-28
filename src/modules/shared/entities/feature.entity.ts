@@ -1,5 +1,13 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Feature } from '../interfaces/feature.interface';
+import { ClassEntity } from './class.entity';
+import { SubclassEntity } from './subclass.entity';
 
 @Entity('features')
 export class FeatureEntity implements Feature {
@@ -15,8 +23,9 @@ export class FeatureEntity implements Feature {
   @Column()
   level: number;
 
-  @Column({ type: 'jsonb' })
-  class: Feature['class'];
+  @ManyToOne(() => ClassEntity, { eager: true })
+  @JoinColumn({ name: 'class_id' })
+  class: ClassEntity;
 
   @Column({ type: 'jsonb' })
   desc: string[];
@@ -24,18 +33,17 @@ export class FeatureEntity implements Feature {
   @Column({ type: 'jsonb' })
   prerequisites: Feature['prerequisites'];
 
-  @Column({ type: 'jsonb', nullable: true })
-  subclass?: Feature['subclass'];
+  @ManyToOne(() => SubclassEntity, { nullable: true, eager: true })
+  @JoinColumn({ name: 'subclass_id' })
+  subclass?: SubclassEntity;
 
-  @Column({ type: 'jsonb', nullable: true })
-  parent?: Feature['parent'];
+  @ManyToOne(() => FeatureEntity, { nullable: true, eager: true })
+  @JoinColumn({ name: 'parent_id' })
+  parent?: FeatureEntity;
 
   @Column({ nullable: true })
   reference?: string;
 
   @Column({ type: 'jsonb', nullable: true })
   feature_specific?: Feature['feature_specific'];
-
-  @Column()
-  url: string;
 }

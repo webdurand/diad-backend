@@ -1,4 +1,6 @@
-import { APIReference } from './api-reference.interface';
+import { Class } from './class.interface';
+import { Proficiency } from './proficiency.interface';
+import { Subclass } from './subclass.interface';
 
 export enum OptionSetType {
   OptionsArray = 'options_array',
@@ -30,7 +32,7 @@ export interface Prerequisite {
 
 export interface FeatureOption {
   option_type: OptionType;
-  item?: APIReference;
+  item?: Proficiency | Feature;
   choice?: SubfeatureOptions;
   items?: FeatureOption[];
 }
@@ -59,16 +61,19 @@ export interface FeatureSpecific {
   subfeature_options?: SubfeatureOptions;
   enemy_type_options?: TypeOptions;
   terrain_type_options?: TypeOptions;
-  invocations?: APIReference[];
+  invocations?: Feature[];
 }
 
-export interface Feature extends APIReference {
-  class: APIReference;
+export interface Feature {
+  id: string;
+  index: string;
+  name: string;
+  class: Class;
   level: number;
   prerequisites: Prerequisite[];
   desc: string[];
-  subclass?: APIReference;
+  subclass?: Subclass;
   reference?: string;
   feature_specific?: FeatureSpecific;
-  parent?: APIReference;
+  parent?: Feature;
 }

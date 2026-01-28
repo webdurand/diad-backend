@@ -1,4 +1,4 @@
-import { APIReference } from './api-reference.interface';
+import { AbilityScore } from './ability-score.interface';
 
 // Usamos o seu Enum para garantir que o tipo seja exato
 export enum FeatType {
@@ -10,7 +10,7 @@ export enum FeatType {
 
 export interface FeatOption {
   option_type: string;
-  ability_score: APIReference;
+  ability_score: AbilityScore;
   minimum_score: number;
 }
 
@@ -29,7 +29,10 @@ export interface FeatPrerequisites {
 }
 
 // Interface principal estendendo a base comum
-export interface Feat extends APIReference {
+export interface Feat {
+  id: string;
+  index: string;
+  name: string;
   description: string;
   type: FeatType;
   repeatable?: string;
