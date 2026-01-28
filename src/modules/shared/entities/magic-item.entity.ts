@@ -22,7 +22,7 @@ export class MagicItemEntity implements MagicItem {
   @Column()
   name: string;
 
-  @ManyToOne(() => EquipmentCategoryEntity, { eager: true })
+  @ManyToOne(() => EquipmentCategoryEntity)
   equipment_category: EquipmentCategoryEntity;
 
   @Column({ type: 'json' })
@@ -31,7 +31,7 @@ export class MagicItemEntity implements MagicItem {
   @Column({ type: 'boolean', default: false })
   variant: boolean;
 
-  @ManyToMany(() => MagicItemEntity, { eager: true })
+  @ManyToMany(() => MagicItemEntity)
   @JoinTable({ name: 'magic_item_variants' })
   variants: MagicItemEntity[];
 

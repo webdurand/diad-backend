@@ -1,5 +1,14 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
-import { Subrace, Race, AbilityBonus } from '../interfaces/subrace.interface'; // Ajuste o caminho
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
+import { Subrace, AbilityBonus } from '../interfaces/subrace.interface';
+import { TraitEntity } from './trait.entity';
+import { RaceEntity } from './race.entity';
 
 @Entity('subraces')
 export class SubraceEntity implements Subrace {
@@ -12,8 +21,8 @@ export class SubraceEntity implements Subrace {
   @Column()
   name: string;
 
-  @Column({ type: 'jsonb' })
-  race: Race;
+  @ManyToOne(() => RaceEntity, (race) => race.subraces)
+  race: RaceEntity;
 
   @Column({ type: 'text' })
   desc: string;
@@ -21,8 +30,9 @@ export class SubraceEntity implements Subrace {
   @Column({ type: 'jsonb' })
   ability_bonuses: AbilityBonus[];
 
-  @Column({ type: 'jsonb' })
-  racial_traits: Race[];
+  @ManyToMany(() => TraitEntity)
+  @JoinTable()
+  racial_traits: TraitEntity[];
 
   @Column()
   url: string;

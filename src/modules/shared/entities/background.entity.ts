@@ -26,7 +26,7 @@ export class BackgroundEntity implements Background {
   @JoinTable()
   ability_scores: AbilityScoreEntity[];
 
-  @ManyToOne(() => FeatEntity, { eager: true })
+  @ManyToOne(() => FeatEntity)
   feat: FeatEntity;
 
   @ManyToMany(() => ProficiencyEntity)

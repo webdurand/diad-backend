@@ -1,15 +1,21 @@
-import { APIReference } from './api-reference.interface';
+import { AbilityScore } from './ability-score.interface';
 import { DamageType } from './damage-type.interface';
+import { Proficiency } from './proficiency.interface';
+import { Race } from './race.interface';
+import { Subrace } from './subrace.interface';
 
-export interface Trait extends APIReference {
-  races: APIReference[];
-  subraces: APIReference[];
+export interface Trait {
+  id: string;
+  index: string;
+  name: string;
+  races: Race[];
+  subraces: Subrace[];
   desc: string[];
-  proficiencies: APIReference[];
+  proficiencies: Proficiency[];
   proficiency_choices?: ChoiceOption;
   trait_specific?: TraitSpecific;
   language_options?: ChoiceOption;
-  parent?: APIReference;
+  parent?: Trait;
 }
 
 export interface ChoiceOption {
@@ -20,12 +26,12 @@ export interface ChoiceOption {
 
 export interface OptionSet {
   option_set_type: string;
-  options: TraitOption[];
+  options: Option[];
 }
 
-export interface TraitOption {
+export interface Option {
   option_type: 'reference' | string;
-  item: APIReference;
+  item: Proficiency;
 }
 
 export interface TraitSpecific {
@@ -51,12 +57,11 @@ export interface TraitAreaOfEffect {
 
 export interface TraitDamage {
   damage_type: DamageType;
-  // Dinâmico para suportar níveis como "2", "6", "11", etc.
   damage_at_character_level: { [level: string]: string };
 }
 
 export interface TraitDc {
-  dc_type: APIReference;
+  dc_type: AbilityScore;
   success_type: 'half' | 'none' | string;
 }
 

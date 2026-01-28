@@ -1,12 +1,5 @@
-import {
-  Entity,
-  Column,
-  PrimaryGeneratedColumn,
-  ManyToMany,
-  JoinTable,
-} from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
 import { Monster, MonsterType, Size } from '../interfaces/monster.interface';
-import { AlignmentEntity } from './alignment.entity';
 
 @Entity('monsters')
 export class MonsterEntity implements Monster {
@@ -25,9 +18,7 @@ export class MonsterEntity implements Monster {
   @Column()
   type: MonsterType;
 
-  @ManyToMany(() => AlignmentEntity)
-  @JoinTable()
-  alignment: AlignmentEntity[];
+  @Column() alignment: string;
 
   @Column({ type: 'jsonb' })
   armor_class: Monster['armor_class'];

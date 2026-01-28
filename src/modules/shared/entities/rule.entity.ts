@@ -22,7 +22,7 @@ export class RuleEntity implements Rule {
   @Column({ type: 'text' })
   desc: string;
 
-  @ManyToMany(() => RuleSectionEntity, { eager: true })
+  @ManyToMany(() => RuleSectionEntity)
   @JoinTable()
   subsections: RuleSectionEntity[];
 

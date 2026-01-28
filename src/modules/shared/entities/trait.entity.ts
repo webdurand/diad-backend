@@ -1,7 +1,18 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
 import {
-  Trait,
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToMany,
+  JoinTable,
+  ManyToOne,
+} from 'typeorm';
+
+import { RaceEntity } from './race.entity';
+import { SubraceEntity } from './subrace.entity';
+import { ProficiencyEntity } from './proficiency.entity';
+import {
   ChoiceOption,
+  Trait,
   TraitSpecific,
 } from '../interfaces/trait.interface';
 
@@ -16,17 +27,20 @@ export class TraitEntity implements Trait {
   @Column()
   name: string;
 
-  @Column({ type: 'jsonb' })
-  races: Trait['races'];
+  @ManyToMany(() => RaceEntity)
+  @JoinTable()
+  races: RaceEntity[];
 
-  @Column({ type: 'jsonb' })
-  subraces: Trait['subraces'];
+  @ManyToMany(() => SubraceEntity)
+  @JoinTable()
+  subraces: SubraceEntity[];
 
   @Column({ type: 'text', array: true })
   desc: string[];
 
-  @Column({ type: 'jsonb' })
-  proficiencies: Trait['proficiencies'];
+  @ManyToMany(() => ProficiencyEntity)
+  @JoinTable()
+  proficiencies: ProficiencyEntity[];
 
   @Column({ type: 'jsonb', nullable: true })
   proficiency_choices?: ChoiceOption;
@@ -37,8 +51,8 @@ export class TraitEntity implements Trait {
   @Column({ type: 'jsonb', nullable: true })
   language_options?: ChoiceOption;
 
-  @Column({ type: 'jsonb', nullable: true })
-  parent?: Trait['parent'];
+  @ManyToOne(() => TraitEntity, { nullable: true, eager: true })
+  parent?: TraitEntity;
 
   @Column()
   url: string;

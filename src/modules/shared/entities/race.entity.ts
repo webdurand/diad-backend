@@ -40,18 +40,18 @@ export class RaceEntity implements Race {
   @Column({ type: 'text' })
   size_description: string;
 
-  @ManyToMany(() => LanguageEntity, { eager: true })
+  @ManyToMany(() => LanguageEntity)
   @JoinTable()
   languages: LanguageEntity[];
 
   @Column({ type: 'text' })
   language_desc: string;
 
-  @ManyToMany(() => TraitEntity, { eager: true })
+  @ManyToMany(() => TraitEntity)
   @JoinTable()
   traits: TraitEntity[];
 
-  @OneToMany(() => SubraceEntity, (subrace) => subrace.race, { eager: true })
+  @OneToMany(() => SubraceEntity, (subrace) => subrace.race)
   subraces: SubraceEntity[];
 
   // Campos opcionais salvos como JSONB

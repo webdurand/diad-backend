@@ -23,7 +23,7 @@ export class FeatureEntity implements Feature {
   @Column()
   level: number;
 
-  @ManyToOne(() => ClassEntity, { eager: true })
+  @ManyToOne(() => ClassEntity)
   @JoinColumn({ name: 'class_id' })
   class: ClassEntity;
 

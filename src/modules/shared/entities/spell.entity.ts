@@ -65,14 +65,14 @@ export class SpellEntity implements Spell {
   @Column({ type: 'jsonb', nullable: true })
   damage?: Damage;
 
-  @ManyToOne(() => MagicSchoolEntity, { eager: true })
+  @ManyToOne(() => MagicSchoolEntity)
   school: MagicSchoolEntity;
 
-  @ManyToMany(() => ClassEntity, { eager: true })
+  @ManyToMany(() => ClassEntity)
   @JoinTable()
   classes: ClassEntity[];
 
-  @ManyToMany(() => SubclassEntity, { eager: true })
+  @ManyToMany(() => SubclassEntity)
   @JoinTable()
   subclasses: SubclassEntity[];
 

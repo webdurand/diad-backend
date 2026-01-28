@@ -33,11 +33,11 @@ export class LevelEntity implements Level {
   @Column({ name: 'prof_bonus', type: 'int', nullable: true })
   prof_bonus: number;
 
-  @ManyToMany(() => FeatureEntity, { eager: true })
+  @ManyToMany(() => FeatureEntity)
   @JoinTable({ name: 'level_features' })
   features: FeatureEntity[];
 
-  @ManyToOne(() => ClassEntity, { eager: true })
+  @ManyToOne(() => ClassEntity)
   class: ClassEntity;
 
   @ManyToOne(() => SubclassEntity, { nullable: true, eager: true })
