@@ -35,7 +35,7 @@ export class FeatureEntity implements Feature {
 
   @ManyToOne(() => SubclassEntity, { nullable: true, eager: true })
   @JoinColumn({ name: 'subclass_id' })
-  subclass?: SubclassEntity;
+  subclass?: SubclassEntity; // SubclassEntity agora está alinhada com a interface
 
   @ManyToOne(() => FeatureEntity, { nullable: true, eager: true })
   @JoinColumn({ name: 'parent_id' })

@@ -35,13 +35,13 @@ export class LevelEntity implements Level {
 
   @ManyToMany(() => FeatureEntity)
   @JoinTable({ name: 'level_features' })
-  features: FeatureEntity[];
+  features: FeatureEntity[]; // FeatureEntity agora está alinhada com a interface
 
   @ManyToOne(() => ClassEntity)
   class: ClassEntity;
 
   @ManyToOne(() => SubclassEntity, { nullable: true, eager: true })
-  subclass?: SubclassEntity;
+  subclass?: SubclassEntity; // SubclassEntity agora está alinhada com a interface
 
   @Column({ type: 'json', nullable: true })
   spellcasting?: Level['spellcasting'];

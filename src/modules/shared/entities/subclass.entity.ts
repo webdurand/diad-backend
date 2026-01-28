@@ -3,11 +3,10 @@ import {
   Column,
   PrimaryGeneratedColumn,
   ManyToOne,
-  ManyToMany,
   JoinTable,
 } from 'typeorm';
 import { Subclass } from '../interfaces/subclass.interface';
-import { SpellEntity } from './spell.entity';
+// import { SpellEntity } from './spell.entity';
 import { ClassEntity } from './class.entity';
 
 @Entity('subclasses')
@@ -34,7 +33,8 @@ export class SubclassEntity implements Subclass {
   @Column()
   subclass_levels: string;
 
-  @ManyToMany(() => SpellEntity, (spell) => spell.subclasses)
-  @JoinTable()
-  spells?: SpellEntity[];
+  // O campo spells deve seguir a interface Spell[] de subclass.interface.ts
+  // Portanto, armazenamos como JSON, não como relação
+  @Column({ type: 'jsonb', nullable: true })
+  spells?: Subclass['spells'];
 }

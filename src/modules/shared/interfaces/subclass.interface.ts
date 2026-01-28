@@ -1,4 +1,5 @@
 import { Class } from './class.interface';
+import { Spell } from './spell.interface';
 
 export interface Subclass {
   id: string;
@@ -8,7 +9,7 @@ export interface Subclass {
   subclass_flavor: string;
   desc: string[];
   subclass_levels: string;
-  spells?: Spell[];
+  spells?: SubclassSpell[];
 }
 
 export enum Type {
@@ -16,7 +17,7 @@ export enum Type {
   Level = 'level',
 }
 
-export interface Spell {
+export interface SubclassSpell {
   prerequisites: Class[];
-  spell: Class;
+  spell: Spell;
 }
