@@ -1,15 +1,22 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import {
   AreaOfEffect,
   AttackType,
-  CastingTime,
   Component,
   Damage,
   Dc,
-  Range,
-  School,
   Spell,
 } from '../interfaces/spell.interface';
+import { MagicSchoolEntity } from './magic-school.entity';
+import { ClassEntity } from './class.entity';
+import { SubclassEntity } from './subclass.entity';
 
 @Entity('spells')
 export class SpellEntity implements Spell {
@@ -28,8 +35,8 @@ export class SpellEntity implements Spell {
   @Column({ type: 'text', array: true, nullable: true })
   higher_level?: string[];
 
-  @Column({ type: 'enum', enum: Range })
-  range: Range;
+  @Column()
+  range: string;
 
   @Column({ type: 'jsonb' })
   components: Component[];
@@ -46,8 +53,8 @@ export class SpellEntity implements Spell {
   @Column()
   concentration: boolean;
 
-  @Column({ type: 'enum', enum: CastingTime })
-  casting_time: CastingTime;
+  @Column()
+  casting_time: string;
 
   @Column()
   level: number;
@@ -58,14 +65,16 @@ export class SpellEntity implements Spell {
   @Column({ type: 'jsonb', nullable: true })
   damage?: Damage;
 
-  @Column({ type: 'jsonb' })
-  school: School;
+  @ManyToOne(() => MagicSchoolEntity, { eager: true })
+  school: MagicSchoolEntity;
 
-  @Column({ type: 'jsonb' })
-  classes: School[];
+  @ManyToMany(() => ClassEntity, { eager: true })
+  @JoinTable()
+  classes: ClassEntity[];
 
-  @Column({ type: 'jsonb' })
-  subclasses: School[];
+  @ManyToMany(() => SubclassEntity, { eager: true })
+  @JoinTable()
+  subclasses: SubclassEntity[];
 
   @Column()
   url: string;
