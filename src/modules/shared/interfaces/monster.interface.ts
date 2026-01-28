@@ -1,10 +1,120 @@
-import { Alignment } from './alignment.interface';
+import { AbilityScore } from './ability-score.interface';
 import { APIReference } from './api-reference.interface';
 import { Dc } from './common.interface';
+import { Condition } from './condition.interface';
+import { DamageType } from './damage-type.interface';
+import { Equipment } from './equipment.interface';
+import { Spell } from './spell.interface';
+
+// =========================
+// ENUMS
+// =========================
+
+export enum OptionSetType {
+  OptionsArray = 'options_array',
+}
+
+export enum ItemOptionType {
+  Action = 'action',
+  Multiple = 'multiple',
+}
+
+export enum ActionType {
+  Ability = 'ability',
+  Magic = 'magic',
+  Melee = 'melee',
+  Ranged = 'ranged',
+}
+
+export enum SuccessType {
+  Half = 'half',
+  None = 'none',
+}
+
+export enum OptionType {
+  Breath = 'breath',
+}
+
+export enum MultiattackType {
+  ActionOptions = 'action_options',
+  Actions = 'actions',
+}
+
+export enum OptionsType {
+  Attack = 'attack',
+}
+
+export enum RestType {
+  Long = 'long',
+  Short = 'short',
+}
+
+export enum ActionUsageType {
+  PerDay = 'per day',
+  RechargeAfterREST = 'recharge after rest',
+  RechargeOnRoll = 'recharge on roll',
+}
+
+export enum ArmorClassType {
+  Armor = 'armor',
+  Condition = 'condition',
+  Dex = 'dex',
+  Natural = 'natural',
+  Spell = 'spell',
+}
+
+export enum Size {
+  Gargantuan = 'Gargantuan',
+  Huge = 'Huge',
+  Large = 'Large',
+  Medium = 'Medium',
+  Small = 'Small',
+  Tiny = 'Tiny',
+}
+
+export enum ComponentsRequired {
+  M = 'M',
+  S = 'S',
+  V = 'V',
+}
+
+export enum School {
+  Cleric = 'cleric',
+  Druid = 'druid',
+  Wizard = 'wizard',
+}
+
+export enum SpellUsageType {
+  AtWill = 'at will',
+  PerDay = 'per day',
+}
+
+export enum MonsterType {
+  Aberration = 'aberration',
+  Beast = 'beast',
+  Celestial = 'celestial',
+  Construct = 'construct',
+  Dragon = 'dragon',
+  Elemental = 'elemental',
+  Fey = 'fey',
+  Fiend = 'fiend',
+  Giant = 'giant',
+  Humanoid = 'humanoid',
+  Monstrosity = 'monstrosity',
+  Ooze = 'ooze',
+  Plant = 'plant',
+  SwarmOfTinyBeasts = 'swarm of Tiny beasts',
+  Undead = 'undead',
+}
+
+// =========================
+// INTERFACES & TYPES
+// =========================
+
 export interface Monster extends APIReference {
   size: Size;
   type: MonsterType;
-  alignment: Alignment[];
+  alignment: string; // Pode ser "any alignment", "chaotic evil", "neutral good", etc.
   armor_class: ArmorClass[];
   hit_points: number;
   hit_dice: string;
@@ -20,7 +130,7 @@ export interface Monster extends APIReference {
   damage_vulnerabilities: string[];
   damage_resistances: string[];
   damage_immunities: string[];
-  condition_immunities: APIReference[];
+  condition_immunities: Condition[];
   senses: Senses;
   languages: string;
   challenge_rating: number;
@@ -61,10 +171,6 @@ export interface ActionOptionsFrom {
   options: ItemElement[];
 }
 
-export enum OptionSetType {
-  OptionsArray = 'options_array',
-}
-
 export interface ItemElement {
   option_type: ItemOptionType;
   items?: ItemElement[];
@@ -72,18 +178,6 @@ export interface ItemElement {
   count?: number;
   type?: ActionType;
   desc?: string;
-}
-
-export enum ItemOptionType {
-  Action = 'action',
-  Multiple = 'multiple',
-}
-
-export enum ActionType {
-  Ability = 'ability',
-  Magic = 'magic',
-  Melee = 'melee',
-  Ranged = 'ranged',
 }
 
 export interface ActionAction {
@@ -100,27 +194,18 @@ export interface Attack {
 }
 
 export interface AttackDamage {
-  damage_type: ConditionImmunity;
+  damage_type: DamageType;
   damage_dice: string;
 }
 
 export type ConditionImmunity = APIReference;
 
-export enum SuccessType {
-  Half = 'half',
-  None = 'none',
-}
-
-export enum OptionType {
-  Breath = 'breath',
-}
-
 export interface ActionDamage {
-  damage_type?: ConditionImmunity;
+  damage_type?: DamageType;
   damage_dice?: string;
   dc?: Dc;
   choose?: number;
-  type?: DamageType;
+  type?: string;
   from?: DamageFrom;
 }
 
@@ -130,25 +215,10 @@ export interface DamageFrom {
 }
 
 export interface DamageChoiceOption {
-  option_type: DamageType;
-  damage_type: ConditionImmunity;
+  option_type: string;
+  damage_type: DamageType;
   damage_dice: string;
-  notes?: Notes;
-}
-
-export enum Notes {
-  OneHanded = 'One handed',
-  TwoHanded = 'Two handed',
-  WithShillelagh = 'With shillelagh',
-}
-
-export enum DamageType {
-  Damage = 'damage',
-}
-
-export enum MultiattackType {
-  ActionOptions = 'action_options',
-  Actions = 'actions',
+  notes?: string;
 }
 
 export interface Options {
@@ -162,48 +232,20 @@ export interface OptionsFrom {
   options: Attack[];
 }
 
-export enum OptionsType {
-  Attack = 'attack',
-}
-
 export interface ActionUsage {
   type: ActionUsageType;
   times?: number;
-  dice?: Dice;
+  dice?: string;
   min_value?: number;
   rest_types?: RestType[];
-}
-
-export enum Dice {
-  The1D6 = '1d6',
-}
-
-export enum RestType {
-  Long = 'long',
-  Short = 'short',
-}
-
-export enum ActionUsageType {
-  PerDay = 'per day',
-  RechargeAfterREST = 'recharge after rest',
-  RechargeOnRoll = 'recharge on roll',
 }
 
 export interface ArmorClass {
   type: ArmorClassType;
   value: number;
-  condition?: ConditionImmunity;
-  spell?: ConditionImmunity;
-  armor?: ConditionImmunity[];
+  spell?: Spell;
+  armor?: Equipment[];
   desc?: string;
-}
-
-export enum ArmorClassType {
-  Armor = 'armor',
-  Condition = 'condition',
-  Dex = 'dex',
-  Natural = 'natural',
-  Spell = 'spell',
 }
 
 export interface LegendaryAction {
@@ -226,31 +268,11 @@ export interface Reaction {
 }
 
 export interface Senses {
-  darkvision?: Blindsight;
+  darkvision?: string;
   passive_perception: number;
-  blindsight?: Blindsight;
-  truesight?: Blindsight;
-  tremorsense?: Blindsight;
-}
-
-export enum Blindsight {
-  The10Ft = '10 ft.',
-  The120Ft = '120 ft.',
-  The30Ft = '30 ft.',
-  The30FtBlindBeyondThisRadius = '30 ft. (blind beyond this radius)',
-  The30FtOr10FtWhileDeafenedBlindBeyondThisRadius = '30 ft. or 10 ft. while deafened (blind beyond this radius)',
-  The60Ft = '60 ft.',
-  The60FtBlindBeyondThisRadius = '60 ft. (blind beyond this radius)',
-  The90Ft = '90 ft.',
-}
-
-export enum Size {
-  Gargantuan = 'Gargantuan',
-  Huge = 'Huge',
-  Large = 'Large',
-  Medium = 'Medium',
-  Small = 'Small',
-  Tiny = 'Tiny',
+  blindsight?: string;
+  truesight?: string;
+  tremorsense?: string;
 }
 
 export interface SpecialAbility {
@@ -263,44 +285,25 @@ export interface SpecialAbility {
 }
 
 export interface Spellcasting {
-  level?: number;
-  ability: ConditionImmunity;
-  dc?: number;
+  ability?: AbilityScore;
   modifier?: number;
+  dc?: number;
   components_required: ComponentsRequired[];
-  school?: School;
   slots?: { [key: string]: number };
-  spells: Spell[];
+  usage?: ActionUsage;
+  spells: SpellcastingSpell[];
 }
 
-export enum ComponentsRequired {
-  M = 'M',
-  S = 'S',
-  V = 'V',
-}
-
-export enum School {
-  Cleric = 'cleric',
-  Druid = 'druid',
-  Wizard = 'wizard',
-}
-
-export interface Spell {
+export interface SpellcastingSpell {
   name: string;
   level: number;
   url: string;
   usage?: SpellUsage;
-  notes?: string;
 }
 
 export interface SpellUsage {
   type: SpellUsageType;
   times?: number;
-}
-
-export enum SpellUsageType {
-  AtWill = 'at will',
-  PerDay = 'per day',
 }
 
 export interface SpecialAbilityUsage {
@@ -310,54 +313,10 @@ export interface SpecialAbilityUsage {
 }
 
 export interface Speed {
-  walk?: Burrow;
-  swim?: Climb;
-  fly?: Climb;
-  burrow?: Burrow;
-  climb?: Climb;
+  walk?: string;
+  swim?: string;
+  fly?: string;
+  burrow?: string;
+  climb?: string;
   hover?: boolean;
-}
-
-export enum Burrow {
-  The0Ft = '0 ft.',
-  The10Ft = '10 ft.',
-  The15Ft = '15 ft.',
-  The20Ft = '20 ft.',
-  The25Ft = '25 ft.',
-  The30Ft = '30 ft.',
-  The40Ft = '40 ft.',
-  The50Ft = '50 ft.',
-  The5Ft = '5 ft.',
-  The60Ft = '60 ft.',
-}
-
-export enum Climb {
-  The10Ft = '10 ft.',
-  The120Ft = '120 ft.',
-  The150Ft = '150 ft.',
-  The20Ft = '20 ft.',
-  The30Ft = '30 ft.',
-  The40Ft = '40 ft.',
-  The50Ft = '50 ft.',
-  The60Ft = '60 ft.',
-  The80Ft = '80 ft.',
-  The90Ft = '90 ft.',
-}
-
-export enum MonsterType {
-  Aberration = 'aberration',
-  Beast = 'beast',
-  Celestial = 'celestial',
-  Construct = 'construct',
-  Dragon = 'dragon',
-  Elemental = 'elemental',
-  Fey = 'fey',
-  Fiend = 'fiend',
-  Giant = 'giant',
-  Humanoid = 'humanoid',
-  Monstrosity = 'monstrosity',
-  Ooze = 'ooze',
-  Plant = 'plant',
-  SwarmOfTinyBeasts = 'swarm of Tiny beasts',
-  Undead = 'undead',
 }

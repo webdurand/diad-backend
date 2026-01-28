@@ -1,4 +1,6 @@
-import { APIReference } from './api-reference.interface';
-export interface Condition extends APIReference {
+export interface Condition {
+  id: string;
+  index: string;
+  name: string;
   description: string;
 }

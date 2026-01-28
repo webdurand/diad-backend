@@ -1,4 +1,6 @@
+import { AbilityScore } from './ability-score.interface';
 import { APIReference } from './api-reference.interface';
+import { DamageType } from './damage-type.interface';
 
 export interface Spell extends APIReference {
   desc: string[];
@@ -16,7 +18,7 @@ export interface Spell extends APIReference {
   school: School;
   classes: School[];
   subclasses: School[];
-  dc?: Dc;
+  dc?: AbilityScore;
   heal_at_slot_level?: { [key: string]: string };
   area_of_effect?: AreaOfEffect;
 }
@@ -51,8 +53,6 @@ export enum CastingTime {
   The8Hours = '8 hours',
 }
 
-export interface School extends APIReference {}
-
 export enum Component {
   M = 'M',
   S = 'S',
@@ -60,13 +60,13 @@ export enum Component {
 }
 
 export interface Damage {
-  damage_type?: School;
+  damage_type?: DamageType;
   damage_at_slot_level?: { [key: string]: string };
   damage_at_character_level?: { [key: string]: string };
 }
 
 export interface Dc {
-  dc_type: School;
+  dc_type: AbilityScore;
   dc_success: DcSuccess;
   desc?: string;
 }
