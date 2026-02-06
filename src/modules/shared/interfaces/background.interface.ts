@@ -3,6 +3,7 @@ import { Feat } from './feat.interface';
 import { Proficiency } from './proficiency.interface';
 import { Equipment } from './equipment.interface';
 import { EquipmentCategory } from './equipment-category.interface';
+import { Language } from './language.interface';
 
 export interface Background {
   id: string;
@@ -13,6 +14,13 @@ export interface Background {
   proficiencies: Proficiency[];
   equipment_options: EquipmentOptionWrapper | EquipmentChoiceGroup;
   proficiency_choices?: ProficiencyChoice[];
+  language_choices?: LanguageChoice[];
+  feature?: BackgroundFeature;
+}
+
+export interface BackgroundFeature {
+  name: string;
+  description: string;
 }
 
 export interface EquipmentOptionWrapper {
@@ -90,6 +98,22 @@ export interface ProficiencyOptionSet {
 export interface ProficiencyChoiceOption {
   option_type: string;
   item: Proficiency;
+}
+
+export interface LanguageChoice {
+  choose: number;
+  type: string;
+  from: LanguageOptionSet;
+}
+
+export interface LanguageOptionSet {
+  option_set_type: string;
+  options: LanguageChoiceOption[];
+}
+
+export interface LanguageChoiceOption {
+  option_type: string;
+  item: Language;
 }
 
 export enum OptionType {

@@ -38,4 +38,10 @@ export class BackgroundEntity implements Background {
 
   @Column({ type: 'jsonb', nullable: true })
   proficiency_choices?: Background['proficiency_choices'];
+
+  @Column({ type: 'jsonb', nullable: true })
+  language_choices?: Background['language_choices'];
+
+  @Column({ type: 'jsonb', nullable: true })
+  feature?: Background['feature'];
 }
