@@ -82,3 +82,16 @@ export const entityMap = {
   [Entities.WeaponMasteryProperty]: WeaponMasteryPropertyEntity,
   [Entities.WeaponProperty]: WeaponPropertyEntity,
 };
+
+// Mapeamento de relações que devem ser carregadas para cada entidade
+export const entityRelations: Record<string, string[]> = {
+  [Entities.Race]: ['languages', 'traits', 'subraces'],
+  [Entities.Subrace]: ['traits', 'languages'],
+  [Entities.Class]: ['proficiencies', 'saving_throws', 'starting_equipment', 'subclasses'],
+  [Entities.Subclass]: ['class'],
+  [Entities.Spell]: ['classes', 'subclasses', 'school'],
+  [Entities.Equipment]: ['equipment_categories'],
+  [Entities.Monster]: [],
+  [Entities.Feat]: [],
+  [Entities.Proficiency]: [],
+};
