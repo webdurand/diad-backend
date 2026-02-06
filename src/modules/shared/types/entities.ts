@@ -86,7 +86,7 @@ export const entityMap = {
 // Mapeamento de relações que devem ser carregadas para cada entidade
 export const entityRelations: Record<string, string[]> = {
   [Entities.Race]: ['languages', 'traits', 'subraces'],
-  [Entities.Subrace]: ['traits', 'languages'],
+  [Entities.Subrace]: ['race', 'racial_traits'],
   [Entities.Class]: ['proficiencies', 'saving_throws', 'starting_equipment', 'subclasses'],
   [Entities.Subclass]: ['class'],
   [Entities.Spell]: ['classes', 'subclasses', 'school'],

@@ -309,7 +309,7 @@ export class AdminService {
         if (!spell.area_of_effect) spell.area_of_effect = null;
       });
     } else if (entityName === 'SubraceEntity') {
-      console.log(' -> Vinculando Race, Traits e Languages para Subraces...');
+      console.log(' -> Vinculando Race e Traits para Subraces...');
       const raceRepo = this.dataSource.getRepository(RaceEntity);
       const allRaces = await raceRepo.find({
         select: { id: true, index: true },
@@ -322,27 +322,13 @@ export class AdminService {
       });
       const traitMap = new Map(allTraits.map((t) => [t.index, t]));
 
-      const langRepo = this.dataSource.getRepository(LanguageEntity);
-      const allLangs = await langRepo.find({
-        select: { id: true, index: true },
-      });
-      const langMap = new Map(allLangs.map((l) => [l.index, l]));
-
       dataArray.forEach((subrace) => {
         if (subrace.race && subrace.race.index) {
           subrace.race = raceMap.get(subrace.race.index);
         }
         const traitsJson = subrace.racial_traits || subrace.traits;
         if (traitsJson && Array.isArray(traitsJson)) {
-          subrace.traits = traitsJson
-            .map((t) => traitMap.get(t.index))
-            .filter((f) => !!f);
-          if (subrace.racial_traits) delete subrace.racial_traits;
-        }
-        if (subrace.languages && Array.isArray(subrace.languages)) {
-          subrace.languages = subrace.languages
-            .map((l) => langMap.get(l.index))
-            .filter((f) => !!f);
+          subrace.racial_traits = traitsJson.map((t) => traitMap.get(t.index)).filter((f) => !!f);
         }
       });
     }
