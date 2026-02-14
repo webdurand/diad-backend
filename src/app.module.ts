@@ -1,16 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { CharacterCreationModule } from './modules/character-creation/character-creation.module';
-import { AdminModule } from './modules/admin/admin.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TypeOrmConfig } from './config/typeorm.config';
+import { AdminModule } from './models/admin/admin.module';
+import { LibraryModule } from './models/library/library.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
     TypeOrmModule.forRootAsync(TypeOrmConfig),
-    CharacterCreationModule,
     AdminModule,
+    LibraryModule,
   ],
   controllers: [],
   providers: [],

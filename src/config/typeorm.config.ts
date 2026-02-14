@@ -1,20 +1,19 @@
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModuleAsyncOptions } from '@nestjs/typeorm';
-import { ENTITIES } from 'src/modules/shared/entities';
+import { ENTITIES } from 'src/entities';
+
 
 export const TypeOrmConfig: TypeOrmModuleAsyncOptions = {
+  imports: [ConfigModule],
   inject: [ConfigService],
-  useFactory: () => {
+  useFactory: (configService: ConfigService) => {
     return {
       type: 'postgres',
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT),
-      database: process.env.DB_NAME,
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      ssl: { rejectUnauthorized: false }, // 👈 obrigatório no Supabase
+      url: configService.get<string>('DATABASE_URL'),
+      ssl: { rejectUnauthorized: false },
+      migrations: [],
       logging: true,
-      synchronize: true,
+      synchronize: false,
       entities: [...ENTITIES],
     };
   },
