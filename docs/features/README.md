@@ -5,7 +5,9 @@ This folder documents the current backend features in simple language, focused o
 ## Current features
 - Library API (read-only data for the SRD library): see library-and-seeding.md.
 - Admin seeding pipeline (load SRD JSON into Postgres): see library-and-seeding.md.
+- User authentication (email + password, JWT cookie).
+- Character persistence (save/list characters per user).
 
 ## Notes
-- There is no character persistence yet.
+- Auth uses httpOnly cookies for the session.
 - Keep this doc updated when features change.

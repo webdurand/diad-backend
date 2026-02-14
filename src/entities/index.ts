@@ -39,6 +39,8 @@ import { TraitEntity } from './trait.entity';
 import { TraitProficiencyEntity } from './trait-proficiency.entity';
 import { WeaponMasteryPropertyEntity } from './weapon-mastery-property.entity';
 import { WeaponPropertyEntity } from './weapon-property.entity';
+import { UserEntity } from './user.entity';
+import { CharacterEntity } from './character.entity';
 
 export {
   AbilityScoreEntity,
@@ -82,6 +84,8 @@ export {
   TraitProficiencyEntity,
   WeaponMasteryPropertyEntity,
   WeaponPropertyEntity,
+  UserEntity,
+  CharacterEntity,
 };
 
 export const ENTITIES = [
@@ -126,6 +130,8 @@ export const ENTITIES = [
   TraitProficiencyEntity,
   WeaponMasteryPropertyEntity,
   WeaponPropertyEntity,
+  UserEntity,
+  CharacterEntity,
 ];
 
 export * from './enums';
