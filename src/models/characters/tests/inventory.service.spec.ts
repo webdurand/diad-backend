@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { InventoryService } from 'src/models/characters/services/inventory.service';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
-import { createMockRepository } from 'src/test-utils/mock-repositories';
+import { createMockRepository } from 'src/shared/test-utils/mock-repositories';
 import {
   makeCharacter,
   makeCharacterEquipment,
@@ -11,7 +11,7 @@ import {
   makeEquipment,
   makeMagicItem,
   resetIdCounter,
-} from 'src/test-utils/entity-factories';
+} from 'src/shared/test-utils/entity-factories';
 import { EquipmentSourceEnum } from 'src/entities/enums';
 
 describe('InventoryService', () => {

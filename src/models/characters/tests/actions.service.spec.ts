@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { ActionsService } from 'src/models/characters/services/actions.service';
-import { createMockRepository } from 'src/test-utils/mock-repositories';
+import { createMockRepository } from 'src/shared/test-utils/mock-repositories';
 import {
   makeCharacter,
   makeCharacterClass,
@@ -12,7 +12,7 @@ import {
   makeCharacterProficiency,
   makeCharacterOrigin,
   resetIdCounter,
-} from 'src/test-utils/entity-factories';
+} from 'src/shared/test-utils/entity-factories';
 import { ProficiencyTypeEnum, SpellStatusEnum } from 'src/entities/enums';
 
 describe('ActionsService', () => {

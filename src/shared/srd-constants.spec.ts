@@ -10,7 +10,7 @@ import {
 import {
   SRD_PROFICIENCY_BONUS,
   SRD_XP_THRESHOLDS,
-} from 'src/test-utils/srd-test-data';
+} from 'src/shared/test-utils/srd-test-data';
 
 describe('SRD Constants', () => {
   describe('PROF_BONUS_BY_LEVEL', () => {

@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
-import { createMockRepository } from 'src/test-utils/mock-repositories';
+import { createMockRepository } from 'src/shared/test-utils/mock-repositories';
 import {
   makeCharacter,
   makeCharacterState,
@@ -8,7 +8,7 @@ import {
   makeCharacterAbilityScore,
   makeLevelUp,
   resetIdCounter,
-} from 'src/test-utils/entity-factories';
+} from 'src/shared/test-utils/entity-factories';
 
 describe('CharacterStateService', () => {
   let service: CharacterStateService;

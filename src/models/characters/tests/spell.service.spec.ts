@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { SpellService } from 'src/models/characters/services/spell.service';
-import { createMockRepository } from 'src/test-utils/mock-repositories';
+import { createMockRepository } from 'src/shared/test-utils/mock-repositories';
 import {
   makeCharacter,
   makeCharacterClass,
@@ -9,7 +9,7 @@ import {
   makeCharacterSpell,
   makeSpell,
   resetIdCounter,
-} from 'src/test-utils/entity-factories';
+} from 'src/shared/test-utils/entity-factories';
 import { SpellStatusEnum, SpellSourceEnum } from 'src/entities/enums';
 import { CASTER_CLASS_TYPE } from 'src/shared/srd-constants';
 

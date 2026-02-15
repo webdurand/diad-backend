@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { createMockRepository } from 'src/test-utils/mock-repositories';
+import { createMockRepository } from 'src/shared/test-utils/mock-repositories';
 import {
   makeCharacter,
   makeCharacterClass,
@@ -15,7 +15,7 @@ import {
   makeLevelUp,
   makeCharacterMagicItem,
   resetIdCounter,
-} from 'src/test-utils/entity-factories';
+} from 'src/shared/test-utils/entity-factories';
 import { SpellStatusEnum } from 'src/entities/enums';
 
 describe('CharacterSheetService', () => {

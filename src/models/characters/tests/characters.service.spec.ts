@@ -1,11 +1,14 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CharactersService } from 'src/models/characters/services/characters.service';
-import { createMockRepository, createMockDataSource } from 'src/test-utils/mock-repositories';
+import {
+  createMockRepository,
+  createMockDataSource,
+} from 'src/shared/test-utils/mock-repositories';
 import {
   makeCharacter,
   makeClass,
   resetIdCounter,
-} from 'src/test-utils/entity-factories';
+} from 'src/shared/test-utils/entity-factories';
 import { SpellStatusEnum, SpellSourceEnum, EquipmentSourceEnum } from 'src/entities/enums';
 
 describe('CharactersService', () => {

@@ -1,6 +1,9 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { LevelUpService } from 'src/models/characters/services/level-up.service';
-import { createMockRepository, createMockDataSource } from 'src/test-utils/mock-repositories';
+import {
+  createMockRepository,
+  createMockDataSource,
+} from 'src/shared/test-utils/mock-repositories';
 import {
   makeCharacter,
   makeCharacterClass,
@@ -9,7 +12,7 @@ import {
   makeCharacterSpell,
   makeClass,
   resetIdCounter,
-} from 'src/test-utils/entity-factories';
+} from 'src/shared/test-utils/entity-factories';
 import { XP_THRESHOLDS, CASTER_CLASS_TYPE } from 'src/shared/srd-constants';
 import { SpellStatusEnum } from 'src/entities/enums';
 
