@@ -578,6 +578,7 @@ export class LevelUpService {
 
       // 6. New spells
       if (dto.newSpells?.length) {
+        const casterType = CASTER_CLASS_TYPE[cls.slug];
         for (const spellSlug of dto.newSpells) {
           const spell = await this.spellRepo.findOneBy({ slug: spellSlug });
           if (!spell) continue;
@@ -587,14 +588,22 @@ export class LevelUpService {
           });
           if (existing) continue;
 
+          let status: SpellStatusEnum;
+          if (spell.level === 0) {
+            status = SpellStatusEnum.Known;
+          } else if (casterType === 'spellbook') {
+            status = SpellStatusEnum.Spellbook;
+          } else if (casterType === 'known' || casterType === 'pact') {
+            status = SpellStatusEnum.Known;
+          } else {
+            status = SpellStatusEnum.Prepared;
+          }
+
           await manager.save(CharacterSpellEntity, {
             character_id: characterId,
             spell_id: spell.id,
             source: SpellSourceEnum.Class,
-            status:
-              spell.level === 0
-                ? SpellStatusEnum.Known
-                : SpellStatusEnum.Prepared,
+            status,
             always_prepared: spell.level === 0,
           });
         }

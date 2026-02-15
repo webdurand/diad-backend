@@ -117,7 +117,8 @@ export interface SpellSlotUpdateDto {
 export interface RestDto {
   type: 'short' | 'long';
   hitDiceToSpend?: Array<{ classSlug: string; count: number }>;
-  preparedSpells?: string[]; // optional new prepared list on long rest
+  preparedSpells?: string[]; // full replacement for 'all' mode (Cleric/Druid/Wizard)
+  spellSwap?: { removeSlug: string; addSlug: string }; // single swap for 'one' mode (Paladin/Ranger)
 }
 
 export interface PreparedSpellsResult {
@@ -147,8 +148,20 @@ export interface AvailableSpellsResult {
   casterType: string;
   maxPrepared: number;
   maxSpellLevel: number;
-  currentPrepared: Array<{ slug: string; name: string; level: number; alwaysPrepared: boolean }>;
-  availableSpells: Array<{ slug: string; name: string; level: number; school?: string }>;
+  /** 'all' = replace entire list (Cleric/Druid/Wizard), 'one' = swap 1 spell (Paladin/Ranger), 'none' = level-up only */
+  prepChangeMode: 'all' | 'one' | 'none';
+  currentPrepared: Array<{
+    slug: string;
+    name: string;
+    level: number;
+    alwaysPrepared: boolean;
+  }>;
+  availableSpells: Array<{
+    slug: string;
+    name: string;
+    level: number;
+    school?: string;
+  }>;
 }
 
 @Injectable()
@@ -411,7 +424,12 @@ export class SpellService {
     if (casterType === 'spellbook') {
       const spellbookSpellIds = new Set(
         charSpells
-          .filter((cs) => cs.status === SpellStatusEnum.Spellbook || cs.always_prepared)
+          .filter(
+            (cs) =>
+              cs.status === SpellStatusEnum.Spellbook ||
+              cs.status === SpellStatusEnum.Prepared ||
+              cs.always_prepared,
+          )
           .map((cs) => cs.spell_id),
       );
       for (const spell of requestedSpells) {
@@ -555,7 +573,12 @@ export class SpellService {
         }));
 
       // Available spells depend on caster type
-      let availableSpells: Array<{ slug: string; name: string; level: number; school?: string }> = [];
+      let availableSpells: Array<{
+        slug: string;
+        name: string;
+        level: number;
+        school?: string;
+      }> = [];
 
       if (casterType === 'total_access') {
         // Can prepare any spell from the class list up to max spell level
@@ -563,8 +586,14 @@ export class SpellService {
           where: { class_id: cc.class_id },
           relations: ['spell', 'spell.school'],
         });
+        const seenSlugs = new Set<string>();
         availableSpells = classSpells
           .filter((sc) => sc.spell.level > 0 && sc.spell.level <= maxSpellLevel)
+          .filter((sc) => {
+            if (seenSlugs.has(sc.spell.slug)) return false;
+            seenSlugs.add(sc.spell.slug);
+            return true;
+          })
           .map((sc) => ({
             slug: sc.spell.slug,
             name: sc.spell.name,
@@ -578,7 +607,8 @@ export class SpellService {
             (cs) =>
               cs.source === SpellSourceEnum.Class &&
               cs.spell.level > 0 &&
-              (cs.status === SpellStatusEnum.Spellbook || cs.status === SpellStatusEnum.Prepared),
+              (cs.status === SpellStatusEnum.Spellbook ||
+                cs.status === SpellStatusEnum.Prepared),
           )
           .map((cs) => ({
             slug: cs.spell.slug,
@@ -593,7 +623,8 @@ export class SpellService {
             (cs) =>
               cs.source === SpellSourceEnum.Class &&
               cs.spell.level > 0 &&
-              (cs.status === SpellStatusEnum.Known || cs.status === SpellStatusEnum.Prepared),
+              (cs.status === SpellStatusEnum.Known ||
+                cs.status === SpellStatusEnum.Prepared),
           )
           .map((cs) => ({
             slug: cs.spell.slug,
@@ -603,11 +634,29 @@ export class SpellService {
           }));
       }
 
+      // Determine how spells can be changed on long rest per SRD 5.2.1
+      let prepChangeMode: 'all' | 'one' | 'none' = 'none';
+      if (
+        casterType === 'total_access' &&
+        (classSlug === 'cleric' || classSlug === 'druid')
+      ) {
+        prepChangeMode = 'all';
+      } else if (
+        casterType === 'total_access' &&
+        (classSlug === 'paladin' || classSlug === 'ranger')
+      ) {
+        prepChangeMode = 'one';
+      } else if (casterType === 'spellbook') {
+        prepChangeMode = 'all';
+      }
+      // known/pact => 'none' (only on level up)
+
       results.push({
         classSlug,
         casterType,
         maxPrepared,
         maxSpellLevel,
+        prepChangeMode,
         currentPrepared,
         availableSpells,
       });
@@ -693,7 +742,9 @@ export class SpellService {
       // Short rest: Warlock recovers pact slots
       const hasWarlock = charClasses.some((cc) => cc.class.slug === 'warlock');
       if (hasWarlock) {
-        const slotsUsed = { ...(state.spell_slots_used as Record<string, number>) };
+        const slotsUsed = {
+          ...(state.spell_slots_used as Record<string, number>),
+        };
         if (slotsUsed['pact'] && slotsUsed['pact'] > 0) {
           slotsUsed['pact'] = 0;
           state.spell_slots_used = slotsUsed;
@@ -704,9 +755,15 @@ export class SpellService {
 
       // Spend hit dice to heal
       if (dto.hitDiceToSpend?.length) {
-        const maxHp = await this.computeMaxHp(characterId, charClasses, charAbilities);
+        const maxHp = await this.computeMaxHp(
+          characterId,
+          charClasses,
+          charAbilities,
+        );
         const conMod = this.getAbilityMod(charAbilities, 'con');
-        const hitDiceUsed = { ...(state.hit_dice_used as Record<string, number>) };
+        const hitDiceUsed = {
+          ...(state.hit_dice_used as Record<string, number>),
+        };
 
         for (const hd of dto.hitDiceToSpend) {
           const cc = charClasses.find((c) => c.class.slug === hd.classSlug);
@@ -716,15 +773,21 @@ export class SpellService {
           const toSpend = Math.min(hd.count, available);
           if (toSpend <= 0) continue;
 
-          hitDiceUsed[hd.classSlug] = (hitDiceUsed[hd.classSlug] ?? 0) + toSpend;
+          hitDiceUsed[hd.classSlug] =
+            (hitDiceUsed[hd.classSlug] ?? 0) + toSpend;
 
           // Each hit die heals: roll (average = die/2 + 0.5) + CON mod; use fixed
-          const healPerDie = Math.max(1, Math.floor(cc.class.hit_die / 2) + 1 + conMod);
+          const healPerDie = Math.max(
+            1,
+            Math.floor(cc.class.hit_die / 2) + 1 + conMod,
+          );
           const healing = healPerDie * toSpend;
           state.current_hp = Math.min(maxHp, state.current_hp + healing);
           hpRestored += healing;
 
-          summary.push(`Gastou ${toSpend}d${cc.class.hit_die}, curou ${healing} HP.`);
+          summary.push(
+            `Gastou ${toSpend}d${cc.class.hit_die}, curou ${healing} HP.`,
+          );
         }
 
         state.hit_dice_used = hitDiceUsed;
@@ -733,7 +796,11 @@ export class SpellService {
       await this.stateRepo.save(state);
     } else {
       // Long rest
-      const maxHp = await this.computeMaxHp(characterId, charClasses, charAbilities);
+      const maxHp = await this.computeMaxHp(
+        characterId,
+        charClasses,
+        charAbilities,
+      );
 
       // 1. Restore HP to max
       hpRestored = maxHp - state.current_hp;
@@ -751,7 +818,9 @@ export class SpellService {
       }
 
       // 3. Recover half of total hit dice (rounded down, min 1)
-      const hitDiceUsed = { ...(state.hit_dice_used as Record<string, number>) };
+      const hitDiceUsed = {
+        ...(state.hit_dice_used as Record<string, number>),
+      };
       const totalHitDice = charClasses.reduce((s, cc) => s + cc.class_level, 0);
       let totalUsed = Object.values(hitDiceUsed).reduce((s, v) => s + v, 0);
       const toRecover = Math.max(1, Math.floor(totalHitDice / 2));
@@ -783,12 +852,80 @@ export class SpellService {
 
       await this.stateRepo.save(state);
 
+      const maxSpellLevel = this.getMaxSpellLevel(charClasses);
+
       // 5. Handle prepared spell changes on long rest
       if (dto.preparedSpells) {
         await this.updatePreparedSpells(userId, characterId, {
           spells: dto.preparedSpells,
         });
         summary.push('Magias preparadas atualizadas.');
+      }
+
+      // 6. Handle single spell swap on long rest (Paladin/Ranger)
+      if (dto.spellSwap) {
+        const { removeSlug, addSlug } = dto.spellSwap;
+        const charSpells = await this.charSpellRepo.find({
+          where: { character_id: characterId },
+          relations: ['spell'],
+        });
+
+        const toRemove = charSpells.find(
+          (cs) =>
+            cs.spell.slug === removeSlug &&
+            cs.source === SpellSourceEnum.Class &&
+            cs.spell.level > 0 &&
+            !cs.always_prepared,
+        );
+        if (!toRemove) {
+          throw new BadRequestException(
+            `Magia '${removeSlug}' nao encontrada entre as magias preparadas.`,
+          );
+        }
+
+        const newSpell = await this.spellRepo.findOne({
+          where: { slug: addSlug },
+        });
+        if (!newSpell || newSpell.level === 0) {
+          throw new BadRequestException(
+            `Magia '${addSlug}' nao encontrada ou e um cantrip.`,
+          );
+        }
+
+        if (newSpell.level > maxSpellLevel) {
+          throw new BadRequestException(
+            `'${newSpell.name}' e nivel ${newSpell.level}, mas o nivel maximo de slot e ${maxSpellLevel}.`,
+          );
+        }
+
+        // Validate the new spell belongs to the caster's class list
+        const casterClass = charClasses.find(
+          (cc) => CASTER_CLASS_TYPE[cc.class.slug],
+        );
+        if (casterClass) {
+          const classSpells = await this.spellClassRepo.find({
+            where: { class_id: casterClass.class_id },
+          });
+          const validIds = new Set(classSpells.map((sc) => sc.spell_id));
+          if (!validIds.has(newSpell.id)) {
+            throw new BadRequestException(
+              `'${newSpell.name}' nao esta na lista de ${casterClass.class.name}.`,
+            );
+          }
+        }
+
+        await this.charSpellRepo.remove(toRemove);
+        await this.charSpellRepo.save({
+          character_id: characterId,
+          spell_id: newSpell.id,
+          source: SpellSourceEnum.Class,
+          status: toRemove.status, // keep same status (Known or Prepared)
+          always_prepared: false,
+        });
+
+        summary.push(
+          `Magia trocada: '${toRemove.spell.name}' -> '${newSpell.name}'.`,
+        );
       }
     }
 
