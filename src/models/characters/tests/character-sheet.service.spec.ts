@@ -250,11 +250,11 @@ describe('CharacterSheetService', () => {
       expect(slotLevels).toEqual([4, 3, 2]);
     });
 
-    it('paladin level 5 (half caster, effective 2): [3]', async () => {
+    it('paladin level 5 (half caster, effective 3): [4, 2]', async () => {
       setupBasicSheet('paladin', 5, { cha: 16 });
       const sheet = await service.computeSheet('user-1', 'char-1');
       const slotLevels = sheet.spellSlots.map((s) => s.total);
-      expect(slotLevels).toEqual([3]); // effective caster level = floor(5/2) = 2 -> FULL_CASTER_SLOTS[2] = [3]
+      expect(slotLevels).toEqual([4, 2]); // effective caster level = ceil(5/2) = 3 -> FULL_CASTER_SLOTS[3] = [4, 2]
     });
 
     it('warlock level 5: pact slot {level: 3, slots: 2}', async () => {

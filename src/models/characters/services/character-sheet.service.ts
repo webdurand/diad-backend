@@ -731,7 +731,7 @@ export class CharacterSheetService {
 
     // Standard spell slots (multiclass formula)
     const effectiveCasterLevel =
-      fullCasterLevels + Math.floor(halfCasterLevels / 2);
+      fullCasterLevels + Math.ceil(halfCasterLevels / 2);
 
     if (effectiveCasterLevel > 0) {
       const slotTable = FULL_CASTER_SLOTS[Math.min(effectiveCasterLevel, 20)];

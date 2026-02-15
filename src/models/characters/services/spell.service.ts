@@ -153,7 +153,8 @@ export class SpellService {
       else if (slotType === 'pact') warlockLevel = cc.class_level;
     }
 
-    const effectiveCasterLevel = fullCasterLevels + Math.floor(halfCasterLevels / 2);
+    const effectiveCasterLevel =
+      fullCasterLevels + Math.ceil(halfCasterLevels / 2);
     let maxLevel = 0;
 
     if (effectiveCasterLevel > 0) {
@@ -188,7 +189,8 @@ export class SpellService {
 
     const result: Record<string, number> = {};
 
-    const effectiveCasterLevel = fullCasterLevels + Math.floor(halfCasterLevels / 2);
+    const effectiveCasterLevel =
+      fullCasterLevels + Math.ceil(halfCasterLevels / 2);
     if (effectiveCasterLevel > 0) {
       const slots = FULL_CASTER_SLOTS[Math.min(effectiveCasterLevel, 20)];
       if (slots) {
