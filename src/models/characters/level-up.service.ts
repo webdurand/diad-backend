@@ -43,6 +43,17 @@ const CASTER_CLASS_TYPE: Record<string, CasterType> = {
   wizard: 'spellbook',
 };
 
+const SPELLCASTING_ABILITY: Record<string, string> = {
+  bard: 'cha',
+  cleric: 'wis',
+  druid: 'wis',
+  paladin: 'cha',
+  ranger: 'wis',
+  sorcerer: 'cha',
+  warlock: 'cha',
+  wizard: 'int',
+};
+
 // SRD Character Advancement XP thresholds (index 0 = level 1 => need 300 for level 2)
 const XP_THRESHOLDS: number[] = [
   0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
@@ -93,6 +104,8 @@ export interface AvailableClassOption {
 export interface SpellSelectionForLevelUp {
   casterType: CasterType;
   newCantrips: number;
+  maxPrepared: number;
+  currentPreparedSlugs: string[];
   newSpells: number;
   canSwapSpell: boolean;
   maxSpellLevel: number;
@@ -111,6 +124,7 @@ export interface LevelUpDto {
   featSlug?: string;
   newSpells?: string[];
   removedSpells?: string[];
+  preparedSpells?: string[];
   featureChoices?: Record<string, unknown>;
 }
 
@@ -294,6 +308,7 @@ export class LevelUpService {
         nextClassLevel,
         isCurrentClass ? charClass!.class_level : 0,
         charSpells,
+        charAbilities,
       );
 
       hitDie[cls.slug] = cls.hit_die;
@@ -578,7 +593,7 @@ export class LevelUpService {
 
       // 6. New spells
       if (dto.newSpells?.length) {
-        const casterType = CASTER_CLASS_TYPE[cls.slug];
+        const casterType = CASTER_CLASS_TYPE[classEntity.slug];
         for (const spellSlug of dto.newSpells) {
           const spell = await this.spellRepo.findOneBy({ slug: spellSlug });
           if (!spell) continue;
@@ -618,6 +633,73 @@ export class LevelUpService {
             character_id: characterId,
             spell_id: spell.id,
           });
+        }
+      }
+
+      // 7b. Prepared spells selection (spellbook / total_access casters)
+      if (dto.preparedSpells) {
+        const casterType = CASTER_CLASS_TYPE[classEntity.slug];
+        if (casterType === 'spellbook' || casterType === 'total_access') {
+          const preparedSet = new Set(dto.preparedSpells);
+
+          // Get all current class spells (level > 0) for this character
+          const allCharSpells = await manager.find(CharacterSpellEntity, {
+            where: { character_id: characterId, source: SpellSourceEnum.Class },
+            relations: ['spell'],
+          });
+
+          // Group by slug to handle duplicates
+          const bySlug = new Map<string, CharacterSpellEntity[]>();
+          for (const cs of allCharSpells) {
+            if (cs.spell.level === 0 || cs.always_prepared) continue;
+            const existing = bySlug.get(cs.spell.slug) ?? [];
+            existing.push(cs);
+            bySlug.set(cs.spell.slug, existing);
+          }
+
+          for (const [slug, records] of bySlug) {
+            // Keep only 1 record, delete extras
+            const keep = records[0];
+            for (let i = 1; i < records.length; i++) {
+              await manager.remove(CharacterSpellEntity, records[i]);
+            }
+
+            const shouldPrepare = preparedSet.has(slug);
+            if (shouldPrepare) {
+              if (keep.status !== SpellStatusEnum.Prepared) {
+                keep.status = SpellStatusEnum.Prepared;
+                await manager.save(CharacterSpellEntity, keep);
+              }
+            } else {
+              if (casterType === 'spellbook') {
+                if (keep.status === SpellStatusEnum.Prepared) {
+                  keep.status = SpellStatusEnum.Spellbook;
+                  await manager.save(CharacterSpellEntity, keep);
+                }
+              } else {
+                if (keep.status === SpellStatusEnum.Prepared) {
+                  await manager.remove(CharacterSpellEntity, keep);
+                }
+              }
+            }
+          }
+
+          // For total_access: add newly prepared spells that don't exist yet
+          if (casterType === 'total_access') {
+            const existingSlugs = new Set(bySlug.keys());
+            for (const slug of dto.preparedSpells) {
+              if (existingSlugs.has(slug)) continue;
+              const spell = await this.spellRepo.findOneBy({ slug });
+              if (!spell || spell.level === 0) continue;
+              await manager.save(CharacterSpellEntity, {
+                character_id: characterId,
+                spell_id: spell.id,
+                source: SpellSourceEnum.Class,
+                status: SpellStatusEnum.Prepared,
+                always_prepared: false,
+              });
+            }
+          }
         }
       }
 
@@ -665,6 +747,7 @@ export class LevelUpService {
     newClassLevel: number,
     currentClassLevel: number,
     charSpells: CharacterSpellEntity[],
+    charAbilities: CharacterAbilityScoreEntity[],
   ): Promise<SpellSelectionForLevelUp | null> {
     const casterType = CASTER_CLASS_TYPE[cls.slug];
     if (!casterType) return null;
@@ -725,15 +808,27 @@ export class LevelUpService {
       newSpells = 2; // wizard adds 2 spells to spellbook per level
     }
 
-    // Character's current cantrips and spells for this class
+    // Character's current cantrips and spells for this class (deduplicated)
+    const seenCantrips = new Set<string>();
     const currentCantrips = charSpells
       .filter(
         (cs) => cs.source === SpellSourceEnum.Class && cs.spell.level === 0,
       )
+      .filter((cs) => {
+        if (seenCantrips.has(cs.spell.slug)) return false;
+        seenCantrips.add(cs.spell.slug);
+        return true;
+      })
       .map((cs) => ({ slug: cs.spell.slug, name: cs.spell.name }));
 
+    const seenSpells = new Set<string>();
     const currentSpells = charSpells
       .filter((cs) => cs.source === SpellSourceEnum.Class && cs.spell.level > 0)
+      .filter((cs) => {
+        if (seenSpells.has(cs.spell.slug)) return false;
+        seenSpells.add(cs.spell.slug);
+        return true;
+      })
       .map((cs) => ({
         slug: cs.spell.slug,
         name: cs.spell.name,
@@ -769,17 +864,68 @@ export class LevelUpService {
       }))
       .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
+    // Compute max prepared spells and current prepared slugs (deduplicated)
+    const maxPrepared = this.computeMaxPrepared(
+      cls.slug,
+      newClassLevel,
+      charAbilities,
+    );
+    const preparedSet = new Set<string>();
+    charSpells
+      .filter(
+        (cs) =>
+          cs.source === SpellSourceEnum.Class &&
+          cs.spell.level > 0 &&
+          (cs.status === SpellStatusEnum.Prepared || cs.always_prepared),
+      )
+      .forEach((cs) => preparedSet.add(cs.spell.slug));
+    const currentPreparedSlugs = [...preparedSet];
+
     return {
       casterType,
       newCantrips,
       newSpells,
       canSwapSpell,
       maxSpellLevel,
+      maxPrepared,
+      currentPreparedSlugs,
       currentCantrips,
       currentSpells,
       availableCantrips,
       availableSpells,
     };
+  }
+
+  private computeMaxPrepared(
+    classSlug: string,
+    classLevel: number,
+    charAbilities: CharacterAbilityScoreEntity[],
+  ): number {
+    const casterType = CASTER_CLASS_TYPE[classSlug];
+    const scAbility = SPELLCASTING_ABILITY[classSlug];
+    if (!casterType || !scAbility) return 0;
+
+    const abilityScore =
+      charAbilities.find((ca) => ca.ability_score.slug === scAbility);
+    const totalScore = abilityScore
+      ? abilityScore.base_score + abilityScore.bonus
+      : 10;
+    const abilityMod = Math.floor((totalScore - 10) / 2);
+
+    switch (casterType) {
+      case 'total_access':
+        if (classSlug === 'paladin') {
+          return Math.max(1, Math.floor(classLevel / 2) + abilityMod);
+        }
+        return Math.max(1, classLevel + abilityMod);
+      case 'spellbook':
+        return Math.max(1, classLevel + abilityMod);
+      case 'known':
+      case 'pact':
+        return Infinity;
+      default:
+        return 0;
+    }
   }
 
   private async ensureOwnership(

@@ -497,18 +497,32 @@ export class SpellService {
     } else if (casterType === 'spellbook') {
       // For Wizard: all spells stay in spellbook, but we toggle status between
       // 'spellbook' (not prepared) and 'prepared' (prepared from spellbook)
+      // Also clean up duplicate records when found
+      const bySpellId = new Map<string, CharacterSpellEntity[]>();
       for (const cs of charSpells) {
-        if (cs.source !== SpellSourceEnum.Class || cs.spell.level === 0) continue;
+        if (cs.source !== SpellSourceEnum.Class || cs.spell.level === 0)
+          continue;
         if (cs.always_prepared) continue;
+        const existing = bySpellId.get(cs.spell_id) ?? [];
+        existing.push(cs);
+        bySpellId.set(cs.spell_id, existing);
+      }
 
-        const shouldBePrepared = requestedSpellIds.has(cs.spell_id);
+      for (const [spellId, records] of bySpellId) {
+        // Keep first, delete extras
+        const keep = records[0];
+        for (let i = 1; i < records.length; i++) {
+          await this.charSpellRepo.remove(records[i]);
+        }
+
+        const shouldBePrepared = requestedSpellIds.has(spellId);
         const newStatus = shouldBePrepared
           ? SpellStatusEnum.Prepared
           : SpellStatusEnum.Spellbook;
 
-        if (cs.status !== newStatus) {
-          cs.status = newStatus;
-          await this.charSpellRepo.save(cs);
+        if (keep.status !== newStatus) {
+          keep.status = newStatus;
+          await this.charSpellRepo.save(keep);
         }
       }
     }
@@ -557,7 +571,8 @@ export class SpellService {
         charAbilities,
       );
 
-      // Current prepared spells
+      // Current prepared spells (deduplicated)
+      const seenPrepared = new Set<string>();
       const currentPrepared = charSpells
         .filter(
           (cs) =>
@@ -565,6 +580,11 @@ export class SpellService {
             cs.spell.level > 0 &&
             (cs.status === SpellStatusEnum.Prepared || cs.always_prepared),
         )
+        .filter((cs) => {
+          if (seenPrepared.has(cs.spell.slug)) return false;
+          seenPrepared.add(cs.spell.slug);
+          return true;
+        })
         .map((cs) => ({
           slug: cs.spell.slug,
           name: cs.spell.name,
@@ -601,7 +621,8 @@ export class SpellService {
             school: sc.spell.school?.name,
           }));
       } else if (casterType === 'spellbook') {
-        // Wizard: can prepare from spellbook
+        // Wizard: can prepare from spellbook (deduplicated)
+        const seenBook = new Set<string>();
         availableSpells = charSpells
           .filter(
             (cs) =>
@@ -610,6 +631,11 @@ export class SpellService {
               (cs.status === SpellStatusEnum.Spellbook ||
                 cs.status === SpellStatusEnum.Prepared),
           )
+          .filter((cs) => {
+            if (seenBook.has(cs.spell.slug)) return false;
+            seenBook.add(cs.spell.slug);
+            return true;
+          })
           .map((cs) => ({
             slug: cs.spell.slug,
             name: cs.spell.name,

@@ -247,15 +247,18 @@ export class CharactersService {
         });
       }
 
-      // character_spells
+      // character_spells (deduplicate: prepared takes precedence over spellbook)
       const cantripSlugs = choices.classCantrips ?? [];
       const preparedSlugs = choices.classPreparedSpells ?? [];
       const spellbookSlugs = choices.classSpellbook ?? [];
       const raceSpellSlugs = choices.raceSpellChoices ?? [];
+      const savedSpellSlugs = new Set<string>();
 
       for (const slug of cantripSlugs) {
+        if (savedSpellSlugs.has(slug)) continue;
         const spellEntity = await this.spellRepository.findOneBy({ slug });
         if (!spellEntity) continue;
+        savedSpellSlugs.add(slug);
         await manager.save(CharacterSpellEntity, {
           character_id: charId,
           spell_id: spellEntity.id,
@@ -265,8 +268,10 @@ export class CharactersService {
         });
       }
       for (const slug of preparedSlugs) {
+        if (savedSpellSlugs.has(slug)) continue;
         const spellEntity = await this.spellRepository.findOneBy({ slug });
         if (!spellEntity) continue;
+        savedSpellSlugs.add(slug);
         await manager.save(CharacterSpellEntity, {
           character_id: charId,
           spell_id: spellEntity.id,
@@ -276,8 +281,10 @@ export class CharactersService {
         });
       }
       for (const slug of spellbookSlugs) {
+        if (savedSpellSlugs.has(slug)) continue;
         const spellEntity = await this.spellRepository.findOneBy({ slug });
         if (!spellEntity) continue;
+        savedSpellSlugs.add(slug);
         await manager.save(CharacterSpellEntity, {
           character_id: charId,
           spell_id: spellEntity.id,
