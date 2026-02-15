@@ -57,4 +57,7 @@ export class CharacterStateEntity {
 
   @Column({ type: 'jsonb', default: {} })
   hit_dice_used: Record<string, number>;
+
+  @Column({ type: 'int', default: 0 })
+  ki_points_used: number;
 }

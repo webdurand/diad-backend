@@ -209,7 +209,10 @@ export class ActionsService {
     // 5. Feature actions
     this.buildFeatureActions(charFeatures, charClasses, charState, profBonus, mod, allActions);
 
-    // 6. Base actions (always available)
+    // 6. Race trait actions (e.g. Breath Weapon)
+    this.buildRaceTraitActions(character, totalLevel, profBonus, mod, allActions);
+
+    // 7. Base actions (always available)
     this.buildBaseActions(allActions, speed);
 
     // Split by timing
@@ -629,6 +632,58 @@ export class ActionsService {
         });
       }
     }
+  }
+
+  // ---- Race trait actions ----
+
+  private static readonly DRACONIC_ANCESTRY_MAP: Record<string, string> = {
+    black: 'Acid', blue: 'Lightning', brass: 'Fire', bronze: 'Lightning',
+    copper: 'Acid', gold: 'Fire', green: 'Poison', red: 'Fire',
+    silver: 'Cold', white: 'Cold',
+  };
+
+  private buildRaceTraitActions(
+    character: CharacterEntity,
+    totalLevel: number,
+    profBonus: number,
+    mod: (s: string) => number,
+    out: ActionBlock[],
+  ) {
+    const origin = character.character_origin;
+    if (!origin) return;
+
+    const raceSlug = origin.race?.slug ?? '';
+    if (raceSlug !== 'dragonborn') return;
+
+    const traitChoices: string[] = origin.race_trait_choices ?? [];
+    const dragonColor = traitChoices.find((c) => ActionsService.DRACONIC_ANCESTRY_MAP[c]);
+    if (!dragonColor) return;
+
+    const damageType = ActionsService.DRACONIC_ANCESTRY_MAP[dragonColor];
+    const damageDice = totalLevel >= 17 ? '4d10'
+      : totalLevel >= 11 ? '3d10'
+      : totalLevel >= 5 ? '2d10'
+      : '1d10';
+    const saveDc = 8 + mod('con') + profBonus;
+    const uses = profBonus;
+
+    const dragonName = dragonColor.charAt(0).toUpperCase() + dragonColor.slice(1);
+
+    out.push({
+      id: 'breath-weapon',
+      name: `Sopro de Dragao (${dragonName})`,
+      timing: 'action',
+      source: 'feature',
+      sourceLabel: 'Dragonborn',
+      description: `Exala ${damageType} em cone de 15 ft ou linha de 30x5 ft. Cada criatura na area faz save de DES (DC ${saveDc}). Falha: ${damageDice} dano ${damageType}. Sucesso: metade. ${uses} usos por descanso longo.`,
+      damage: { dice: damageDice, type: damageType },
+      saveDc,
+      saveAbility: 'DES',
+      range: '15 ft cone / 30 ft line',
+      uses,
+      usesMax: uses,
+      usesRecharge: 'long_rest',
+    });
   }
 
   // ---- Base actions ----

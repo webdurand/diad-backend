@@ -17,6 +17,7 @@ import {
   type HpUpdateDto,
   type XpUpdateDto,
   type DeathSaveDto,
+  type KiPointsDto,
 } from './services/character-state.service';
 import { LevelUpService, type LevelUpDto } from './services/level-up.service';
 import {
@@ -190,6 +191,16 @@ export class CharactersController {
   ) {
     const userId = req.user?.id ?? '';
     return this.spellService.rest(userId, id, body);
+  }
+
+  @Patch(':id/ki-points')
+  async updateKiPoints(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: KiPointsDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.stateService.updateKiPoints(userId, id, body);
   }
 
   // ---- Inventory ----

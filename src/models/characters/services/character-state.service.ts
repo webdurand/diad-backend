@@ -26,6 +26,10 @@ export interface DeathSaveDto {
   reset?: boolean;
 }
 
+export interface KiPointsDto {
+  used: number;
+}
+
 export interface HpResult {
   currentHp: number;
   tempHp: number;
@@ -64,7 +68,10 @@ export class CharacterStateService {
     private readonly charLevelUpRepo: Repository<CharacterLevelUpEntity>,
   ) {}
 
-  private async ensureOwnership(userId: string, characterId: string): Promise<CharacterEntity> {
+  private async ensureOwnership(
+    userId: string,
+    characterId: string,
+  ): Promise<CharacterEntity> {
     const character = await this.characterRepo.findOne({
       where: { id: characterId, userId },
     });
@@ -95,7 +102,9 @@ export class CharacterStateService {
     const charAbilities = await this.charAbilityRepo.find({
       where: { character_id: characterId },
     });
-    const conAbility = charAbilities.find((a) => a.ability_score.slug === 'con');
+    const conAbility = charAbilities.find(
+      (a) => a.ability_score.slug === 'con',
+    );
     const conMod = conAbility
       ? Math.floor((conAbility.base_score + conAbility.bonus - 10) / 2)
       : 0;
@@ -117,7 +126,11 @@ export class CharacterStateService {
     return maxHp;
   }
 
-  async updateHp(userId: string, characterId: string, dto: HpUpdateDto): Promise<HpResult> {
+  async updateHp(
+    userId: string,
+    characterId: string,
+    dto: HpUpdateDto,
+  ): Promise<HpResult> {
     await this.ensureOwnership(userId, characterId);
 
     if (dto.damage !== undefined && dto.damage < 0) {
@@ -127,7 +140,9 @@ export class CharacterStateService {
       throw new BadRequestException('Cura deve ser um valor positivo.');
     }
     if (dto.tempHp !== undefined && dto.tempHp < 0) {
-      throw new BadRequestException('HP temporario deve ser um valor positivo.');
+      throw new BadRequestException(
+        'HP temporario deve ser um valor positivo.',
+      );
     }
 
     const state = await this.getState(characterId);
@@ -154,7 +169,9 @@ export class CharacterStateService {
 
       // Massive damage check: if excess damage >= maxHp, instant death
       if (remaining > 0) {
-        const excessDamage = dto.damage - (state.current_hp + state.temp_hp + dto.damage - remaining);
+        const excessDamage =
+          dto.damage -
+          (state.current_hp + state.temp_hp + dto.damage - remaining);
         if (state.current_hp === 0 && remaining >= maxHp) {
           instantDeath = true;
         }
@@ -188,7 +205,11 @@ export class CharacterStateService {
     };
   }
 
-  async updateXp(userId: string, characterId: string, dto: XpUpdateDto): Promise<XpResult> {
+  async updateXp(
+    userId: string,
+    characterId: string,
+    dto: XpUpdateDto,
+  ): Promise<XpResult> {
     await this.ensureOwnership(userId, characterId);
 
     if (dto.amount < 0) {
@@ -245,8 +266,38 @@ export class CharacterStateService {
     };
   }
 
+  async updateKiPoints(
+    userId: string,
+    characterId: string,
+    dto: KiPointsDto,
+  ): Promise<{ total: number; used: number }> {
+    await this.ensureOwnership(userId, characterId);
+    const state = await this.getState(characterId);
+
+    const monkClass = await this.charClassRepo.findOne({
+      where: { character_id: characterId },
+    });
+    const charClasses = await this.charClassRepo.find({
+      where: { character_id: characterId },
+    });
+    const monk = charClasses.find((cc) => cc.class.slug === 'monk');
+    if (!monk || monk.class_level < 2) {
+      throw new BadRequestException('Personagem nao possui pontos de Ki.');
+    }
+
+    const total = monk.class_level;
+    const used = Math.max(0, Math.min(dto.used, total));
+    state.ki_points_used = used;
+    await this.stateRepo.save(state);
+
+    return { total, used };
+  }
+
   /** Returns XP threshold info for a given total level */
-  static getXpInfo(xp: number, totalLevel: number): { nextLevelXp: number | null; levelUpAvailable: boolean } {
+  static getXpInfo(
+    xp: number,
+    totalLevel: number,
+  ): { nextLevelXp: number | null; levelUpAvailable: boolean } {
     const nextLevelXp = totalLevel < 20 ? XP_THRESHOLDS[totalLevel] : null;
     return {
       nextLevelXp,

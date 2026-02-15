@@ -745,6 +745,12 @@ export class SpellService {
         state.hit_dice_used = hitDiceUsed;
       }
 
+      // Restore ki points on short rest
+      if (state.ki_points_used > 0) {
+        state.ki_points_used = 0;
+        summary.push('Pontos de Ki restaurados.');
+      }
+
       await this.stateRepo.save(state);
     } else {
       // Long rest
@@ -800,6 +806,12 @@ export class SpellService {
         state.death_saves_fail = 0;
         deathSavesReset = true;
         summary.push('Death saves resetados.');
+      }
+
+      // 5. Restore ki points
+      if (state.ki_points_used > 0) {
+        state.ki_points_used = 0;
+        summary.push('Pontos de Ki restaurados.');
       }
 
       await this.stateRepo.save(state);

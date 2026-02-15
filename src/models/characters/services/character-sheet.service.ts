@@ -179,6 +179,9 @@ export interface CharacterSheet {
   spells: SpellBlock[];
   spellSlots: SpellSlotBlock[];
 
+  // Ki (Monk)
+  kiPoints?: { total: number; used: number };
+
   // State
   xp: number;
   nextLevelXp: number | null;
@@ -526,8 +529,31 @@ export class CharacterSheetService {
     }));
 
     // Origin details (misc creation metadata)
+    const draconicAncestryMap: Record<string, string> = {
+      black: 'Acid',
+      blue: 'Lightning',
+      brass: 'Fire',
+      bronze: 'Lightning',
+      copper: 'Acid',
+      gold: 'Fire',
+      green: 'Poison',
+      red: 'Fire',
+      silver: 'Cold',
+      white: 'Cold',
+    };
+    const raceTraitChoices = charOrigin.race_trait_choices ?? [];
+    const draconicChoice = raceTraitChoices.find((c) => draconicAncestryMap[c]);
+    const draconicAncestry = draconicChoice
+      ? {
+          dragon:
+            draconicChoice.charAt(0).toUpperCase() + draconicChoice.slice(1),
+          damageType: draconicAncestryMap[draconicChoice],
+        }
+      : undefined;
+
     const originDetails: Record<string, unknown> = {
-      raceTraitChoices: charOrigin.race_trait_choices,
+      raceTraitChoices,
+      draconicAncestry,
       raceFeatChoice: charOrigin.race_feat_choice,
       divineOrder: charOrigin.divine_order,
       primalOrder: charOrigin.primal_order,
@@ -665,6 +691,15 @@ export class CharacterSheetService {
 
       spells,
       spellSlots,
+
+      kiPoints: (() => {
+        const monkClass = charClasses.find((cc) => cc.class.slug === 'monk');
+        if (!monkClass || monkClass.class_level < 2) return undefined;
+        return {
+          total: monkClass.class_level,
+          used: charState?.ki_points_used ?? 0,
+        };
+      })(),
 
       xp: charState?.xp ?? 0,
       nextLevelXp: totalLevel < 20 ? XP_THRESHOLDS[totalLevel] : null,
