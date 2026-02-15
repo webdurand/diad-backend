@@ -223,6 +223,16 @@ export class CharactersController {
     return this.inventoryService.removeItem(userId, id, itemId);
   }
 
+  @Post(':id/inventory/:itemId/use')
+  async useItem(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.useItem(userId, id, itemId);
+  }
+
   @Patch(':id/gold')
   async updateGold(
     @Req() req: AuthRequest,

@@ -15,6 +15,7 @@ import {
   MagicItemEntity,
 } from 'src/entities';
 import { EquipmentSourceEnum } from 'src/entities/enums';
+import { CharacterStateService } from './character-state.service';
 
 // ---- DTOs ----
 
@@ -45,6 +46,18 @@ export interface AttuneToggleDto {
 
 export interface AddMagicItemDto {
   magicItemId: string;
+}
+
+export interface UseItemResult {
+  consumed: boolean;
+  remainingQuantity: number;
+  effect?: {
+    type: string;
+    healingApplied?: number;
+    newCurrentHp?: number;
+    maxHp?: number;
+    message: string;
+  };
 }
 
 // ---- Response types ----
@@ -116,6 +129,7 @@ export class InventoryService {
     private readonly equipmentRepo: Repository<EquipmentEntity>,
     @InjectRepository(MagicItemEntity)
     private readonly magicItemRepo: Repository<MagicItemEntity>,
+    private readonly stateService: CharacterStateService,
   ) {}
 
   // ---- Helpers ----
@@ -503,5 +517,76 @@ export class InventoryService {
     item.attuned = dto.attuned;
     const saved = await this.charMagicItemRepo.save(item);
     return this.mapMagicItem(saved);
+  }
+
+  // ---- Use consumable ----
+
+  private rollDice(expression: string): number {
+    const match = expression.match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+    if (!match) return parseInt(expression, 10) || 0;
+    const count = parseInt(match[1], 10);
+    const sides = parseInt(match[2], 10);
+    const bonus = match[3] ? parseInt(match[3], 10) : 0;
+    let total = bonus;
+    for (let i = 0; i < count; i++) {
+      total += Math.floor(Math.random() * sides) + 1;
+    }
+    return total;
+  }
+
+  async useItem(
+    userId: string,
+    characterId: string,
+    itemId: string,
+  ): Promise<UseItemResult> {
+    await this.ensureOwnership(userId, characterId);
+
+    const item = await this.charEquipRepo.findOne({
+      where: { id: itemId, character_id: characterId },
+    });
+    if (!item) {
+      throw new NotFoundException('Item nao encontrado no inventario.');
+    }
+
+    // Decrement quantity (remove if 0)
+    item.quantity -= 1;
+    if (item.quantity <= 0) {
+      await this.charEquipRepo.remove(item);
+    } else {
+      await this.charEquipRepo.save(item);
+    }
+
+    const slug = item.equipment.slug;
+    const effect = item.equipment.consumable_effect as Record<
+      string,
+      unknown
+    > | null;
+
+    if (effect?.autoApply && effect?.type === 'healing' && effect?.dice) {
+      const rolled = this.rollDice(effect.dice as string);
+      const hpResult = await this.stateService.updateHp(userId, characterId, {
+        healing: rolled,
+      });
+      return {
+        consumed: true,
+        remainingQuantity: Math.max(0, item.quantity),
+        effect: {
+          type: 'healing',
+          healingApplied: rolled,
+          newCurrentHp: hpResult.currentHp,
+          maxHp: hpResult.maxHp,
+          message: `${item.equipment.name}: recuperou ${rolled} HP (${effect.dice})`,
+        },
+      };
+    }
+
+    return {
+      consumed: true,
+      remainingQuantity: Math.max(0, item.quantity),
+      effect: {
+        type: 'consumed',
+        message: `${item.equipment.name} usado.`,
+      },
+    };
   }
 }

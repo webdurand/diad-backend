@@ -94,6 +94,8 @@ export interface EquipmentBlock {
   range?: Record<string, unknown>;
   description?: string;
   cost?: Record<string, unknown>;
+  utilize?: Array<Record<string, unknown>>;
+  consumableEffect?: Record<string, unknown>;
 }
 
 export interface MagicItemBlock {
@@ -658,6 +660,10 @@ export class CharacterSheetService {
         range: ce.equipment.range ?? undefined,
         description: ce.equipment.description ?? undefined,
         cost: ce.equipment.cost ?? undefined,
+        utilize:
+          (ce.equipment.utilize as unknown as Array<Record<string, unknown>>) ??
+          undefined,
+        consumableEffect: ce.equipment.consumable_effect ?? undefined,
       };
     });
 

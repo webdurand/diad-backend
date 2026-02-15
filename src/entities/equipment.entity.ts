@@ -53,6 +53,9 @@ export class EquipmentEntity {
   @Column({ type: 'jsonb', nullable: true })
   range?: Record<string, unknown>;
 
+  @Column({ type: 'jsonb', nullable: true })
+  consumable_effect?: Record<string, unknown>;
+
   @Column({ type: 'uuid', nullable: true })
   source_id?: string;
 
@@ -63,10 +66,7 @@ export class EquipmentEntity {
   @Column({ type: 'jsonb', nullable: true })
   raw?: Record<string, unknown>;
 
-  @OneToMany(
-    () => EquipmentCategoryItemEntity,
-    (item) => item.equipment,
-  )
+  @OneToMany(() => EquipmentCategoryItemEntity, (item) => item.equipment)
   category_items?: EquipmentCategoryItemEntity[];
 
   @Column({ type: 'timestamptz', default: () => 'now()' })
