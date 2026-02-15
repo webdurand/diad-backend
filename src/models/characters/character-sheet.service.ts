@@ -128,6 +128,8 @@ export interface CharacterSheet {
 
   // State
   xp: number;
+  nextLevelXp: number | null;
+  levelUpAvailable: boolean;
   gold: { cp: number; sp: number; gp: number; pp: number };
   conditions: string[];
 
@@ -146,6 +148,29 @@ const PROF_BONUS_BY_LEVEL: Record<number, number> = {
   13: 5, 14: 5, 15: 5, 16: 5,
   17: 6, 18: 6, 19: 6, 20: 6,
 };
+
+// SRD Character Advancement XP thresholds (index = current level, value = XP needed for next)
+const XP_THRESHOLDS_TABLE: number[] = [
+  300,    // 1 -> 2
+  900,    // 2 -> 3
+  2700,   // 3 -> 4
+  6500,   // 4 -> 5
+  14000,  // 5 -> 6
+  23000,  // 6 -> 7
+  34000,  // 7 -> 8
+  48000,  // 8 -> 9
+  64000,  // 9 -> 10
+  85000,  // 10 -> 11
+  100000, // 11 -> 12
+  120000, // 12 -> 13
+  140000, // 13 -> 14
+  165000, // 14 -> 15
+  195000, // 15 -> 16
+  225000, // 16 -> 17
+  265000, // 17 -> 18
+  305000, // 18 -> 19
+  355000, // 19 -> 20
+];
 
 // Full-caster spell slots table (SRD)
 const FULL_CASTER_SLOTS: number[][] = [
@@ -540,6 +565,10 @@ export class CharacterSheetService {
       spellSlots,
 
       xp: charState?.xp ?? 0,
+      nextLevelXp: totalLevel < 20 ? XP_THRESHOLDS_TABLE[totalLevel - 1] : null,
+      levelUpAvailable:
+        totalLevel < 20 &&
+        (charState?.xp ?? 0) >= XP_THRESHOLDS_TABLE[totalLevel - 1],
       gold: {
         cp: charState?.cp ?? 0,
         sp: charState?.sp ?? 0,

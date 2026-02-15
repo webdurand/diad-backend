@@ -29,6 +29,7 @@ import { AuthModule } from '../auth/auth.module';
 import { CharactersController } from './characters.controller';
 import { CharactersService } from './characters.service';
 import { CharacterSheetService } from './character-sheet.service';
+import { CharacterStateService } from './character-state.service';
 
 @Module({
   imports: [
@@ -60,6 +61,6 @@ import { CharacterSheetService } from './character-sheet.service';
     AuthModule,
   ],
   controllers: [CharactersController],
-  providers: [CharactersService, CharacterSheetService],
+  providers: [CharactersService, CharacterSheetService, CharacterStateService],
 })
 export class CharactersModule {}

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Req,
@@ -11,6 +12,12 @@ import {
 } from '@nestjs/common';
 import { CharactersService } from './characters.service';
 import { CharacterSheetService } from './character-sheet.service';
+import {
+  CharacterStateService,
+  type HpUpdateDto,
+  type XpUpdateDto,
+  type DeathSaveDto,
+} from './character-state.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 
@@ -29,6 +36,7 @@ export class CharactersController {
   constructor(
     private readonly charactersService: CharactersService,
     private readonly sheetService: CharacterSheetService,
+    private readonly stateService: CharacterStateService,
   ) {}
 
   @Get()
@@ -73,5 +81,35 @@ export class CharactersController {
   async remove(@Req() req: AuthRequest, @Param('id') id: string) {
     const userId = req.user?.id ?? '';
     return this.charactersService.remove(userId, id);
+  }
+
+  @Patch(':id/hp')
+  async updateHp(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: HpUpdateDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.stateService.updateHp(userId, id, body);
+  }
+
+  @Patch(':id/xp')
+  async updateXp(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: XpUpdateDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.stateService.updateXp(userId, id, body);
+  }
+
+  @Patch(':id/death-saves')
+  async updateDeathSaves(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: DeathSaveDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.stateService.updateDeathSaves(userId, id, body);
   }
 }
