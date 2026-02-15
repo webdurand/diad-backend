@@ -21,6 +21,9 @@ export class BackgroundEntity {
   @Column()
   name: string;
 
+  @Column({ type: 'jsonb', nullable: true })
+  ability_scores?: Record<string, unknown>[];
+
   @Column({ type: 'jsonb' })
   equipment_options: Record<string, unknown>;
 
@@ -50,10 +53,7 @@ export class BackgroundEntity {
   @Column({ type: 'jsonb', nullable: true })
   raw?: Record<string, unknown>;
 
-  @OneToMany(
-    () => BackgroundProficiencyEntity,
-    (item) => item.background,
-  )
+  @OneToMany(() => BackgroundProficiencyEntity, (item) => item.background)
   background_proficiencies?: BackgroundProficiencyEntity[];
 
   @Column({ type: 'timestamptz', default: () => 'now()' })

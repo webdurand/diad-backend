@@ -171,6 +171,13 @@ export class AdminController {
     return this.adminService.seedBackgrounds();
   }
 
+  @Post('eldritch-invocations')
+  @HttpCode(HttpStatus.OK)
+  async seedEldritchInvocations(): Promise<SeedResult> {
+    this.logger.log('▶ Seed eldritch_invocations');
+    return this.adminService.seedEldritchInvocations();
+  }
+
   // ────── Fase 5 — Features, Spells, MagicItems, Monsters ──────
 
   @Post('features')
@@ -249,6 +256,7 @@ export class AdminController {
     results.push(await this.adminService.seedSubraces());
     results.push(await this.adminService.seedTraits());
     results.push(await this.adminService.seedBackgrounds());
+    results.push(await this.adminService.seedEldritchInvocations());
 
     // Fase 5
     results.push(await this.adminService.seedFeatures());

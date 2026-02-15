@@ -239,7 +239,30 @@
         "url": "/api/2014/subclasses/berserker"
       }
     ],
-    "url": "/api/2014/classes/barbarian"
+    "url": "/api/2014/classes/barbarian",
+    "weapon_mastery_count": 2,
+    "weapon_mastery_restriction": "melee only",
+    "cantrips_known": 0,
+    "spells_prepared_count": 0,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "rage",
+        "name": "Rage",
+        "type": "passive"
+      },
+      {
+        "index": "unarmored-defense-barbarian",
+        "name": "Unarmored Defense",
+        "type": "passive",
+        "description": "While not wearing armor, your AC equals 10 + Dex modifier + Con modifier. You can use a Shield."
+      },
+      {
+        "index": "weapon-mastery",
+        "name": "Weapon Mastery",
+        "type": "choice"
+      }
+    ]
   },
   {
     "index": "bard",
@@ -998,7 +1021,24 @@
       ]
     },
     "spells": "/api/2014/classes/bard/spells",
-    "url": "/api/2014/classes/bard"
+    "url": "/api/2014/classes/bard",
+    "weapon_mastery_count": 0,
+    "cantrips_known": 2,
+    "spells_prepared_count": 4,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "bardic-inspiration",
+        "name": "Bardic Inspiration",
+        "type": "passive",
+        "description": "You can supernaturally inspire others through words, music, or dance. As a Bonus Action, you can inspire another creature within 60 feet who can hear you. That creature gains a Bardic Inspiration die (d6). A creature can have only one Bardic Inspiration die at a time. Uses equal to Charisma modifier (minimum 1), regain all on Long Rest."
+      },
+      {
+        "index": "spellcasting-bard",
+        "name": "Spellcasting",
+        "type": "passive"
+      }
+    ]
   },
   {
     "index": "cleric",
@@ -1370,7 +1410,35 @@
       ]
     },
     "spells": "/api/2014/classes/cleric/spells",
-    "url": "/api/2014/classes/cleric"
+    "url": "/api/2014/classes/cleric",
+    "weapon_mastery_count": 0,
+    "cantrips_known": 3,
+    "spells_prepared_count": 4,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "spellcasting-cleric",
+        "name": "Spellcasting",
+        "type": "passive"
+      },
+      {
+        "index": "divine-order",
+        "name": "Divine Order",
+        "type": "choice",
+        "choices": [
+          {
+            "index": "protector",
+            "name": "Protector",
+            "description": "Trained for battle, you gain proficiency with Martial weapons and training with Heavy armor."
+          },
+          {
+            "index": "thaumaturge",
+            "name": "Thaumaturge",
+            "description": "You know one extra cantrip from the Cleric spell list. In addition, your mystical connection to the divine gives you a bonus to your Intelligence (Religion) checks. The bonus equals your Wisdom modifier (minimum of +1)."
+          }
+        ]
+      }
+    ]
   },
   {
     "index": "druid",
@@ -1732,7 +1800,41 @@
       ]
     },
     "spells": "/api/2014/classes/druid/spells",
-    "url": "/api/2014/classes/druid"
+    "url": "/api/2014/classes/druid",
+    "weapon_mastery_count": 0,
+    "cantrips_known": 2,
+    "spells_prepared_count": 4,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "spellcasting-druid",
+        "name": "Spellcasting",
+        "type": "passive"
+      },
+      {
+        "index": "druidic",
+        "name": "Druidic",
+        "type": "passive",
+        "description": "You know Druidic, the secret language of Druids. While learning this language, you also learn the conventions of using it to leave hidden messages."
+      },
+      {
+        "index": "primal-order",
+        "name": "Primal Order",
+        "type": "choice",
+        "choices": [
+          {
+            "index": "magician",
+            "name": "Magician",
+            "description": "You know one extra cantrip from the Druid spell list. In addition, your mystical connection to nature gives you a bonus to your Intelligence (Nature) checks. The bonus equals your Wisdom modifier (minimum of +1)."
+          },
+          {
+            "index": "warden",
+            "name": "Warden",
+            "description": "Trained for battle, you gain proficiency with Martial weapons and training with Medium armor."
+          }
+        ]
+      }
+    ]
   },
   {
     "index": "fighter",
@@ -2102,7 +2204,31 @@
         "url": "/api/2014/subclasses/champion"
       }
     ],
-    "url": "/api/2014/classes/fighter"
+    "url": "/api/2014/classes/fighter",
+    "weapon_mastery_count": 3,
+    "cantrips_known": 0,
+    "spells_prepared_count": 0,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "fighting-style-fighter",
+        "name": "Fighting Style",
+        "type": "feat_choice",
+        "description": "You have honed your martial prowess and gain a Fighting Style feat of your choice. Defense is recommended.",
+        "feat_filter": "fighting-style"
+      },
+      {
+        "index": "second-wind",
+        "name": "Second Wind",
+        "type": "passive",
+        "description": "You have a limited well of stamina. As a Bonus Action, you can regain HP equal to 1d10 + Fighter level. 2 uses, regain 1 on Short Rest, all on Long Rest."
+      },
+      {
+        "index": "weapon-mastery",
+        "name": "Weapon Mastery",
+        "type": "choice"
+      }
+    ]
   },
   {
     "index": "monk",
@@ -2585,7 +2711,33 @@
         "url": "/api/2014/subclasses/open-hand"
       }
     ],
-    "url": "/api/2014/classes/monk"
+    "url": "/api/2014/classes/monk",
+    "weapon_mastery_count": 0,
+    "cantrips_known": 0,
+    "spells_prepared_count": 0,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "martial-arts",
+        "name": "Martial Arts",
+        "type": "passive",
+        "description": "Your practice of martial arts gives you mastery of combat styles that use your Unarmed Strikes and Monk weapons. Martial Arts die: d6."
+      },
+      {
+        "index": "unarmored-defense-monk",
+        "name": "Unarmored Defense",
+        "type": "passive",
+        "description": "While not wearing armor and not wielding a Shield, your AC equals 10 + Dex modifier + Wis modifier."
+      }
+    ],
+    "tool_choice": {
+      "description": "Choose one type of Artisan's Tools or one Musical Instrument.",
+      "choose": 1,
+      "from_categories": [
+        "artisans-tools",
+        "musical-instruments"
+      ]
+    }
   },
   {
     "index": "paladin",
@@ -2928,7 +3080,29 @@
       ]
     },
     "spells": "/api/2014/classes/paladin/spells",
-    "url": "/api/2014/classes/paladin"
+    "url": "/api/2014/classes/paladin",
+    "weapon_mastery_count": 2,
+    "cantrips_known": 0,
+    "spells_prepared_count": 2,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "lay-on-hands",
+        "name": "Lay On Hands",
+        "type": "passive",
+        "description": "Your blessed touch can heal wounds. You have a pool of healing power equal to 5 x Paladin level HP. As a Magic action, touch a creature to restore HP from the pool, or spend 5 HP from the pool to end the Poisoned condition."
+      },
+      {
+        "index": "spellcasting-paladin",
+        "name": "Spellcasting",
+        "type": "passive"
+      },
+      {
+        "index": "weapon-mastery",
+        "name": "Weapon Mastery",
+        "type": "choice"
+      }
+    ]
   },
   {
     "index": "ranger",
@@ -3334,7 +3508,35 @@
       ]
     },
     "spells": "/api/2014/classes/ranger/spells",
-    "url": "/api/2014/classes/ranger"
+    "url": "/api/2014/classes/ranger",
+    "weapon_mastery_count": 2,
+    "cantrips_known": 0,
+    "spells_prepared_count": 2,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "spellcasting-ranger",
+        "name": "Spellcasting",
+        "type": "passive"
+      },
+      {
+        "index": "favored-enemy",
+        "name": "Favored Enemy",
+        "type": "passive",
+        "description": "You always have the Hunter's Mark spell prepared. You can cast it twice without expending a spell slot, and you regain all expended uses when you finish a Long Rest."
+      },
+      {
+        "index": "weapon-mastery",
+        "name": "Weapon Mastery",
+        "type": "choice"
+      }
+    ],
+    "always_prepared_spells": [
+      {
+        "index": "hunters-mark",
+        "name": "Hunter's Mark"
+      }
+    ]
   },
   {
     "index": "rogue",
@@ -3765,7 +3967,36 @@
         "url": "/api/2014/subclasses/thief"
       }
     ],
-    "url": "/api/2014/classes/rogue"
+    "url": "/api/2014/classes/rogue",
+    "weapon_mastery_count": 2,
+    "cantrips_known": 0,
+    "spells_prepared_count": 0,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "expertise-rogue",
+        "name": "Expertise",
+        "type": "choice",
+        "description": "You gain Expertise in two of your skill proficiencies of your choice. Stealth and one other are recommended."
+      },
+      {
+        "index": "sneak-attack",
+        "name": "Sneak Attack",
+        "type": "passive",
+        "description": "Once per turn, you can deal extra 1d6 damage to one creature you hit with an attack roll if you have Advantage on the roll or if an ally is within 5 feet of the target."
+      },
+      {
+        "index": "thieves-cant",
+        "name": "Thieves' Cant",
+        "type": "passive",
+        "description": "You know Thieves' Cant and one other language of your choice."
+      },
+      {
+        "index": "weapon-mastery",
+        "name": "Weapon Mastery",
+        "type": "choice"
+      }
+    ]
   },
   {
     "index": "sorcerer",
@@ -4071,7 +4302,24 @@
       ]
     },
     "spells": "/api/2014/classes/sorcerer/spells",
-    "url": "/api/2014/classes/sorcerer"
+    "url": "/api/2014/classes/sorcerer",
+    "weapon_mastery_count": 0,
+    "cantrips_known": 4,
+    "spells_prepared_count": 2,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "spellcasting-sorcerer",
+        "name": "Spellcasting",
+        "type": "passive"
+      },
+      {
+        "index": "innate-sorcery",
+        "name": "Innate Sorcery",
+        "type": "passive",
+        "description": "An event in your past left an indelible mark on you, infusing you with simmering magic. As a Bonus Action, you can unleash that magic for 1 minute gaining advantage on spell attack rolls and +1 to spell save DC. Uses equal to proficiency bonus, regain all on Long Rest."
+      }
+    ]
   },
   {
     "index": "warlock",
@@ -4403,7 +4651,26 @@
       ]
     },
     "spells": "/api/2014/classes/warlock/spells",
-    "url": "/api/2014/classes/warlock"
+    "url": "/api/2014/classes/warlock",
+    "weapon_mastery_count": 0,
+    "cantrips_known": 2,
+    "spells_prepared_count": 2,
+    "spellbook_count": 0,
+    "class_features_level_1": [
+      {
+        "index": "eldritch-invocations",
+        "name": "Eldritch Invocations",
+        "type": "choice",
+        "description": "In your study of occult lore, you have unearthed Eldritch Invocations. You gain one invocation of your choice. When you gain certain Warlock levels, you gain more invocations.",
+        "invocation_count": 1
+      },
+      {
+        "index": "pact-magic",
+        "name": "Pact Magic",
+        "type": "passive",
+        "description": "Through occult ceremony, you have formed a pact with a mysterious entity to gain magical powers. 1 spell slot of level 1, regains on Short or Long Rest."
+      }
+    ]
   },
   {
     "index": "wizard",
@@ -4694,6 +4961,29 @@
       ]
     },
     "spells": "/api/2014/classes/wizard/spells",
-    "url": "/api/2014/classes/wizard"
+    "url": "/api/2014/classes/wizard",
+    "weapon_mastery_count": 0,
+    "cantrips_known": 3,
+    "spells_prepared_count": 4,
+    "spellbook_count": 6,
+    "class_features_level_1": [
+      {
+        "index": "spellcasting-wizard",
+        "name": "Spellcasting",
+        "type": "passive"
+      },
+      {
+        "index": "ritual-adept",
+        "name": "Ritual Adept",
+        "type": "passive",
+        "description": "You can cast any spell as a Ritual if that spell has the Ritual tag and the spell is in your spellbook. You needn't have the spell prepared. The casting takes an extra 10 minutes."
+      },
+      {
+        "index": "arcane-recovery",
+        "name": "Arcane Recovery",
+        "type": "passive",
+        "description": "You have learned to regain some of your magical energy by studying your spellbook. Once per day when you finish a Short Rest, you can recover spell slots with a combined level equal to no more than half your Wizard level (round up), and none can be a level 6+ slot."
+      }
+    ]
   }
 ]

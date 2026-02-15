@@ -19,6 +19,7 @@ import {
   EquipmentCategoryEntity,
   EquipmentCategoryItemEntity,
   EquipmentEntity,
+  EldritchInvocationEntity,
   FeatEntity,
   FeatureEntity,
   LanguageEntity,
@@ -552,7 +553,7 @@ export class AdminService {
       general: FeatTypeEnum.General,
       epic_boon: FeatTypeEnum.EpicBoon,
       'epic-boon': FeatTypeEnum.EpicBoon,
-      'fighting-style': FeatTypeEnum.Other,
+      'fighting-style': FeatTypeEnum.FightingStyle,
     };
 
     for (const item of data) {
@@ -649,6 +650,12 @@ export class AdminService {
             multi_classing: item.multi_classing ?? {},
             spellcasting: item.spellcasting ?? null,
             spells_url: item.spells ?? null,
+            weapon_mastery_count: item.weapon_mastery_count ?? 0,
+            weapon_mastery_restriction: item.weapon_mastery_restriction ?? null,
+            cantrips_known: item.cantrips_known ?? 0,
+            spells_prepared_count: item.spells_prepared_count ?? 0,
+            spellbook_count: item.spellbook_count ?? 0,
+            class_features_level_1: item.class_features_level_1 ?? null,
             source_id: sourceId,
             raw: item,
           },
@@ -986,6 +993,7 @@ export class AdminService {
           {
             slug: item.index,
             name: item.name,
+            ability_scores: item.ability_scores ?? null,
             equipment_options: item.equipment_options ?? {},
             proficiency_choices: item.proficiency_choices ?? null,
             feat_id: featId,
@@ -1014,6 +1022,38 @@ export class AdminService {
       }
     }
     return this.result('backgrounds', data.length, success, errors);
+  }
+
+  async seedEldritchInvocations(): Promise<SeedResult> {
+    const data = this.loadJson<any[]>('5e-SRD-Eldritch-Invocations.json');
+    const sourceId = await this.getOrCreateSource();
+    const repo = this.ds.getRepository(EldritchInvocationEntity);
+    const errors: { slug: string; message: string }[] = [];
+    let success = 0;
+
+    for (const item of data) {
+      try {
+        await repo.upsert(
+          {
+            slug: item.index,
+            name: item.name,
+            description: item.description ?? '',
+            min_level: item.min_level ?? null,
+            prerequisite: item.prerequisite ?? null,
+            has_sub_choices: item.has_sub_choices ?? false,
+            sub_choice_type: item.sub_choice_type ?? null,
+            sub_choice_options: item.sub_choice_options ?? null,
+            source_id: sourceId,
+            raw: item,
+          },
+          { conflictPaths: ['slug'] },
+        );
+        success++;
+      } catch (err: any) {
+        errors.push({ slug: item.index, message: err.message });
+      }
+    }
+    return this.result('eldritch_invocations', data.length, success, errors);
   }
 
   // ──────────── Fase 5 — Features, Spells, MagicItems, Monsters ─────────────

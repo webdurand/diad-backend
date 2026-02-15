@@ -44,6 +44,24 @@ export class ClassEntity {
   @Column({ type: 'text', nullable: true })
   spells_url?: string;
 
+  @Column({ type: 'int', default: 0 })
+  weapon_mastery_count: number;
+
+  @Column({ type: 'text', nullable: true })
+  weapon_mastery_restriction?: string;
+
+  @Column({ type: 'int', default: 0 })
+  cantrips_known: number;
+
+  @Column({ type: 'int', default: 0 })
+  spells_prepared_count: number;
+
+  @Column({ type: 'int', default: 0 })
+  spellbook_count: number;
+
+  @Column({ type: 'jsonb', nullable: true })
+  class_features_level_1?: Record<string, unknown>[];
+
   @Column({ type: 'uuid', nullable: true })
   source_id?: string;
 

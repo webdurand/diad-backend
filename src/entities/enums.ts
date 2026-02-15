@@ -1,6 +1,7 @@
 export enum FeatTypeEnum {
   General = 'general',
   Origin = 'origin',
+  FightingStyle = 'fighting_style',
   EpicBoon = 'epic_boon',
   Other = 'other',
 }
