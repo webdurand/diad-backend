@@ -27,6 +27,8 @@ import {
   SubclassEntity,
   FeatureEntity,
   SpellClassEntity,
+  EquipmentEntity,
+  MagicItemEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersController } from './characters.controller';
@@ -35,6 +37,7 @@ import { CharacterSheetService } from './character-sheet.service';
 import { CharacterStateService } from './character-state.service';
 import { LevelUpService } from './level-up.service';
 import { SpellService } from './spell.service';
+import { InventoryService } from './inventory.service';
 
 @Module({
   imports: [
@@ -65,6 +68,8 @@ import { SpellService } from './spell.service';
       SubclassEntity,
       FeatureEntity,
       SpellClassEntity,
+      EquipmentEntity,
+      MagicItemEntity,
     ]),
     AuthModule,
   ],
@@ -75,6 +80,7 @@ import { SpellService } from './spell.service';
     CharacterStateService,
     LevelUpService,
     SpellService,
+    InventoryService,
   ],
 })
 export class CharactersModule {}

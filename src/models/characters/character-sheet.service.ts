@@ -9,6 +9,7 @@ import {
   CharacterProficiencyEntity,
   CharacterSpellEntity,
   CharacterEquipmentEntity,
+  CharacterMagicItemEntity,
   CharacterStateEntity,
   CharacterLevelUpEntity,
   CharacterFeatureEntity,
@@ -75,6 +76,31 @@ interface ProficiencyBlock {
   source: string;
 }
 
+export interface EquipmentBlock {
+  id: string;
+  slug: string;
+  name: string;
+  weight: number;
+  quantity: number;
+  equipped: boolean;
+  source: string;
+  damage?: Record<string, unknown>;
+  armorClass?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+  range?: Record<string, unknown>;
+  description?: string;
+  cost?: Record<string, unknown>;
+}
+
+export interface MagicItemBlock {
+  id: string;
+  slug: string;
+  name: string;
+  rarity: Record<string, unknown>;
+  attuned: boolean;
+  description?: Record<string, unknown>;
+}
+
 export interface CharacterSheet {
   id: string;
   name: string;
@@ -132,6 +158,13 @@ export interface CharacterSheet {
   levelUpAvailable: boolean;
   gold: { cp: number; sp: number; gp: number; pp: number };
   conditions: string[];
+
+  // Equipment & Inventory
+  equipment: EquipmentBlock[];
+  magicItems: MagicItemBlock[];
+  totalWeight: number;
+  encumbered: boolean;
+  attunementSlots: { used: number; max: number };
 
   // Origin metadata
   originDetails: Record<string, unknown>;
@@ -263,6 +296,8 @@ export class CharacterSheetService {
     private readonly charSpellRepo: Repository<CharacterSpellEntity>,
     @InjectRepository(CharacterEquipmentEntity)
     private readonly charEquipRepo: Repository<CharacterEquipmentEntity>,
+    @InjectRepository(CharacterMagicItemEntity)
+    private readonly charMagicItemRepo: Repository<CharacterMagicItemEntity>,
     @InjectRepository(CharacterStateEntity)
     private readonly charStateRepo: Repository<CharacterStateEntity>,
     @InjectRepository(CharacterLevelUpEntity)
@@ -277,7 +312,10 @@ export class CharacterSheetService {
     private readonly classSavingThrowRepo: Repository<ClassSavingThrowEntity>,
   ) {}
 
-  async computeSheet(userId: string, characterId: string): Promise<CharacterSheet> {
+  async computeSheet(
+    userId: string,
+    characterId: string,
+  ): Promise<CharacterSheet> {
     const character = await this.characterRepo.findOne({
       where: { id: characterId, userId },
     });
@@ -293,6 +331,7 @@ export class CharacterSheetService {
       charProfs,
       charSpells,
       charEquip,
+      charMagicItems,
       charState,
       charLevelUps,
       charFeatures,
@@ -307,6 +346,7 @@ export class CharacterSheetService {
       this.charProfRepo.find({ where: { character_id: characterId } }),
       this.charSpellRepo.find({ where: { character_id: characterId } }),
       this.charEquipRepo.find({ where: { character_id: characterId } }),
+      this.charMagicItemRepo.find({ where: { character_id: characterId } }),
       this.charStateRepo.findOne({ where: { character_id: characterId } }),
       this.charLevelUpRepo.find({
         where: { character_id: characterId },
@@ -317,7 +357,9 @@ export class CharacterSheetService {
     ]);
 
     if (!charOrigin) {
-      throw new NotFoundException('Dados de origem do personagem nao encontrados.');
+      throw new NotFoundException(
+        'Dados de origem do personagem nao encontrados.',
+      );
     }
 
     // Total level & proficiency bonus
@@ -325,7 +367,10 @@ export class CharacterSheetService {
     const profBonus = PROF_BONUS_BY_LEVEL[Math.min(totalLevel, 20)] ?? 2;
 
     // Ability scores
-    const abilityMap = new Map<string, { score: number; slug: string; name: string }>();
+    const abilityMap = new Map<
+      string,
+      { score: number; slug: string; name: string }
+    >();
     for (const ca of charAbilities) {
       const slug = ca.ability_score.slug;
       abilityMap.set(slug, {
@@ -341,22 +386,29 @@ export class CharacterSheetService {
       return Math.floor((entry.score - 10) / 2);
     };
 
-    const abilityScores: AbilityScoreBlock[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(
-      (slug) => {
-        const entry = abilityMap.get(slug);
-        return {
-          slug,
-          name: entry?.name ?? slug.toUpperCase(),
-          score: entry?.score ?? 10,
-          modifier: mod(slug),
-        };
-      },
-    );
+    const abilityScores: AbilityScoreBlock[] = [
+      'str',
+      'dex',
+      'con',
+      'int',
+      'wis',
+      'cha',
+    ].map((slug) => {
+      const entry = abilityMap.get(slug);
+      return {
+        slug,
+        name: entry?.name ?? slug.toUpperCase(),
+        score: entry?.score ?? 10,
+        modifier: mod(slug),
+      };
+    });
 
     // Max HP
     const primaryClass = charClasses[0];
     const conMod = mod('con');
-    let maxHp = primaryClass ? primaryClass.class.hit_die + conMod : 10 + conMod;
+    let maxHp = primaryClass
+      ? primaryClass.class.hit_die + conMod
+      : 10 + conMod;
     for (const lu of charLevelUps) {
       maxHp += lu.hp_gained;
     }
@@ -396,17 +448,22 @@ export class CharacterSheetService {
 
     // Saving throws
     const classSavingThrows = await this.getClassSavingThrows(charClasses);
-    const savingThrows: SavingThrowBlock[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(
-      (slug) => {
-        const proficient = classSavingThrows.has(slug);
-        return {
-          slug,
-          name: abilityMap.get(slug)?.name ?? slug.toUpperCase(),
-          proficient,
-          bonus: mod(slug) + (proficient ? profBonus : 0),
-        };
-      },
-    );
+    const savingThrows: SavingThrowBlock[] = [
+      'str',
+      'dex',
+      'con',
+      'int',
+      'wis',
+      'cha',
+    ].map((slug) => {
+      const proficient = classSavingThrows.has(slug);
+      return {
+        slug,
+        name: abilityMap.get(slug)?.name ?? slug.toUpperCase(),
+        proficient,
+        bonus: mod(slug) + (proficient ? profBonus : 0),
+      };
+    });
 
     // Skills
     const proficientSkillIds = new Set(charSkills.map((s) => s.skill_id));
@@ -433,7 +490,9 @@ export class CharacterSheetService {
     });
 
     // Passive Perception
-    const perceptionSkill = charSkills.find((s) => s.skill.slug === 'perception');
+    const perceptionSkill = charSkills.find(
+      (s) => s.skill.slug === 'perception',
+    );
     const perceptionProficient = !!perceptionSkill;
     const perceptionExpertise = perceptionSkill?.expertise ?? false;
     const passivePerception =
@@ -446,12 +505,20 @@ export class CharacterSheetService {
     const hitDice = charClasses.map((cc) => ({
       die: cc.class.hit_die,
       total: cc.class_level,
-      used: (charState?.hit_dice_used as Record<string, number>)?.[cc.class.slug] ?? 0,
+      used:
+        (charState?.hit_dice_used as Record<string, number>)?.[cc.class.slug] ??
+        0,
     }));
 
-    // Carrying capacity
+    // Carrying capacity & weight
     const strScore = abilityMap.get('str')?.score ?? 10;
     const carryingCapacity = strScore * 15;
+
+    const totalWeight = charEquip.reduce((sum, ce) => {
+      const w = parseFloat(ce.equipment.weight) || 0;
+      return sum + w * ce.quantity;
+    }, 0);
+    const encumbered = totalWeight > carryingCapacity;
 
     // Classes block with spellcasting
     const classes: ClassBlock[] = charClasses.map((cc) => {
@@ -511,6 +578,34 @@ export class CharacterSheetService {
       classLanguageChoices: charOrigin.class_language_choices,
       classToolProficiency: charOrigin.class_tool_proficiency,
     };
+
+    // Equipment blocks
+    const equipment: EquipmentBlock[] = charEquip.map((ce) => ({
+      id: ce.id,
+      slug: ce.equipment.slug,
+      name: ce.equipment.name,
+      weight: parseFloat(ce.equipment.weight) || 0,
+      quantity: ce.quantity,
+      equipped: ce.equipped,
+      source: ce.source,
+      damage: ce.equipment.damage ?? undefined,
+      armorClass: ce.equipment.armor_class ?? undefined,
+      properties: ce.equipment.properties ?? undefined,
+      range: ce.equipment.range ?? undefined,
+      description: ce.equipment.description ?? undefined,
+      cost: ce.equipment.cost ?? undefined,
+    }));
+
+    // Magic item blocks
+    const attunedCount = charMagicItems.filter((mi) => mi.attuned).length;
+    const magicItems: MagicItemBlock[] = charMagicItems.map((cmi) => ({
+      id: cmi.id,
+      slug: cmi.magic_item.slug,
+      name: cmi.magic_item.name,
+      rarity: cmi.magic_item.rarity,
+      attuned: cmi.attuned,
+      description: cmi.magic_item.description ?? undefined,
+    }));
 
     return {
       id: character.id,
@@ -577,6 +672,12 @@ export class CharacterSheetService {
       },
       conditions: charState?.conditions ?? [],
 
+      equipment,
+      magicItems,
+      totalWeight: Math.round(totalWeight * 100) / 100,
+      encumbered,
+      attunementSlots: { used: attunedCount, max: 3 },
+
       originDetails,
 
       createdAt: character.createdAt.toISOString(),
@@ -615,7 +716,10 @@ export class CharacterSheetService {
       else if (type === 'pact') warlockLevel = cc.class_level;
     }
 
-    const slotsUsed = (charState?.spell_slots_used ?? {}) as Record<string, number>;
+    const slotsUsed = (charState?.spell_slots_used ?? {}) as Record<
+      string,
+      number
+    >;
 
     const result: SpellSlotBlock[] = [];
 

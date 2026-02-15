@@ -25,6 +25,15 @@ import {
   type SpellSlotUpdateDto,
   type RestDto,
 } from './spell.service';
+import {
+  InventoryService,
+  type AddItemDto,
+  type UpdateItemDto,
+  type GoldUpdateDto,
+  type EquipToggleDto,
+  type AttuneToggleDto,
+  type AddMagicItemDto,
+} from './inventory.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 
@@ -46,6 +55,7 @@ export class CharactersController {
     private readonly stateService: CharacterStateService,
     private readonly levelUpService: LevelUpService,
     private readonly spellService: SpellService,
+    private readonly inventoryService: InventoryService,
   ) {}
 
   @Get()
@@ -172,5 +182,100 @@ export class CharactersController {
   ) {
     const userId = req.user?.id ?? '';
     return this.spellService.rest(userId, id, body);
+  }
+
+  // ---- Inventory ----
+
+  @Get(':id/inventory')
+  async getInventory(@Req() req: AuthRequest, @Param('id') id: string) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.getInventory(userId, id);
+  }
+
+  @Post(':id/inventory')
+  async addItem(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: AddItemDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.addItem(userId, id, body);
+  }
+
+  @Patch(':id/inventory/:itemId')
+  async updateItem(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: UpdateItemDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.updateItemQuantity(userId, id, itemId, body);
+  }
+
+  @Delete(':id/inventory/:itemId')
+  async removeItem(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.removeItem(userId, id, itemId);
+  }
+
+  @Patch(':id/gold')
+  async updateGold(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: GoldUpdateDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.updateGold(userId, id, body);
+  }
+
+  // ---- Equip / Attune ----
+
+  @Patch(':id/equipment/:itemId/equip')
+  async toggleEquip(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: EquipToggleDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.toggleEquip(userId, id, itemId, body);
+  }
+
+  // ---- Magic Items ----
+
+  @Post(':id/magic-items')
+  async addMagicItem(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: AddMagicItemDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.addMagicItem(userId, id, body);
+  }
+
+  @Delete(':id/magic-items/:itemId')
+  async removeMagicItem(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.removeMagicItem(userId, id, itemId);
+  }
+
+  @Patch(':id/magic-items/:itemId/attune')
+  async toggleAttune(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: AttuneToggleDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.inventoryService.toggleAttune(userId, id, itemId, body);
   }
 }
