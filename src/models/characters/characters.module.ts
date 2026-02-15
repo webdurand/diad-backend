@@ -41,6 +41,7 @@ import { CharacterStateService } from './character-state.service';
 import { LevelUpService } from './level-up.service';
 import { SpellService } from './spell.service';
 import { InventoryService } from './inventory.service';
+import { ActionsService } from './actions.service';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { InventoryService } from './inventory.service';
     LevelUpService,
     SpellService,
     InventoryService,
+    ActionsService,
   ],
 })
 export class CharactersModule {}

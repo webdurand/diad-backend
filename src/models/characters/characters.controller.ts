@@ -34,6 +34,7 @@ import {
   type AttuneToggleDto,
   type AddMagicItemDto,
 } from './inventory.service';
+import { ActionsService } from './actions.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 
@@ -56,6 +57,7 @@ export class CharactersController {
     private readonly levelUpService: LevelUpService,
     private readonly spellService: SpellService,
     private readonly inventoryService: InventoryService,
+    private readonly actionsService: ActionsService,
   ) {}
 
   @Get()
@@ -130,6 +132,12 @@ export class CharactersController {
   ) {
     const userId = req.user?.id ?? '';
     return this.stateService.updateDeathSaves(userId, id, body);
+  }
+
+  @Get(':id/actions')
+  async getActions(@Req() req: AuthRequest, @Param('id') id: string) {
+    const userId = req.user?.id ?? '';
+    return this.actionsService.getActions(userId, id);
   }
 
   @Get(':id/level-up-options')
