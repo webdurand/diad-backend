@@ -79,6 +79,15 @@ interface ProficiencyBlock {
   source: string;
 }
 
+interface FeatureBlock {
+  slug: string;
+  name: string;
+  level: number;
+  description: Record<string, unknown>;
+  sourceClass?: string;
+  active: boolean;
+}
+
 export interface EquipmentBlock {
   id: string;
   slug: string;
@@ -153,6 +162,9 @@ export interface CharacterSheet {
 
   // Proficiencies
   proficiencies: ProficiencyBlock[];
+
+  // Features
+  features: FeatureBlock[];
 
   // Spells
   spells: SpellBlock[];
@@ -362,7 +374,10 @@ export class CharacterSheetService {
         where: { character_id: characterId },
         order: { total_level: 'ASC' },
       }),
-      this.charFeatureRepo.find({ where: { character_id: characterId } }),
+      this.charFeatureRepo.find({
+        where: { character_id: characterId },
+        relations: ['source_class'],
+      }),
       this.charOriginRepo.findOne({ where: { character_id: characterId } }),
     ]);
 
@@ -564,12 +579,44 @@ export class CharacterSheetService {
     // Spell slots
     const spellSlots = this.computeSpellSlots(charClasses, charState);
 
-    // Proficiencies
+    // Proficiencies (character-level + class-level)
     const proficiencies: ProficiencyBlock[] = charProfs.map((cp) => ({
       slug: cp.proficiency.slug,
       name: cp.proficiency.name,
       type: cp.proficiency.proficiency_type,
       source: cp.source,
+    }));
+
+    // Add class proficiencies that aren't already in character_proficiencies
+    const existingProfSlugs = new Set(proficiencies.map((p) => p.slug));
+    const classIds = charClasses.map((cc) => cc.class_id);
+    if (classIds.length > 0) {
+      const classProfs = await this.classProfRepo
+        .createQueryBuilder('cp')
+        .innerJoinAndSelect('cp.proficiency', 'p')
+        .where('cp.class_id IN (:...classIds)', { classIds })
+        .getMany();
+      for (const cp of classProfs) {
+        if (!existingProfSlugs.has(cp.proficiency.slug)) {
+          existingProfSlugs.add(cp.proficiency.slug);
+          proficiencies.push({
+            slug: cp.proficiency.slug,
+            name: cp.proficiency.name,
+            type: cp.proficiency.proficiency_type,
+            source: 'class',
+          });
+        }
+      }
+    }
+
+    // Features
+    const features: FeatureBlock[] = charFeatures.map((cf) => ({
+      slug: cf.feature.slug,
+      name: cf.feature.name,
+      level: cf.feature.level,
+      description: cf.feature.description,
+      sourceClass: cf.source_class?.name,
+      active: cf.active,
     }));
 
     // Origin details (misc creation metadata)
@@ -607,36 +654,17 @@ export class CharacterSheetService {
       }
     }
 
-    // Build proficiency slugs from character profs + class profs
+    // Build proficiency slugs from character profs + class profs (reuse already-loaded data)
     const profSlugs = new Set(
-      charProfs
+      proficiencies
         .filter(
-          (cp) =>
-            cp.proficiency.proficiency_type === ProficiencyTypeEnum.Armor ||
-            cp.proficiency.proficiency_type === ProficiencyTypeEnum.Weapon ||
-            cp.proficiency.proficiency_type === ProficiencyTypeEnum.Other,
+          (p) =>
+            p.type === ProficiencyTypeEnum.Armor ||
+            p.type === ProficiencyTypeEnum.Weapon ||
+            p.type === ProficiencyTypeEnum.Other,
         )
-        .map((cp) => cp.proficiency.slug),
+        .map((p) => p.slug),
     );
-
-    // Include class-level proficiencies (armor/weapon)
-    const classIds = charClasses.map((cc) => cc.class_id);
-    if (classIds.length > 0) {
-      const classProfs = await this.classProfRepo
-        .createQueryBuilder('cp')
-        .innerJoinAndSelect('cp.proficiency', 'p')
-        .where('cp.class_id IN (:...classIds)', { classIds })
-        .getMany();
-      for (const cp of classProfs) {
-        if (
-          cp.proficiency.proficiency_type === ProficiencyTypeEnum.Armor ||
-          cp.proficiency.proficiency_type === ProficiencyTypeEnum.Weapon ||
-          cp.proficiency.proficiency_type === ProficiencyTypeEnum.Other
-        ) {
-          profSlugs.add(cp.proficiency.slug);
-        }
-      }
-    }
 
     const equipment: EquipmentBlock[] = charEquip.map((ce) => {
       const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
@@ -726,6 +754,8 @@ export class CharacterSheetService {
       savingThrows,
 
       proficiencies,
+
+      features,
 
       spells,
       spellSlots,

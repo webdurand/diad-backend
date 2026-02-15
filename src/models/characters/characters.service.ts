@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -11,6 +11,7 @@ import {
   CharacterEquipmentEntity,
   CharacterStateEntity,
   CharacterOriginEntity,
+  CharacterFeatureEntity,
   ClassEntity,
   ClassStartingEquipmentEntity,
   AbilityScoreEntity,
@@ -22,6 +23,7 @@ import {
   SubraceEntity,
   BackgroundEntity,
   AlignmentEntity,
+  LevelEntity,
 } from 'src/entities';
 import {
   CharacterProficiencySourceEnum,
@@ -119,6 +121,8 @@ export class CharactersService {
     private readonly equipmentRepository: Repository<EquipmentEntity>,
     @InjectRepository(ClassStartingEquipmentEntity)
     private readonly classStartingEquipRepo: Repository<ClassStartingEquipmentEntity>,
+    @InjectRepository(LevelEntity)
+    private readonly levelRepository: Repository<LevelEntity>,
   ) {}
 
   async listByUser(userId: string): Promise<CharacterEntity[]> {
@@ -369,6 +373,28 @@ export class CharactersService {
         class_language_choices: choices.classLanguageChoices ?? [],
         class_tool_proficiency: choices.classToolProficiency,
       });
+
+      // character_features (level 1)
+      const levelData = await this.levelRepository.findOne({
+        where: {
+          class_id: classEntity.id,
+          level: 1,
+          subclass_id: IsNull(),
+        },
+        relations: ['level_features', 'level_features.feature'],
+      });
+
+      if (levelData?.level_features) {
+        for (const lf of levelData.level_features) {
+          await manager.save(CharacterFeatureEntity, {
+            character_id: charId,
+            feature_id: lf.feature.id,
+            source_class_id: classEntity.id,
+            active: true,
+            choices: {},
+          });
+        }
+      }
 
       return saved;
     });
