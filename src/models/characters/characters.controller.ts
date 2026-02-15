@@ -19,6 +19,12 @@ import {
   type DeathSaveDto,
 } from './character-state.service';
 import { LevelUpService, type LevelUpDto } from './level-up.service';
+import {
+  SpellService,
+  type PreparedSpellsDto,
+  type SpellSlotUpdateDto,
+  type RestDto,
+} from './spell.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 
@@ -39,6 +45,7 @@ export class CharactersController {
     private readonly sheetService: CharacterSheetService,
     private readonly stateService: CharacterStateService,
     private readonly levelUpService: LevelUpService,
+    private readonly spellService: SpellService,
   ) {}
 
   @Get()
@@ -129,5 +136,41 @@ export class CharactersController {
   ) {
     const userId = req.user?.id ?? '';
     return this.levelUpService.execute(userId, id, body);
+  }
+
+  @Get(':id/available-spells')
+  async getAvailableSpells(@Req() req: AuthRequest, @Param('id') id: string) {
+    const userId = req.user?.id ?? '';
+    return this.spellService.getAvailableSpells(userId, id);
+  }
+
+  @Put(':id/prepared-spells')
+  async updatePreparedSpells(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: PreparedSpellsDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.spellService.updatePreparedSpells(userId, id, body);
+  }
+
+  @Patch(':id/spell-slots')
+  async updateSpellSlots(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: SpellSlotUpdateDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.spellService.updateSpellSlots(userId, id, body);
+  }
+
+  @Post(':id/rest')
+  async rest(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: RestDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.spellService.rest(userId, id, body);
   }
 }

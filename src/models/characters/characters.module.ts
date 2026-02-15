@@ -26,6 +26,7 @@ import {
   ClassSavingThrowEntity,
   SubclassEntity,
   FeatureEntity,
+  SpellClassEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersController } from './characters.controller';
@@ -33,6 +34,7 @@ import { CharactersService } from './characters.service';
 import { CharacterSheetService } from './character-sheet.service';
 import { CharacterStateService } from './character-state.service';
 import { LevelUpService } from './level-up.service';
+import { SpellService } from './spell.service';
 
 @Module({
   imports: [
@@ -62,6 +64,7 @@ import { LevelUpService } from './level-up.service';
       ClassSavingThrowEntity,
       SubclassEntity,
       FeatureEntity,
+      SpellClassEntity,
     ]),
     AuthModule,
   ],
@@ -71,6 +74,7 @@ import { LevelUpService } from './level-up.service';
     CharacterSheetService,
     CharacterStateService,
     LevelUpService,
+    SpellService,
   ],
 })
 export class CharactersModule {}

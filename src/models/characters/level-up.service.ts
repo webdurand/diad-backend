@@ -18,6 +18,7 @@ import {
   LevelEntity,
   SubclassEntity,
   SpellEntity,
+  SpellClassEntity,
   ProficiencyEntity,
   FeatureEntity,
 } from 'src/entities';
@@ -27,6 +28,20 @@ import {
   SpellStatusEnum,
   CharacterProficiencySourceEnum,
 } from 'src/entities/enums';
+
+// Caster type classification for level-up spell selection
+type CasterType = 'total_access' | 'known' | 'spellbook' | 'pact';
+
+const CASTER_CLASS_TYPE: Record<string, CasterType> = {
+  cleric: 'total_access',
+  druid: 'total_access',
+  paladin: 'total_access',
+  bard: 'known',
+  sorcerer: 'known',
+  ranger: 'known',
+  warlock: 'pact',
+  wizard: 'spellbook',
+};
 
 // SRD Character Advancement XP thresholds (index 0 = level 1 => need 300 for level 2)
 const XP_THRESHOLDS: number[] = [
@@ -72,6 +87,19 @@ export interface AvailableClassOption {
   }>;
   spellcasting: Record<string, unknown> | null;
   newProficiencies: Array<{ slug: string; name: string }>;
+  spellSelection: SpellSelectionForLevelUp | null;
+}
+
+export interface SpellSelectionForLevelUp {
+  casterType: CasterType;
+  newCantrips: number;
+  newSpells: number;
+  canSwapSpell: boolean;
+  maxSpellLevel: number;
+  currentCantrips: Array<{ slug: string; name: string }>;
+  currentSpells: Array<{ slug: string; name: string; level: number }>;
+  availableCantrips: Array<{ slug: string; name: string }>;
+  availableSpells: Array<{ slug: string; name: string; level: number }>;
 }
 
 export interface LevelUpDto {
@@ -125,6 +153,8 @@ export class LevelUpService {
     private readonly spellRepo: Repository<SpellEntity>,
     @InjectRepository(ProficiencyEntity)
     private readonly proficiencyRepo: Repository<ProficiencyEntity>,
+    @InjectRepository(SpellClassEntity)
+    private readonly spellClassRepo: Repository<SpellClassEntity>,
   ) {}
 
   // ---- GET /characters/:id/level-up-options ----
@@ -135,13 +165,14 @@ export class LevelUpService {
   ): Promise<LevelUpOptionsResult> {
     const character = await this.ensureOwnership(userId, characterId);
     const state = await this.getState(characterId);
-    const charClasses = await this.charClassRepo.find({
-      where: { character_id: characterId },
-      order: { order: 'ASC' },
-    });
-    const charAbilities = await this.charAbilityRepo.find({
-      where: { character_id: characterId },
-    });
+    const [charClasses, charAbilities, charSpells] = await Promise.all([
+      this.charClassRepo.find({
+        where: { character_id: characterId },
+        order: { order: 'ASC' },
+      }),
+      this.charAbilityRepo.find({ where: { character_id: characterId } }),
+      this.charSpellRepo.find({ where: { character_id: characterId } }),
+    ]);
 
     const totalLevel = charClasses.reduce((s, cc) => s + cc.class_level, 0);
     const xpRequired = totalLevel < 20 ? XP_THRESHOLDS[totalLevel] : Infinity;
@@ -167,14 +198,22 @@ export class LevelUpService {
 
       // Parse multiclassing prerequisites
       const prereqs = this.parsePrerequisites(cls.multi_classing);
-      const meetsPrereqs = isCurrentClass || this.checkPrerequisites(prereqs, abilityMap, charClasses);
+      const meetsPrereqs =
+        isCurrentClass ||
+        this.checkPrerequisites(prereqs, abilityMap, charClasses);
 
       // For multiclass: also need to meet current class prereqs
       if (!isCurrentClass && meetsPrereqs) {
         const currentPrimaryClass = charClasses[0]?.class;
         if (currentPrimaryClass) {
-          const currentPrereqs = this.parsePrerequisites(currentPrimaryClass.multi_classing);
-          const meetsCurrent = this.checkPrerequisites(currentPrereqs, abilityMap, charClasses);
+          const currentPrereqs = this.parsePrerequisites(
+            currentPrimaryClass.multi_classing,
+          );
+          const meetsCurrent = this.checkPrerequisites(
+            currentPrereqs,
+            abilityMap,
+            charClasses,
+          );
           if (!meetsCurrent) continue;
         }
       }
@@ -199,7 +238,11 @@ export class LevelUpService {
 
       if (charClass?.subclass_id) {
         const subLevelData = await this.levelRepo.findOne({
-          where: { class_id: cls.id, level: nextClassLevel, subclass_id: charClass.subclass_id },
+          where: {
+            class_id: cls.id,
+            level: nextClassLevel,
+            subclass_id: charClass.subclass_id,
+          },
           relations: ['level_features', 'level_features.feature'],
         });
         if (subLevelData?.level_features) {
@@ -215,12 +258,16 @@ export class LevelUpService {
       const hasAsi = (levelData?.ability_score_bonuses ?? 0) > 0;
 
       // Check if this level requires subclass choice
-      const hasSubclass = this.isSubclassLevel(cls.slug, nextClassLevel) && !charClass?.subclass_id;
+      const hasSubclass =
+        this.isSubclassLevel(cls.slug, nextClassLevel) &&
+        !charClass?.subclass_id;
 
       // Available subclasses
       let availableSubclasses: Array<{ slug: string; name: string }> = [];
       if (hasSubclass) {
-        const subs = await this.subclassRepo.find({ where: { class_id: cls.id } });
+        const subs = await this.subclassRepo.find({
+          where: { class_id: cls.id },
+        });
         availableSubclasses = subs.map((s) => ({ slug: s.slug, name: s.name }));
       }
 
@@ -241,6 +288,14 @@ export class LevelUpService {
       // Spellcasting for this level
       const spellcasting = levelData?.spellcasting ?? null;
 
+      // Spell selection context for level-up
+      const spellSelection = await this.buildSpellSelection(
+        cls,
+        nextClassLevel,
+        isCurrentClass ? charClass!.class_level : 0,
+        charSpells,
+      );
+
       hitDie[cls.slug] = cls.hit_die;
 
       availableClasses.push({
@@ -257,6 +312,7 @@ export class LevelUpService {
         features: [...features, ...subclassFeatures],
         spellcasting,
         newProficiencies,
+        spellSelection,
       });
     }
 
@@ -306,7 +362,9 @@ export class LevelUpService {
     // Resolve class
     const classEntity = await this.classRepo.findOneBy({ slug: dto.classSlug });
     if (!classEntity) {
-      throw new BadRequestException(`Classe '${dto.classSlug}' nao encontrada.`);
+      throw new BadRequestException(
+        `Classe '${dto.classSlug}' nao encontrada.`,
+      );
     }
 
     const existingCharClass = charClasses.find(
@@ -334,7 +392,9 @@ export class LevelUpService {
       // Must meet current class prereqs
       const primaryClass = charClasses[0]?.class;
       if (primaryClass) {
-        const currentPrereqs = this.parsePrerequisites(primaryClass.multi_classing);
+        const currentPrereqs = this.parsePrerequisites(
+          primaryClass.multi_classing,
+        );
         if (!this.checkPrerequisites(currentPrereqs, abilityMap, charClasses)) {
           throw new BadRequestException(
             'Pre-requisitos de multiclasse da classe atual nao atendidos.',
@@ -382,13 +442,16 @@ export class LevelUpService {
           class_level: 1,
           order: newOrder,
           subclass_id: dto.subclassSlug
-            ? (await this.subclassRepo.findOneBy({ slug: dto.subclassSlug }))?.id
+            ? (await this.subclassRepo.findOneBy({ slug: dto.subclassSlug }))
+                ?.id
             : undefined,
         });
       } else {
         existingCharClass!.class_level = newClassLevel;
         if (dto.subclassSlug && !existingCharClass!.subclass_id) {
-          const subclass = await this.subclassRepo.findOneBy({ slug: dto.subclassSlug });
+          const subclass = await this.subclassRepo.findOneBy({
+            slug: dto.subclassSlug,
+          });
           if (subclass) {
             existingCharClass!.subclass_id = subclass.id;
           }
@@ -402,7 +465,8 @@ export class LevelUpService {
         total_level: newTotalLevel,
         class_id: classEntity.id,
         hp_gained: hpGained,
-        hp_method: dto.hpMethod === 'roll' ? HpMethodEnum.Roll : HpMethodEnum.Fixed,
+        hp_method:
+          dto.hpMethod === 'roll' ? HpMethodEnum.Roll : HpMethodEnum.Fixed,
         choices: {
           classSlug: dto.classSlug,
           subclassSlug: dto.subclassSlug,
@@ -527,7 +591,10 @@ export class LevelUpService {
             character_id: characterId,
             spell_id: spell.id,
             source: SpellSourceEnum.Class,
-            status: spell.level === 0 ? SpellStatusEnum.Known : SpellStatusEnum.Prepared,
+            status:
+              spell.level === 0
+                ? SpellStatusEnum.Known
+                : SpellStatusEnum.Prepared,
             always_prepared: spell.level === 0,
           });
         }
@@ -547,9 +614,13 @@ export class LevelUpService {
 
       // 8. Multiclass proficiencies
       if (isNewClass) {
-        const multiProfs = this.getMulticlassProficiencies(classEntity.multi_classing);
+        const multiProfs = this.getMulticlassProficiencies(
+          classEntity.multi_classing,
+        );
         for (const mp of multiProfs) {
-          const profEntity = await this.proficiencyRepo.findOneBy({ slug: mp.slug });
+          const profEntity = await this.proficiencyRepo.findOneBy({
+            slug: mp.slug,
+          });
           if (!profEntity) continue;
           const existing = await manager.findOne(CharacterProficiencyEntity, {
             where: { character_id: characterId, proficiency_id: profEntity.id },
@@ -575,6 +646,132 @@ export class LevelUpService {
   }
 
   // ---- Helpers ----
+
+  /**
+   * Build spell selection context for a class at level-up.
+   * Returns null if the class is not a spellcaster.
+   */
+  private async buildSpellSelection(
+    cls: ClassEntity,
+    newClassLevel: number,
+    currentClassLevel: number,
+    charSpells: CharacterSpellEntity[],
+  ): Promise<SpellSelectionForLevelUp | null> {
+    const casterType = CASTER_CLASS_TYPE[cls.slug];
+    if (!casterType) return null;
+
+    // Load spellcasting data for new and current levels
+    const [newLevelData, prevLevelData] = await Promise.all([
+      this.levelRepo.findOne({
+        where: {
+          class_id: cls.id,
+          level: newClassLevel,
+          subclass_id: IsNull(),
+        },
+      }),
+      currentClassLevel > 0
+        ? this.levelRepo.findOne({
+            where: {
+              class_id: cls.id,
+              level: currentClassLevel,
+              subclass_id: IsNull(),
+            },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const newSc = (newLevelData?.spellcasting ?? {}) as Record<string, number>;
+    const prevSc = (prevLevelData?.spellcasting ?? {}) as Record<
+      string,
+      number
+    >;
+
+    // Calculate cantrip delta
+    const newCantrips = Math.max(
+      0,
+      (newSc['cantrips_known'] ?? 0) - (prevSc['cantrips_known'] ?? 0),
+    );
+
+    // Calculate max spell level from slot data
+    let maxSpellLevel = 0;
+    for (let i = 1; i <= 9; i++) {
+      if ((newSc[`spell_slots_level_${i}`] ?? 0) > 0) {
+        maxSpellLevel = i;
+      }
+    }
+
+    // Known-spell casters: calculate new spells count from spells_known delta
+    // total_access/spellbook: prepared from list, no fixed new-spells count at level-up
+    // (wizard gets 2 free spells per level in spellbook)
+    let newSpells = 0;
+    let canSwapSpell = false;
+
+    if (casterType === 'known' || casterType === 'pact') {
+      newSpells = Math.max(
+        0,
+        (newSc['spells_known'] ?? 0) - (prevSc['spells_known'] ?? 0),
+      );
+      canSwapSpell = currentClassLevel > 0; // can swap 1 spell at level-up (not at level 1)
+    } else if (casterType === 'spellbook') {
+      newSpells = 2; // wizard adds 2 spells to spellbook per level
+    }
+
+    // Character's current cantrips and spells for this class
+    const currentCantrips = charSpells
+      .filter(
+        (cs) => cs.source === SpellSourceEnum.Class && cs.spell.level === 0,
+      )
+      .map((cs) => ({ slug: cs.spell.slug, name: cs.spell.name }));
+
+    const currentSpells = charSpells
+      .filter((cs) => cs.source === SpellSourceEnum.Class && cs.spell.level > 0)
+      .map((cs) => ({
+        slug: cs.spell.slug,
+        name: cs.spell.name,
+        level: cs.spell.level,
+      }));
+
+    // Available spells from the class spell list
+    const classSpellLinks = await this.spellClassRepo.find({
+      where: { class_id: cls.id },
+      relations: ['spell'],
+    });
+
+    const currentSpellSlugs = new Set(charSpells.map((cs) => cs.spell.slug));
+
+    const availableCantrips = classSpellLinks
+      .filter(
+        (sc) => sc.spell.level === 0 && !currentSpellSlugs.has(sc.spell.slug),
+      )
+      .map((sc) => ({ slug: sc.spell.slug, name: sc.spell.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const availableSpells = classSpellLinks
+      .filter(
+        (sc) =>
+          sc.spell.level > 0 &&
+          sc.spell.level <= maxSpellLevel &&
+          !currentSpellSlugs.has(sc.spell.slug),
+      )
+      .map((sc) => ({
+        slug: sc.spell.slug,
+        name: sc.spell.name,
+        level: sc.spell.level,
+      }))
+      .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+
+    return {
+      casterType,
+      newCantrips,
+      newSpells,
+      canSwapSpell,
+      maxSpellLevel,
+      currentCantrips,
+      currentSpells,
+      availableCantrips,
+      availableSpells,
+    };
+  }
 
   private async ensureOwnership(
     userId: string,
@@ -661,6 +858,10 @@ export class LevelUpService {
     // Only trigger subclass choice at the defined level
     // If class chooses subclass at level 1, it's done at creation, so skip
     const subclassLevel = subclassLevels[classSlug];
-    return subclassLevel !== undefined && subclassLevel > 1 && level === subclassLevel;
+    return (
+      subclassLevel !== undefined &&
+      subclassLevel > 1 &&
+      level === subclassLevel
+    );
   }
 }
