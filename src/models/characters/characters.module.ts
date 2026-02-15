@@ -24,12 +24,15 @@ import {
   AlignmentEntity,
   LevelEntity,
   ClassSavingThrowEntity,
+  SubclassEntity,
+  FeatureEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersController } from './characters.controller';
 import { CharactersService } from './characters.service';
 import { CharacterSheetService } from './character-sheet.service';
 import { CharacterStateService } from './character-state.service';
+import { LevelUpService } from './level-up.service';
 
 @Module({
   imports: [
@@ -57,10 +60,17 @@ import { CharacterStateService } from './character-state.service';
       AlignmentEntity,
       LevelEntity,
       ClassSavingThrowEntity,
+      SubclassEntity,
+      FeatureEntity,
     ]),
     AuthModule,
   ],
   controllers: [CharactersController],
-  providers: [CharactersService, CharacterSheetService, CharacterStateService],
+  providers: [
+    CharactersService,
+    CharacterSheetService,
+    CharacterStateService,
+    LevelUpService,
+  ],
 })
 export class CharactersModule {}

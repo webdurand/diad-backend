@@ -18,6 +18,7 @@ import {
   type XpUpdateDto,
   type DeathSaveDto,
 } from './character-state.service';
+import { LevelUpService, type LevelUpDto } from './level-up.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 
@@ -37,6 +38,7 @@ export class CharactersController {
     private readonly charactersService: CharactersService,
     private readonly sheetService: CharacterSheetService,
     private readonly stateService: CharacterStateService,
+    private readonly levelUpService: LevelUpService,
   ) {}
 
   @Get()
@@ -111,5 +113,21 @@ export class CharactersController {
   ) {
     const userId = req.user?.id ?? '';
     return this.stateService.updateDeathSaves(userId, id, body);
+  }
+
+  @Get(':id/level-up-options')
+  async getLevelUpOptions(@Req() req: AuthRequest, @Param('id') id: string) {
+    const userId = req.user?.id ?? '';
+    return this.levelUpService.getOptions(userId, id);
+  }
+
+  @Post(':id/level-up')
+  async levelUp(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: LevelUpDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.levelUpService.execute(userId, id, body);
   }
 }
