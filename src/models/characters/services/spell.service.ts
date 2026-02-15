@@ -16,92 +16,16 @@ import {
   SpellClassEntity,
 } from 'src/entities';
 import { SpellSourceEnum, SpellStatusEnum } from 'src/entities/enums';
+import {
+  CASTER_CLASS_TYPE,
+  SPELLCASTING_ABILITY,
+  CASTER_SLOT_TYPE,
+  FULL_CASTER_SLOTS,
+  WARLOCK_SLOTS,
+  CasterClassType,
+} from 'src/shared/srd-constants';
 
-// ---- Caster type classification ----
-
-type CasterType = 'total_access' | 'known' | 'spellbook' | 'pact';
-
-const CASTER_CLASS_TYPE: Record<string, CasterType> = {
-  cleric: 'total_access',
-  druid: 'total_access',
-  paladin: 'total_access',
-  bard: 'known',
-  sorcerer: 'known',
-  ranger: 'known',
-  warlock: 'pact',
-  wizard: 'spellbook',
-};
-
-const SPELLCASTING_ABILITY: Record<string, string> = {
-  bard: 'cha',
-  cleric: 'wis',
-  druid: 'wis',
-  paladin: 'cha',
-  ranger: 'wis',
-  sorcerer: 'cha',
-  warlock: 'cha',
-  wizard: 'int',
-};
-
-const CASTER_SLOT_TYPE: Record<string, 'full' | 'half' | 'pact'> = {
-  bard: 'full',
-  cleric: 'full',
-  druid: 'full',
-  sorcerer: 'full',
-  wizard: 'full',
-  paladin: 'half',
-  ranger: 'half',
-  warlock: 'pact',
-};
-
-// Full-caster spell slots table (SRD)
-const FULL_CASTER_SLOTS: number[][] = [
-  [],
-  [2],
-  [3],
-  [4, 2],
-  [4, 3],
-  [4, 3, 2],
-  [4, 3, 3],
-  [4, 3, 3, 1],
-  [4, 3, 3, 2],
-  [4, 3, 3, 3, 1],
-  [4, 3, 3, 3, 2],
-  [4, 3, 3, 3, 2, 1],
-  [4, 3, 3, 3, 2, 1],
-  [4, 3, 3, 3, 2, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1, 1, 1],
-  [4, 3, 3, 3, 3, 1, 1, 1, 1],
-  [4, 3, 3, 3, 3, 2, 1, 1, 1],
-  [4, 3, 3, 3, 3, 2, 2, 1, 1],
-];
-
-// Warlock Pact Magic slots
-const WARLOCK_SLOTS: Array<{ slots: number; level: number }> = [
-  { slots: 1, level: 1 },
-  { slots: 2, level: 1 },
-  { slots: 2, level: 2 },
-  { slots: 2, level: 2 },
-  { slots: 2, level: 3 },
-  { slots: 2, level: 3 },
-  { slots: 2, level: 4 },
-  { slots: 2, level: 4 },
-  { slots: 2, level: 5 },
-  { slots: 2, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 4, level: 5 },
-  { slots: 4, level: 5 },
-  { slots: 4, level: 5 },
-  { slots: 4, level: 5 },
-];
+type CasterType = CasterClassType;
 
 // ---- DTOs ----
 

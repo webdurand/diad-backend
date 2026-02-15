@@ -10,21 +10,21 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { CharactersService } from './characters.service';
-import { CharacterSheetService } from './character-sheet.service';
+import { CharactersService } from './services/characters.service';
+import { CharacterSheetService } from './services/character-sheet.service';
 import {
   CharacterStateService,
   type HpUpdateDto,
   type XpUpdateDto,
   type DeathSaveDto,
-} from './character-state.service';
-import { LevelUpService, type LevelUpDto } from './level-up.service';
+} from './services/character-state.service';
+import { LevelUpService, type LevelUpDto } from './services/level-up.service';
 import {
   SpellService,
   type PreparedSpellsDto,
   type SpellSlotUpdateDto,
   type RestDto,
-} from './spell.service';
+} from './services/spell.service';
 import {
   InventoryService,
   type AddItemDto,
@@ -33,8 +33,8 @@ import {
   type EquipToggleDto,
   type AttuneToggleDto,
   type AddMagicItemDto,
-} from './inventory.service';
-import { ActionsService } from './actions.service';
+} from './services/inventory.service';
+import { ActionsService } from './services/actions.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 

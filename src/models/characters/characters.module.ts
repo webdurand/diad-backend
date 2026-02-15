@@ -35,13 +35,13 @@ import {
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersController } from './characters.controller';
-import { CharactersService } from './characters.service';
-import { CharacterSheetService } from './character-sheet.service';
-import { CharacterStateService } from './character-state.service';
-import { LevelUpService } from './level-up.service';
-import { SpellService } from './spell.service';
-import { InventoryService } from './inventory.service';
-import { ActionsService } from './actions.service';
+import { CharactersService } from './services/characters.service';
+import { CharacterSheetService } from './services/character-sheet.service';
+import { CharacterStateService } from './services/character-state.service';
+import { LevelUpService } from './services/level-up.service';
+import { SpellService } from './services/spell.service';
+import { InventoryService } from './services/inventory.service';
+import { ActionsService } from './services/actions.service';
 
 @Module({
   imports: [

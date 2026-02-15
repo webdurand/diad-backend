@@ -14,6 +14,11 @@ import {
   ClassProficiencyEntity,
 } from 'src/entities';
 import { ProficiencyTypeEnum } from 'src/entities/enums';
+import {
+  PROF_BONUS_BY_LEVEL,
+  SPELLCASTING_ABILITY,
+  PROF_TO_CATEGORIES,
+} from 'src/shared/srd-constants';
 
 // ---- Types ----
 
@@ -61,36 +66,6 @@ export interface ActionsResponse {
     spellAttackBonus: Record<string, number>;
   };
 }
-
-// Proficiency bonus table
-const PROF_BONUS: Record<number, number> = {
-  1: 2, 2: 2, 3: 2, 4: 2,
-  5: 3, 6: 3, 7: 3, 8: 3,
-  9: 4, 10: 4, 11: 4, 12: 4,
-  13: 5, 14: 5, 15: 5, 16: 5,
-  17: 6, 18: 6, 19: 6, 20: 6,
-};
-
-const SPELLCASTING_ABILITY: Record<string, string> = {
-  bard: 'cha',
-  cleric: 'wis',
-  druid: 'wis',
-  paladin: 'cha',
-  ranger: 'wis',
-  sorcerer: 'cha',
-  warlock: 'cha',
-  wizard: 'int',
-};
-
-// Map proficiency slugs to equipment category slugs
-const PROF_TO_CATEGORIES: Record<string, string[]> = {
-  'light-armor': ['light-armor'],
-  'medium-armor': ['medium-armor'],
-  'heavy-armor': ['heavy-armor'],
-  shields: ['shields', 'shield'],
-  'simple-weapons': ['simple-melee-weapons', 'simple-ranged-weapons'],
-  'martial-weapons': ['martial-melee-weapons', 'martial-ranged-weapons'],
-};
 
 @Injectable()
 export class ActionsService {
@@ -151,7 +126,7 @@ export class ActionsService {
     }
     const mod = (slug: string) => Math.floor(((abilityMap.get(slug) ?? 10) - 10) / 2);
     const totalLevel = charClasses.reduce((s, cc) => s + cc.class_level, 0);
-    const profBonus = PROF_BONUS[Math.min(totalLevel, 20)] ?? 2;
+    const profBonus = PROF_BONUS_BY_LEVEL[Math.min(totalLevel, 20)] ?? 2;
 
     // Build weapon proficiency set
     const profSlugs = new Set(

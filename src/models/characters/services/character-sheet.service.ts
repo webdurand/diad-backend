@@ -20,6 +20,15 @@ import {
   EquipmentCategoryItemEntity,
 } from 'src/entities';
 import { ProficiencyTypeEnum } from 'src/entities/enums';
+import {
+  PROF_BONUS_BY_LEVEL,
+  XP_THRESHOLDS,
+  SPELLCASTING_ABILITY,
+  CASTER_SLOT_TYPE,
+  FULL_CASTER_SLOTS,
+  WARLOCK_SLOTS,
+  PROF_TO_CATEGORIES,
+} from 'src/shared/srd-constants';
 
 // ---- Response DTOs ----
 
@@ -190,112 +199,6 @@ export interface CharacterSheet {
   createdAt: string;
   updatedAt: string;
 }
-
-// Proficiency bonus by total level (SRD)
-const PROF_BONUS_BY_LEVEL: Record<number, number> = {
-  1: 2, 2: 2, 3: 2, 4: 2,
-  5: 3, 6: 3, 7: 3, 8: 3,
-  9: 4, 10: 4, 11: 4, 12: 4,
-  13: 5, 14: 5, 15: 5, 16: 5,
-  17: 6, 18: 6, 19: 6, 20: 6,
-};
-
-// SRD Character Advancement XP thresholds (index = current level, value = XP needed for next)
-const XP_THRESHOLDS_TABLE: number[] = [
-  300,    // 1 -> 2
-  900,    // 2 -> 3
-  2700,   // 3 -> 4
-  6500,   // 4 -> 5
-  14000,  // 5 -> 6
-  23000,  // 6 -> 7
-  34000,  // 7 -> 8
-  48000,  // 8 -> 9
-  64000,  // 9 -> 10
-  85000,  // 10 -> 11
-  100000, // 11 -> 12
-  120000, // 12 -> 13
-  140000, // 13 -> 14
-  165000, // 14 -> 15
-  195000, // 15 -> 16
-  225000, // 16 -> 17
-  265000, // 17 -> 18
-  305000, // 18 -> 19
-  355000, // 19 -> 20
-];
-
-// Full-caster spell slots table (SRD)
-const FULL_CASTER_SLOTS: number[][] = [
-  // index = caster level (1-based), value = [1st, 2nd, ...]
-  [],
-  [2],
-  [3],
-  [4, 2],
-  [4, 3],
-  [4, 3, 2],
-  [4, 3, 3],
-  [4, 3, 3, 1],
-  [4, 3, 3, 2],
-  [4, 3, 3, 3, 1],
-  [4, 3, 3, 3, 2],
-  [4, 3, 3, 3, 2, 1],
-  [4, 3, 3, 3, 2, 1],
-  [4, 3, 3, 3, 2, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1, 1],
-  [4, 3, 3, 3, 2, 1, 1, 1, 1],
-  [4, 3, 3, 3, 3, 1, 1, 1, 1],
-  [4, 3, 3, 3, 3, 2, 1, 1, 1],
-  [4, 3, 3, 3, 3, 2, 2, 1, 1],
-];
-
-// Warlock Pact Magic slots
-const WARLOCK_SLOTS: Array<{ slots: number; level: number }> = [
-  { slots: 1, level: 1 },
-  { slots: 2, level: 1 },
-  { slots: 2, level: 2 },
-  { slots: 2, level: 2 },
-  { slots: 2, level: 3 },
-  { slots: 2, level: 3 },
-  { slots: 2, level: 4 },
-  { slots: 2, level: 4 },
-  { slots: 2, level: 5 },
-  { slots: 2, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 3, level: 5 },
-  { slots: 4, level: 5 },
-  { slots: 4, level: 5 },
-  { slots: 4, level: 5 },
-  { slots: 4, level: 5 },
-];
-
-// Spellcasting ability by class slug
-const SPELLCASTING_ABILITY: Record<string, string> = {
-  bard: 'cha',
-  cleric: 'wis',
-  druid: 'wis',
-  paladin: 'cha',
-  ranger: 'wis',
-  sorcerer: 'cha',
-  warlock: 'cha',
-  wizard: 'int',
-};
-
-// Caster type by class slug (used for multiclass slot calculation)
-const CASTER_TYPE: Record<string, 'full' | 'half' | 'pact'> = {
-  bard: 'full',
-  cleric: 'full',
-  druid: 'full',
-  sorcerer: 'full',
-  wizard: 'full',
-  paladin: 'half',
-  ranger: 'half',
-  warlock: 'pact',
-};
 
 @Injectable()
 export class CharacterSheetService {
@@ -761,10 +664,9 @@ export class CharacterSheetService {
       spellSlots,
 
       xp: charState?.xp ?? 0,
-      nextLevelXp: totalLevel < 20 ? XP_THRESHOLDS_TABLE[totalLevel - 1] : null,
+      nextLevelXp: totalLevel < 20 ? XP_THRESHOLDS[totalLevel] : null,
       levelUpAvailable:
-        totalLevel < 20 &&
-        (charState?.xp ?? 0) >= XP_THRESHOLDS_TABLE[totalLevel - 1],
+        totalLevel < 20 && (charState?.xp ?? 0) >= XP_THRESHOLDS[totalLevel],
       gold: {
         cp: charState?.cp ?? 0,
         sp: charState?.sp ?? 0,
@@ -810,7 +712,7 @@ export class CharacterSheetService {
     let warlockLevel = 0;
 
     for (const cc of charClasses) {
-      const type = CASTER_TYPE[cc.class.slug];
+      const type = CASTER_SLOT_TYPE[cc.class.slug];
       if (!type) continue;
       if (type === 'full') fullCasterLevels += cc.class_level;
       else if (type === 'half') halfCasterLevels += cc.class_level;
@@ -856,19 +758,7 @@ export class CharacterSheetService {
     return result;
   }
 
-  /**
-   * Map proficiency slugs to equipment category slugs.
-   * Armor: light-armor, medium-armor, heavy-armor, shields
-   * Weapons: simple-weapons → simple-melee/ranged, martial-weapons → martial-melee/ranged
-   */
-  private static readonly PROF_TO_CATEGORIES: Record<string, string[]> = {
-    'light-armor': ['light-armor'],
-    'medium-armor': ['medium-armor'],
-    'heavy-armor': ['heavy-armor'],
-    shields: ['shields', 'shield'],
-    'simple-weapons': ['simple-melee-weapons', 'simple-ranged-weapons'],
-    'martial-weapons': ['martial-melee-weapons', 'martial-ranged-weapons'],
-  };
+
 
   private isEquipmentProficient(
     equipSlug: string,
@@ -896,9 +786,7 @@ export class CharacterSheetService {
     if (profSlugs.has(equipSlug + 's')) return true;
 
     // Check category-based proficiency
-    for (const [profSlug, cats] of Object.entries(
-      CharacterSheetService.PROF_TO_CATEGORIES,
-    )) {
+    for (const [profSlug, cats] of Object.entries(PROF_TO_CATEGORIES)) {
       if (profSlugs.has(profSlug) && cats.some((c) => categorySlugs.has(c))) {
         return true;
       }

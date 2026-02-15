@@ -28,37 +28,14 @@ import {
   SpellStatusEnum,
   CharacterProficiencySourceEnum,
 } from 'src/entities/enums';
+import {
+  CASTER_CLASS_TYPE,
+  SPELLCASTING_ABILITY,
+  XP_THRESHOLDS,
+  CasterClassType,
+} from 'src/shared/srd-constants';
 
-// Caster type classification for level-up spell selection
-type CasterType = 'total_access' | 'known' | 'spellbook' | 'pact';
-
-const CASTER_CLASS_TYPE: Record<string, CasterType> = {
-  cleric: 'total_access',
-  druid: 'total_access',
-  paladin: 'total_access',
-  bard: 'known',
-  sorcerer: 'known',
-  ranger: 'known',
-  warlock: 'pact',
-  wizard: 'spellbook',
-};
-
-const SPELLCASTING_ABILITY: Record<string, string> = {
-  bard: 'cha',
-  cleric: 'wis',
-  druid: 'wis',
-  paladin: 'cha',
-  ranger: 'wis',
-  sorcerer: 'cha',
-  warlock: 'cha',
-  wizard: 'int',
-};
-
-// SRD Character Advancement XP thresholds (index 0 = level 1 => need 300 for level 2)
-const XP_THRESHOLDS: number[] = [
-  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
-  85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000,
-];
+type CasterType = CasterClassType;
 
 // Multiclass prerequisites: ability scores required (slug -> minimum)
 interface MulticlassPrereq {
