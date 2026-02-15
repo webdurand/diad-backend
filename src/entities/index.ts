@@ -2,6 +2,17 @@ import { AbilityScoreEntity } from './ability-score.entity';
 import { AlignmentEntity } from './alignment.entity';
 import { BackgroundEntity } from './background.entity';
 import { BackgroundProficiencyEntity } from './background-proficiency.entity';
+import { CharacterAbilityScoreEntity } from './character-ability-score.entity';
+import { CharacterClassEntity } from './character-class.entity';
+import { CharacterEquipmentEntity } from './character-equipment.entity';
+import { CharacterFeatureEntity } from './character-feature.entity';
+import { CharacterLevelUpEntity } from './character-level-up.entity';
+import { CharacterMagicItemEntity } from './character-magic-item.entity';
+import { CharacterOriginEntity } from './character-origin.entity';
+import { CharacterProficiencyEntity } from './character-proficiency.entity';
+import { CharacterSkillEntity } from './character-skill.entity';
+import { CharacterSpellEntity } from './character-spell.entity';
+import { CharacterStateEntity } from './character-state.entity';
 import { ClassEntity } from './class.entity';
 import { ClassProficiencyEntity } from './class-proficiency.entity';
 import { ClassSavingThrowEntity } from './class-saving-throw.entity';
@@ -48,6 +59,17 @@ export {
   AlignmentEntity,
   BackgroundEntity,
   BackgroundProficiencyEntity,
+  CharacterAbilityScoreEntity,
+  CharacterClassEntity,
+  CharacterEquipmentEntity,
+  CharacterFeatureEntity,
+  CharacterLevelUpEntity,
+  CharacterMagicItemEntity,
+  CharacterOriginEntity,
+  CharacterProficiencyEntity,
+  CharacterSkillEntity,
+  CharacterSpellEntity,
+  CharacterStateEntity,
   ClassEntity,
   ClassProficiencyEntity,
   ClassSavingThrowEntity,
@@ -95,6 +117,17 @@ export const ENTITIES = [
   AlignmentEntity,
   BackgroundEntity,
   BackgroundProficiencyEntity,
+  CharacterAbilityScoreEntity,
+  CharacterClassEntity,
+  CharacterEquipmentEntity,
+  CharacterFeatureEntity,
+  CharacterLevelUpEntity,
+  CharacterMagicItemEntity,
+  CharacterOriginEntity,
+  CharacterProficiencyEntity,
+  CharacterSkillEntity,
+  CharacterSpellEntity,
+  CharacterStateEntity,
   ClassEntity,
   ClassProficiencyEntity,
   ClassSavingThrowEntity,

@@ -1,0 +1,624 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import {
+  CharacterEntity,
+  CharacterClassEntity,
+  CharacterAbilityScoreEntity,
+  CharacterSkillEntity,
+  CharacterProficiencyEntity,
+  CharacterSpellEntity,
+  CharacterEquipmentEntity,
+  CharacterStateEntity,
+  CharacterLevelUpEntity,
+  CharacterFeatureEntity,
+  CharacterOriginEntity,
+  LevelEntity,
+  ClassSavingThrowEntity,
+} from 'src/entities';
+
+// ---- Response DTOs ----
+
+export interface AbilityScoreBlock {
+  slug: string;
+  name: string;
+  score: number;
+  modifier: number;
+}
+
+export interface SkillBlock {
+  slug: string;
+  name: string;
+  ability: string;
+  proficient: boolean;
+  expertise: boolean;
+  bonus: number;
+}
+
+export interface SavingThrowBlock {
+  slug: string;
+  name: string;
+  proficient: boolean;
+  bonus: number;
+}
+
+export interface ClassBlock {
+  slug: string;
+  name: string;
+  level: number;
+  hitDie: number;
+  subclass?: { slug: string; name: string };
+  spellcastingAbility?: string;
+  spellSaveDc?: number;
+  spellAttackBonus?: number;
+}
+
+export interface SpellBlock {
+  slug: string;
+  name: string;
+  level: number;
+  source: string;
+  status: string;
+  alwaysPrepared: boolean;
+}
+
+export interface SpellSlotBlock {
+  level: number;
+  total: number;
+  used: number;
+}
+
+interface ProficiencyBlock {
+  slug: string;
+  name: string;
+  type: string;
+  source: string;
+}
+
+export interface CharacterSheet {
+  id: string;
+  name: string;
+
+  // Origin
+  race: { slug: string; name: string };
+  subrace?: { slug: string; name: string };
+  background: { slug: string; name: string };
+  alignment?: { slug: string; name: string };
+  personality: Record<string, string>;
+  age?: string;
+  height?: string;
+  weight?: string;
+  speciesSize?: string;
+  abilityScoreMethod?: string;
+
+  // Classes
+  classes: ClassBlock[];
+  totalLevel: number;
+  proficiencyBonus: number;
+
+  // Ability scores
+  abilityScores: AbilityScoreBlock[];
+
+  // Combat
+  maxHp: number;
+  currentHp: number;
+  tempHp: number;
+  armorClass: number;
+  initiative: number;
+  speed: number;
+  hitDice: Array<{ die: number; total: number; used: number }>;
+  carryingCapacity: number;
+
+  // Death saves
+  deathSaves: { successes: number; failures: number };
+
+  // Skills
+  skills: SkillBlock[];
+  passivePerception: number;
+
+  // Saving throws
+  savingThrows: SavingThrowBlock[];
+
+  // Proficiencies
+  proficiencies: ProficiencyBlock[];
+
+  // Spells
+  spells: SpellBlock[];
+  spellSlots: SpellSlotBlock[];
+
+  // State
+  xp: number;
+  gold: { cp: number; sp: number; gp: number; pp: number };
+  conditions: string[];
+
+  // Origin metadata
+  originDetails: Record<string, unknown>;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Proficiency bonus by total level (SRD)
+const PROF_BONUS_BY_LEVEL: Record<number, number> = {
+  1: 2, 2: 2, 3: 2, 4: 2,
+  5: 3, 6: 3, 7: 3, 8: 3,
+  9: 4, 10: 4, 11: 4, 12: 4,
+  13: 5, 14: 5, 15: 5, 16: 5,
+  17: 6, 18: 6, 19: 6, 20: 6,
+};
+
+// Full-caster spell slots table (SRD)
+const FULL_CASTER_SLOTS: number[][] = [
+  // index = caster level (1-based), value = [1st, 2nd, ...]
+  [],
+  [2],
+  [3],
+  [4, 2],
+  [4, 3],
+  [4, 3, 2],
+  [4, 3, 3],
+  [4, 3, 3, 1],
+  [4, 3, 3, 2],
+  [4, 3, 3, 3, 1],
+  [4, 3, 3, 3, 2],
+  [4, 3, 3, 3, 2, 1],
+  [4, 3, 3, 3, 2, 1],
+  [4, 3, 3, 3, 2, 1, 1],
+  [4, 3, 3, 3, 2, 1, 1],
+  [4, 3, 3, 3, 2, 1, 1, 1],
+  [4, 3, 3, 3, 2, 1, 1, 1],
+  [4, 3, 3, 3, 2, 1, 1, 1, 1],
+  [4, 3, 3, 3, 3, 1, 1, 1, 1],
+  [4, 3, 3, 3, 3, 2, 1, 1, 1],
+  [4, 3, 3, 3, 3, 2, 2, 1, 1],
+];
+
+// Warlock Pact Magic slots
+const WARLOCK_SLOTS: Array<{ slots: number; level: number }> = [
+  { slots: 1, level: 1 },
+  { slots: 2, level: 1 },
+  { slots: 2, level: 2 },
+  { slots: 2, level: 2 },
+  { slots: 2, level: 3 },
+  { slots: 2, level: 3 },
+  { slots: 2, level: 4 },
+  { slots: 2, level: 4 },
+  { slots: 2, level: 5 },
+  { slots: 2, level: 5 },
+  { slots: 3, level: 5 },
+  { slots: 3, level: 5 },
+  { slots: 3, level: 5 },
+  { slots: 3, level: 5 },
+  { slots: 3, level: 5 },
+  { slots: 3, level: 5 },
+  { slots: 4, level: 5 },
+  { slots: 4, level: 5 },
+  { slots: 4, level: 5 },
+  { slots: 4, level: 5 },
+];
+
+// Spellcasting ability by class slug
+const SPELLCASTING_ABILITY: Record<string, string> = {
+  bard: 'cha',
+  cleric: 'wis',
+  druid: 'wis',
+  paladin: 'cha',
+  ranger: 'wis',
+  sorcerer: 'cha',
+  warlock: 'cha',
+  wizard: 'int',
+};
+
+// Caster type by class slug (used for multiclass slot calculation)
+const CASTER_TYPE: Record<string, 'full' | 'half' | 'pact'> = {
+  bard: 'full',
+  cleric: 'full',
+  druid: 'full',
+  sorcerer: 'full',
+  wizard: 'full',
+  paladin: 'half',
+  ranger: 'half',
+  warlock: 'pact',
+};
+
+@Injectable()
+export class CharacterSheetService {
+  constructor(
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CharacterClassEntity)
+    private readonly charClassRepo: Repository<CharacterClassEntity>,
+    @InjectRepository(CharacterAbilityScoreEntity)
+    private readonly charAbilityRepo: Repository<CharacterAbilityScoreEntity>,
+    @InjectRepository(CharacterSkillEntity)
+    private readonly charSkillRepo: Repository<CharacterSkillEntity>,
+    @InjectRepository(CharacterProficiencyEntity)
+    private readonly charProfRepo: Repository<CharacterProficiencyEntity>,
+    @InjectRepository(CharacterSpellEntity)
+    private readonly charSpellRepo: Repository<CharacterSpellEntity>,
+    @InjectRepository(CharacterEquipmentEntity)
+    private readonly charEquipRepo: Repository<CharacterEquipmentEntity>,
+    @InjectRepository(CharacterStateEntity)
+    private readonly charStateRepo: Repository<CharacterStateEntity>,
+    @InjectRepository(CharacterLevelUpEntity)
+    private readonly charLevelUpRepo: Repository<CharacterLevelUpEntity>,
+    @InjectRepository(CharacterFeatureEntity)
+    private readonly charFeatureRepo: Repository<CharacterFeatureEntity>,
+    @InjectRepository(CharacterOriginEntity)
+    private readonly charOriginRepo: Repository<CharacterOriginEntity>,
+    @InjectRepository(LevelEntity)
+    private readonly levelRepo: Repository<LevelEntity>,
+    @InjectRepository(ClassSavingThrowEntity)
+    private readonly classSavingThrowRepo: Repository<ClassSavingThrowEntity>,
+  ) {}
+
+  async computeSheet(userId: string, characterId: string): Promise<CharacterSheet> {
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId, userId },
+    });
+    if (!character) {
+      throw new NotFoundException('Personagem nao encontrado.');
+    }
+
+    // Load all related data in parallel
+    const [
+      charClasses,
+      charAbilities,
+      charSkills,
+      charProfs,
+      charSpells,
+      charEquip,
+      charState,
+      charLevelUps,
+      charFeatures,
+      charOrigin,
+    ] = await Promise.all([
+      this.charClassRepo.find({
+        where: { character_id: characterId },
+        order: { order: 'ASC' },
+      }),
+      this.charAbilityRepo.find({ where: { character_id: characterId } }),
+      this.charSkillRepo.find({ where: { character_id: characterId } }),
+      this.charProfRepo.find({ where: { character_id: characterId } }),
+      this.charSpellRepo.find({ where: { character_id: characterId } }),
+      this.charEquipRepo.find({ where: { character_id: characterId } }),
+      this.charStateRepo.findOne({ where: { character_id: characterId } }),
+      this.charLevelUpRepo.find({
+        where: { character_id: characterId },
+        order: { total_level: 'ASC' },
+      }),
+      this.charFeatureRepo.find({ where: { character_id: characterId } }),
+      this.charOriginRepo.findOne({ where: { character_id: characterId } }),
+    ]);
+
+    if (!charOrigin) {
+      throw new NotFoundException('Dados de origem do personagem nao encontrados.');
+    }
+
+    // Total level & proficiency bonus
+    const totalLevel = charClasses.reduce((sum, cc) => sum + cc.class_level, 0);
+    const profBonus = PROF_BONUS_BY_LEVEL[Math.min(totalLevel, 20)] ?? 2;
+
+    // Ability scores
+    const abilityMap = new Map<string, { score: number; slug: string; name: string }>();
+    for (const ca of charAbilities) {
+      const slug = ca.ability_score.slug;
+      abilityMap.set(slug, {
+        slug,
+        name: ca.ability_score.name,
+        score: ca.base_score + ca.bonus,
+      });
+    }
+
+    const mod = (slug: string) => {
+      const entry = abilityMap.get(slug);
+      if (!entry) return 0;
+      return Math.floor((entry.score - 10) / 2);
+    };
+
+    const abilityScores: AbilityScoreBlock[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(
+      (slug) => {
+        const entry = abilityMap.get(slug);
+        return {
+          slug,
+          name: entry?.name ?? slug.toUpperCase(),
+          score: entry?.score ?? 10,
+          modifier: mod(slug),
+        };
+      },
+    );
+
+    // Max HP
+    const primaryClass = charClasses[0];
+    const conMod = mod('con');
+    let maxHp = primaryClass ? primaryClass.class.hit_die + conMod : 10 + conMod;
+    for (const lu of charLevelUps) {
+      maxHp += lu.hp_gained;
+    }
+    maxHp += charState?.max_hp_bonus ?? 0;
+
+    // Speed (from race)
+    const speed = charOrigin.race?.speed ?? 30;
+
+    // AC (base: 10 + DEX mod; equipped armor handled in F6)
+    const dexMod = mod('dex');
+    let armorClass = 10 + dexMod;
+
+    // Check equipped armor & shield
+    for (const eq of charEquip) {
+      if (!eq.equipped || !eq.equipment?.armor_class) continue;
+      const ac = eq.equipment.armor_class as Record<string, unknown>;
+      const base = (ac.base as number) ?? 0;
+      const dexBonus = ac.dex_bonus as boolean | undefined;
+      const maxBonus = ac.max_bonus as number | undefined;
+
+      if (base > 0) {
+        if (dexBonus === false) {
+          armorClass = base;
+        } else if (maxBonus !== undefined) {
+          armorClass = base + Math.min(dexMod, maxBonus);
+        } else {
+          armorClass = base + dexMod;
+        }
+      } else {
+        // Shield: +2
+        armorClass += 2;
+      }
+    }
+
+    // Initiative
+    const initiative = dexMod;
+
+    // Saving throws
+    const classSavingThrows = await this.getClassSavingThrows(charClasses);
+    const savingThrows: SavingThrowBlock[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(
+      (slug) => {
+        const proficient = classSavingThrows.has(slug);
+        return {
+          slug,
+          name: abilityMap.get(slug)?.name ?? slug.toUpperCase(),
+          proficient,
+          bonus: mod(slug) + (proficient ? profBonus : 0),
+        };
+      },
+    );
+
+    // Skills
+    const proficientSkillIds = new Set(charSkills.map((s) => s.skill_id));
+    const expertiseSkillIds = new Set(
+      charSkills.filter((s) => s.expertise).map((s) => s.skill_id),
+    );
+
+    const skills: SkillBlock[] = charSkills.map((cs) => {
+      const abilitySlug = cs.skill.ability_score?.slug ?? 'dex';
+      const isProficient = proficientSkillIds.has(cs.skill_id);
+      const isExpertise = expertiseSkillIds.has(cs.skill_id);
+      const bonus =
+        mod(abilitySlug) +
+        (isProficient ? profBonus : 0) +
+        (isExpertise ? profBonus : 0);
+      return {
+        slug: cs.skill.slug,
+        name: cs.skill.name,
+        ability: abilitySlug,
+        proficient: isProficient,
+        expertise: isExpertise,
+        bonus,
+      };
+    });
+
+    // Passive Perception
+    const perceptionSkill = charSkills.find((s) => s.skill.slug === 'perception');
+    const perceptionProficient = !!perceptionSkill;
+    const perceptionExpertise = perceptionSkill?.expertise ?? false;
+    const passivePerception =
+      10 +
+      mod('wis') +
+      (perceptionProficient ? profBonus : 0) +
+      (perceptionExpertise ? profBonus : 0);
+
+    // Hit dice
+    const hitDice = charClasses.map((cc) => ({
+      die: cc.class.hit_die,
+      total: cc.class_level,
+      used: (charState?.hit_dice_used as Record<string, number>)?.[cc.class.slug] ?? 0,
+    }));
+
+    // Carrying capacity
+    const strScore = abilityMap.get('str')?.score ?? 10;
+    const carryingCapacity = strScore * 15;
+
+    // Classes block with spellcasting
+    const classes: ClassBlock[] = charClasses.map((cc) => {
+      const classSlug = cc.class.slug;
+      const scAbility = SPELLCASTING_ABILITY[classSlug];
+      const block: ClassBlock = {
+        slug: classSlug,
+        name: cc.class.name,
+        level: cc.class_level,
+        hitDie: cc.class.hit_die,
+      };
+      if (cc.subclass) {
+        block.subclass = { slug: cc.subclass.slug, name: cc.subclass.name };
+      }
+      if (scAbility) {
+        block.spellcastingAbility = scAbility;
+        block.spellSaveDc = 8 + profBonus + mod(scAbility);
+        block.spellAttackBonus = profBonus + mod(scAbility);
+      }
+      return block;
+    });
+
+    // Spells
+    const spells: SpellBlock[] = charSpells.map((cs) => ({
+      slug: cs.spell.slug,
+      name: cs.spell.name,
+      level: cs.spell.level,
+      source: cs.source,
+      status: cs.status,
+      alwaysPrepared: cs.always_prepared,
+    }));
+
+    // Spell slots
+    const spellSlots = this.computeSpellSlots(charClasses, charState);
+
+    // Proficiencies
+    const proficiencies: ProficiencyBlock[] = charProfs.map((cp) => ({
+      slug: cp.proficiency.slug,
+      name: cp.proficiency.name,
+      type: cp.proficiency.proficiency_type,
+      source: cp.source,
+    }));
+
+    // Origin details (misc creation metadata)
+    const originDetails: Record<string, unknown> = {
+      raceTraitChoices: charOrigin.race_trait_choices,
+      raceFeatChoice: charOrigin.race_feat_choice,
+      divineOrder: charOrigin.divine_order,
+      primalOrder: charOrigin.primal_order,
+      fightingStyleIndex: charOrigin.fighting_style_index,
+      classEquipmentChoices: charOrigin.class_equipment_choices,
+      backgroundEquipmentChoices: charOrigin.background_equipment_choices,
+      classStartingGold: charOrigin.class_starting_gold,
+      eldritchInvocations: charOrigin.eldritch_invocations,
+      eldritchInvocationSubChoices: charOrigin.eldritch_invocation_sub_choices,
+      weaponMasteryChoices: charOrigin.weapon_mastery_choices,
+      classLanguageChoices: charOrigin.class_language_choices,
+      classToolProficiency: charOrigin.class_tool_proficiency,
+    };
+
+    return {
+      id: character.id,
+      name: character.name,
+
+      race: { slug: charOrigin.race.slug, name: charOrigin.race.name },
+      subrace: charOrigin.subrace
+        ? { slug: charOrigin.subrace.slug, name: charOrigin.subrace.name }
+        : undefined,
+      background: {
+        slug: charOrigin.background.slug,
+        name: charOrigin.background.name,
+      },
+      alignment: charOrigin.alignment
+        ? { slug: charOrigin.alignment.slug, name: charOrigin.alignment.name }
+        : undefined,
+      personality: charOrigin.personality,
+      age: charOrigin.age ?? undefined,
+      height: charOrigin.height ?? undefined,
+      weight: charOrigin.weight ?? undefined,
+      speciesSize: charOrigin.species_size ?? undefined,
+      abilityScoreMethod: charOrigin.ability_score_method ?? undefined,
+
+      classes,
+      totalLevel,
+      proficiencyBonus: profBonus,
+
+      abilityScores,
+
+      maxHp,
+      currentHp: charState?.current_hp ?? maxHp,
+      tempHp: charState?.temp_hp ?? 0,
+      armorClass,
+      initiative,
+      speed,
+      hitDice,
+      carryingCapacity,
+
+      deathSaves: {
+        successes: charState?.death_saves_success ?? 0,
+        failures: charState?.death_saves_fail ?? 0,
+      },
+
+      skills,
+      passivePerception,
+
+      savingThrows,
+
+      proficiencies,
+
+      spells,
+      spellSlots,
+
+      xp: charState?.xp ?? 0,
+      gold: {
+        cp: charState?.cp ?? 0,
+        sp: charState?.sp ?? 0,
+        gp: charState?.gp ?? 0,
+        pp: charState?.pp ?? 0,
+      },
+      conditions: charState?.conditions ?? [],
+
+      originDetails,
+
+      createdAt: character.createdAt.toISOString(),
+      updatedAt: character.updatedAt.toISOString(),
+    };
+  }
+
+  private async getClassSavingThrows(
+    charClasses: CharacterClassEntity[],
+  ): Promise<Set<string>> {
+    const classIds = charClasses.map((cc) => cc.class_id);
+    if (classIds.length === 0) return new Set();
+
+    const savingThrows = await this.classSavingThrowRepo
+      .createQueryBuilder('cst')
+      .innerJoinAndSelect('cst.ability_score', 'as')
+      .where('cst.class_id IN (:...classIds)', { classIds })
+      .getMany();
+
+    return new Set(savingThrows.map((st) => st.ability_score.slug));
+  }
+
+  private computeSpellSlots(
+    charClasses: CharacterClassEntity[],
+    charState: CharacterStateEntity | null,
+  ): SpellSlotBlock[] {
+    let fullCasterLevels = 0;
+    let halfCasterLevels = 0;
+    let warlockLevel = 0;
+
+    for (const cc of charClasses) {
+      const type = CASTER_TYPE[cc.class.slug];
+      if (!type) continue;
+      if (type === 'full') fullCasterLevels += cc.class_level;
+      else if (type === 'half') halfCasterLevels += cc.class_level;
+      else if (type === 'pact') warlockLevel = cc.class_level;
+    }
+
+    const slotsUsed = (charState?.spell_slots_used ?? {}) as Record<string, number>;
+
+    const result: SpellSlotBlock[] = [];
+
+    // Standard spell slots (multiclass formula)
+    const effectiveCasterLevel =
+      fullCasterLevels + Math.floor(halfCasterLevels / 2);
+
+    if (effectiveCasterLevel > 0) {
+      const slotTable = FULL_CASTER_SLOTS[Math.min(effectiveCasterLevel, 20)];
+      if (slotTable) {
+        for (let i = 0; i < slotTable.length; i++) {
+          result.push({
+            level: i + 1,
+            total: slotTable[i],
+            used: slotsUsed[String(i + 1)] ?? 0,
+          });
+        }
+      }
+    }
+
+    // Warlock pact slots (separate tracking)
+    if (warlockLevel > 0) {
+      const pact = WARLOCK_SLOTS[warlockLevel - 1];
+      if (pact) {
+        result.push({
+          level: pact.level,
+          total: pact.slots,
+          used: slotsUsed['pact'] ?? 0,
+        });
+      }
+    }
+
+    return result;
+  }
+}
