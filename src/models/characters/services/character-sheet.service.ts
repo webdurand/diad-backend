@@ -267,7 +267,10 @@ export class CharacterSheetService {
         order: { order: 'ASC' },
       }),
       this.charAbilityRepo.find({ where: { character_id: characterId } }),
-      this.charSkillRepo.find({ where: { character_id: characterId } }),
+      this.charSkillRepo.find({
+        where: { character_id: characterId },
+        relations: ['skill', 'skill.ability_score'],
+      }),
       this.charProfRepo.find({ where: { character_id: characterId } }),
       this.charSpellRepo.find({ where: { character_id: characterId } }),
       this.charEquipRepo.find({ where: { character_id: characterId } }),
