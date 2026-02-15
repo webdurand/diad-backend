@@ -16,7 +16,10 @@ import {
   CharacterOriginEntity,
   LevelEntity,
   ClassSavingThrowEntity,
+  ClassProficiencyEntity,
+  EquipmentCategoryItemEntity,
 } from 'src/entities';
+import { ProficiencyTypeEnum } from 'src/entities/enums';
 
 // ---- Response DTOs ----
 
@@ -84,6 +87,7 @@ export interface EquipmentBlock {
   quantity: number;
   equipped: boolean;
   source: string;
+  proficient?: boolean | null;
   damage?: Record<string, unknown>;
   armorClass?: Record<string, unknown>;
   properties?: Record<string, unknown>;
@@ -310,6 +314,10 @@ export class CharacterSheetService {
     private readonly levelRepo: Repository<LevelEntity>,
     @InjectRepository(ClassSavingThrowEntity)
     private readonly classSavingThrowRepo: Repository<ClassSavingThrowEntity>,
+    @InjectRepository(ClassProficiencyEntity)
+    private readonly classProfRepo: Repository<ClassProficiencyEntity>,
+    @InjectRepository(EquipmentCategoryItemEntity)
+    private readonly equipCatItemRepo: Repository<EquipmentCategoryItemEntity>,
   ) {}
 
   async computeSheet(
@@ -579,22 +587,79 @@ export class CharacterSheetService {
       classToolProficiency: charOrigin.class_tool_proficiency,
     };
 
-    // Equipment blocks
-    const equipment: EquipmentBlock[] = charEquip.map((ce) => ({
-      id: ce.id,
-      slug: ce.equipment.slug,
-      name: ce.equipment.name,
-      weight: parseFloat(ce.equipment.weight) || 0,
-      quantity: ce.quantity,
-      equipped: ce.equipped,
-      source: ce.source,
-      damage: ce.equipment.damage ?? undefined,
-      armorClass: ce.equipment.armor_class ?? undefined,
-      properties: ce.equipment.properties ?? undefined,
-      range: ce.equipment.range ?? undefined,
-      description: ce.equipment.description ?? undefined,
-      cost: ce.equipment.cost ?? undefined,
-    }));
+    // Equipment blocks — resolve proficiency per item
+    const equipIds = charEquip.map((ce) => ce.equipment_id);
+    let equipCatMap = new Map<string, Set<string>>();
+    if (equipIds.length > 0) {
+      const catItems = await this.equipCatItemRepo.find({
+        where: equipIds.map((eid) => ({ equipment_id: eid })),
+        relations: ['category'],
+      });
+      for (const ci of catItems) {
+        let s = equipCatMap.get(ci.equipment_id);
+        if (!s) {
+          s = new Set();
+          equipCatMap.set(ci.equipment_id, s);
+        }
+        s.add(ci.category.slug);
+      }
+    }
+
+    // Build proficiency slugs from character profs + class profs
+    const profSlugs = new Set(
+      charProfs
+        .filter(
+          (cp) =>
+            cp.proficiency.proficiency_type === ProficiencyTypeEnum.Armor ||
+            cp.proficiency.proficiency_type === ProficiencyTypeEnum.Weapon ||
+            cp.proficiency.proficiency_type === ProficiencyTypeEnum.Other,
+        )
+        .map((cp) => cp.proficiency.slug),
+    );
+
+    // Include class-level proficiencies (armor/weapon)
+    const classIds = charClasses.map((cc) => cc.class_id);
+    if (classIds.length > 0) {
+      const classProfs = await this.classProfRepo
+        .createQueryBuilder('cp')
+        .innerJoinAndSelect('cp.proficiency', 'p')
+        .where('cp.class_id IN (:...classIds)', { classIds })
+        .getMany();
+      for (const cp of classProfs) {
+        if (
+          cp.proficiency.proficiency_type === ProficiencyTypeEnum.Armor ||
+          cp.proficiency.proficiency_type === ProficiencyTypeEnum.Weapon ||
+          cp.proficiency.proficiency_type === ProficiencyTypeEnum.Other
+        ) {
+          profSlugs.add(cp.proficiency.slug);
+        }
+      }
+    }
+
+    const equipment: EquipmentBlock[] = charEquip.map((ce) => {
+      const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
+      const proficient = this.isEquipmentProficient(
+        ce.equipment.slug,
+        cats,
+        profSlugs,
+      );
+      return {
+        id: ce.id,
+        slug: ce.equipment.slug,
+        name: ce.equipment.name,
+        weight: parseFloat(ce.equipment.weight) || 0,
+        quantity: ce.quantity,
+        equipped: ce.equipped,
+        source: ce.source,
+        proficient,
+        damage: ce.equipment.damage ?? undefined,
+        armorClass: ce.equipment.armor_class ?? undefined,
+        properties: ce.equipment.properties ?? undefined,
+        range: ce.equipment.range ?? undefined,
+        description: ce.equipment.description ?? undefined,
+        cost: ce.equipment.cost ?? undefined,
+      };
+    });
 
     // Magic item blocks
     const attunedCount = charMagicItems.filter((mi) => mi.attuned).length;
@@ -753,5 +818,56 @@ export class CharacterSheetService {
     }
 
     return result;
+  }
+
+  /**
+   * Map proficiency slugs to equipment category slugs.
+   * Armor: light-armor, medium-armor, heavy-armor, shields
+   * Weapons: simple-weapons → simple-melee/ranged, martial-weapons → martial-melee/ranged
+   */
+  private static readonly PROF_TO_CATEGORIES: Record<string, string[]> = {
+    'light-armor': ['light-armor'],
+    'medium-armor': ['medium-armor'],
+    'heavy-armor': ['heavy-armor'],
+    shields: ['shields', 'shield'],
+    'simple-weapons': ['simple-melee-weapons', 'simple-ranged-weapons'],
+    'martial-weapons': ['martial-melee-weapons', 'martial-ranged-weapons'],
+  };
+
+  private isEquipmentProficient(
+    equipSlug: string,
+    categorySlugs: Set<string>,
+    profSlugs: Set<string>,
+  ): boolean | null {
+    const isArmor =
+      categorySlugs.has('light-armor') ||
+      categorySlugs.has('medium-armor') ||
+      categorySlugs.has('heavy-armor') ||
+      categorySlugs.has('shields') ||
+      categorySlugs.has('shield');
+
+    const isWeapon =
+      categorySlugs.has('simple-melee-weapons') ||
+      categorySlugs.has('simple-ranged-weapons') ||
+      categorySlugs.has('martial-melee-weapons') ||
+      categorySlugs.has('martial-ranged-weapons');
+
+    if (!isArmor && !isWeapon) return null;
+
+    // Check individual weapon/armor proficiency by equipment slug
+    if (profSlugs.has(equipSlug)) return true;
+    // Also try plural form (e.g. "longsword" equip slug vs "longswords" proficiency slug)
+    if (profSlugs.has(equipSlug + 's')) return true;
+
+    // Check category-based proficiency
+    for (const [profSlug, cats] of Object.entries(
+      CharacterSheetService.PROF_TO_CATEGORIES,
+    )) {
+      if (profSlugs.has(profSlug) && cats.some((c) => categorySlugs.has(c))) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }

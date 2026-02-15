@@ -12,7 +12,7 @@ export const TypeOrmConfig: TypeOrmModuleAsyncOptions = {
       url: configService.get<string>('DATABASE_URL'),
       ssl: { rejectUnauthorized: false },
       migrations: [],
-      logging: true,
+      // logging: true,
       synchronize: false,
       entities: [...ENTITIES],
     };

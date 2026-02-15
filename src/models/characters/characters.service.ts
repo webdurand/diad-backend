@@ -8,13 +8,16 @@ import {
   CharacterSkillEntity,
   CharacterProficiencyEntity,
   CharacterSpellEntity,
+  CharacterEquipmentEntity,
   CharacterStateEntity,
   CharacterOriginEntity,
   ClassEntity,
+  ClassStartingEquipmentEntity,
   AbilityScoreEntity,
   SkillEntity,
   ProficiencyEntity,
   SpellEntity,
+  EquipmentEntity,
   RaceEntity,
   SubraceEntity,
   BackgroundEntity,
@@ -22,6 +25,7 @@ import {
 } from 'src/entities';
 import {
   CharacterProficiencySourceEnum,
+  EquipmentSourceEnum,
   SpellSourceEnum,
   SpellStatusEnum,
 } from 'src/entities/enums';
@@ -111,6 +115,10 @@ export class CharactersService {
     private readonly proficiencyRepository: Repository<ProficiencyEntity>,
     @InjectRepository(SpellEntity)
     private readonly spellRepository: Repository<SpellEntity>,
+    @InjectRepository(EquipmentEntity)
+    private readonly equipmentRepository: Repository<EquipmentEntity>,
+    @InjectRepository(ClassStartingEquipmentEntity)
+    private readonly classStartingEquipRepo: Repository<ClassStartingEquipmentEntity>,
   ) {}
 
   async listByUser(userId: string): Promise<CharacterEntity[]> {
@@ -321,6 +329,17 @@ export class CharactersService {
         gp,
       });
 
+      // character_equipment (materialize starting items)
+      if (!choices.classStartingGold) {
+        await this.materializeEquipment(
+          manager,
+          charId,
+          classEntity.id,
+          choices.classEquipmentChoices ?? [],
+          choices.backgroundEquipmentChoices ?? [],
+        );
+      }
+
       // character_origin
       await manager.save(CharacterOriginEntity, {
         character_id: charId,
@@ -370,5 +389,127 @@ export class CharactersService {
   async remove(userId: string, id: string): Promise<void> {
     const character = await this.getById(userId, id);
     await this.characterRepository.remove(character);
+  }
+
+  /**
+   * Parse formatted equipment label strings (e.g. "1x Longsword", "8 gp")
+   * and create CharacterEquipmentEntity records + apply gold from equipment choices.
+   */
+  private async materializeEquipment(
+    manager: import('typeorm').EntityManager,
+    characterId: string,
+    classId: string,
+    classChoiceLabels: string[],
+    backgroundChoiceLabels: string[],
+  ): Promise<void> {
+    // 1. Class fixed starting equipment
+    const classStarting = await this.classStartingEquipRepo.find({
+      where: { class_id: classId },
+    });
+
+    const seenEquipIds = new Set<string>();
+    for (const cse of classStarting) {
+      seenEquipIds.add(cse.equipment_id);
+      await manager.save(CharacterEquipmentEntity, {
+        character_id: characterId,
+        equipment_id: cse.equipment_id,
+        quantity: 1,
+        equipped: false,
+        source: EquipmentSourceEnum.Starting,
+      });
+    }
+
+    // 2. Parse choice labels into { name, quantity } pairs + gold
+    const allLabels = [...classChoiceLabels, ...backgroundChoiceLabels];
+
+    let extraGold = 0;
+    const parsedItems: Array<{ name: string; quantity: number }> = [];
+
+    for (const label of allLabels) {
+      // Each label may contain multiple items separated by ", "
+      // e.g. "1x Calligrapher's Supplies, 1x Book, 10x Parchment, 8 gp"
+      const parts = label.split(/,\s*/);
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+
+        // Match gold: "8 gp", "10 sp", etc.
+        const goldMatch = trimmed.match(/^(\d+)\s*(gp|sp|cp|pp)$/i);
+        if (goldMatch) {
+          const amount = parseInt(goldMatch[1], 10);
+          const unit = goldMatch[2].toLowerCase();
+          if (unit === 'gp') extraGold += amount;
+          else if (unit === 'sp') extraGold += amount / 10;
+          else if (unit === 'cp') extraGold += amount / 100;
+          else if (unit === 'pp') extraGold += amount * 10;
+          continue;
+        }
+
+        // Match item: "1x Longsword", "10x Parchment"
+        const itemMatch = trimmed.match(/^(\d+)x\s+(.+)$/i);
+        if (itemMatch) {
+          parsedItems.push({
+            quantity: parseInt(itemMatch[1], 10),
+            name: itemMatch[2].trim(),
+          });
+          continue;
+        }
+
+        // Match category choice: "2x (Simple Weapons)" — skip, can't resolve a category to one item
+        if (trimmed.match(/^\d+x\s+\(.+\)$/)) continue;
+
+        // Fallback: treat the whole string as an item name
+        parsedItems.push({ quantity: 1, name: trimmed });
+      }
+    }
+
+    // 3. Resolve names to equipment entities and create records
+    if (parsedItems.length > 0) {
+      const allEquipment = await this.equipmentRepository.find();
+      const nameMap = new Map<string, (typeof allEquipment)[0]>();
+      for (const eq of allEquipment) {
+        nameMap.set(eq.name.toLowerCase(), eq);
+        nameMap.set(eq.slug.toLowerCase(), eq);
+      }
+
+      for (const { name, quantity } of parsedItems) {
+        const eq = nameMap.get(name.toLowerCase());
+        if (!eq) continue;
+        if (seenEquipIds.has(eq.id)) {
+          // Already added as fixed starting equipment — increase quantity
+          await manager
+            .createQueryBuilder()
+            .update(CharacterEquipmentEntity)
+            .set({ quantity: () => `quantity + ${quantity}` })
+            .where(
+              'character_id = :characterId AND equipment_id = :equipmentId',
+              {
+                characterId,
+                equipmentId: eq.id,
+              },
+            )
+            .execute();
+          continue;
+        }
+        seenEquipIds.add(eq.id);
+        await manager.save(CharacterEquipmentEntity, {
+          character_id: characterId,
+          equipment_id: eq.id,
+          quantity,
+          equipped: false,
+          source: EquipmentSourceEnum.Starting,
+        });
+      }
+    }
+
+    // 4. Apply extra gold from equipment choices
+    if (extraGold > 0) {
+      await manager
+        .createQueryBuilder()
+        .update('character_state')
+        .set({ gp: () => `gp + ${Math.floor(extraGold)}` })
+        .where('character_id = :characterId', { characterId })
+        .execute();
+    }
   }
 }
