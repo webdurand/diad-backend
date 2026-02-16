@@ -43,9 +43,13 @@ interface FiveToolsClass {
     proficienciesGained?: Record<string, unknown>;
   };
   classTableGroups?: ClassTableGroup[];
-  classFeatures?: (string | { classFeature: string; gainSubclassFeature?: boolean })[];
+  classFeatures?: (
+    | string
+    | { classFeature: string; gainSubclassFeature?: boolean }
+  )[];
   subclassTitle?: string;
   reprintedAs?: string[];
+  weaponMasteries?: number;
   _copy?: unknown;
   [key: string]: unknown;
 }
@@ -57,9 +61,29 @@ interface ClassTableGroup {
   rowsSpellProgression?: number[][];
 }
 
+interface FiveToolsClassFeature {
+  name: string;
+  source: string;
+  className: string;
+  classSource: string;
+  level: number;
+  entries?: unknown[];
+  [key: string]: unknown;
+}
+
 // ────────────────────────────────────────────────────────────────
 // Output types
 // ────────────────────────────────────────────────────────────────
+
+export interface ClassFeatureLevel1 {
+  slug: string;
+  name: string;
+  type: 'passive' | 'choice' | 'feat_choice';
+  description?: string;
+  choices?: { slug: string; name: string; description: string }[];
+  feat_filter?: string;
+  invocation_count?: number;
+}
 
 export interface TransformedClass {
   slug: string;
@@ -74,7 +98,9 @@ export interface TransformedClass {
   spellbook_count: number;
   weapon_mastery_count: number;
   weapon_mastery_restriction: string | null;
-  class_features_level_1: Record<string, unknown>[] | null;
+  class_features_level_1: ClassFeatureLevel1[] | null;
+  tool_choice: Record<string, unknown> | null;
+  always_prepared_spells: { slug: string; name: string }[] | null;
   source_code: string;
   saving_throw_slugs: string[];
   proficiency_slugs: string[];
@@ -163,14 +189,25 @@ function resolveMulticlassing(
 function resolveSpellcasting(cls: FiveToolsClass): Record<string, unknown> | null {
   if (!cls.spellcastingAbility && !cls.casterProgression) return null;
 
+  const abilityFull = cls.spellcastingAbility
+    ? (ABILITY_MAP[cls.spellcastingAbility] ?? cls.spellcastingAbility)
+    : null;
+
   return {
-    ability: cls.spellcastingAbility ? (ABILITY_MAP[cls.spellcastingAbility] ?? cls.spellcastingAbility) : null,
+    ability: abilityFull,
+    spellcasting_ability: abilityFull
+      ? { slug: cls.spellcastingAbility, name: capitalize(abilityFull) }
+      : null,
     caster_progression: cls.casterProgression ?? null,
     cantrip_progression: cls.cantripProgression ?? null,
     prepared_spells_progression: cls.preparedSpellsProgression ?? null,
     spellbook_progression: cls.spellsKnownProgressionFixed ?? null,
     prepared_formula: cls.preparedSpells ?? null,
   };
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function resolveSpellSlotProgression(tableGroups?: ClassTableGroup[]): number[][] | null {
@@ -226,28 +263,253 @@ function resolveProficiencySlugs(profs?: FiveToolsClass['startingProficiencies']
 }
 
 function resolveLevel1Features(
-  classFeatures?: FiveToolsClass['classFeatures'],
-): Record<string, unknown>[] | null {
-  if (!classFeatures) return null;
+  cls: FiveToolsClass,
+  classFeatures: FiveToolsClassFeature[],
+): ClassFeatureLevel1[] | null {
+  if (!cls.classFeatures) return null;
 
-  const level1: Record<string, unknown>[] = [];
-  for (const cf of classFeatures) {
+  // Collect level 1 feature names from class definition
+  const level1Refs: string[] = [];
+  for (const cf of cls.classFeatures) {
     const str = typeof cf === 'string' ? cf : cf.classFeature;
     const parts = str.split('|');
     const level = parseInt(parts[parts.length - 1], 10);
-    if (level === 1) {
-      level1.push({ name: parts[0], reference: str });
+    if (level === 1) level1Refs.push(parts[0]);
+  }
+
+  if (level1Refs.length === 0) return null;
+
+  // Find matching feature entries from 5etools data
+  const featureMap = new Map<string, FiveToolsClassFeature>();
+  for (const feat of classFeatures) {
+    if (
+      feat.className === cls.name &&
+      feat.classSource === cls.source &&
+      feat.level === 1
+    ) {
+      featureMap.set(feat.name, feat);
     }
   }
-  return level1.length > 0 ? level1 : null;
+
+  const classKey = cls.name.toLowerCase();
+  const result: ClassFeatureLevel1[] = [];
+
+  for (const featName of level1Refs) {
+    const feat = featureMap.get(featName);
+    const slug = toSlug(featName);
+    const desc = feat ? extractFirstText(feat.entries) : undefined;
+
+    // Determine feature type and enrich
+    const enriched = enrichFeature(
+      classKey,
+      slug,
+      featName,
+      desc,
+      feat,
+      classFeatures,
+    );
+    result.push(enriched);
+  }
+
+  return result.length > 0 ? result : null;
+}
+
+function enrichFeature(
+  classKey: string,
+  slug: string,
+  name: string,
+  description: string | undefined,
+  feat: FiveToolsClassFeature | undefined,
+  allFeatures: FiveToolsClassFeature[],
+): ClassFeatureLevel1 {
+  // Fighting Style (Fighter) — feat_choice type
+  if (name === 'Fighting Style' && classKey === 'fighter') {
+    return {
+      slug,
+      name,
+      type: 'feat_choice',
+      description:
+        description ??
+        'You have honed your martial prowess and gain a Fighting Style feat of your choice.',
+      feat_filter: 'fighting-style',
+    };
+  }
+
+  // Divine Order (Cleric) — choice with sub-options
+  if (name === 'Divine Order' && classKey === 'cleric') {
+    return {
+      slug,
+      name,
+      type: 'choice',
+      choices: resolveSubChoices(feat, allFeatures),
+    };
+  }
+
+  // Primal Order (Druid) — choice with sub-options
+  if (name === 'Primal Order' && classKey === 'druid') {
+    return {
+      slug,
+      name,
+      type: 'choice',
+      choices: resolveSubChoices(feat, allFeatures),
+    };
+  }
+
+  // Eldritch Invocations (Warlock) — choice with invocation_count
+  if (name === 'Eldritch Invocations' && classKey === 'warlock') {
+    return {
+      slug,
+      name,
+      type: 'choice',
+      description:
+        description ??
+        'You have unearthed Eldritch Invocations, pieces of forbidden knowledge that imbue you with an abiding magical ability.',
+      invocation_count: 1,
+    };
+  }
+
+  // Expertise (Rogue) — choice
+  if (slug === 'expertise' && classKey === 'rogue') {
+    return {
+      slug,
+      name,
+      type: 'choice',
+      description:
+        description ??
+        'You gain Expertise in two of your skill proficiencies of your choice.',
+    };
+  }
+
+  // Thieves' Cant (Rogue)
+  if (slug === 'thieves-cant') {
+    return {
+      slug,
+      name,
+      type: 'passive',
+      description:
+        description ??
+        "You know Thieves' Cant and one other language of your choice.",
+    };
+  }
+
+  // Weapon Mastery — choice
+  if (name === 'Weapon Mastery') {
+    return { slug, name, type: 'choice', description };
+  }
+
+  // Everything else is passive
+  return { slug, name, type: 'passive', description };
+}
+
+function resolveSubChoices(
+  feat: FiveToolsClassFeature | undefined,
+  allFeatures: FiveToolsClassFeature[],
+): { slug: string; name: string; description: string }[] {
+  if (!feat?.entries) return [];
+
+  // Find refClassFeature references in entries
+  const refs: string[] = [];
+  findRefs(feat.entries, refs);
+
+  const choices: { slug: string; name: string; description: string }[] = [];
+  for (const ref of refs) {
+    const parts = ref.split('|');
+    const choiceName = parts[0];
+    // Find the matching feature entry
+    const choiceFeat = allFeatures.find(
+      (f) =>
+        f.name === choiceName &&
+        f.className === feat.className &&
+        f.classSource === feat.classSource &&
+        f.level === feat.level,
+    );
+    choices.push({
+      slug: toSlug(choiceName),
+      name: choiceName,
+      description: choiceFeat
+        ? (extractFirstText(choiceFeat.entries) ?? '')
+        : '',
+    });
+  }
+  return choices;
+}
+
+function findRefs(entries: unknown[], refs: string[]): void {
+  if (!Array.isArray(entries)) return;
+  for (const e of entries) {
+    if (typeof e === 'object' && e !== null) {
+      const obj = e as Record<string, unknown>;
+      if (
+        obj.type === 'refClassFeature' &&
+        typeof obj.classFeature === 'string'
+      ) {
+        refs.push(obj.classFeature);
+      }
+      if (Array.isArray(obj.entries)) findRefs(obj.entries, refs);
+    }
+  }
+}
+
+function extractFirstText(entries?: unknown[]): string | undefined {
+  if (!entries) return undefined;
+  for (const e of entries) {
+    if (typeof e === 'string') return stripTags(e);
+  }
+  return undefined;
+}
+
+function toSlug(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['']/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function resolveToolChoice(
+  cls: FiveToolsClass,
+): Record<string, unknown> | null {
+  const classKey = cls.name.toLowerCase();
+  if (classKey === 'monk') {
+    return {
+      description:
+        "Choose one type of Artisan's Tools or one Musical Instrument.",
+      choose: 1,
+      from_categories: ['artisans-tools', 'musical-instruments'],
+    };
+  }
+  return null;
+}
+
+function resolveAlwaysPreparedSpells(
+  cls: FiveToolsClass,
+): { slug: string; name: string }[] | null {
+  const classKey = cls.name.toLowerCase();
+  if (classKey === 'ranger') {
+    return [{ slug: 'hunters-mark', name: "Hunter's Mark" }];
+  }
+  return null;
 }
 
 function resolveWeaponMastery(cls: FiveToolsClass): { count: number; restriction: string | null } {
   const wm = cls.weaponMasteries as number | undefined;
-  return {
-    count: wm ?? 0,
-    restriction: null,
+  if (wm && wm > 0) return { count: wm, restriction: null };
+
+  // Fallback: some XPHB classes define mastery via feature but not the field
+  const classKey = cls.name.toLowerCase();
+  const MASTERY_DEFAULTS: Record<
+    string,
+    { count: number; restriction: string | null }
+  > = {
+    barbarian: { count: 2, restriction: 'melee' },
+    fighter: { count: 3, restriction: null },
+    paladin: { count: 2, restriction: null },
+    ranger: { count: 2, restriction: null },
+    rogue: { count: 2, restriction: null },
   };
+  return MASTERY_DEFAULTS[classKey] ?? { count: 0, restriction: null };
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -260,6 +522,7 @@ export function transformClasses(): TransformedClass[] {
   for (const file of CLASS_FILES) {
     const data = loadClassFile(file);
     const classes = data.class ?? [];
+    const classFeatures = (data.classFeature ?? []) as FiveToolsClassFeature[];
 
     for (const cls of classes) {
       const nameLower = cls.name.toLowerCase();
@@ -274,8 +537,12 @@ export function transformClasses(): TransformedClass[] {
         slug,
         name: cls.name,
         hit_die: cls.hd.faces,
-        proficiency_choices: resolveSkillChoices(cls.startingProficiencies?.skills),
-        starting_equipment_options: resolveStartingEquipment(cls.startingEquipment),
+        proficiency_choices: resolveSkillChoices(
+          cls.startingProficiencies?.skills,
+        ),
+        starting_equipment_options: resolveStartingEquipment(
+          cls.startingEquipment,
+        ),
         multi_classing: resolveMulticlassing(cls.multiclassing),
         spellcasting: resolveSpellcasting(cls),
         cantrips_known: cls.cantripProgression?.[0] ?? 0,
@@ -283,7 +550,9 @@ export function transformClasses(): TransformedClass[] {
         spellbook_count: cls.spellsKnownProgressionFixed?.[0] ?? 0,
         weapon_mastery_count: wm.count,
         weapon_mastery_restriction: wm.restriction,
-        class_features_level_1: resolveLevel1Features(cls.classFeatures),
+        class_features_level_1: resolveLevel1Features(cls, classFeatures),
+        tool_choice: resolveToolChoice(cls),
+        always_prepared_spells: resolveAlwaysPreparedSpells(cls),
         source_code: cls.source,
         saving_throw_slugs: resolveSavingThrows(cls.proficiency),
         proficiency_slugs: resolveProficiencySlugs(cls.startingProficiencies),

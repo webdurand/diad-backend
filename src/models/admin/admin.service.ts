@@ -731,6 +731,8 @@ export class AdminService {
             spells_prepared_count: item.spells_prepared_count,
             spellbook_count: item.spellbook_count,
             class_features_level_1: (item.class_features_level_1 ?? undefined) as any,
+            tool_choice: (item.tool_choice ?? undefined) as any,
+            always_prepared_spells: (item.always_prepared_spells ?? undefined) as any,
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },

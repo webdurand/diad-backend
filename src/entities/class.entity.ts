@@ -62,6 +62,12 @@ export class ClassEntity {
   @Column({ type: 'jsonb', nullable: true })
   class_features_level_1?: Record<string, unknown>[];
 
+  @Column({ type: 'jsonb', nullable: true })
+  tool_choice?: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', nullable: true })
+  always_prepared_spells?: Record<string, unknown>[];
+
   @Column({ type: 'uuid', nullable: true })
   source_id?: string;
 
