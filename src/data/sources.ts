@@ -1,0 +1,239 @@
+// All official D&D 5e sources from 5etools
+// edition: "classic" (2014 rules) | "one" (2024 rules)
+// group: "core" | "sourcebook" | "adventure" | "supplement" | "other"
+
+export interface SourceEntry {
+  code: string;
+  name: string;
+  abbreviation: string;
+  edition: string;
+  year: number;
+  group: string;
+}
+
+export const ALL_SOURCES: SourceEntry[] = [
+  // ── SRD (default for legacy data) ──
+  { code: 'SRD', name: 'System Reference Document 5e', abbreviation: 'SRD', edition: 'classic', year: 2014, group: 'core' },
+
+  // ── Core Rulebooks (2024 / One D&D) ──
+  { code: 'XPHB', name: "Player's Handbook (2024)", abbreviation: 'XPHB', edition: 'one', year: 2024, group: 'core' },
+  { code: 'XDMG', name: "Dungeon Master's Guide (2024)", abbreviation: 'XDMG', edition: 'one', year: 2024, group: 'core' },
+  { code: 'XMM', name: 'Monster Manual (2025)', abbreviation: 'XMM', edition: 'one', year: 2025, group: 'core' },
+  { code: 'XSAC', name: 'Sage Advice Compendium (2025)', abbreviation: 'XSAC', edition: 'one', year: 2025, group: 'supplement' },
+
+  // ── Core Rulebooks (2014 / Classic) ──
+  { code: 'PHB', name: "Player's Handbook (2014)", abbreviation: 'PHB', edition: 'classic', year: 2014, group: 'core' },
+  { code: 'DMG', name: "Dungeon Master's Guide (2014)", abbreviation: 'DMG', edition: 'classic', year: 2014, group: 'core' },
+  { code: 'MM', name: 'Monster Manual (2014)', abbreviation: 'MM', edition: 'classic', year: 2014, group: 'core' },
+
+  // ── Sourcebooks (Classic) ──
+  { code: 'SCAG', name: "Sword Coast Adventurer's Guide", abbreviation: 'SCAG', edition: 'classic', year: 2015, group: 'sourcebook' },
+  { code: 'VGM', name: "Volo's Guide to Monsters", abbreviation: 'VGM', edition: 'classic', year: 2016, group: 'sourcebook' },
+  { code: 'XGE', name: "Xanathar's Guide to Everything", abbreviation: 'XGE', edition: 'classic', year: 2017, group: 'sourcebook' },
+  { code: 'MTF', name: "Mordenkainen's Tome of Foes", abbreviation: 'MTF', edition: 'classic', year: 2018, group: 'sourcebook' },
+  { code: 'GGR', name: "Guildmasters' Guide to Ravnica", abbreviation: 'GGR', edition: 'classic', year: 2018, group: 'sourcebook' },
+  { code: 'ERLW', name: 'Eberron: Rising from the Last War', abbreviation: 'ERLW', edition: 'classic', year: 2019, group: 'sourcebook' },
+  { code: 'EGW', name: "Explorer's Guide to Wildemount", abbreviation: 'EGW', edition: 'classic', year: 2020, group: 'sourcebook' },
+  { code: 'MOT', name: 'Mythic Odysseys of Theros', abbreviation: 'MOT', edition: 'classic', year: 2020, group: 'sourcebook' },
+  { code: 'TCE', name: "Tasha's Cauldron of Everything", abbreviation: 'TCE', edition: 'classic', year: 2020, group: 'sourcebook' },
+  { code: 'VRGR', name: "Van Richten's Guide to Ravenloft", abbreviation: 'VRGR', edition: 'classic', year: 2021, group: 'sourcebook' },
+  { code: 'FTD', name: "Fizban's Treasury of Dragons", abbreviation: 'FTD', edition: 'classic', year: 2021, group: 'sourcebook' },
+  { code: 'SCC', name: 'Strixhaven: A Curriculum of Chaos', abbreviation: 'SCC', edition: 'classic', year: 2021, group: 'sourcebook' },
+  { code: 'MPMM', name: 'Mordenkainen Presents: Monsters of the Multiverse', abbreviation: 'MPMM', edition: 'classic', year: 2022, group: 'sourcebook' },
+  { code: 'BGG', name: 'Bigby Presents: Glory of the Giants', abbreviation: 'BGG', edition: 'classic', year: 2023, group: 'sourcebook' },
+  { code: 'BMT', name: 'The Book of Many Things', abbreviation: 'BMT', edition: 'classic', year: 2023, group: 'sourcebook' },
+
+  // ── Spelljammer ──
+  { code: 'SAiS', name: 'Spelljammer: Adventures in Space', abbreviation: 'SAiS', edition: 'classic', year: 2022, group: 'sourcebook' },
+  { code: 'AAG', name: "Astral Adventurer's Guide", abbreviation: 'AAG', edition: 'classic', year: 2022, group: 'sourcebook' },
+  { code: 'BAM', name: "Boo's Astral Menagerie", abbreviation: 'BAM', edition: 'classic', year: 2022, group: 'sourcebook' },
+
+  // ── Planescape ──
+  { code: 'PAitM', name: 'Planescape: Adventures in the Multiverse', abbreviation: 'PAitM', edition: 'classic', year: 2023, group: 'sourcebook' },
+  { code: 'SatO', name: 'Sigil and the Outlands', abbreviation: 'SatO', edition: 'classic', year: 2023, group: 'sourcebook' },
+  { code: 'MPP', name: "Morte's Planar Parade", abbreviation: 'MPP', edition: 'classic', year: 2023, group: 'sourcebook' },
+
+  // ── Dragonlance ──
+  { code: 'DSotDQ', name: 'Dragonlance: Shadow of the Dragon Queen', abbreviation: 'DSotDQ', edition: 'classic', year: 2022, group: 'sourcebook' },
+
+  // ── Adventures (Classic) ──
+  { code: 'CoS', name: 'Curse of Strahd', abbreviation: 'CoS', edition: 'classic', year: 2016, group: 'adventure' },
+  { code: 'HotDQ', name: 'Hoard of the Dragon Queen', abbreviation: 'HotDQ', edition: 'classic', year: 2014, group: 'adventure' },
+  { code: 'LMoP', name: 'Lost Mine of Phandelver', abbreviation: 'LMoP', edition: 'classic', year: 2014, group: 'adventure' },
+  { code: 'OotA', name: 'Out of the Abyss', abbreviation: 'OotA', edition: 'classic', year: 2015, group: 'adventure' },
+  { code: 'PotA', name: 'Princes of the Apocalypse', abbreviation: 'PotA', edition: 'classic', year: 2015, group: 'adventure' },
+  { code: 'RoT', name: 'The Rise of Tiamat', abbreviation: 'RoT', edition: 'classic', year: 2014, group: 'adventure' },
+  { code: 'SKT', name: "Storm King's Thunder", abbreviation: 'SKT', edition: 'classic', year: 2016, group: 'adventure' },
+  { code: 'ToA', name: 'Tomb of Annihilation', abbreviation: 'ToA', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'ToD', name: 'Tyranny of Dragons', abbreviation: 'ToD', edition: 'classic', year: 2019, group: 'adventure' },
+  { code: 'TftYP', name: 'Tales from the Yawning Portal', abbreviation: 'TftYP', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'WDH', name: 'Waterdeep: Dragon Heist', abbreviation: 'WDH', edition: 'classic', year: 2018, group: 'adventure' },
+  { code: 'WDMM', name: 'Waterdeep: Dungeon of the Mad Mage', abbreviation: 'WDMM', edition: 'classic', year: 2018, group: 'adventure' },
+  { code: 'GoS', name: 'Ghosts of Saltmarsh', abbreviation: 'GoS', edition: 'classic', year: 2019, group: 'adventure' },
+  { code: 'AI', name: 'Acquisitions Incorporated', abbreviation: 'AI', edition: 'classic', year: 2019, group: 'adventure' },
+  { code: 'DIP', name: 'Dragon of Icespire Peak', abbreviation: 'DIP', edition: 'classic', year: 2019, group: 'adventure' },
+  { code: 'BGDIA', name: "Baldur's Gate: Descent Into Avernus", abbreviation: 'BGDIA', edition: 'classic', year: 2019, group: 'adventure' },
+  { code: 'IDRotF', name: 'Icewind Dale: Rime of the Frostmaiden', abbreviation: 'IDRotF', edition: 'classic', year: 2020, group: 'adventure' },
+  { code: 'CM', name: 'Candlekeep Mysteries', abbreviation: 'CM', edition: 'classic', year: 2021, group: 'adventure' },
+  { code: 'WBtW', name: 'The Wild Beyond the Witchlight', abbreviation: 'WBtW', edition: 'classic', year: 2021, group: 'adventure' },
+  { code: 'CRCotN', name: 'Critical Role: Call of the Netherdeep', abbreviation: 'CRCotN', edition: 'classic', year: 2022, group: 'adventure' },
+  { code: 'JttRC', name: 'Journeys through the Radiant Citadel', abbreviation: 'JttRC', edition: 'classic', year: 2022, group: 'adventure' },
+  { code: 'KftGV', name: 'Keys from the Golden Vault', abbreviation: 'KftGV', edition: 'classic', year: 2023, group: 'adventure' },
+  { code: 'PaBTSO', name: 'Phandelver and Below: The Shattered Obelisk', abbreviation: 'PaBTSO', edition: 'classic', year: 2023, group: 'adventure' },
+  { code: 'ToFW', name: "Turn of Fortune's Wheel", abbreviation: 'ToFW', edition: 'classic', year: 2023, group: 'adventure' },
+  { code: 'QftIS', name: 'Quests from the Infinite Staircase', abbreviation: 'QftIS', edition: 'classic', year: 2024, group: 'adventure' },
+  { code: 'VEoR', name: 'Vecna: Eve of Ruin', abbreviation: 'VEoR', edition: 'classic', year: 2024, group: 'adventure' },
+  { code: 'DoSI', name: 'Dragons of Stormwreck Isle', abbreviation: 'DoSI', edition: 'classic', year: 2022, group: 'adventure' },
+  { code: 'LoX', name: 'Light of Xaryxis', abbreviation: 'LoX', edition: 'classic', year: 2022, group: 'adventure' },
+
+  // ── Adventures (One D&D era) ──
+  { code: 'DrDe', name: 'Dragon Delves', abbreviation: 'DrDe', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'HotB', name: 'Heroes of the Borderlands', abbreviation: 'HotB', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'FRAiF', name: 'Forgotten Realms: Adventures in Faerun', abbreviation: 'FRAiF', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'FRHoF', name: 'Forgotten Realms: Heroes of Faerun', abbreviation: 'FRHoF', edition: 'one', year: 2025, group: 'sourcebook' },
+  { code: 'ABH', name: "Astarion's Book of Hungers", abbreviation: 'ABH', edition: 'one', year: 2025, group: 'sourcebook' },
+  { code: 'NF', name: "Netheril's Fall", abbreviation: 'NF', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'LFL', name: 'Lorwyn: First Light', abbreviation: 'LFL', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'EFA', name: 'Eberron: Forge of the Artificer', abbreviation: 'EFA', edition: 'one', year: 2025, group: 'sourcebook' },
+
+  // ── Supplements & Companions ──
+  { code: 'EEPC', name: "Elemental Evil Player's Companion", abbreviation: 'EEPC', edition: 'classic', year: 2015, group: 'supplement' },
+  { code: 'EET', name: 'Elemental Evil: Trinkets', abbreviation: 'EET', edition: 'classic', year: 2015, group: 'supplement' },
+  { code: 'RoTOS', name: 'The Rise of Tiamat Online Supplement', abbreviation: 'RoTOS', edition: 'classic', year: 2014, group: 'supplement' },
+  { code: 'TLK', name: 'The Lost Kenku', abbreviation: 'TLK', edition: 'classic', year: 2017, group: 'supplement' },
+  { code: 'TTP', name: 'The Tortle Package', abbreviation: 'TTP', edition: 'classic', year: 2017, group: 'supplement' },
+  { code: 'OGA', name: 'One Grung Above', abbreviation: 'OGA', edition: 'classic', year: 2017, group: 'supplement' },
+  { code: 'KKW', name: "Krenko's Way", abbreviation: 'KKW', edition: 'classic', year: 2018, group: 'supplement' },
+  { code: 'LLK', name: 'Lost Laboratory of Kwalish', abbreviation: 'LLK', edition: 'classic', year: 2018, group: 'supplement' },
+  { code: 'AZfyT', name: 'A Zib for your Thoughts', abbreviation: 'AZfyT', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'OoW', name: 'The Orrery of the Wanderer', abbreviation: 'OoW', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'ESK', name: 'Essentials Kit', abbreviation: 'ESK', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'HftT', name: 'Hunt for the Thessalhydra', abbreviation: 'HftT', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'DC', name: 'Divine Contention', abbreviation: 'DC', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'SLW', name: "Storm Lord's Wrath", abbreviation: 'SLW', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'SDW', name: "Sleeping Dragon's Wake", abbreviation: 'SDW', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'LR', name: 'Locathah Rising', abbreviation: 'LR', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'AL', name: "Adventurers' League", abbreviation: 'AL', edition: 'classic', year: 2014, group: 'supplement' },
+  { code: 'SAC', name: 'Sage Advice Compendium (2014)', abbreviation: 'SAC', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'EFR', name: 'Eberron: Forgotten Relics', abbreviation: 'EFR', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'RMBRE', name: 'The Lost Dungeon of Rickedness: Big Rick Energy', abbreviation: 'RMBRE', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'RMR', name: 'Dungeons & Dragons vs. Rick and Morty: Basic Rules', abbreviation: 'RMR', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'MFF', name: "Mordenkainen's Fiendish Folio", abbreviation: 'MFF', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'AWM', name: 'Adventure with Muk', abbreviation: 'AWM', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'IMR', name: 'Infernal Machine Rebuild', abbreviation: 'IMR', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'SADS', name: 'Sapphire Anniversary Dice Set', abbreviation: 'SADS', edition: 'classic', year: 2019, group: 'supplement' },
+  { code: 'ToR', name: 'Tide of Retribution', abbreviation: 'ToR', edition: 'classic', year: 2020, group: 'supplement' },
+  { code: 'DD', name: 'Dangerous Designs', abbreviation: 'DD', edition: 'classic', year: 2020, group: 'supplement' },
+  { code: 'FS', name: 'Frozen Sick', abbreviation: 'FS', edition: 'classic', year: 2020, group: 'supplement' },
+  { code: 'US', name: 'Unwelcome Spirits', abbreviation: 'US', edition: 'classic', year: 2020, group: 'supplement' },
+  { code: 'HoL', name: 'The House of Lament', abbreviation: 'HoL', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'RtG', name: 'Return to Glory', abbreviation: 'RtG', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'DoD', name: 'Domains of Delight', abbreviation: 'DoD', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'MaBJoV', name: "Minsc and Boo's Journal of Villainy", abbreviation: 'MaBJoV', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'DMTCRG', name: 'The Deck of Many Things: Card Reference Guide', abbreviation: 'DMTCRG', edition: 'classic', year: 2023, group: 'supplement' },
+
+  // ── Adventures in the Forgotten Realms (MTG crossover) ──
+  { code: 'AitFR', name: 'Adventures in the Forgotten Realms', abbreviation: 'AitFR', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'AitFR-ISF', name: 'Adventures in the Forgotten Realms: In Scarlet Flames', abbreviation: 'AitFR-ISF', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'AitFR-THP', name: 'Adventures in the Forgotten Realms: The Hidden Page', abbreviation: 'AitFR-THP', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'AitFR-AVT', name: 'Adventures in the Forgotten Realms: A Verdant Tomb', abbreviation: 'AitFR-AVT', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'AitFR-DN', name: 'Adventures in the Forgotten Realms: Deepest Night', abbreviation: 'AitFR-DN', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'AitFR-FCD', name: 'Adventures in the Forgotten Realms: From Cyan Depths', abbreviation: 'AitFR-FCD', edition: 'classic', year: 2021, group: 'supplement' },
+
+  // ── Strixhaven adventures ──
+  { code: 'SCC-CK', name: 'Campus Kerfuffle', abbreviation: 'SCC-CK', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'SCC-HfMT', name: 'Hunt for Mage Tower', abbreviation: 'SCC-HfMT', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'SCC-TMM', name: "The Magister's Masquerade", abbreviation: 'SCC-TMM', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'SCC-ARiR', name: 'A Reckoning in Ruins', abbreviation: 'SCC-ARiR', edition: 'classic', year: 2021, group: 'supplement' },
+
+  // ── Tales from the Yawning Portal sub-adventures ──
+  { code: 'TftYP-AtG', name: 'Tales from the Yawning Portal: Against the Giants', abbreviation: 'TftYP-AtG', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'TftYP-DiT', name: 'Tales from the Yawning Portal: Dead in Thay', abbreviation: 'TftYP-DiT', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'TftYP-TFoF', name: 'Tales from the Yawning Portal: The Forge of Fury', abbreviation: 'TftYP-TFoF', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'TftYP-THSoT', name: 'Tales from the Yawning Portal: The Hidden Shrine of Tamoachan', abbreviation: 'TftYP-THSoT', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'TftYP-TSC', name: 'Tales from the Yawning Portal: The Sunless Citadel', abbreviation: 'TftYP-TSC', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'TftYP-ToH', name: 'Tales from the Yawning Portal: Tomb of Horrors', abbreviation: 'TftYP-ToH', edition: 'classic', year: 2017, group: 'adventure' },
+  { code: 'TftYP-WPM', name: 'Tales from the Yawning Portal: White Plume Mountain', abbreviation: 'TftYP-WPM', edition: 'classic', year: 2017, group: 'adventure' },
+
+  // ── Dragon Delves sub-adventures ──
+  { code: 'DrDe-DaS', name: 'Death at Sunset', abbreviation: 'DrDe-DaS', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-BD', name: "Baker's Doesn't", abbreviation: 'DrDe-BD', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-TWoO', name: 'The Will of Orcus', abbreviation: 'DrDe-TWoO', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-FWtVC', name: 'For Whom the Void Calls', abbreviation: 'DrDe-FWtVC', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-TDoN', name: 'The Dragon of Najkir', abbreviation: 'DrDe-TDoN', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-TFV', name: 'The Forbidden Vale', abbreviation: 'DrDe-TFV', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-BtS', name: 'Before the Storm', abbreviation: 'DrDe-BtS', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-SD', name: 'Shivering Death', abbreviation: 'DrDe-SD', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-ACfaS', name: 'A Copper for a Song', abbreviation: 'DrDe-ACfaS', edition: 'one', year: 2025, group: 'adventure' },
+  { code: 'DrDe-DotSC', name: 'Dragons of the Sandstone City', abbreviation: 'DrDe-DotSC', edition: 'one', year: 2025, group: 'adventure' },
+
+  // ── Monstrous Compendiums ──
+  { code: 'MCV1SC', name: 'Monstrous Compendium Volume 1: Spelljammer Creatures', abbreviation: 'MCV1SC', edition: 'classic', year: 2022, group: 'supplement' },
+  { code: 'MCV2DC', name: 'Monstrous Compendium Volume 2: Dragonlance Creatures', abbreviation: 'MCV2DC', edition: 'classic', year: 2022, group: 'supplement' },
+  { code: 'MCV3MC', name: 'Monstrous Compendium Volume 3: Minecraft Creatures', abbreviation: 'MCV3MC', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'MCV4EC', name: 'Monstrous Compendium Volume 4: Eldraine Creatures', abbreviation: 'MCV4EC', edition: 'classic', year: 2023, group: 'supplement' },
+
+  // ── Plane Shift ──
+  { code: 'PSA', name: 'Plane Shift: Amonkhet', abbreviation: 'PSA', edition: 'classic', year: 2017, group: 'supplement' },
+  { code: 'PSI', name: 'Plane Shift: Innistrad', abbreviation: 'PSI', edition: 'classic', year: 2016, group: 'supplement' },
+  { code: 'PSK', name: 'Plane Shift: Kaladesh', abbreviation: 'PSK', edition: 'classic', year: 2017, group: 'supplement' },
+  { code: 'PSZ', name: 'Plane Shift: Zendikar', abbreviation: 'PSZ', edition: 'classic', year: 2016, group: 'supplement' },
+  { code: 'PSX', name: 'Plane Shift: Ixalan', abbreviation: 'PSX', edition: 'classic', year: 2018, group: 'supplement' },
+  { code: 'PSD', name: 'Plane Shift: Dominaria', abbreviation: 'PSD', edition: 'classic', year: 2018, group: 'supplement' },
+
+  // ── NERDS Restoring Harmony ──
+  { code: 'NRH', name: 'NERDS Restoring Harmony', abbreviation: 'NRH', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'NRH-TCMC', name: 'NERDS Restoring Harmony: The Candy Mountain Caper', abbreviation: 'NRH-TCMC', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'NRH-AVitW', name: 'NERDS Restoring Harmony: A Voice in the Wilderness', abbreviation: 'NRH-AVitW', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'NRH-ASS', name: 'NERDS Restoring Harmony: A Sticky Situation', abbreviation: 'NRH-ASS', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'NRH-CoI', name: 'NERDS Restoring Harmony: Circus of Illusions', abbreviation: 'NRH-CoI', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'NRH-TLT', name: 'NERDS Restoring Harmony: The Lost Tomb', abbreviation: 'NRH-TLT', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'NRH-AWoL', name: 'NERDS Restoring Harmony: A Web of Lies', abbreviation: 'NRH-AWoL', edition: 'classic', year: 2021, group: 'supplement' },
+  { code: 'NRH-AT', name: 'NERDS Restoring Harmony: Adventure Together', abbreviation: 'NRH-AT', edition: 'classic', year: 2021, group: 'supplement' },
+
+  // ── Other supplements and misc ──
+  { code: 'MGELFT', name: "Muk's Guide To Everything He Learned From Tasha", abbreviation: 'MGELFT', edition: 'classic', year: 2020, group: 'supplement' },
+  { code: 'TD', name: 'Tarot Deck', abbreviation: 'TD', edition: 'classic', year: 2022, group: 'other' },
+  { code: 'Screen', name: "Dungeon Master's Screen", abbreviation: 'Screen', edition: 'classic', year: 2015, group: 'other' },
+  { code: 'ScreenWildernessKit', name: "Dungeon Master's Screen: Wilderness Kit", abbreviation: 'ScreenWildernessKit', edition: 'classic', year: 2020, group: 'other' },
+  { code: 'ScreenDungeonKit', name: "Dungeon Master's Screen: Dungeon Kit", abbreviation: 'ScreenDungeonKit', edition: 'classic', year: 2020, group: 'other' },
+  { code: 'ScreenSpelljammer', name: "Dungeon Master's Screen: Spelljammer", abbreviation: 'ScreenSpelljammer', edition: 'classic', year: 2022, group: 'other' },
+  { code: 'XScreen', name: "Dungeon Master's Screen (2024)", abbreviation: 'XScreen', edition: 'one', year: 2024, group: 'other' },
+  { code: 'HF', name: "Heroes' Feast", abbreviation: 'HF', edition: 'classic', year: 2020, group: 'other' },
+  { code: 'HFFotM', name: "Heroes' Feast: Flavors of the Multiverse", abbreviation: 'HFFotM', edition: 'classic', year: 2023, group: 'other' },
+  { code: 'HFStCM', name: "Heroes' Feast: Saving the Children's Menu", abbreviation: 'HFStCM', edition: 'classic', year: 2023, group: 'other' },
+  { code: 'PaF', name: 'Puncheons and Flagons', abbreviation: 'PaF', edition: 'classic', year: 2024, group: 'other' },
+  { code: 'HFDoMM', name: "Heroes' Feast: The Deck of Many Morsels", abbreviation: 'HFDoMM', edition: 'classic', year: 2024, group: 'other' },
+  { code: 'VD', name: 'Vecna Dossier', abbreviation: 'VD', edition: 'classic', year: 2022, group: 'supplement' },
+  { code: 'SjA', name: 'Spelljammer Academy', abbreviation: 'SjA', edition: 'classic', year: 2022, group: 'supplement' },
+  { code: 'XMtS', name: 'X Marks the Spot', abbreviation: 'XMtS', edition: 'classic', year: 2017, group: 'supplement' },
+  { code: 'MisMV1', name: 'Misplaced Monsters: Volume 1', abbreviation: 'MisMV1', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'AATM', name: 'Adventure Atlas: The Mortuary', abbreviation: 'AATM', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'FFotR', name: 'Fated Flight of the Recluse', abbreviation: 'FFotR', edition: 'one', year: 2025, group: 'supplement' },
+  { code: 'WttHC', name: 'Stranger Things: Welcome to the Hellfire Club', abbreviation: 'WttHC', edition: 'one', year: 2025, group: 'adventure' },
+
+  // ── Honor Among Thieves ──
+  { code: 'HAT-TG', name: "Honor Among Thieves: Thieves' Gallery", abbreviation: 'HAT-TG', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'HAT-LMI', name: 'Honor Among Thieves: Legendary Magic Items', abbreviation: 'HAT-LMI', edition: 'classic', year: 2023, group: 'supplement' },
+
+  // ── Misc adventures ──
+  { code: 'GotSF', name: 'Giants of the Star Forge', abbreviation: 'GotSF', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'LK', name: 'Lightning Keep', abbreviation: 'LK', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'CoA', name: 'Chains of Asmodeus', abbreviation: 'CoA', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'PiP', name: 'Peril in Pinebrook', abbreviation: 'PiP', edition: 'classic', year: 2023, group: 'supplement' },
+  { code: 'DitLCoT', name: 'Descent into the Lost Caverns of Tsojcanth', abbreviation: 'DitLCoT', edition: 'classic', year: 2024, group: 'supplement' },
+  { code: 'VNotEE', name: 'Vecna: Nest of the Eldritch Eye', abbreviation: 'VNotEE', edition: 'classic', year: 2024, group: 'supplement' },
+  { code: 'LRDT', name: "Red Dragon's Tale: A LEGO Adventure", abbreviation: 'LRDT', edition: 'classic', year: 2024, group: 'supplement' },
+  { code: 'UtHftLH', name: 'Uni and the Hunt for the Lost Horn', abbreviation: 'UtHftLH', edition: 'classic', year: 2024, group: 'supplement' },
+  { code: 'ScoEE', name: 'Scions of Elemental Evil', abbreviation: 'ScoEE', edition: 'classic', year: 2024, group: 'supplement' },
+  { code: 'HBTD', name: 'Hold Back The Dead', abbreviation: 'HBTD', edition: 'one', year: 2025, group: 'supplement' },
+  { code: 'BQGT', name: 'Borderlands Quest: Goblin Trouble', abbreviation: 'BQGT', edition: 'one', year: 2025, group: 'supplement' },
+
+  // ── Adventurers League ──
+  { code: 'ALCurseOfStrahd', name: "Adventurers' League: Curse of Strahd", abbreviation: 'ALCoS', edition: 'classic', year: 2016, group: 'supplement' },
+  { code: 'ALElementalEvil', name: "Adventurers' League: Elemental Evil", abbreviation: 'ALEE', edition: 'classic', year: 2015, group: 'supplement' },
+  { code: 'ALRageOfDemons', name: "Adventurers' League: Rage of Demons", abbreviation: 'ALRoD', edition: 'classic', year: 2015, group: 'supplement' },
+
+  // ── Unearthed Arcana ──
+  { code: 'UATheMysticClass', name: 'Unearthed Arcana: The Mystic Class', abbreviation: 'UA-TMC', edition: 'classic', year: 2017, group: 'supplement' },
+];

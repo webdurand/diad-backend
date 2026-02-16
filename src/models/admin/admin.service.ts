@@ -51,6 +51,7 @@ import {
   ProficiencyTypeEnum,
   AttackTypeEnum,
 } from '../../entities';
+import { ALL_SOURCES } from '../../data/sources';
 
 // ────────────────────────────────────────────────────────────────
 // Tipos auxiliares
@@ -89,6 +90,10 @@ export class AdminService {
       source = repo.create({
         code: 'SRD',
         name: 'System Reference Document 5e',
+        abbreviation: 'SRD',
+        edition: 'classic',
+        year: 2014,
+        group: 'core',
       });
       source = await repo.save(source);
     }
@@ -134,8 +139,29 @@ export class AdminService {
   // ──────────── Fase 0 — CompSource ────────────
 
   async seedCompSources(): Promise<SeedResult> {
-    await this.getOrCreateSource();
-    return this.result('comp_sources', 1, 1, []);
+    const repo = this.ds.getRepository(CompSourceEntity);
+    const errors: { slug: string; message: string }[] = [];
+    let success = 0;
+
+    for (const src of ALL_SOURCES) {
+      try {
+        await repo.upsert(
+          {
+            code: src.code,
+            name: src.name,
+            abbreviation: src.abbreviation,
+            edition: src.edition,
+            year: src.year,
+            group: src.group,
+          },
+          { conflictPaths: ['code'] },
+        );
+        success++;
+      } catch (err: any) {
+        errors.push({ slug: src.code, message: err.message });
+      }
+    }
+    return this.result('comp_sources', ALL_SOURCES.length, success, errors);
   }
 
   // ──────────── Fase 1 — Sem dependências ────────────

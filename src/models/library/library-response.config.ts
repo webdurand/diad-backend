@@ -103,8 +103,6 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
 
 const INTERNAL_FIELDS = new Set([
   'raw',
-  'source',
-  'source_id',
   'created_at',
   'updated_at',
   'search_text',
