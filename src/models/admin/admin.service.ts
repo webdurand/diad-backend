@@ -63,6 +63,10 @@ import {
   transformSubraces,
   extractTraitsFromRace,
   extractTraitsFromSubrace,
+  transformClasses,
+  transformSubclasses5e,
+  transformFeatures,
+  transformLevels,
 } from '../../data/transformers';
 
 // ────────────────────────────────────────────────────────────────
@@ -698,60 +702,44 @@ export class AdminService {
   // ──────────── Fase 3 — Classes e Races ────────────
 
   async seedClasses(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Classes.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformClasses();
+    const sourceMap = await this.sourceCodeToIdMap();
     const classRepo = this.ds.getRepository(ClassEntity);
     const cpRepo = this.ds.getRepository(ClassProficiencyEntity);
     const csRepo = this.ds.getRepository(ClassSavingThrowEntity);
-    const ceRepo = this.ds.getRepository(ClassStartingEquipmentEntity);
     const profMap = await this.slugToIdMap(ProficiencyEntity);
     const abilityMap = await this.slugToIdMap(AbilityScoreEntity);
-    const eqMap = await this.slugToIdMap(EquipmentEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
         await classRepo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             hit_die: item.hit_die,
-            proficiency_choices: item.proficiency_choices ?? {},
-            starting_equipment_options: item.starting_equipment_options ?? null,
-            class_levels_url: item.class_levels ?? null,
-            multi_classing: item.multi_classing ?? {},
-            spellcasting: item.spellcasting ?? null,
-            spells_url: item.spells ?? null,
-            weapon_mastery_count: item.weapon_mastery_count ?? 0,
-            weapon_mastery_restriction: item.weapon_mastery_restriction ?? null,
-            cantrips_known: item.cantrips_known ?? 0,
-            spells_prepared_count: item.spells_prepared_count ?? 0,
-            spellbook_count: item.spellbook_count ?? 0,
-            class_features_level_1: item.class_features_level_1 ?? null,
-            source_id: sourceId,
-            raw: item,
+            proficiency_choices: item.proficiency_choices as any,
+            starting_equipment_options: (item.starting_equipment_options ?? undefined) as any,
+            multi_classing: item.multi_classing as any,
+            spellcasting: (item.spellcasting ?? undefined) as any,
+            weapon_mastery_count: item.weapon_mastery_count,
+            weapon_mastery_restriction: item.weapon_mastery_restriction ?? undefined,
+            cantrips_known: item.cantrips_known,
+            spells_prepared_count: item.spells_prepared_count,
+            spellbook_count: item.spellbook_count,
+            class_features_level_1: (item.class_features_level_1 ?? undefined) as any,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
 
-        const classId = (await this.slugToId(ClassEntity, item.index))!;
-
-        // class_proficiencies
-        const profs: JsonRef[] = item.proficiencies ?? [];
-        for (const p of profs) {
-          const profId = profMap.get(p.index);
-          if (!profId) continue;
-          await cpRepo.upsert(
-            { class_id: classId, proficiency_id: profId },
-            { conflictPaths: ['class_id', 'proficiency_id'] },
-          );
-        }
+        const classId = (await this.slugToId(ClassEntity, item.slug))!;
 
         // class_saving_throws
-        const saves: JsonRef[] = item.saving_throws ?? [];
-        for (const s of saves) {
-          const abilityId = abilityMap.get(s.index);
+        for (const abilitySlug of item.saving_throw_slugs) {
+          const abilityId = abilityMap.get(abilitySlug);
           if (!abilityId) continue;
           await csRepo.upsert(
             { class_id: classId, ability_score_id: abilityId },
@@ -759,25 +747,22 @@ export class AdminService {
           );
         }
 
-        // class_starting_equipment
-        const startEq: any[] = item.starting_equipment ?? [];
-        for (const se of startEq) {
-          const eqSlug = se.equipment?.index;
-          if (!eqSlug) continue;
-          const eqId = eqMap.get(eqSlug);
-          if (!eqId) continue;
-          await ceRepo.upsert(
-            { class_id: classId, equipment_id: eqId },
-            { conflictPaths: ['class_id', 'equipment_id'] },
+        // class_proficiencies
+        for (const profSlug of item.proficiency_slugs) {
+          const profId = profMap.get(profSlug);
+          if (!profId) continue;
+          await cpRepo.upsert(
+            { class_id: classId, proficiency_id: profId },
+            { conflictPaths: ['class_id', 'proficiency_id'] },
           );
         }
 
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('classes', data.length, success, errors);
+    return this.result('classes', items.length, success, errors);
   }
 
   async seedRaces(): Promise<SeedResult> {
@@ -833,37 +818,35 @@ export class AdminService {
   // ──────────── Fase 4 — Subclasses, Subraces, Traits, Backgrounds ──────────
 
   async seedSubclasses(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Subclasses.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformSubclasses5e();
+    const sourceMap = await this.sourceCodeToIdMap();
     const classMap = await this.slugToIdMap(ClassEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
-        const classId = classMap.get(item.class?.index) ?? undefined;
+        const classId = classMap.get(item.class_slug) ?? undefined;
 
         await this.ds
           .createQueryBuilder()
           .insert()
           .into(SubclassEntity)
           .values({
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             subclass_flavor: item.subclass_flavor,
-            description: item.desc ?? [],
-            subclass_levels_url: item.subclass_levels ?? null,
-            spells: item.spells ?? null,
+            description: item.description,
+            spells: (item.spells ?? undefined) as any,
             class_id: classId,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           })
           .orUpdate(
             [
               'name',
               'subclass_flavor',
               'description',
-              'subclass_levels_url',
               'spells',
               'class_id',
               'source_id',
@@ -874,10 +857,10 @@ export class AdminService {
           .execute();
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('subclasses', data.length, success, errors);
+    return this.result('subclasses', items.length, success, errors);
   }
 
   async seedSubraces(): Promise<SeedResult> {
@@ -1125,35 +1108,36 @@ export class AdminService {
   // ──────────── Fase 5 — Features, Spells, MagicItems, Monsters ─────────────
 
   async seedFeatures(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Features.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformFeatures();
+    const sourceMap = await this.sourceCodeToIdMap();
     const classMap = await this.slugToIdMap(ClassEntity);
     const subclassMap = await this.slugToIdMap(SubclassEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    // Passe 1 — inserir todos sem parent_id
-    for (const item of data) {
+    for (const item of items) {
       try {
-        const classId = classMap.get(item.class?.index) ?? undefined;
-        const subclassId = subclassMap.get(item.subclass?.index) ?? undefined;
+        const classId = classMap.get(item.class_slug) ?? undefined;
+        const subclassId = item.subclass_slug
+          ? (subclassMap.get(item.subclass_slug) ?? undefined)
+          : undefined;
 
         await this.ds
           .createQueryBuilder()
           .insert()
           .into(FeatureEntity)
           .values({
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             level: item.level,
-            description: item.desc ?? [],
-            prerequisites: item.prerequisites ?? [],
-            reference: item.url ?? null,
-            feature_specific: item.feature_specific ?? null,
+            description: item.description as any,
+            prerequisites: item.prerequisites as any,
+            reference: item.reference,
+            feature_specific: (item.feature_specific ?? undefined) as any,
             class_id: classId,
             subclass_id: subclassId,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           })
           .orUpdate(
             [
@@ -1173,34 +1157,11 @@ export class AdminService {
           .execute();
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
 
-    // Passe 2 — atualizar parent_id
-    const featureMap = await this.slugToIdMap(FeatureEntity);
-    for (const item of data) {
-      if (!item.parent?.index) continue;
-      try {
-        const featureId = featureMap.get(item.index);
-        const parentId = featureMap.get(item.parent.index);
-        if (featureId && parentId) {
-          await this.ds
-            .createQueryBuilder()
-            .update(FeatureEntity)
-            .set({ parent_id: parentId })
-            .where('id = :id', { id: featureId })
-            .execute();
-        }
-      } catch (err: any) {
-        errors.push({
-          slug: `${item.index}→parent`,
-          message: err.message,
-        });
-      }
-    }
-
-    return this.result('features', data.length, success, errors);
+    return this.result('features', items.length, success, errors);
   }
 
   async seedSpells(): Promise<SeedResult> {
@@ -1452,24 +1413,22 @@ export class AdminService {
   // ──────────── Fase 6 — Levels ────────────
 
   async seedLevels(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Levels.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformLevels();
+    const sourceMap = await this.sourceCodeToIdMap();
     const classMap = await this.slugToIdMap(ClassEntity);
-    const subclassMap = await this.slugToIdMap(SubclassEntity);
     const featureMap = await this.slugToIdMap(FeatureEntity);
     const lfRepo = this.ds.getRepository(LevelFeatureEntity);
     const levelRepo = this.ds.getRepository(LevelEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
-        const classId = classMap.get(item.class?.index) ?? undefined;
-        const subclassId = subclassMap.get(item.subclass?.index) ?? undefined;
+        const classId = classMap.get(item.class_slug) ?? undefined;
 
-        // slug não é unique em levels — find+update ou insert
+        // slug nao e unique em levels — find+update ou insert
         const existing = await levelRepo.findOne({
-          where: { slug: item.index },
+          where: { slug: item.slug },
         });
 
         let levelId: string;
@@ -1480,16 +1439,13 @@ export class AdminService {
             .update(LevelEntity)
             .set({
               level: item.level,
-              url: item.url ?? null,
-              ability_score_bonuses: item.ability_score_bonuses ?? 0,
-              prof_bonus: item.prof_bonus ?? null,
-              spellcasting: item.spellcasting ?? null,
-              class_specific: item.class_specific ?? null,
-              subclass_specific: item.subclass_specific ?? null,
+              ability_score_bonuses: item.ability_score_bonuses,
+              prof_bonus: item.prof_bonus,
+              spellcasting: (item.spellcasting ?? undefined) as any,
+              class_specific: (item.class_specific ?? undefined) as any,
               class_id: classId,
-              subclass_id: subclassId,
-              source_id: sourceId,
-              raw: item,
+              source_id: sourceMap.get(item.source_code) ?? undefined,
+              raw: item.raw as any,
             })
             .where('id = :id', { id: existing.id })
             .execute();
@@ -1500,18 +1456,15 @@ export class AdminService {
             .insert()
             .into(LevelEntity)
             .values({
-              slug: item.index,
+              slug: item.slug,
               level: item.level,
-              url: item.url ?? null,
-              ability_score_bonuses: item.ability_score_bonuses ?? 0,
-              prof_bonus: item.prof_bonus ?? null,
-              spellcasting: item.spellcasting ?? null,
-              class_specific: item.class_specific ?? null,
-              subclass_specific: item.subclass_specific ?? null,
+              ability_score_bonuses: item.ability_score_bonuses,
+              prof_bonus: item.prof_bonus,
+              spellcasting: (item.spellcasting ?? undefined) as any,
+              class_specific: (item.class_specific ?? undefined) as any,
               class_id: classId,
-              subclass_id: subclassId,
-              source_id: sourceId,
-              raw: item,
+              source_id: sourceMap.get(item.source_code) ?? undefined,
+              raw: item.raw as any,
             })
             .returning('id')
             .execute();
@@ -1519,9 +1472,8 @@ export class AdminService {
         }
 
         // level_features
-        const features: JsonRef[] = item.features ?? [];
-        for (const f of features) {
-          const featureId = featureMap.get(f.index);
+        for (const featureSlug of item.feature_slugs) {
+          const featureId = featureMap.get(featureSlug);
           if (!featureId) continue;
           await lfRepo.upsert(
             { level_id: levelId, feature_id: featureId },
@@ -1531,9 +1483,9 @@ export class AdminService {
 
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('levels', data.length, success, errors);
+    return this.result('levels', items.length, success, errors);
   }
 }

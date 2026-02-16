@@ -46,3 +46,12 @@ export {
   extractTraitsFromSubrace,
 } from './transform-traits';
 export type { TransformedTrait } from './transform-traits';
+
+export { transformClasses } from './transform-classes';
+export type { TransformedClass } from './transform-classes';
+export { transformSubclasses as transformSubclasses5e } from './transform-subclasses';
+export type { TransformedSubclass } from './transform-subclasses';
+export { transformFeatures } from './transform-features';
+export type { TransformedFeature } from './transform-features';
+export { transformLevels } from './transform-levels';
+export type { TransformedLevel } from './transform-levels';
