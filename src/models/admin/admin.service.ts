@@ -52,6 +52,14 @@ import {
   AttackTypeEnum,
 } from '../../entities';
 import { ALL_SOURCES } from '../../data/sources';
+import {
+  transformConditions,
+  transformLanguages,
+  transformSkills,
+  transformEquipmentCategories,
+  transformWeaponProperties,
+  transformWeaponMasteryProperties,
+} from '../../data/transformers';
 
 // ────────────────────────────────────────────────────────────────
 // Tipos auxiliares
@@ -98,6 +106,19 @@ export class AdminService {
       source = await repo.save(source);
     }
     return source.id;
+  }
+
+  private async sourceCodeToId(code: string): Promise<string | null> {
+    const repo = this.ds.getRepository(CompSourceEntity);
+    const source = await repo.findOne({ where: { code } });
+    return source ? source.id : null;
+  }
+
+  private async sourceCodeToIdMap(): Promise<Map<string, string>> {
+    const rows = await this.ds.getRepository(CompSourceEntity).find();
+    const map = new Map<string, string>();
+    for (const r of rows) map.set(r.code, r.id);
+    return map;
   }
 
   private async slugToId(
@@ -223,31 +244,30 @@ export class AdminService {
   }
 
   async seedConditions(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Conditions.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformConditions();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(ConditionEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             description: item.description,
-            url: item.url ?? null,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('conditions', data.length, success, errors);
+    return this.result('conditions', items.length, success, errors);
   }
 
   async seedDamageTypes(): Promise<SeedResult> {
@@ -278,31 +298,31 @@ export class AdminService {
   }
 
   async seedLanguages(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Languages.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformLanguages();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(LanguageEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            is_rare: item.is_rare ?? false,
-            note: item.note || null,
-            source_id: sourceId,
-            raw: item,
+            is_rare: item.is_rare,
+            note: item.note ?? undefined,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('languages', data.length, success, errors);
+    return this.result('languages', items.length, success, errors);
   }
 
   async seedMagicSchools(): Promise<SeedResult> {
@@ -333,59 +353,59 @@ export class AdminService {
   }
 
   async seedWeaponProperties(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Weapon-Properties.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformWeaponProperties();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(WeaponPropertyEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             description: item.description,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('weapon_properties', data.length, success, errors);
+    return this.result('weapon_properties', items.length, success, errors);
   }
 
   async seedWeaponMasteryProperties(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Weapon-Mastery-Properties.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformWeaponMasteryProperties();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(WeaponMasteryPropertyEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             description: item.description,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
     return this.result(
       'weapon_mastery_properties',
-      data.length,
+      items.length,
       success,
       errors,
     );
@@ -419,13 +439,15 @@ export class AdminService {
   }
 
   async seedEquipmentCategories(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Equipment-Categories.json');
+    // First: seed existing SRD categories to preserve FK compatibility
+    const srdData = this.loadJson<any[]>('5e-SRD-Equipment-Categories.json');
     const sourceId = await this.getOrCreateSource();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(EquipmentCategoryEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of srdData) {
       try {
         await repo.upsert(
           {
@@ -441,7 +463,27 @@ export class AdminService {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('equipment_categories', data.length, success, errors);
+
+    // Second: seed 5etools item type categories (adds missing ones)
+    const fiveToolsCategories = transformEquipmentCategories();
+    for (const item of fiveToolsCategories) {
+      try {
+        await repo.upsert(
+          {
+            slug: item.slug,
+            name: item.name,
+            source_id: sourceMap.get(item.source_code) ?? sourceId,
+          },
+          { conflictPaths: ['slug'] },
+        );
+        success++;
+      } catch (err: any) {
+        errors.push({ slug: item.slug, message: err.message });
+      }
+    }
+
+    const total = srdData.length + fiveToolsCategories.length;
+    return this.result('equipment_categories', total, success, errors);
   }
 
   async seedProficiencies(): Promise<SeedResult> {
@@ -485,34 +527,35 @@ export class AdminService {
   // ──────────── Fase 2 — Dependem da Fase 1 ────────────
 
   async seedSkills(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Skills.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformSkills();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(SkillEntity);
     const abilityMap = await this.slugToIdMap(AbilityScoreEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
-        const abilityId =
-          abilityMap.get(item.ability_score?.index) ?? undefined;
+        const abilityId = item.ability_score_slug
+          ? abilityMap.get(item.ability_score_slug)
+          : undefined;
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             description: item.description,
             ability_score_id: abilityId,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('skills', data.length, success, errors);
+    return this.result('skills', items.length, success, errors);
   }
 
   async seedEquipment(): Promise<SeedResult> {
