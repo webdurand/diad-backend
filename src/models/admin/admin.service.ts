@@ -67,6 +67,8 @@ import {
   transformSubclasses5e,
   transformFeatures,
   transformLevels,
+  transformSpells,
+  loadSpellClassMappings,
 } from '../../data/transformers';
 
 // ────────────────────────────────────────────────────────────────
@@ -1165,13 +1167,11 @@ export class AdminService {
   }
 
   async seedSpells(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Spells.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformSpells();
+    const sourceMap = await this.sourceCodeToIdMap();
     const schoolMap = await this.slugToIdMap(MagicSchoolEntity);
     const classMap = await this.slugToIdMap(ClassEntity);
-    const subclassMap = await this.slugToIdMap(SubclassEntity);
     const scRepo = this.ds.getRepository(SpellClassEntity);
-    const ssRepo = this.ds.getRepository(SpellSubclassEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
@@ -1180,37 +1180,42 @@ export class AdminService {
       ranged: AttackTypeEnum.Ranged,
     };
 
-    for (const item of data) {
+    // Pass 1: upsert all spells
+    for (const item of items) {
       try {
-        const schoolId = schoolMap.get(item.school?.index) ?? undefined;
+        const schoolId = item.school_slug
+          ? schoolMap.get(item.school_slug) ?? undefined
+          : undefined;
+        const sourceId = sourceMap.get(item.source_code) ?? undefined;
 
         await this.ds
           .createQueryBuilder()
           .insert()
           .into(SpellEntity)
           .values({
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            description: item.desc ?? [],
-            higher_level: item.higher_level ?? null,
+            description: item.description,
+            higher_level: item.higher_level ?? undefined,
             range: item.range,
-            components: item.components ?? [],
-            material: item.material ?? null,
-            ritual: item.ritual ?? false,
+            components: item.components as any,
+            material: item.material ?? undefined,
+            ritual: item.ritual,
             duration: item.duration,
-            concentration: item.concentration ?? false,
+            concentration: item.concentration,
             casting_time: item.casting_time,
             level: item.level,
-            attack_type: attackMap[item.attack_type] ?? null,
-            damage: item.damage ?? null,
-            url: item.url ?? null,
-            dc: item.dc ?? null,
-            heal_at_slot_level: item.heal_at_slot_level ?? null,
-            area_of_effect: item.area_of_effect ?? null,
+            attack_type: item.attack_type
+              ? attackMap[item.attack_type] ?? undefined
+              : undefined,
+            damage: item.damage ?? undefined,
+            dc: item.dc ?? undefined,
+            heal_at_slot_level: item.heal_at_slot_level ?? undefined,
+            area_of_effect: item.area_of_effect ?? undefined,
             school_id: schoolId,
             source_id: sourceId,
-            raw: item,
-          })
+            raw: item.raw as any,
+          } as any)
           .orUpdate(
             [
               'name',
@@ -1226,7 +1231,6 @@ export class AdminService {
               'level',
               'attack_type',
               'damage',
-              'url',
               'dc',
               'heal_at_slot_level',
               'area_of_effect',
@@ -1238,35 +1242,35 @@ export class AdminService {
           )
           .execute();
 
-        // Junções
-        const spellId = (await this.slugToId(SpellEntity, item.index))!;
-
-        const classes: JsonRef[] = item.classes ?? [];
-        for (const c of classes) {
-          const cId = classMap.get(c.index);
-          if (!cId) continue;
-          await scRepo.upsert(
-            { spell_id: spellId, class_id: cId },
-            { conflictPaths: ['spell_id', 'class_id'] },
-          );
-        }
-
-        const subclasses: JsonRef[] = item.subclasses ?? [];
-        for (const sc of subclasses) {
-          const scId = subclassMap.get(sc.index);
-          if (!scId) continue;
-          await ssRepo.upsert(
-            { spell_id: spellId, subclass_id: scId },
-            { conflictPaths: ['spell_id', 'subclass_id'] },
-          );
-        }
-
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('spells', data.length, success, errors);
+
+    // Pass 2: spell-class mappings from sources.json
+    const spellMap = await this.slugToIdMap(SpellEntity);
+    const mappings = loadSpellClassMappings();
+    let mappingCount = 0;
+
+    for (const m of mappings) {
+      try {
+        const spellId = spellMap.get(m.spell_slug);
+        const classId = classMap.get(m.class_slug);
+        if (!spellId || !classId) continue;
+
+        await scRepo.upsert(
+          { spell_id: spellId, class_id: classId },
+          { conflictPaths: ['spell_id', 'class_id'] },
+        );
+        mappingCount++;
+      } catch {
+        // skip duplicates or missing FKs
+      }
+    }
+
+    this.logger.log(`[spell_classes] ${mappingCount} mappings created`);
+    return this.result('spells', items.length, success, errors);
   }
 
   async seedMagicItems(): Promise<SeedResult> {
