@@ -4,9 +4,12 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { CompSourceEntity } from './comp-source.entity';
 import { MagicSchoolEntity } from './magic-school.entity';
+import { SpellClassEntity } from './spell-class.entity';
+import { SpellSubclassEntity } from './spell-subclass.entity';
 import { AttackTypeEnum } from './enums';
 
 @Entity('spells')
@@ -97,6 +100,12 @@ export class SpellEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   raw?: Record<string, unknown>;
+
+  @OneToMany(() => SpellClassEntity, (item) => item.spell)
+  spell_classes?: SpellClassEntity[];
+
+  @OneToMany(() => SpellSubclassEntity, (item) => item.spell)
+  spell_subclasses?: SpellSubclassEntity[];
 
   @Column({ type: 'timestamptz', default: () => 'now()' })
   created_at: Date;

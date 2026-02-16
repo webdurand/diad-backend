@@ -1,5 +1,9 @@
 import { Controller, Get, Param } from '@nestjs/common';
 import { LibraryService } from './library.service';
+import {
+  ENTITY_CONFIG,
+  transformLibraryResponse,
+} from './library-response.config';
 
 @Controller('library')
 export class LibraryController {
@@ -8,6 +12,13 @@ export class LibraryController {
   ) {}
   @Get(':entity')
   async get(@Param('entity') entity: string) {
-    return this.libraryService.findAll(entity);
+    const config = ENTITY_CONFIG[entity];
+    const results = await this.libraryService.findAll(entity, {
+      ...(config?.relations ? { relations: config.relations } : {}),
+    });
+    return transformLibraryResponse(
+      results as unknown as Record<string, unknown>[],
+      entity,
+    );
   }
 }

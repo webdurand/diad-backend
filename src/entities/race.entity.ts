@@ -9,6 +9,7 @@ import {
 import { CompSourceEntity } from './comp-source.entity';
 import { RaceLanguageEntity } from './race-language.entity';
 import { RaceTraitEntity } from './race-trait.entity';
+import { SubraceEntity } from './subrace.entity';
 
 @Entity('races')
 export class RaceEntity {
@@ -63,6 +64,9 @@ export class RaceEntity {
 
   @OneToMany(() => RaceTraitEntity, (item) => item.race)
   race_traits?: RaceTraitEntity[];
+
+  @OneToMany(() => SubraceEntity, (item) => item.race)
+  subraces?: SubraceEntity[];
 
   @Column({ type: 'timestamptz', default: () => 'now()' })
   created_at: Date;
