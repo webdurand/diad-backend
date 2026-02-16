@@ -59,6 +59,10 @@ import {
   transformEquipmentCategories,
   transformWeaponProperties,
   transformWeaponMasteryProperties,
+  transformRaces,
+  transformSubraces,
+  extractTraitsFromRace,
+  extractTraitsFromSubrace,
 } from '../../data/transformers';
 
 // ────────────────────────────────────────────────────────────────
@@ -777,41 +781,40 @@ export class AdminService {
   }
 
   async seedRaces(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Races.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformRaces();
+    const sourceMap = await this.sourceCodeToIdMap();
     const raceRepo = this.ds.getRepository(RaceEntity);
     const rlRepo = this.ds.getRepository(RaceLanguageEntity);
     const langMap = await this.slugToIdMap(LanguageEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
         await raceRepo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
             speed: item.speed,
-            ability_bonuses: item.ability_bonuses ?? [],
+            ability_bonuses: item.ability_bonuses as any,
             age: item.age,
             size: item.size,
             size_description: item.size_description,
-            language_options: item.language_options ?? null,
+            language_options: (item.language_options ?? undefined) as any,
             language_desc: item.language_desc,
-            ability_bonus_options: item.ability_bonus_options ?? null,
+            ability_bonus_options: (item.ability_bonus_options ?? undefined) as any,
             alignment: item.alignment,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
 
-        const raceId = (await this.slugToId(RaceEntity, item.index))!;
+        const raceId = (await this.slugToId(RaceEntity, item.slug))!;
 
         // race_languages
-        const langs: JsonRef[] = item.languages ?? [];
-        for (const l of langs) {
-          const langId = langMap.get(l.index);
+        for (const langSlug of item.language_slugs) {
+          const langId = langMap.get(langSlug);
           if (!langId) continue;
           await rlRepo.upsert(
             { race_id: raceId, language_id: langId },
@@ -821,10 +824,10 @@ export class AdminService {
 
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('races', data.length, success, errors);
+    return this.result('races', items.length, success, errors);
   }
 
   // ──────────── Fase 4 — Subclasses, Subraces, Traits, Backgrounds ──────────
@@ -878,63 +881,106 @@ export class AdminService {
   }
 
   async seedSubraces(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Subraces.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformSubraces();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(SubraceEntity);
     const raceMap = await this.slugToIdMap(RaceEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
-        const raceId = raceMap.get(item.race?.index) ?? undefined;
+        const raceId = raceMap.get(item.race_slug) ?? undefined;
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            description: item.desc ?? '',
-            ability_bonuses: item.ability_bonuses ?? [],
-            url: item.url ?? null,
+            description: item.description,
+            ability_bonuses: item.ability_bonuses as any,
             race_id: raceId,
-            source_id: sourceId,
-            raw: item,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('subraces', data.length, success, errors);
+    return this.result('subraces', items.length, success, errors);
   }
 
   async seedTraits(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Traits.json');
-    const sourceId = await this.getOrCreateSource();
-    const profMap = await this.slugToIdMap(ProficiencyEntity);
-    const tpRepo = this.ds.getRepository(TraitProficiencyEntity);
+    const sourceMap = await this.sourceCodeToIdMap();
     const rtRepo = this.ds.getRepository(RaceTraitEntity);
     const stRepo = this.ds.getRepository(SubraceTraitEntity);
+    const raceMap = await this.slugToIdMap(RaceEntity);
+    const subraceMap = await this.slugToIdMap(SubraceEntity);
     const errors: { slug: string; message: string }[] = [];
+    let totalTraits = 0;
     let success = 0;
 
-    // Passe 1 — inserir todos sem parent_id
-    for (const item of data) {
+    // Collect traits from all races' entries
+    const raceItems = transformRaces();
+    const allTraits: Array<{ slug: string; name: string; description: string[]; proficiency_choices: Record<string, unknown> | null; trait_specific: Record<string, unknown> | null; language_options: Record<string, unknown> | null; source_code: string; race_slug: string; raw: Record<string, unknown> }> = [];
+    const subraceTraitLinks: Array<{ trait_slug: string; subrace_slug: string }> = [];
+
+    for (const race of raceItems) {
+      const extracted = extractTraitsFromRace({
+        raceSlug: race.slug,
+        sourceCode: race.source_code,
+        srd52: (race.raw as any).srd52,
+        entries: (race.raw as any).entries,
+        raw: race.raw,
+      });
+      allTraits.push(...extracted);
+    }
+
+    // Collect traits from subraces
+    const subraceItems = transformSubraces();
+    for (const sub of subraceItems) {
+      const extracted = extractTraitsFromSubrace({
+        subraceSlug: sub.slug,
+        raceSlug: sub.race_slug,
+        sourceCode: sub.source_code,
+        srd52: (sub.raw as any).srd52,
+        entries: (sub.raw as any).entries,
+        raw: sub.raw,
+      });
+      for (const t of extracted) {
+        allTraits.push(t);
+        subraceTraitLinks.push({ trait_slug: t.slug, subrace_slug: sub.slug });
+      }
+    }
+
+    // Deduplicate traits by slug (keep first occurrence)
+    const seenSlugs = new Set<string>();
+    const uniqueTraits: typeof allTraits = [];
+    for (const t of allTraits) {
+      if (!seenSlugs.has(t.slug)) {
+        seenSlugs.add(t.slug);
+        uniqueTraits.push(t);
+      }
+    }
+    totalTraits = uniqueTraits.length;
+
+    // Passe 1 — insert all traits
+    for (const item of uniqueTraits) {
       try {
         await this.ds
           .createQueryBuilder()
           .insert()
           .into(TraitEntity)
           .values({
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            description: item.desc ?? [],
-            proficiency_choices: item.proficiency_choices ?? null,
-            trait_specific: item.trait_specific ?? null,
-            language_options: item.language_options ?? null,
-            source_id: sourceId,
-            raw: item,
+            description: item.description,
+            proficiency_choices: (item.proficiency_choices ?? undefined) as any,
+            trait_specific: (item.trait_specific ?? undefined) as any,
+            language_options: (item.language_options ?? undefined) as any,
+            source_id: sourceMap.get(item.source_code) ?? undefined,
+            raw: item.raw as any,
           })
           .orUpdate(
             [
@@ -951,97 +997,48 @@ export class AdminService {
           .execute();
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
 
-    // Passe 2 — atualizar parent_id
+    // Passe 2 — race_traits junctions
     const traitMap = await this.slugToIdMap(TraitEntity);
-    for (const item of data) {
-      if (!item.parent?.index) continue;
+    for (const item of allTraits) {
+      const traitId = traitMap.get(item.slug);
+      const raceId = raceMap.get(item.race_slug);
+      if (!traitId || !raceId) continue;
       try {
-        const traitId = traitMap.get(item.index);
-        const parentId = traitMap.get(item.parent.index);
-        if (traitId && parentId) {
-          await this.ds
-            .createQueryBuilder()
-            .update(TraitEntity)
-            .set({ parent_id: parentId })
-            .where('id = :id', { id: traitId })
-            .execute();
-        }
+        await rtRepo.upsert(
+          { race_id: raceId, trait_id: traitId },
+          { conflictPaths: ['race_id', 'trait_id'] },
+        );
       } catch (err: any) {
         errors.push({
-          slug: `${item.index}→parent`,
+          slug: `${item.slug}→race:${item.race_slug}`,
           message: err.message,
         });
       }
     }
 
-    // Passe 3 — junções
-    const raceMap = await this.slugToIdMap(RaceEntity);
-    const subraceMap = await this.slugToIdMap(SubraceEntity);
-
-    for (const item of data) {
-      const traitId = traitMap.get(item.index);
-      if (!traitId) continue;
-
-      // trait_proficiencies
-      const profs: JsonRef[] = item.proficiencies ?? [];
-      for (const p of profs) {
-        const profId = profMap.get(p.index);
-        if (!profId) continue;
-        try {
-          await tpRepo.upsert(
-            { trait_id: traitId, proficiency_id: profId },
-            { conflictPaths: ['trait_id', 'proficiency_id'] },
-          );
-        } catch (err: any) {
-          errors.push({
-            slug: `${item.index}→prof:${p.index}`,
-            message: err.message,
-          });
-        }
-      }
-
-      // race_traits
-      const races: JsonRef[] = item.races ?? [];
-      for (const r of races) {
-        const raceId = raceMap.get(r.index);
-        if (!raceId) continue;
-        try {
-          await rtRepo.upsert(
-            { race_id: raceId, trait_id: traitId },
-            { conflictPaths: ['race_id', 'trait_id'] },
-          );
-        } catch (err: any) {
-          errors.push({
-            slug: `${item.index}→race:${r.index}`,
-            message: err.message,
-          });
-        }
-      }
-
-      // subrace_traits
-      const subs: JsonRef[] = item.subraces ?? [];
-      for (const s of subs) {
-        const subraceId = subraceMap.get(s.index);
-        if (!subraceId) continue;
-        try {
-          await stRepo.upsert(
-            { subrace_id: subraceId, trait_id: traitId },
-            { conflictPaths: ['subrace_id', 'trait_id'] },
-          );
-        } catch (err: any) {
-          errors.push({
-            slug: `${item.index}→subrace:${s.index}`,
-            message: err.message,
-          });
-        }
+    // Passe 3 — subrace_traits junctions
+    for (const link of subraceTraitLinks) {
+      const traitId = traitMap.get(link.trait_slug);
+      const subraceId = subraceMap.get(link.subrace_slug);
+      if (!traitId || !subraceId) continue;
+      try {
+        await stRepo.upsert(
+          { subrace_id: subraceId, trait_id: traitId },
+          { conflictPaths: ['subrace_id', 'trait_id'] },
+        );
+      } catch (err: any) {
+        errors.push({
+          slug: `${link.trait_slug}→subrace:${link.subrace_slug}`,
+          message: err.message,
+        });
       }
     }
 
-    return this.result('traits', data.length, success, errors);
+    return this.result('traits', totalTraits, success, errors);
   }
 
   async seedBackgrounds(): Promise<SeedResult> {

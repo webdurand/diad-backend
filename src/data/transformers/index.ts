@@ -30,3 +30,19 @@ export type {
   TransformedWeaponProperty,
   TransformedWeaponMasteryProperty,
 } from './transform-weapon-properties';
+
+export {
+  transformRaces,
+  transformSubraces,
+  extractTraitEntries,
+} from './transform-races';
+export type {
+  TransformedRace,
+  TransformedSubrace,
+  RaceTraitEntry,
+} from './transform-races';
+export {
+  extractTraitsFromRace,
+  extractTraitsFromSubrace,
+} from './transform-traits';
+export type { TransformedTrait } from './transform-traits';
