@@ -594,6 +594,9 @@ export class AdminService {
             contents: item.contents ?? null,
             craft: item.craft ?? null,
             range: item.range ?? null,
+            mastery: item.mastery
+              ? { slug: item.mastery.index, name: item.mastery.name }
+              : undefined,
             source_id: sourceId,
             raw: item,
           },

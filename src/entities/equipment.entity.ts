@@ -56,6 +56,9 @@ export class EquipmentEntity {
   @Column({ type: 'jsonb', nullable: true })
   consumable_effect?: Record<string, unknown>;
 
+  @Column({ type: 'jsonb', nullable: true })
+  mastery?: Record<string, unknown>;
+
   @Column({ type: 'uuid', nullable: true })
   source_id?: string;
 
