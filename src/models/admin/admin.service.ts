@@ -69,6 +69,8 @@ import {
   transformLevels,
   transformSpells,
   loadSpellClassMappings,
+  transformFeats,
+  transformBackgrounds,
 } from '../../data/transformers';
 
 // ────────────────────────────────────────────────────────────────
@@ -624,8 +626,8 @@ export class AdminService {
   }
 
   async seedFeats(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Feats.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformFeats();
+    const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(FeatEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
@@ -634,32 +636,35 @@ export class AdminService {
       origin: FeatTypeEnum.Origin,
       general: FeatTypeEnum.General,
       epic_boon: FeatTypeEnum.EpicBoon,
-      'epic-boon': FeatTypeEnum.EpicBoon,
-      'fighting-style': FeatTypeEnum.FightingStyle,
+      fighting_style: FeatTypeEnum.FightingStyle,
+      dragonmark: FeatTypeEnum.Other,
+      other: FeatTypeEnum.Other,
     };
 
-    for (const item of data) {
+    for (const item of items) {
       try {
+        const sourceId = sourceMap.get(item.source_code) ?? null;
+
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            description: item.description ?? '',
-            feat_type: typeMap[item.type] ?? FeatTypeEnum.Other,
-            repeatable: item.repeatable ?? null,
-            prerequisites: item.prerequisites ?? null,
-            prerequisite_options: item.prerequisite_options ?? null,
-            source_id: sourceId,
-            raw: item,
+            description: item.description,
+            feat_type: typeMap[item.feat_type] ?? FeatTypeEnum.Other,
+            repeatable: item.repeatable,
+            prerequisites: item.prerequisites,
+            prerequisite_options: item.ability_options,
+            source_id: sourceId ?? undefined,
+            raw: item.raw,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('feats', data.length, success, errors);
+    return this.result('feats', items.length, success, errors);
   }
 
   async seedRules(): Promise<SeedResult> {
@@ -1032,8 +1037,8 @@ export class AdminService {
   }
 
   async seedBackgrounds(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Backgrounds.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformBackgrounds();
+    const sourceMap = await this.sourceCodeToIdMap();
     const bgRepo = this.ds.getRepository(BackgroundEntity);
     const bpRepo = this.ds.getRepository(BackgroundProficiencyEntity);
     const featMap = await this.slugToIdMap(FeatEntity);
@@ -1041,30 +1046,39 @@ export class AdminService {
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
-        const featId = featMap.get(item.feat?.index) ?? undefined;
+        const sourceId = sourceMap.get(item.source_code) ?? null;
+        const featId = item.feat_slug
+          ? featMap.get(item.feat_slug) ?? undefined
+          : undefined;
 
         await bgRepo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            ability_scores: item.ability_scores ?? null,
-            equipment_options: item.equipment_options ?? {},
-            proficiency_choices: item.proficiency_choices ?? null,
+            ability_scores: item.ability_scores
+              ? (item.ability_scores as unknown as Record<string, unknown>[])
+              : null,
+            equipment_options: item.equipment_options,
+            proficiency_choices: null,
             feat_id: featId,
-            language_choices: item.language_choices ?? null,
-            feature: item.feature ?? null,
-            source_id: sourceId,
-            raw: item,
+            language_choices: item.language_choices,
+            feature: item.feature,
+            source_id: sourceId ?? undefined,
+            raw: item.raw,
           },
           { conflictPaths: ['slug'] },
         );
 
-        const bgId = (await this.slugToId(BackgroundEntity, item.index))!;
-        const profs: JsonRef[] = item.proficiencies ?? [];
-        for (const p of profs) {
-          const profId = profMap.get(p.index);
+        // Skill + tool proficiencies via junction table
+        const bgId = (await this.slugToId(BackgroundEntity, item.slug))!;
+        const allProfSlugs = [
+          ...item.skill_proficiency_slugs,
+          ...item.tool_proficiency_slugs,
+        ];
+        for (const profSlug of allProfSlugs) {
+          const profId = profMap.get(profSlug);
           if (!profId) continue;
           await bpRepo.upsert(
             { background_id: bgId, proficiency_id: profId },
@@ -1074,10 +1088,10 @@ export class AdminService {
 
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('backgrounds', data.length, success, errors);
+    return this.result('backgrounds', items.length, success, errors);
   }
 
   async seedEldritchInvocations(): Promise<SeedResult> {

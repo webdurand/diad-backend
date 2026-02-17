@@ -57,3 +57,7 @@ export { transformLevels } from './transform-levels';
 export type { TransformedLevel } from './transform-levels';
 export { transformSpells, loadSpellClassMappings } from './transform-spells';
 export type { TransformedSpell, SpellClassMapping } from './transform-spells';
+export { transformFeats } from './transform-feats';
+export type { TransformedFeat } from './transform-feats';
+export { transformBackgrounds } from './transform-backgrounds';
+export type { TransformedBackground, AbilityScoreConfig } from './transform-backgrounds';
