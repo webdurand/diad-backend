@@ -61,3 +61,7 @@ export { transformFeats } from './transform-feats';
 export type { TransformedFeat } from './transform-feats';
 export { transformBackgrounds } from './transform-backgrounds';
 export type { TransformedBackground, AbilityScoreConfig } from './transform-backgrounds';
+export { transformEquipment } from './transform-equipment';
+export type { TransformedEquipment } from './transform-equipment';
+export { transformMagicItems } from './transform-magic-items';
+export type { TransformedMagicItem } from './transform-magic-items';

@@ -36,6 +36,21 @@ export class MagicItemEntity {
   @Column({ type: 'text', nullable: true })
   url?: string;
 
+  @Column({ type: 'numeric', default: 0 })
+  weight: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  cost?: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', nullable: true })
+  attunement?: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', nullable: true })
+  bonuses?: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', nullable: true })
+  charges_info?: Record<string, unknown>;
+
   @Column({ type: 'uuid', nullable: true })
   equipment_category_id?: string;
 

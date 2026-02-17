@@ -71,6 +71,8 @@ import {
   loadSpellClassMappings,
   transformFeats,
   transformBackgrounds,
+  transformEquipment,
+  transformMagicItems,
 } from '../../data/transformers';
 
 // ────────────────────────────────────────────────────────────────
@@ -571,45 +573,60 @@ export class AdminService {
   }
 
   async seedEquipment(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Equipment.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformEquipment();
+    const sourceMap = await this.sourceCodeToIdMap();
     const eqRepo = this.ds.getRepository(EquipmentEntity);
     const catMap = await this.slugToIdMap(EquipmentCategoryEntity);
+    const wpMap = await this.slugToIdMap(WeaponPropertyEntity);
     const eciRepo = this.ds.getRepository(EquipmentCategoryItemEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
+        const sourceId = sourceMap.get(item.source_code) ?? undefined;
+
+        // Build properties as array of { slug, name } for weapon properties
+        const propsJsonb = item.properties.length > 0
+          ? item.properties.map((slug) => ({ slug, name: slug }))
+          : null;
+
+        // Build mastery as { slug, name } of first mastery
+        const masteryJsonb = item.mastery_slugs.length > 0
+          ? { slug: item.mastery_slugs[0], name: item.mastery_slugs[0] }
+          : null;
+
         await eqRepo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            weight: item.weight != null ? String(item.weight) : '0',
-            description: item.description ?? null,
-            image: item.image ?? null,
-            cost: item.cost ?? { quantity: 0, unit: 'gp' },
-            damage: item.damage ?? null,
-            armor_class: item.armor_class ?? null,
-            properties: item.properties ?? null,
-            utilize: item.utilize ?? null,
-            contents: item.contents ?? null,
-            craft: item.craft ?? null,
-            range: item.range ?? null,
-            mastery: item.mastery
-              ? { slug: item.mastery.index, name: item.mastery.name }
-              : undefined,
+            weight: String(item.weight),
+            description: item.description || undefined,
+            cost: item.cost,
+            damage: (item.damage ?? undefined) as any,
+            armor_class: (item.armor_class ?? undefined) as any,
+            properties: (propsJsonb ?? undefined) as any,
+            range: (item.range ?? undefined) as any,
+            mastery: (masteryJsonb ?? undefined) as any,
+            utilize: (item.utilize ?? undefined) as any,
+            contents: (item.contents ?? undefined) as any,
+            craft: (item.craft ?? undefined) as any,
+            consumable_effect: (item.consumable_effect ?? undefined) as any,
+            stealth_disadvantage: item.stealth_disadvantage,
+            str_minimum: item.str_minimum ?? undefined,
+            weapon_category: item.weapon_category ?? undefined,
+            don_time: item.don_time ?? undefined,
+            doff_time: item.doff_time ?? undefined,
             source_id: sourceId,
-            raw: item,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
 
-        // Junção equipment_category_items
-        const eqId = (await this.slugToId(EquipmentEntity, item.index))!;
-        const categories: JsonRef[] = item.equipment_categories ?? [];
-        for (const cat of categories) {
-          const catId = catMap.get(cat.index);
+        // equipment_category_items M2M
+        const eqId = (await this.slugToId(EquipmentEntity, item.slug))!;
+        for (const catSlug of item.category_slugs) {
+          const catId = catMap.get(catSlug);
           if (!catId) continue;
           await eciRepo.upsert(
             { equipment_id: eqId, category_id: catId },
@@ -619,10 +636,10 @@ export class AdminService {
 
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('equipments', data.length, success, errors);
+    return this.result('equipments', items.length, success, errors);
   }
 
   async seedFeats(): Promise<SeedResult> {
@@ -1293,33 +1310,38 @@ export class AdminService {
   }
 
   async seedMagicItems(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Magic-Items.json');
-    const sourceId = await this.getOrCreateSource();
+    const items = transformMagicItems();
+    const sourceMap = await this.sourceCodeToIdMap();
     const catMap = await this.slugToIdMap(EquipmentCategoryEntity);
-    const mvRepo = this.ds.getRepository(MagicItemVariantEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    // Passe 1 — inserir todos
-    for (const item of data) {
+    for (const item of items) {
       try {
-        const catId = catMap.get(item.equipment_category?.index) ?? undefined;
+        const sourceId = sourceMap.get(item.source_code) ?? undefined;
+        const catId = item.category_slug
+          ? catMap.get(item.category_slug) ?? undefined
+          : undefined;
 
         await this.ds
           .createQueryBuilder()
           .insert()
           .into(MagicItemEntity)
           .values({
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            rarity: item.rarity ?? {},
-            is_variant: item.variant ?? false,
-            description: item.desc ?? [],
-            image: item.image ?? null,
-            url: item.url ?? null,
+            rarity: item.rarity as any,
+            is_variant: item.is_variant,
+            description: item.description as any,
+            image: item.image ?? undefined,
+            weight: String(item.weight),
+            cost: (item.cost ?? undefined) as any,
+            attunement: (item.attunement ?? undefined) as any,
+            bonuses: (item.bonuses ?? undefined) as any,
+            charges_info: (item.charges_info ?? undefined) as any,
             equipment_category_id: catId,
             source_id: sourceId,
-            raw: item,
+            raw: item.raw as any,
           })
           .orUpdate(
             [
@@ -1328,7 +1350,11 @@ export class AdminService {
               'is_variant',
               'description',
               'image',
-              'url',
+              'weight',
+              'cost',
+              'attunement',
+              'bonuses',
+              'charges_info',
               'equipment_category_id',
               'source_id',
               'raw',
@@ -1338,41 +1364,11 @@ export class AdminService {
           .execute();
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
 
-    // Passe 2 — magic_item_variants
-    const miMap = await this.slugToIdMap(MagicItemEntity);
-    for (const item of data) {
-      const variants: JsonRef[] = item.variants ?? [];
-      if (!variants.length) continue;
-      const parentId = miMap.get(item.index);
-      if (!parentId) continue;
-
-      for (const v of variants) {
-        const variantId = miMap.get(v.index);
-        if (!variantId) continue;
-        try {
-          await mvRepo.upsert(
-            {
-              magic_item_id: parentId,
-              variant_magic_item_id: variantId,
-            },
-            {
-              conflictPaths: ['magic_item_id', 'variant_magic_item_id'],
-            },
-          );
-        } catch (err: any) {
-          errors.push({
-            slug: `${item.index}→variant:${v.index}`,
-            message: err.message,
-          });
-        }
-      }
-    }
-
-    return this.result('magic_items', data.length, success, errors);
+    return this.result('magic_items', items.length, success, errors);
   }
 
   async seedMonsters(): Promise<SeedResult> {

@@ -59,6 +59,21 @@ export class EquipmentEntity {
   @Column({ type: 'jsonb', nullable: true })
   mastery?: Record<string, unknown>;
 
+  @Column({ type: 'boolean', default: false })
+  stealth_disadvantage: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  str_minimum?: number;
+
+  @Column({ type: 'text', nullable: true })
+  weapon_category?: string;
+
+  @Column({ type: 'text', nullable: true })
+  don_time?: string;
+
+  @Column({ type: 'text', nullable: true })
+  doff_time?: string;
+
   @Column({ type: 'uuid', nullable: true })
   source_id?: string;
 
