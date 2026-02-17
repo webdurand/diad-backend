@@ -24,6 +24,7 @@ interface FiveToolsClass {
   cantripProgression?: number[];
   spellsKnownProgressionFixed?: number[];
   spellsKnownProgressionFixedAllowLowerLevel?: boolean;
+  spellsKnownProgression?: number[];
   primaryAbility?: Record<string, boolean>[];
   startingProficiencies?: {
     armor?: (string | Record<string, unknown>)[];
@@ -201,6 +202,7 @@ function resolveSpellcasting(cls: FiveToolsClass): Record<string, unknown> | nul
     caster_progression: cls.casterProgression ?? null,
     cantrip_progression: cls.cantripProgression ?? null,
     prepared_spells_progression: cls.preparedSpellsProgression ?? null,
+    spells_known_progression: cls.spellsKnownProgression ?? null,
     spellbook_progression: cls.spellsKnownProgressionFixed ?? null,
     prepared_formula: cls.preparedSpells ?? null,
   };
@@ -208,6 +210,33 @@ function resolveSpellcasting(cls: FiveToolsClass): Record<string, unknown> | nul
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Resolve the number of prepared/known spells at level 1.
+ *
+ * XPHB (2024): uses preparedSpellsProgression (fixed table).
+ * PHB  (2014): two cases:
+ *   - Classes with formula (Wizard, Cleric, Druid, Paladin): preparedSpells
+ *     = "<$level$> + <$mod$>". At level 1 with +0 mod the minimum is 1.
+ *   - Spells-known classes (Bard, Ranger, Sorcerer, Warlock):
+ *     spellsKnownProgression gives the fixed count per level.
+ */
+function resolveSpellsPreparedCount(cls: FiveToolsClass): number {
+  // XPHB: fixed progression table
+  if (cls.preparedSpellsProgression?.[0] != null) {
+    return cls.preparedSpellsProgression[0];
+  }
+  // PHB spells-known classes (Bard, Ranger, Sorcerer, Warlock)
+  if (cls.spellsKnownProgression?.[0] != null) {
+    return cls.spellsKnownProgression[0];
+  }
+  // PHB formula-based classes (Cleric, Druid, Paladin, Wizard)
+  // At level 1 with ability mod 0 the minimum is 1
+  if (cls.preparedSpells) {
+    return 1;
+  }
+  return 0;
 }
 
 function resolveSpellSlotProgression(tableGroups?: ClassTableGroup[]): number[][] | null {
@@ -546,7 +575,7 @@ export function transformClasses(): TransformedClass[] {
         multi_classing: resolveMulticlassing(cls.multiclassing),
         spellcasting: resolveSpellcasting(cls),
         cantrips_known: cls.cantripProgression?.[0] ?? 0,
-        spells_prepared_count: cls.preparedSpellsProgression?.[0] ?? 0,
+        spells_prepared_count: resolveSpellsPreparedCount(cls),
         spellbook_count: cls.spellsKnownProgressionFixed?.[0] ?? 0,
         weapon_mastery_count: wm.count,
         weapon_mastery_restriction: wm.restriction,
