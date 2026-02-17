@@ -65,3 +65,7 @@ export { transformEquipment } from './transform-equipment';
 export type { TransformedEquipment } from './transform-equipment';
 export { transformMagicItems } from './transform-magic-items';
 export type { TransformedMagicItem } from './transform-magic-items';
+export { transformOptionalFeatures } from './transform-optional-features';
+export type { TransformedOptionalFeature } from './transform-optional-features';
+export { transformMonsters, transformMonstersByFile } from './transform-monsters';
+export type { TransformedMonster } from './transform-monsters';

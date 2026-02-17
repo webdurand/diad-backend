@@ -19,7 +19,7 @@ import {
   EquipmentCategoryEntity,
   EquipmentCategoryItemEntity,
   EquipmentEntity,
-  EldritchInvocationEntity,
+  OptionalFeatureEntity,
   FeatEntity,
   FeatureEntity,
   LanguageEntity,
@@ -73,6 +73,8 @@ import {
   transformBackgrounds,
   transformEquipment,
   transformMagicItems,
+  transformOptionalFeatures,
+  transformMonstersByFile,
 } from '../../data/transformers';
 
 // ────────────────────────────────────────────────────────────────
@@ -1111,36 +1113,39 @@ export class AdminService {
     return this.result('backgrounds', items.length, success, errors);
   }
 
-  async seedEldritchInvocations(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Eldritch-Invocations.json');
-    const sourceId = await this.getOrCreateSource();
-    const repo = this.ds.getRepository(EldritchInvocationEntity);
+  async seedOptionalFeatures(): Promise<SeedResult> {
+    const items = transformOptionalFeatures();
+    const sourceMap = await this.sourceCodeToIdMap();
+    const repo = this.ds.getRepository(OptionalFeatureEntity);
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
 
-    for (const item of data) {
+    for (const item of items) {
       try {
+        const sourceId = sourceMap.get(item.source_code) ?? null;
+
         await repo.upsert(
           {
-            slug: item.index,
+            slug: item.slug,
             name: item.name,
-            description: item.description ?? '',
-            min_level: item.min_level ?? null,
-            prerequisite: item.prerequisite ?? null,
-            has_sub_choices: item.has_sub_choices ?? false,
-            sub_choice_type: item.sub_choice_type ?? null,
-            sub_choice_options: item.sub_choice_options ?? null,
-            source_id: sourceId,
-            raw: item,
+            description: item.description,
+            feature_type: item.feature_type,
+            min_level: item.min_level ?? undefined,
+            prerequisite: (item.prerequisite ?? undefined) as any,
+            has_sub_choices: item.has_sub_choices,
+            sub_choice_type: item.sub_choice_type ?? undefined,
+            sub_choice_options: (item.sub_choice_options ?? undefined) as any,
+            source_id: sourceId ?? undefined,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
         success++;
       } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+        errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('eldritch_invocations', data.length, success, errors);
+    return this.result('optional_features', items.length, success, errors);
   }
 
   // ──────────── Fase 5 — Features, Spells, MagicItems, Monsters ─────────────
@@ -1372,61 +1377,115 @@ export class AdminService {
   }
 
   async seedMonsters(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Monsters.json');
-    const sourceId = await this.getOrCreateSource();
-    const repo = this.ds.getRepository(MonsterEntity);
+    const filesets = transformMonstersByFile();
+    const sourceMap = await this.sourceCodeToIdMap();
     const errors: { slug: string; message: string }[] = [];
     let success = 0;
+    let total = 0;
+    const BATCH_SIZE = 80;
 
-    for (const item of data) {
-      try {
-        await repo.upsert(
-          {
-            slug: item.index,
-            name: item.name,
-            size: item.size,
-            type: item.type,
-            subtype: item.subtype ?? null,
-            alignment: item.alignment,
-            armor_class: item.armor_class ?? [],
-            hit_points: item.hit_points,
-            hit_dice: item.hit_dice,
-            hit_points_roll: item.hit_points_roll,
-            speed: item.speed ?? {},
-            strength: item.strength,
-            dexterity: item.dexterity,
-            constitution: item.constitution,
-            intelligence: item.intelligence,
-            wisdom: item.wisdom,
-            charisma: item.charisma,
-            proficiencies: item.proficiencies ?? [],
-            damage_vulnerabilities: item.damage_vulnerabilities ?? [],
-            damage_resistances: item.damage_resistances ?? [],
-            damage_immunities: item.damage_immunities ?? [],
-            condition_immunities: item.condition_immunities ?? [],
-            senses: item.senses ?? {},
-            languages: item.languages ?? '',
-            proficiency_bonus: item.proficiency_bonus ?? 0,
-            xp: item.xp ?? 0,
-            special_abilities: item.special_abilities ?? null,
-            actions: item.actions ?? null,
-            legendary_actions: item.legendary_actions ?? null,
-            reactions: item.reactions ?? null,
-            forms: item.forms ?? null,
-            image: item.image ?? null,
-            description: item.desc ?? null,
-            challenge_rating: item.challenge_rating ?? 0,
-            source_id: sourceId,
-            raw: item,
-          },
-          { conflictPaths: ['slug'] },
-        );
-        success++;
-      } catch (err: any) {
-        errors.push({ slug: item.index, message: err.message });
+    for (const { file, monsters } of filesets) {
+      this.logger.log(`[monsters] Processing ${file} (${monsters.length} monsters)`);
+      total += monsters.length;
+
+      for (let i = 0; i < monsters.length; i += BATCH_SIZE) {
+        const batch = monsters.slice(i, i + BATCH_SIZE);
+
+        for (const item of batch) {
+          try {
+            const sourceId = sourceMap.get(item.source_code) ?? undefined;
+
+            await this.ds
+              .createQueryBuilder()
+              .insert()
+              .into(MonsterEntity)
+              .values({
+                slug: item.slug,
+                name: item.name,
+                size: item.size,
+                type: item.type,
+                subtype: item.subtype ?? undefined,
+                alignment: item.alignment,
+                armor_class: item.armor_class as any,
+                hit_points: item.hit_points,
+                hit_dice: item.hit_dice,
+                hit_points_roll: item.hit_points_roll,
+                speed: item.speed as any,
+                strength: item.strength,
+                dexterity: item.dexterity,
+                constitution: item.constitution,
+                intelligence: item.intelligence,
+                wisdom: item.wisdom,
+                charisma: item.charisma,
+                proficiencies: item.proficiencies as any,
+                damage_vulnerabilities: item.damage_vulnerabilities as any,
+                damage_resistances: item.damage_resistances as any,
+                damage_immunities: item.damage_immunities as any,
+                condition_immunities: item.condition_immunities as any,
+                senses: item.senses as any,
+                languages: item.languages,
+                proficiency_bonus: item.proficiency_bonus,
+                xp: item.xp,
+                special_abilities: (item.special_abilities ?? undefined) as any,
+                actions: (item.actions ?? undefined) as any,
+                legendary_actions: (item.legendary_actions ?? undefined) as any,
+                reactions: (item.reactions ?? undefined) as any,
+                image: item.image ?? undefined,
+                description: item.description ?? undefined,
+                challenge_rating: item.challenge_rating,
+                source_id: sourceId,
+                raw: item.raw as any,
+              })
+              .orUpdate(
+                [
+                  'name',
+                  'size',
+                  'type',
+                  'subtype',
+                  'alignment',
+                  'armor_class',
+                  'hit_points',
+                  'hit_dice',
+                  'hit_points_roll',
+                  'speed',
+                  'strength',
+                  'dexterity',
+                  'constitution',
+                  'intelligence',
+                  'wisdom',
+                  'charisma',
+                  'proficiencies',
+                  'damage_vulnerabilities',
+                  'damage_resistances',
+                  'damage_immunities',
+                  'condition_immunities',
+                  'senses',
+                  'languages',
+                  'proficiency_bonus',
+                  'xp',
+                  'special_abilities',
+                  'actions',
+                  'legendary_actions',
+                  'reactions',
+                  'image',
+                  'description',
+                  'challenge_rating',
+                  'source_id',
+                  'raw',
+                ],
+                ['slug'],
+              )
+              .execute();
+            success++;
+          } catch (err: any) {
+            errors.push({ slug: item.slug, message: err.message });
+          }
+        }
       }
     }
-    return this.result('monsters', data.length, success, errors);
+
+    this.logger.log(`[monsters] Total: ${total}, Success: ${success}, Errors: ${errors.length}`);
+    return this.result('monsters', total, success, errors);
   }
 
   // ──────────── Fase 6 — Levels ────────────

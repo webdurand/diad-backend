@@ -23,7 +23,7 @@ import { DamageTypeEntity } from './damage-type.entity';
 import { EquipmentCategoryEntity } from './equipment-category.entity';
 import { EquipmentCategoryItemEntity } from './equipment-category-item.entity';
 import { EquipmentEntity } from './equipment.entity';
-import { EldritchInvocationEntity } from './eldritch-invocation.entity';
+import { OptionalFeatureEntity } from './optional-feature.entity';
 import { FeatEntity } from './feat.entity';
 import { FeatureEntity } from './feature.entity';
 import { LanguageEntity } from './language.entity';
@@ -80,7 +80,7 @@ export {
   EquipmentCategoryEntity,
   EquipmentCategoryItemEntity,
   EquipmentEntity,
-  EldritchInvocationEntity,
+  OptionalFeatureEntity,
   FeatEntity,
   FeatureEntity,
   LanguageEntity,
@@ -138,7 +138,7 @@ export const ENTITIES = [
   EquipmentCategoryEntity,
   EquipmentCategoryItemEntity,
   EquipmentEntity,
-  EldritchInvocationEntity,
+  OptionalFeatureEntity,
   FeatEntity,
   FeatureEntity,
   LanguageEntity,

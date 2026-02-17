@@ -7,8 +7,8 @@ import {
 } from 'typeorm';
 import { CompSourceEntity } from './comp-source.entity';
 
-@Entity('eldritch_invocations')
-export class EldritchInvocationEntity {
+@Entity('optional_features')
+export class OptionalFeatureEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -21,11 +21,14 @@ export class EldritchInvocationEntity {
   @Column({ type: 'text' })
   description: string;
 
+  @Column({ type: 'varchar' })
+  feature_type: string;
+
   @Column({ type: 'int', nullable: true })
   min_level?: number;
 
-  @Column({ type: 'text', nullable: true })
-  prerequisite?: string;
+  @Column({ type: 'jsonb', nullable: true })
+  prerequisite?: Record<string, unknown>;
 
   @Column({ type: 'boolean', default: false })
   has_sub_choices: boolean;
