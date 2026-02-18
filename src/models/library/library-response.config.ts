@@ -15,11 +15,7 @@ interface EntityConfig {
 
 export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   races: {
-    relations: [
-      'race_languages.language',
-      'race_traits.trait',
-      'subraces',
-    ],
+    relations: ['race_languages.language', 'race_traits.trait', 'subraces'],
     flatten: {
       race_languages: { as: 'languages', pick: 'language' },
       race_traits: { as: 'traits', pick: 'trait' },
@@ -99,6 +95,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   subclasses: {
     relations: ['class'],
   },
+  comp_sources: {},
 };
 
 const INTERNAL_FIELDS = new Set([

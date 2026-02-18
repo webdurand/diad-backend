@@ -24,6 +24,7 @@ import {
   BackgroundEntity,
   AlignmentEntity,
   LevelEntity,
+  CompSourceEntity,
 } from 'src/entities';
 import {
   CharacterProficiencySourceEnum,
@@ -33,11 +34,12 @@ import {
 } from 'src/entities/enums';
 
 interface CharacterChoicesData {
-  raceIndex?: string;
-  subraceIndex?: string;
-  classIndex?: string;
-  backgroundIndex?: string;
-  alignmentIndex?: string;
+  sourceCode?: string;
+  raceSlug?: string;
+  subraceSlug?: string;
+  classSlug?: string;
+  backgroundSlug?: string;
+  alignmentSlug?: string;
   abilityScores?: Record<string, number>;
   abilityScoreMethod?: string;
   backgroundAbilityBonuses?: Array<{
@@ -59,11 +61,11 @@ interface CharacterChoicesData {
   height?: string;
   weight?: string;
   raceTraitChoices?: string[];
-  raceFeatChoiceIndex?: string;
+  raceFeatChoiceSlug?: string;
   raceLanguageChoices?: string[];
   divineOrder?: string;
   primalOrder?: string;
-  fightingStyleIndex?: string;
+  fightingStyleSlug?: string;
   classEquipmentChoices?: string[];
   backgroundEquipmentChoices?: string[];
   classStartingGold?: Record<string, unknown>;
@@ -123,6 +125,8 @@ export class CharactersService {
     private readonly classStartingEquipRepo: Repository<ClassStartingEquipmentEntity>,
     @InjectRepository(LevelEntity)
     private readonly levelRepository: Repository<LevelEntity>,
+    @InjectRepository(CompSourceEntity)
+    private readonly compSourceRepository: Repository<CompSourceEntity>,
   ) {}
 
   async listByUser(userId: string): Promise<CharacterEntity[]> {
@@ -150,38 +154,54 @@ export class CharactersService {
     const choices = input.data as unknown as CharacterChoicesData;
 
     return this.dataSource.transaction(async (manager) => {
+      // Resolve source
+      const sourceEntity = choices.sourceCode
+        ? await this.compSourceRepository.findOneBy({
+            code: choices.sourceCode,
+          })
+        : null;
+
       // Create character record (keep data as backup)
       const character = manager.create(CharacterEntity, {
         userId: input.userId,
         name: input.name.trim(),
         data: input.data,
+        sourceId: sourceEntity?.id ?? undefined,
       });
       const saved = await manager.save(CharacterEntity, character);
       const charId = saved.id;
 
       // Resolve slugs
-      const classEntity = choices.classIndex
-        ? await this.classRepository.findOneBy({ slug: choices.classIndex })
+      const classEntity = choices.classSlug
+        ? await this.classRepository.findOneBy({ slug: choices.classSlug })
         : null;
-      const raceEntity = choices.raceIndex
-        ? await this.raceRepository.findOneBy({ slug: choices.raceIndex })
+      const raceEntity = choices.raceSlug
+        ? await this.raceRepository.findOneBy({ slug: choices.raceSlug })
         : null;
-      const subraceEntity = choices.subraceIndex
-        ? await this.subraceRepository.findOneBy({ slug: choices.subraceIndex })
+      const subraceEntity = choices.subraceSlug
+        ? await this.subraceRepository.findOneBy({ slug: choices.subraceSlug })
         : null;
-      const backgroundEntity = choices.backgroundIndex
+      const backgroundEntity = choices.backgroundSlug
         ? await this.backgroundRepository.findOneBy({
-            slug: choices.backgroundIndex,
+            slug: choices.backgroundSlug,
           })
         : null;
-      const alignmentEntity = choices.alignmentIndex
+      const alignmentEntity = choices.alignmentSlug
         ? await this.alignmentRepository.findOneBy({
-            slug: choices.alignmentIndex,
+            slug: choices.alignmentSlug,
           })
         : null;
 
       if (!classEntity || !raceEntity || !backgroundEntity) {
-        return saved;
+        throw new BadRequestException(
+          `Dados obrigatorios nao encontrados: ${[
+            !classEntity && 'classe',
+            !raceEntity && 'raca',
+            !backgroundEntity && 'passado',
+          ]
+            .filter(Boolean)
+            .join(', ')}.`,
+        );
       }
 
       // character_classes
@@ -359,10 +379,10 @@ export class CharactersService {
         weight: choices.weight,
         ability_score_method: choices.abilityScoreMethod,
         race_trait_choices: choices.raceTraitChoices ?? [],
-        race_feat_choice: choices.raceFeatChoiceIndex,
+        race_feat_choice: choices.raceFeatChoiceSlug,
         divine_order: choices.divineOrder,
         primal_order: choices.primalOrder,
-        fighting_style_index: choices.fightingStyleIndex,
+        fighting_style_index: choices.fightingStyleSlug,
         class_equipment_choices: choices.classEquipmentChoices ?? [],
         background_equipment_choices: choices.backgroundEquipmentChoices ?? [],
         class_starting_gold: choices.classStartingGold ?? undefined,

@@ -33,6 +33,7 @@ describe('CharactersService', () => {
       equipment: createMockRepository(),
       classStartingEquip: createMockRepository(),
       level: createMockRepository(),
+      compSource: createMockRepository(),
     };
 
     mockManager = {
@@ -66,6 +67,7 @@ describe('CharactersService', () => {
       repos.equipment as any,
       repos.classStartingEquip as any,
       repos.level as any,
+      repos.compSource as any,
     );
   });
 

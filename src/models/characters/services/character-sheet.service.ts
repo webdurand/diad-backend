@@ -199,6 +199,9 @@ export interface CharacterSheet {
   // Origin metadata
   originDetails: Record<string, unknown>;
 
+  // Source / Ruleset
+  source?: { code: string; name: string };
+
   createdAt: string;
   updatedAt: string;
 }
@@ -720,6 +723,10 @@ export class CharacterSheetService {
       attunementSlots: { used: attunedCount, max: 3 },
 
       originDetails,
+
+      source: character.source
+        ? { code: character.source.code, name: character.source.name }
+        : undefined,
 
       createdAt: character.createdAt.toISOString(),
       updatedAt: character.updatedAt.toISOString(),

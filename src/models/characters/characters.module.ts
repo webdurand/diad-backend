@@ -32,6 +32,7 @@ import {
   MagicItemEntity,
   ClassStartingEquipmentEntity,
   EquipmentCategoryItemEntity,
+  CompSourceEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersController } from './characters.controller';
@@ -77,6 +78,7 @@ import { ActionsService } from './services/actions.service';
       MagicItemEntity,
       ClassStartingEquipmentEntity,
       EquipmentCategoryItemEntity,
+      CompSourceEntity,
     ]),
     AuthModule,
   ],

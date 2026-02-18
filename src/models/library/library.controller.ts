@@ -17,14 +17,19 @@ export class LibraryController {
   ) {
     const config = ENTITY_CONFIG[entity];
     const relations = config?.relations ? [...config.relations] : [];
-    if (!relations.some((r) => r === 'source' || r.startsWith('source.'))) {
+    const isSourceEntity = entity === 'comp_sources';
+    if (
+      !isSourceEntity &&
+      !relations.some((r) => r === 'source' || r.startsWith('source.'))
+    ) {
       relations.push('source');
     }
 
-    const where = source ? { source: { code: source } } : {};
+    const where = source && !isSourceEntity ? { source: { code: source } } : {};
 
     const results = await this.libraryService.findAll(entity, {
       relations,
+      order: { name: 'ASC' } as Record<string, 'ASC' | 'DESC'>,
       ...(Object.keys(where).length ? { where } : {}),
     });
     return transformLibraryResponse(

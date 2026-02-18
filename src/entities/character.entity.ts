@@ -21,6 +21,7 @@ import { CharacterStateEntity } from './character-state.entity';
 import { CharacterLevelUpEntity } from './character-level-up.entity';
 import { CharacterFeatureEntity } from './character-feature.entity';
 import { CharacterOriginEntity } from './character-origin.entity';
+import { CompSourceEntity } from './comp-source.entity';
 
 @Entity('characters')
 export class CharacterEntity {
@@ -42,6 +43,13 @@ export class CharacterEntity {
 
   @Column({ name: 'user_id', type: 'uuid' })
   userId: string;
+
+  @ManyToOne(() => CompSourceEntity, { nullable: true, eager: true })
+  @JoinColumn({ name: 'source_id' })
+  source?: CompSourceEntity;
+
+  @Column({ name: 'source_id', type: 'uuid', nullable: true })
+  sourceId?: string;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
