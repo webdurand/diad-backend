@@ -18,6 +18,7 @@ import {
   ClassSavingThrowEntity,
   ClassProficiencyEntity,
   EquipmentCategoryItemEntity,
+  SkillEntity,
 } from 'src/entities';
 import { ProficiencyTypeEnum } from 'src/entities/enums';
 import {
@@ -241,6 +242,8 @@ export class CharacterSheetService {
     private readonly classProfRepo: Repository<ClassProficiencyEntity>,
     @InjectRepository(EquipmentCategoryItemEntity)
     private readonly equipCatItemRepo: Repository<EquipmentCategoryItemEntity>,
+    @InjectRepository(SkillEntity)
+    private readonly skillRepo: Repository<SkillEntity>,
   ) {}
 
   async computeSheet(
@@ -402,23 +405,27 @@ export class CharacterSheetService {
       };
     });
 
-    // Skills
+    // Skills (all SRD skills, sorted alphabetically)
+    const allSkills = await this.skillRepo.find({
+      relations: ['ability_score'],
+      order: { name: 'ASC' },
+    });
     const proficientSkillIds = new Set(charSkills.map((s) => s.skill_id));
     const expertiseSkillIds = new Set(
       charSkills.filter((s) => s.expertise).map((s) => s.skill_id),
     );
 
-    const skills: SkillBlock[] = charSkills.map((cs) => {
-      const abilitySlug = cs.skill.ability_score?.slug ?? 'dex';
-      const isProficient = proficientSkillIds.has(cs.skill_id);
-      const isExpertise = expertiseSkillIds.has(cs.skill_id);
+    const skills: SkillBlock[] = allSkills.map((skill) => {
+      const abilitySlug = skill.ability_score?.slug ?? 'dex';
+      const isProficient = proficientSkillIds.has(skill.id);
+      const isExpertise = expertiseSkillIds.has(skill.id);
       const bonus =
         mod(abilitySlug) +
         (isProficient ? profBonus : 0) +
         (isExpertise ? profBonus : 0);
       return {
-        slug: cs.skill.slug,
-        name: cs.skill.name,
+        slug: skill.slug,
+        name: skill.name,
         ability: abilitySlug,
         proficient: isProficient,
         expertise: isExpertise,
@@ -802,8 +809,6 @@ export class CharacterSheetService {
 
     return result;
   }
-
-
 
   private isEquipmentProficient(
     equipSlug: string,
