@@ -23,11 +23,11 @@ import { ProficiencyTypeEnum } from 'src/entities/enums';
 import {
   PROF_BONUS_BY_LEVEL,
   XP_THRESHOLDS,
-  SPELLCASTING_ABILITY,
-  CASTER_SLOT_TYPE,
   FULL_CASTER_SLOTS,
   WARLOCK_SLOTS,
   PROF_TO_CATEGORIES,
+  getSpellcastingAbility,
+  getCasterSlotType,
 } from 'src/shared/srd-constants';
 
 // ---- Response DTOs ----
@@ -460,7 +460,7 @@ export class CharacterSheetService {
     // Classes block with spellcasting
     const classes: ClassBlock[] = charClasses.map((cc) => {
       const classSlug = cc.class.slug;
-      const scAbility = SPELLCASTING_ABILITY[classSlug];
+      const scAbility = getSpellcastingAbility(classSlug);
       const block: ClassBlock = {
         slug: classSlug,
         name: cc.class.name,
@@ -757,7 +757,7 @@ export class CharacterSheetService {
     let warlockLevel = 0;
 
     for (const cc of charClasses) {
-      const type = CASTER_SLOT_TYPE[cc.class.slug];
+      const type = getCasterSlotType(cc.class.slug);
       if (!type) continue;
       if (type === 'full') fullCasterLevels += cc.class_level;
       else if (type === 'half') halfCasterLevels += cc.class_level;

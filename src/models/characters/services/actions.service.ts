@@ -16,8 +16,8 @@ import {
 import { ProficiencyTypeEnum } from 'src/entities/enums';
 import {
   PROF_BONUS_BY_LEVEL,
-  SPELLCASTING_ABILITY,
   PROF_TO_CATEGORIES,
+  getSpellcastingAbility,
 } from 'src/shared/srd-constants';
 
 // ---- Types ----
@@ -183,7 +183,7 @@ export class ActionsService {
     const spellSaveDc: Record<string, number> = {};
     const spellAttackBonus: Record<string, number> = {};
     for (const cc of charClasses) {
-      const scAbility = SPELLCASTING_ABILITY[cc.class.slug];
+      const scAbility = getSpellcastingAbility(cc.class.slug);
       if (scAbility) {
         spellSaveDc[cc.class.slug] = 8 + profBonus + mod(scAbility);
         spellAttackBonus[cc.class.slug] = profBonus + mod(scAbility);
@@ -435,8 +435,8 @@ export class ActionsService {
     );
 
     // Get the primary spellcasting class for DC/attack
-    const primaryCaster = charClasses.find(
-      (cc) => SPELLCASTING_ABILITY[cc.class.slug],
+    const primaryCaster = charClasses.find((cc) =>
+      getSpellcastingAbility(cc.class.slug),
     );
     const defaultDc = primaryCaster ? spellSaveDc[primaryCaster.class.slug] : 0;
     const defaultAttackBonus = primaryCaster ? spellAttackBonus[primaryCaster.class.slug] : 0;

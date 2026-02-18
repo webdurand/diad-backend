@@ -23,6 +23,10 @@ import {
   FULL_CASTER_SLOTS,
   WARLOCK_SLOTS,
   CasterClassType,
+  getCasterClassType,
+  getSpellcastingAbility,
+  getCasterSlotType,
+  normalizeClassSlug,
 } from 'src/shared/srd-constants';
 
 type CasterType = CasterClassType;
@@ -88,6 +92,45 @@ export interface AvailableSpellsResult {
   }>;
 }
 
+export interface LearnSpellDto {
+  spellSlug: string;
+}
+
+export interface LearnSpellResult {
+  slug: string;
+  name: string;
+  level: number;
+  status: string;
+  message: string;
+}
+
+export interface UnlearnSpellResult {
+  slug: string;
+  message: string;
+}
+
+export interface ManageableSpellsResult {
+  classSlug: string;
+  className: string;
+  casterType: string;
+  maxPrepared: number;
+  maxSpellLevel: number;
+  currentSpells: Array<{
+    slug: string;
+    name: string;
+    level: number;
+    status: string;
+    alwaysPrepared: boolean;
+    canRemove: boolean;
+  }>;
+  availableToLearn: Array<{
+    slug: string;
+    name: string;
+    level: number;
+    school?: string;
+  }>;
+}
+
 @Injectable()
 export class SpellService {
   constructor(
@@ -111,7 +154,10 @@ export class SpellService {
 
   // ---- Helpers ----
 
-  private async ensureOwnership(userId: string, characterId: string): Promise<CharacterEntity> {
+  private async ensureOwnership(
+    userId: string,
+    characterId: string,
+  ): Promise<CharacterEntity> {
     const character = await this.characterRepo.findOne({
       where: { id: characterId, userId },
     });
@@ -146,7 +192,7 @@ export class SpellService {
     let warlockLevel = 0;
 
     for (const cc of charClasses) {
-      const slotType = CASTER_SLOT_TYPE[cc.class.slug];
+      const slotType = getCasterSlotType(cc.class.slug);
       if (!slotType) continue;
       if (slotType === 'full') fullCasterLevels += cc.class_level;
       else if (slotType === 'half') halfCasterLevels += cc.class_level;
@@ -180,7 +226,7 @@ export class SpellService {
     let warlockLevel = 0;
 
     for (const cc of charClasses) {
-      const slotType = CASTER_SLOT_TYPE[cc.class.slug];
+      const slotType = getCasterSlotType(cc.class.slug);
       if (!slotType) continue;
       if (slotType === 'full') fullCasterLevels += cc.class_level;
       else if (slotType === 'half') halfCasterLevels += cc.class_level;
@@ -222,16 +268,17 @@ export class SpellService {
     classLevel: number,
     charAbilities: CharacterAbilityScoreEntity[],
   ): number {
-    const casterType = CASTER_CLASS_TYPE[classSlug];
-    const scAbility = SPELLCASTING_ABILITY[classSlug];
+    const casterType = getCasterClassType(classSlug);
+    const scAbility = getSpellcastingAbility(classSlug);
     if (!casterType || !scAbility) return 0;
 
     const abilityMod = this.getAbilityMod(charAbilities, scAbility);
+    const baseSlug = normalizeClassSlug(classSlug);
 
     switch (casterType) {
       case 'total_access':
         // Paladin uses floor(level/2), Cleric/Druid use full level
-        if (classSlug === 'paladin') {
+        if (baseSlug === 'paladin') {
           return Math.max(1, Math.floor(classLevel / 2) + abilityMod);
         }
         return Math.max(1, classLevel + abilityMod);
@@ -269,13 +316,15 @@ export class SpellService {
     ]);
 
     // Find primary caster class
-    const casterClass = charClasses.find((cc) => CASTER_CLASS_TYPE[cc.class.slug]);
+    const casterClass = charClasses.find((cc) =>
+      getCasterClassType(cc.class.slug),
+    );
     if (!casterClass) {
       throw new BadRequestException('Personagem nao possui classe com magias.');
     }
 
     const classSlug = casterClass.class.slug;
-    const casterType = CASTER_CLASS_TYPE[classSlug]!;
+    const casterType = getCasterClassType(classSlug)!;
 
     // Known-spell casters cannot change prepared spells outside of level up
     if (casterType === 'known' || casterType === 'pact') {
@@ -300,9 +349,10 @@ export class SpellService {
     }
 
     // Resolve spell entities
-    const requestedSpells = requestedSlugs.length > 0
-      ? await this.spellRepo.find({ where: { slug: In(requestedSlugs) } })
-      : [];
+    const requestedSpells =
+      requestedSlugs.length > 0
+        ? await this.spellRepo.find({ where: { slug: In(requestedSlugs) } })
+        : [];
 
     if (requestedSpells.length !== requestedSlugs.length) {
       const found = new Set(requestedSpells.map((s) => s.slug));
@@ -488,7 +538,7 @@ export class SpellService {
 
     for (const cc of charClasses) {
       const classSlug = cc.class.slug;
-      const casterType = CASTER_CLASS_TYPE[classSlug];
+      const casterType = getCasterClassType(classSlug);
       if (!casterType) continue;
 
       const maxPrepared = this.computeMaxPrepared(
@@ -587,15 +637,16 @@ export class SpellService {
       }
 
       // Determine how spells can be changed on long rest per SRD 5.2.1
+      const baseSlug = normalizeClassSlug(classSlug);
       let prepChangeMode: 'all' | 'one' | 'none' = 'none';
       if (
         casterType === 'total_access' &&
-        (classSlug === 'cleric' || classSlug === 'druid')
+        (baseSlug === 'cleric' || baseSlug === 'druid')
       ) {
         prepChangeMode = 'all';
       } else if (
         casterType === 'total_access' &&
-        (classSlug === 'paladin' || classSlug === 'ranger')
+        (baseSlug === 'paladin' || baseSlug === 'ranger')
       ) {
         prepChangeMode = 'one';
       } else if (casterType === 'spellbook') {
@@ -615,6 +666,219 @@ export class SpellService {
     }
 
     return results;
+  }
+
+  // ---- GET /characters/:id/manageable-spells ----
+
+  async getManageableSpells(
+    userId: string,
+    characterId: string,
+  ): Promise<ManageableSpellsResult[]> {
+    await this.ensureOwnership(userId, characterId);
+
+    const [charClasses, charAbilities, charSpells] = await Promise.all([
+      this.charClassRepo.find({
+        where: { character_id: characterId },
+        order: { order: 'ASC' },
+      }),
+      this.charAbilityRepo.find({ where: { character_id: characterId } }),
+      this.charSpellRepo.find({
+        where: { character_id: characterId },
+        relations: ['spell', 'spell.school'],
+      }),
+    ]);
+
+    const maxSpellLevel = this.getMaxSpellLevel(charClasses);
+    const results: ManageableSpellsResult[] = [];
+
+    for (const cc of charClasses) {
+      const classSlug = cc.class.slug;
+      const casterType = getCasterClassType(classSlug);
+      if (!casterType) continue;
+
+      const maxPrepared = this.computeMaxPrepared(
+        classSlug,
+        cc.class_level,
+        charAbilities,
+      );
+
+      // Current character spells (deduplicated)
+      const seenSlugs = new Set<string>();
+      const currentSpells = charSpells
+        .filter(
+          (cs) => cs.source === SpellSourceEnum.Class && cs.spell.level >= 0,
+        )
+        .filter((cs) => {
+          if (seenSlugs.has(cs.spell.slug)) return false;
+          seenSlugs.add(cs.spell.slug);
+          return true;
+        })
+        .map((cs) => ({
+          slug: cs.spell.slug,
+          name: cs.spell.name,
+          level: cs.spell.level,
+          status: cs.status,
+          alwaysPrepared: cs.always_prepared,
+          canRemove: !cs.always_prepared || cs.spell.level > 0,
+        }))
+        .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+
+      // Spells available to learn from the class list
+      const classSpells = await this.spellClassRepo.find({
+        where: { class_id: cc.class_id },
+        relations: ['spell', 'spell.school'],
+      });
+
+      const currentSpellSlugs = new Set(currentSpells.map((s) => s.slug));
+      const seenAvailable = new Set<string>();
+      const availableToLearn = classSpells
+        .filter(
+          (sc) =>
+            sc.spell.level <= maxSpellLevel &&
+            !currentSpellSlugs.has(sc.spell.slug),
+        )
+        .filter((sc) => {
+          if (seenAvailable.has(sc.spell.slug)) return false;
+          seenAvailable.add(sc.spell.slug);
+          return true;
+        })
+        .map((sc) => ({
+          slug: sc.spell.slug,
+          name: sc.spell.name,
+          level: sc.spell.level,
+          school: sc.spell.school?.name,
+        }))
+        .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+
+      results.push({
+        classSlug,
+        className: cc.class.name,
+        casterType,
+        maxPrepared,
+        maxSpellLevel,
+        currentSpells,
+        availableToLearn,
+      });
+    }
+
+    return results;
+  }
+
+  // ---- POST /characters/:id/spells ----
+
+  async learnSpell(
+    userId: string,
+    characterId: string,
+    dto: LearnSpellDto,
+  ): Promise<LearnSpellResult> {
+    await this.ensureOwnership(userId, characterId);
+
+    const spell = await this.spellRepo.findOne({
+      where: { slug: dto.spellSlug },
+    });
+    if (!spell) {
+      throw new BadRequestException(`Magia '${dto.spellSlug}' nao encontrada.`);
+    }
+
+    // Check if already known
+    const existing = await this.charSpellRepo.findOne({
+      where: { character_id: characterId, spell_id: spell.id },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `Personagem ja conhece a magia '${spell.name}'.`,
+      );
+    }
+
+    // Find the caster class for this spell
+    const charClasses = await this.charClassRepo.find({
+      where: { character_id: characterId },
+      order: { order: 'ASC' },
+    });
+
+    let targetClass: CharacterClassEntity | undefined;
+    for (const cc of charClasses) {
+      const casterType = getCasterClassType(cc.class.slug);
+      if (!casterType) continue;
+      const link = await this.spellClassRepo.findOne({
+        where: { class_id: cc.class_id, spell_id: spell.id },
+      });
+      if (link) {
+        targetClass = cc;
+        break;
+      }
+    }
+
+    if (!targetClass) {
+      throw new BadRequestException(
+        `'${spell.name}' nao pertence a lista de nenhuma classe do personagem.`,
+      );
+    }
+
+    const casterType = getCasterClassType(targetClass.class.slug)!;
+
+    // Determine status based on caster type
+    let status: SpellStatusEnum;
+    if (spell.level === 0) {
+      status = SpellStatusEnum.Known;
+    } else if (casterType === 'spellbook') {
+      status = SpellStatusEnum.Spellbook;
+    } else if (casterType === 'known' || casterType === 'pact') {
+      status = SpellStatusEnum.Known;
+    } else {
+      // total_access: add as prepared
+      status = SpellStatusEnum.Prepared;
+    }
+
+    await this.charSpellRepo.save({
+      character_id: characterId,
+      spell_id: spell.id,
+      source: SpellSourceEnum.Class,
+      status,
+      always_prepared: spell.level === 0,
+    });
+
+    return {
+      slug: spell.slug,
+      name: spell.name,
+      level: spell.level,
+      status,
+      message: `Magia '${spell.name}' aprendida com sucesso.`,
+    };
+  }
+
+  // ---- DELETE /characters/:id/spells/:spellSlug ----
+
+  async unlearnSpell(
+    userId: string,
+    characterId: string,
+    spellSlug: string,
+  ): Promise<UnlearnSpellResult> {
+    await this.ensureOwnership(userId, characterId);
+
+    const charSpells = await this.charSpellRepo.find({
+      where: { character_id: characterId },
+      relations: ['spell'],
+    });
+
+    const toRemove = charSpells.filter(
+      (cs) =>
+        cs.spell.slug === spellSlug && cs.source === SpellSourceEnum.Class,
+    );
+
+    if (toRemove.length === 0) {
+      throw new BadRequestException(
+        `Magia '${spellSlug}' nao encontrada entre as magias do personagem.`,
+      );
+    }
+
+    const spellName = toRemove[0].spell.name;
+    await this.charSpellRepo.remove(toRemove);
+
+    return {
+      slug: spellSlug,
+      message: `Magia '${spellName}' removida com sucesso.`,
+    };
   }
 
   // ---- PATCH /characters/:id/spell-slots ----
@@ -863,8 +1127,8 @@ export class SpellService {
         }
 
         // Validate the new spell belongs to the caster's class list
-        const casterClass = charClasses.find(
-          (cc) => CASTER_CLASS_TYPE[cc.class.slug],
+        const casterClass = charClasses.find((cc) =>
+          getCasterClassType(cc.class.slug),
         );
         if (casterClass) {
           const classSpells = await this.spellClassRepo.find({

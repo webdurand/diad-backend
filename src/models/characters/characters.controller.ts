@@ -25,6 +25,7 @@ import {
   type PreparedSpellsDto,
   type SpellSlotUpdateDto,
   type RestDto,
+  type LearnSpellDto,
 } from './services/spell.service';
 import {
   InventoryService,
@@ -161,6 +162,32 @@ export class CharactersController {
   async getAvailableSpells(@Req() req: AuthRequest, @Param('id') id: string) {
     const userId = req.user?.id ?? '';
     return this.spellService.getAvailableSpells(userId, id);
+  }
+
+  @Get(':id/manageable-spells')
+  async getManageableSpells(@Req() req: AuthRequest, @Param('id') id: string) {
+    const userId = req.user?.id ?? '';
+    return this.spellService.getManageableSpells(userId, id);
+  }
+
+  @Post(':id/spells')
+  async learnSpell(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: LearnSpellDto,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.spellService.learnSpell(userId, id, body);
+  }
+
+  @Delete(':id/spells/:spellSlug')
+  async unlearnSpell(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('spellSlug') spellSlug: string,
+  ) {
+    const userId = req.user?.id ?? '';
+    return this.spellService.unlearnSpell(userId, id, spellSlug);
   }
 
   @Put(':id/prepared-spells')

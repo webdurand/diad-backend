@@ -1,5 +1,13 @@
 // Consolidated SRD 5.2.1 constants — single source of truth for all services
 
+/**
+ * Normalizes a class slug by removing variant suffixes (-phb, etc.)
+ * so constants work with both 'druid' and 'druid-phb' style slugs.
+ */
+export function normalizeClassSlug(slug: string): string {
+  return slug.replace(/-phb$/, '');
+}
+
 // Proficiency bonus by total character level (1-20)
 export const PROF_BONUS_BY_LEVEL: Record<number, number> = {
   1: 2, 2: 2, 3: 2, 4: 2,
@@ -71,6 +79,19 @@ export const CASTER_SLOT_TYPE: Record<string, 'full' | 'half' | 'pact'> = {
   ranger: 'half',
   warlock: 'pact',
 };
+
+// Normalized lookup helpers — work with both 'druid' and 'druid-phb' slugs
+export function getSpellcastingAbility(slug: string): string | undefined {
+  return SPELLCASTING_ABILITY[normalizeClassSlug(slug)];
+}
+
+export function getCasterClassType(slug: string): CasterClassType | undefined {
+  return CASTER_CLASS_TYPE[normalizeClassSlug(slug)];
+}
+
+export function getCasterSlotType(slug: string): 'full' | 'half' | 'pact' | undefined {
+  return CASTER_SLOT_TYPE[normalizeClassSlug(slug)];
+}
 
 // Full-caster spell slots table (SRD)
 // Index = effective caster level (1-based), value = [1st, 2nd, ...]

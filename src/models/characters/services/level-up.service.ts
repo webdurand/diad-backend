@@ -29,10 +29,11 @@ import {
   CharacterProficiencySourceEnum,
 } from 'src/entities/enums';
 import {
-  CASTER_CLASS_TYPE,
-  SPELLCASTING_ABILITY,
   XP_THRESHOLDS,
   CasterClassType,
+  getCasterClassType,
+  getSpellcastingAbility,
+  normalizeClassSlug,
 } from 'src/shared/srd-constants';
 
 type CasterType = CasterClassType;
@@ -570,7 +571,7 @@ export class LevelUpService {
 
       // 6. New spells
       if (dto.newSpells?.length) {
-        const casterType = CASTER_CLASS_TYPE[classEntity.slug];
+        const casterType = getCasterClassType(classEntity.slug);
         for (const spellSlug of dto.newSpells) {
           const spell = await this.spellRepo.findOneBy({ slug: spellSlug });
           if (!spell) continue;
@@ -615,7 +616,7 @@ export class LevelUpService {
 
       // 7b. Prepared spells selection (spellbook / total_access casters)
       if (dto.preparedSpells) {
-        const casterType = CASTER_CLASS_TYPE[classEntity.slug];
+        const casterType = getCasterClassType(classEntity.slug);
         if (casterType === 'spellbook' || casterType === 'total_access') {
           const preparedSet = new Set(dto.preparedSpells);
 
@@ -726,7 +727,7 @@ export class LevelUpService {
     charSpells: CharacterSpellEntity[],
     charAbilities: CharacterAbilityScoreEntity[],
   ): Promise<SpellSelectionForLevelUp | null> {
-    const casterType = CASTER_CLASS_TYPE[cls.slug];
+    const casterType = getCasterClassType(cls.slug);
     if (!casterType) return null;
 
     // Load spellcasting data for new and current levels
@@ -878,8 +879,8 @@ export class LevelUpService {
     classLevel: number,
     charAbilities: CharacterAbilityScoreEntity[],
   ): number {
-    const casterType = CASTER_CLASS_TYPE[classSlug];
-    const scAbility = SPELLCASTING_ABILITY[classSlug];
+    const casterType = getCasterClassType(classSlug);
+    const scAbility = getSpellcastingAbility(classSlug);
     if (!casterType || !scAbility) return 0;
 
     const abilityScore =
@@ -891,7 +892,7 @@ export class LevelUpService {
 
     switch (casterType) {
       case 'total_access':
-        if (classSlug === 'paladin') {
+        if (normalizeClassSlug(classSlug) === 'paladin') {
           return Math.max(1, Math.floor(classLevel / 2) + abilityMod);
         }
         return Math.max(1, classLevel + abilityMod);
