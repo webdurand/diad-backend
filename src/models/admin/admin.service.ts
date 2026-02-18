@@ -670,11 +670,11 @@ export class AdminService {
             name: item.name,
             description: item.description,
             feat_type: typeMap[item.feat_type] ?? FeatTypeEnum.Other,
-            repeatable: item.repeatable,
-            prerequisites: item.prerequisites,
-            prerequisite_options: item.ability_options,
+            repeatable: item.repeatable ?? undefined,
+            prerequisites: (item.prerequisites ?? undefined) as any,
+            prerequisite_options: (item.ability_options ?? undefined) as any,
             source_id: sourceId ?? undefined,
-            raw: item.raw,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );
@@ -1076,16 +1076,16 @@ export class AdminService {
           {
             slug: item.slug,
             name: item.name,
-            ability_scores: item.ability_scores
+            ability_scores: (item.ability_scores
               ? (item.ability_scores as unknown as Record<string, unknown>[])
-              : null,
-            equipment_options: item.equipment_options,
-            proficiency_choices: null,
+              : undefined) as any,
+            equipment_options: item.equipment_options as any,
+            proficiency_choices: undefined,
             feat_id: featId,
-            language_choices: item.language_choices,
-            feature: item.feature,
+            language_choices: (item.language_choices ?? undefined) as any,
+            feature: item.feature ?? undefined,
             source_id: sourceId ?? undefined,
-            raw: item.raw,
+            raw: item.raw as any,
           },
           { conflictPaths: ['slug'] },
         );

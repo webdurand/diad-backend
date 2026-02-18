@@ -18,7 +18,64 @@ interface FiveToolsBackground {
   languageProficiencies?: Record<string, unknown>[];
   startingEquipment?: Record<string, unknown>[];
   entries?: unknown[];
+  _copy?: { name: string; source: string; _mod?: Record<string, unknown> };
+  reprintedAs?: unknown;
   [key: string]: unknown;
+}
+
+const INHERITABLE_FIELDS = [
+  'skillProficiencies',
+  'toolProficiencies',
+  'languageProficiencies',
+  'startingEquipment',
+  'entries',
+  'ability',
+  'feats',
+] as const;
+
+function resolveCopy(
+  bg: FiveToolsBackground,
+  allBackgrounds: FiveToolsBackground[],
+): FiveToolsBackground {
+  if (!bg._copy) return bg;
+
+  const parent = allBackgrounds.find(
+    (p) => p.name === bg._copy!.name && p.source === bg._copy!.source,
+  );
+  if (!parent) return bg;
+
+  const resolved = { ...bg };
+  for (const field of INHERITABLE_FIELDS) {
+    if (resolved[field] == null && parent[field] != null) {
+      resolved[field] = structuredClone(parent[field]) as any;
+    }
+  }
+
+  // Apply _mod.entries replacements if present
+  if (bg._copy._mod?.entries && resolved.entries) {
+    const mods = Array.isArray(bg._copy._mod.entries)
+      ? bg._copy._mod.entries
+      : [bg._copy._mod.entries];
+
+    for (const mod of mods as Record<string, unknown>[]) {
+      if (mod.mode === 'replaceArr' && mod.replace && mod.items) {
+        const idx = resolved.entries!.findIndex((e: any) => {
+          if (typeof e === 'object' && e !== null && 'name' in e) {
+            return (e as { name: string }).name === mod.replace;
+          }
+          return false;
+        });
+        if (idx !== -1) {
+          resolved.entries!.splice(idx, 1, mod.items as unknown);
+        }
+      } else if (mod.mode === 'insertArr' && mod.items != null) {
+        const insertIdx = (mod.index as number) ?? resolved.entries!.length;
+        resolved.entries!.splice(insertIdx, 0, mod.items as unknown);
+      }
+    }
+  }
+
+  return resolved;
 }
 
 export interface AbilityScoreOption {
@@ -250,14 +307,13 @@ export function transformBackgrounds(): TransformedBackground[] {
 
   return backgrounds
     .filter((b) => !b.reprintedAs)
+    .map((b) => resolveCopy(b, backgrounds))
     .map((b) => ({
       slug: generateSlug(b.name, b.source, b.srd52),
       name: b.name,
       ability_scores: convertAbilityScores(b.ability),
       feat_slug: parseFeatReference(b.feats),
-      skill_proficiency_slugs: convertSkillProficiencies(
-        b.skillProficiencies,
-      ),
+      skill_proficiency_slugs: convertSkillProficiencies(b.skillProficiencies),
       tool_proficiency_slugs: convertToolProficiencies(b.toolProficiencies),
       language_choices: convertLanguageChoices(b.languageProficiencies),
       equipment_options: convertEquipment(b.startingEquipment),
