@@ -105,10 +105,10 @@ const INTERNAL_FIELDS = new Set([
   'search_text',
 ]);
 
-function stripInternal(obj: unknown, depth = 0): unknown {
+function stripInternal(obj: unknown, depth = 0, entityName = ''): unknown {
   if (!obj || typeof obj !== 'object' || depth > 4) return obj;
   if (obj instanceof Date) return obj;
-  if (Array.isArray(obj)) return obj.map((item) => stripInternal(item, depth));
+  if (Array.isArray(obj)) return obj.map((item) => stripInternal(item, depth, entityName));
 
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
@@ -123,8 +123,11 @@ function stripInternal(obj: unknown, depth = 0): unknown {
       continue;
     }
 
-    if (value && typeof value === 'object' && !(value instanceof Date)) {
-      result[key] = stripInternal(value, depth + 1);
+    if (key === 'description' && entityName === 'spells') {
+      // Remover description do retorno da listagem para reduzir drastically tamanho
+      continue;
+    } else if (value && typeof value === 'object' && !(value instanceof Date)) {
+      result[key] = stripInternal(value, depth + 1, entityName);
     } else {
       result[key] = value;
     }
@@ -154,6 +157,6 @@ export function transformLibraryResponse(
       }
     }
 
-    return stripInternal(item) as Record<string, unknown>;
+    return stripInternal(item, 0, entityName) as Record<string, unknown>;
   });
 }

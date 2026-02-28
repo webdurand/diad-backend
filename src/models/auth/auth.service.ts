@@ -126,7 +126,7 @@ export class AuthService {
     return {
       httpOnly: true,
       sameSite,
-      secure: isProduction,
+      secure: true, // Sempre secure para SameSite='none' funcionar corretamente
       maxAge: this.cookieMaxAgeMs,
     };
   }

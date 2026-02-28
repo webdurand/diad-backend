@@ -7,7 +7,7 @@ async function bootstrap() {
   app.use(cookieParser());
   // Habilita CORS para todas as origens com suporte a credenciais (deploy)
   app.enableCors({
-    origin: true, // Aceita qualquer origem
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'],
     credentials: true, // Permite cookies/auth
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type,Authorization',
