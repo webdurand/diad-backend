@@ -17,6 +17,7 @@ import { ProficiencyTypeEnum } from 'src/entities/enums';
 import {
   PROF_BONUS_BY_LEVEL,
   getSpellcastingAbility,
+  normalizeClassSlug,
 } from 'src/shared/srd-constants';
 import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
 
@@ -179,7 +180,7 @@ export class ActionsService {
       (cf) => cf.feature?.slug?.includes('extra-attack') && cf.active,
     );
     const fighterClass = charClasses.find((cc) =>
-      cc.class.slug === 'fighter' || cc.class.slug === 'fighter-phb',
+      normalizeClassSlug(cc.class.slug) === 'fighter',
     );
     let attackCount = 1;
     if (hasExtraAttack) {
@@ -368,7 +369,7 @@ export class ActionsService {
     const dexMod = mod('dex');
 
     // Check for Monk Martial Arts
-    const monkClass = charClasses.find((cc) => cc.class.slug === 'monk');
+    const monkClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
     let martialArtsDie: string | null = null;
     if (monkClass) {
       const lvl = monkClass.class_level;
@@ -812,7 +813,7 @@ export class ActionsService {
     const chaMod = mod('cha');
 
     // Fighter
-    const fighterClass = charClasses.find((cc) => cc.class.slug === 'fighter');
+    const fighterClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'fighter');
     if (fighterClass) {
       map.set('second-wind', [{
         id: 'second-wind',
@@ -913,7 +914,7 @@ export class ActionsService {
     }
 
     // Monk
-    const monkClass = charClasses.find((cc) => cc.class.slug === 'monk');
+    const monkClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
     if (monkClass) {
       const kiPoints = monkClass.class_level;
       map.set('flurry-of-blows', [{
@@ -1039,7 +1040,7 @@ export class ActionsService {
     }
 
     // Warlock
-    const warlockClass = charClasses.find((cc) => cc.class.slug === 'warlock');
+    const warlockClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'warlock');
     if (warlockClass) {
       map.set('eldritch-invocations', [{
         id: 'eldritch-invocations',

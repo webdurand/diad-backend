@@ -28,6 +28,7 @@ import {
   WARLOCK_SLOTS,
   getSpellcastingAbility,
   getCasterSlotType,
+  normalizeClassSlug,
 } from 'src/shared/srd-constants';
 import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
 import type { EquipmentArmorClass } from 'src/shared/equipment-types';
@@ -366,8 +367,6 @@ export class CharacterSheetService {
     // Step 1: Determine armor AC and whether shield is equipped
     let armorAc: number | null = null;
     let hasShield = false;
-    let wearingArmor = false;
-
     for (const eq of charEquip) {
       if (!eq.equipped || !eq.equipment?.armor_class) continue;
       const ac = eq.equipment.armor_class as unknown as EquipmentArmorClass;
@@ -377,7 +376,6 @@ export class CharacterSheetService {
 
       if (base > 0) {
         // Armor piece
-        wearingArmor = true;
         if (dexBonus === false) {
           armorAc = base;
         } else if (maxBonus !== undefined) {
@@ -392,33 +390,35 @@ export class CharacterSheetService {
     }
 
     // Step 2: Determine base AC (armor, unarmored defense, or default)
+    const classSlugs = charClasses.map((cc) => cc.class.slug.replace(/-phb$/, ''));
+    const editionRules = character.source?.rules;
     let armorClass: number;
+
     if (armorAc !== null) {
       // Wearing armor — use armor AC
       armorClass = armorAc;
     } else {
       // Not wearing armor — check Unarmored Defense
-      const classSlugs = charClasses.map((cc) => cc.class.slug.replace(/-phb$/, ''));
       if (classSlugs.includes('barbarian')) {
         // Barbarian Unarmored Defense: 10 + DEX + CON (can use shield)
         armorClass = 10 + dexMod + conMod;
       } else if (classSlugs.includes('monk')) {
-        // Monk Unarmored Defense: 10 + DEX + WIS (no shield)
+        // Monk Unarmored Defense: 10 + DEX + WIS
         const wisMod = mod('wis');
         armorClass = 10 + dexMod + wisMod;
-        // Monk Unarmored Defense doesn't work with shields
-        if (hasShield) {
-          armorClass = 10 + dexMod; // Fall back to default if using shield
+        // 2014: Unarmored Defense doesn't work with shields (lose WIS, keep base)
+        // 2024: Unarmored Defense works with shields
+        if (hasShield && editionRules?.hasWeaponMastery === false) {
+          // 2014 edition — shield breaks Unarmored Defense
+          armorClass = 10 + dexMod;
         }
       } else {
         armorClass = 10 + dexMod;
       }
     }
 
-    // Step 3: Add shield bonus (+2) — always applies unless Monk without armor
-    const classSlugsForShield = charClasses.map((cc) => cc.class.slug.replace(/-phb$/, ''));
-    const isMonkUnarmored = !wearingArmor && classSlugsForShield.includes('monk');
-    if (hasShield && !isMonkUnarmored) {
+    // Step 3: Add shield bonus (+2)
+    if (hasShield) {
       armorClass += 2;
     }
 
@@ -730,7 +730,7 @@ export class CharacterSheetService {
       spellSlots,
 
       kiPoints: (() => {
-        const monkClass = charClasses.find((cc) => cc.class.slug === 'monk');
+        const monkClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
         if (!monkClass || monkClass.class_level < 2) return undefined;
         return {
           total: monkClass.class_level,
@@ -772,13 +772,14 @@ export class CharacterSheetService {
   private async getClassSavingThrows(
     charClasses: CharacterClassEntity[],
   ): Promise<Set<string>> {
-    const classIds = charClasses.map((cc) => cc.class_id);
-    if (classIds.length === 0) return new Set();
+    // D&D 5e: multiclass only grants saving throw proficiency from the FIRST class
+    const primaryClass = charClasses[0];
+    if (!primaryClass) return new Set();
 
     const savingThrows = await this.classSavingThrowRepo
       .createQueryBuilder('cst')
       .innerJoinAndSelect('cst.ability_score', 'as')
-      .where('cst.class_id IN (:...classIds)', { classIds })
+      .where('cst.class_id = :classId', { classId: primaryClass.class_id })
       .getMany();
 
     return new Set(savingThrows.map((st) => st.ability_score.slug));

@@ -8,7 +8,7 @@ import {
   CharacterAbilityScoreEntity,
   CharacterLevelUpEntity,
 } from 'src/entities';
-import { XP_THRESHOLDS } from 'src/shared/srd-constants';
+import { XP_THRESHOLDS, normalizeClassSlug } from 'src/shared/srd-constants';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
 
@@ -293,7 +293,7 @@ export class CharacterStateService {
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },
     });
-    const monk = charClasses.find((cc) => cc.class.slug === 'monk');
+    const monk = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
     if (!monk || monk.class_level < 2) {
       throw new BadRequestException('Personagem nao possui pontos de Ki.');
     }
@@ -329,7 +329,7 @@ export class CharacterStateService {
   ): Promise<{ exhaustionLevel: number }> {
     await this.ensureOwnership(userId, characterId);
     const state = await this.getState(characterId);
-    state.exhaustion_level = Math.max(0, Math.min(10, dto.level));
+    state.exhaustion_level = Math.max(0, Math.min(6, dto.level));
     await this.stateRepo.save(state);
     return { exhaustionLevel: state.exhaustion_level };
   }

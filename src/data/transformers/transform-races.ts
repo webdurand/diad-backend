@@ -151,8 +151,32 @@ function resolveAbilityBonusOptions(ability?: Record<string, unknown>[]): Record
   return null;
 }
 
-function resolveLanguages(langProfs?: Record<string, unknown>[]): { slugs: string[]; desc: string; options: Record<string, unknown> | null } {
+// 2024 races don't have languageProficiencies in 5etools data;
+// map their secondary racial languages manually per SRD 5.2.1
+const RACE_LANGUAGES_2024: Record<string, string[]> = {
+  dragonborn: ['common', 'draconic'],
+  dwarf: ['common', 'dwarvish'],
+  elf: ['common', 'elvish'],
+  gnome: ['common', 'gnomish'],
+  goliath: ['common', 'giant'],
+  halfling: ['common', 'halfling'],
+  human: ['common'], // + 1 choice
+  orc: ['common', 'orc'],
+  tiefling: ['common', 'infernal'],
+};
+
+function resolveLanguages(langProfs?: Record<string, unknown>[], raceName?: string): { slugs: string[]; desc: string; options: Record<string, unknown> | null } {
   if (!langProfs || langProfs.length === 0) {
+    // Try 2024 manual mapping
+    const raceKey = raceName?.toLowerCase();
+    if (raceKey && RACE_LANGUAGES_2024[raceKey]) {
+      const slugs = RACE_LANGUAGES_2024[raceKey];
+      const langNames = slugs.map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+      const desc = `You can speak, read, and write ${langNames.join(' and ')}.`;
+      // Human gets 1 extra choice
+      const options = raceKey === 'human' ? { choose: 1, type: 'languages' } : null;
+      return { slugs, desc, options };
+    }
     return { slugs: ['common'], desc: 'You can speak, read, and write Common.', options: null };
   }
 
@@ -227,7 +251,7 @@ export function transformRaces(): TransformedRace[] {
   const races = data.race ?? [];
 
   return races.filter(isImportableRace).map((race) => {
-    const lang = resolveLanguages(race.languageProficiencies);
+    const lang = resolveLanguages(race.languageProficiencies, race.name);
 
     return {
       slug: generateSlug(race.name, race.source, race.srd52),

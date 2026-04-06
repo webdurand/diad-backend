@@ -56,7 +56,7 @@
   {
     "index": "petrified",
     "name": "Petrified",
-    "description": "While you have the Petrified condition, you experience the following effects.\n**Turned to Inanimate Substance.** You are transformed, along with any nonmagical objects you are wearing and carrying, into a solid inanimate substance (usually stone). Your weight increases by a factor of ten, and you cease aging.\n**Incapacitated.** You have the Incapacitated condition.\n**Speed 0.** Your Speed is 0 and can't increase.\n**Attacks Affected.** Attack rolls against you have Advantage.\n**Saving Throws Affected.** You automatically fail Strength and Dexterity saving throws.\n**Resist Damage.** You have Resistance to all damage.\n**Poison Immunity.** You have Immunity to the Poisoned condition.\n**Saving Throws Affected.** You automatically fail Strength and Dexterity saving throws.\n**Resist Damage.** You have Resistance to all damage.\n**Poison Immunity.** You have Immunity to the Poisoned condition.",
+    "description": "While you have the Petrified condition, you experience the following effects.\n**Turned to Inanimate Substance.** You are transformed, along with any nonmagical objects you are wearing and carrying, into a solid inanimate substance (usually stone). Your weight increases by a factor of ten, and you cease aging.\n**Incapacitated.** You have the Incapacitated condition.\n**Speed 0.** Your Speed is 0 and can't increase.\n**Attacks Affected.** Attack rolls against you have Advantage.\n**Saving Throws Affected.** You automatically fail Strength and Dexterity saving throws.\n**Resist Damage.** You have Resistance to all damage.\n**Poison Immunity.** You have Immunity to the Poisoned condition.",
     "url": "/api/2024/conditions/petrified"
   },
   {

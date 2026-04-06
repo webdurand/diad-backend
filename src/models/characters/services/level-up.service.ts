@@ -543,10 +543,12 @@ export class LevelUpService {
           );
           if (abilityRecord) {
             abilityRecord.bonus += asi.increase;
-            // Cap at 20
+            // Epic Boons (level 19+) allow scores up to 30; normal ASIs cap at 20
+            const isEpicBoon = dto.featSlug && totalLevel >= 19;
+            const cap = isEpicBoon ? 30 : 20;
             const totalScore = abilityRecord.base_score + abilityRecord.bonus;
-            if (totalScore > 20) {
-              abilityRecord.bonus = 20 - abilityRecord.base_score;
+            if (totalScore > cap) {
+              abilityRecord.bonus = cap - abilityRecord.base_score;
             }
             await manager.save(CharacterAbilityScoreEntity, abilityRecord);
           }

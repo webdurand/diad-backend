@@ -958,7 +958,7 @@ export class SpellService {
 
     if (dto.type === 'short') {
       // Short rest: Warlock recovers pact slots
-      const hasWarlock = charClasses.some((cc) => cc.class.slug === 'warlock');
+      const hasWarlock = charClasses.some((cc) => normalizeClassSlug(cc.class.slug) === 'warlock');
       if (hasWarlock) {
         const slotsUsed = {
           ...(state.spell_slots_used as Record<string, number>),
