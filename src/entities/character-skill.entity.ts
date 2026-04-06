@@ -1,6 +1,7 @@
 import {
   Entity,
   Column,
+  Index,
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
@@ -13,6 +14,7 @@ export class CharacterSkillEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index()
   @Column({ type: 'uuid' })
   character_id: string;
 

@@ -9,6 +9,8 @@ import {
   CharacterLevelUpEntity,
 } from 'src/entities';
 import { XP_THRESHOLDS } from 'src/shared/srd-constants';
+import { getAbilityModifier } from 'src/shared/srd-utils';
+import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
 
 export interface HpUpdateDto {
   damage?: number;
@@ -24,10 +26,24 @@ export interface DeathSaveDto {
   success?: boolean;
   fail?: boolean;
   reset?: boolean;
+  /** If provided, handles natural 20 (regain 1 HP + reset) and natural 1 (2 failures) */
+  rollValue?: number;
 }
 
 export interface KiPointsDto {
   used: number;
+}
+
+export interface ConditionsDto {
+  conditions: string[];
+}
+
+export interface ExhaustionDto {
+  level: number;
+}
+
+export interface InspirationDto {
+  inspiration: boolean;
 }
 
 export interface HpResult {
@@ -51,6 +67,7 @@ export interface DeathSaveResult {
   failures: number;
   stabilized: boolean;
   dead: boolean;
+  revivedHp?: number;
 }
 
 @Injectable()
@@ -72,23 +89,11 @@ export class CharacterStateService {
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    const character = await this.characterRepo.findOne({
-      where: { id: characterId, userId },
-    });
-    if (!character) {
-      throw new NotFoundException('Personagem nao encontrado.');
-    }
-    return character;
+    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {
-    const state = await this.stateRepo.findOne({
-      where: { character_id: characterId },
-    });
-    if (!state) {
-      throw new NotFoundException('Estado do personagem nao encontrado.');
-    }
-    return state;
+    return getCharacterState(this.stateRepo, characterId);
   }
 
   private async computeMaxHp(characterId: string): Promise<number> {
@@ -106,7 +111,7 @@ export class CharacterStateService {
       (a) => a.ability_score.slug === 'con',
     );
     const conMod = conAbility
-      ? Math.floor((conAbility.base_score + conAbility.bonus - 10) / 2)
+      ? getAbilityModifier(conAbility.base_score + conAbility.bonus)
       : 0;
 
     let maxHp = primaryClass.class.hit_die + conMod;
@@ -165,14 +170,13 @@ export class CharacterStateService {
         remaining -= absorbed;
       }
 
+      const hpBeforeDamage = state.current_hp;
       state.current_hp = Math.max(0, state.current_hp - remaining);
 
-      // Massive damage check: if excess damage >= maxHp, instant death
-      if (remaining > 0) {
-        const excessDamage =
-          dto.damage -
-          (state.current_hp + state.temp_hp + dto.damage - remaining);
-        if (state.current_hp === 0 && remaining >= maxHp) {
+      // Massive damage: if excess damage after reaching 0 HP >= maxHp, instant death
+      if (state.current_hp === 0 && remaining > hpBeforeDamage) {
+        const excessDamage = remaining - hpBeforeDamage;
+        if (excessDamage >= maxHp) {
           instantDeath = true;
         }
       }
@@ -244,14 +248,25 @@ export class CharacterStateService {
     await this.ensureOwnership(userId, characterId);
     const state = await this.getState(characterId);
 
+    let revivedHp: number | undefined;
+
     if (dto.reset) {
       state.death_saves_success = 0;
       state.death_saves_fail = 0;
+    } else if (dto.rollValue === 20) {
+      // Natural 20: regain 1 HP, reset all death saves, regain consciousness
+      state.current_hp = 1;
+      state.death_saves_success = 0;
+      state.death_saves_fail = 0;
+      revivedHp = 1;
+    } else if (dto.rollValue === 1) {
+      // Natural 1: counts as 2 failures
+      state.death_saves_fail = Math.min(3, state.death_saves_fail + 2);
     } else {
-      if (dto.success) {
+      if (dto.success || (dto.rollValue !== undefined && dto.rollValue >= 10)) {
         state.death_saves_success = Math.min(3, state.death_saves_success + 1);
       }
-      if (dto.fail) {
+      if (dto.fail || (dto.rollValue !== undefined && dto.rollValue < 10 && dto.rollValue > 1)) {
         state.death_saves_fail = Math.min(3, state.death_saves_fail + 1);
       }
     }
@@ -263,6 +278,7 @@ export class CharacterStateService {
       failures: state.death_saves_fail,
       stabilized: state.death_saves_success >= 3,
       dead: state.death_saves_fail >= 3,
+      ...(revivedHp !== undefined && { revivedHp }),
     };
   }
 
@@ -274,9 +290,6 @@ export class CharacterStateService {
     await this.ensureOwnership(userId, characterId);
     const state = await this.getState(characterId);
 
-    const monkClass = await this.charClassRepo.findOne({
-      where: { character_id: characterId },
-    });
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },
     });
@@ -291,6 +304,48 @@ export class CharacterStateService {
     await this.stateRepo.save(state);
 
     return { total, used };
+  }
+
+  // ---- Conditions ----
+
+  async updateConditions(
+    userId: string,
+    characterId: string,
+    dto: ConditionsDto,
+  ): Promise<{ conditions: string[] }> {
+    await this.ensureOwnership(userId, characterId);
+    const state = await this.getState(characterId);
+    state.conditions = dto.conditions;
+    await this.stateRepo.save(state);
+    return { conditions: state.conditions };
+  }
+
+  // ---- Exhaustion ----
+
+  async updateExhaustion(
+    userId: string,
+    characterId: string,
+    dto: ExhaustionDto,
+  ): Promise<{ exhaustionLevel: number }> {
+    await this.ensureOwnership(userId, characterId);
+    const state = await this.getState(characterId);
+    state.exhaustion_level = Math.max(0, Math.min(10, dto.level));
+    await this.stateRepo.save(state);
+    return { exhaustionLevel: state.exhaustion_level };
+  }
+
+  // ---- Inspiration ----
+
+  async updateInspiration(
+    userId: string,
+    characterId: string,
+    dto: InspirationDto,
+  ): Promise<{ inspiration: boolean }> {
+    await this.ensureOwnership(userId, characterId);
+    const state = await this.getState(characterId);
+    state.inspiration = dto.inspiration;
+    await this.stateRepo.save(state);
+    return { inspiration: state.inspiration };
   }
 
   /** Returns XP threshold info for a given total level */

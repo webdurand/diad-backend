@@ -60,4 +60,12 @@ export class CharacterStateEntity {
 
   @Column({ type: 'int', default: 0 })
   ki_points_used: number;
+
+  /** Exhaustion level (0-10 for 2024 rules, 0-6 for 2014) */
+  @Column({ type: 'int', default: 0 })
+  exhaustion_level: number;
+
+  /** Whether the character has inspiration */
+  @Column({ type: 'boolean', default: false })
+  inspiration: boolean;
 }

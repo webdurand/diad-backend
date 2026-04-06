@@ -18,6 +18,9 @@ import {
   type XpUpdateDto,
   type DeathSaveDto,
   type KiPointsDto,
+  type ConditionsDto,
+  type ExhaustionDto,
+  type InspirationDto,
 } from './services/character-state.service';
 import { LevelUpService, type LevelUpDto } from './services/level-up.service';
 import {
@@ -39,6 +42,7 @@ import {
 import { ActionsService } from './services/actions.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
+import { UnauthorizedException } from '@nestjs/common';
 
 interface CreateCharacterBody {
   name: string;
@@ -47,6 +51,12 @@ interface CreateCharacterBody {
 
 interface UpdateCharacterBody {
   name?: string;
+}
+
+function getUserId(req: AuthRequest): string {
+  const id = req.user?.id;
+  if (!id) throw new UnauthorizedException('Usuario nao autenticado.');
+  return id;
 }
 
 @Controller('characters')
@@ -64,25 +74,26 @@ export class CharactersController {
 
   @Get()
   async list(@Req() req: AuthRequest) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
+    return this.charactersService.listByUser(userId);
     return this.charactersService.listByUser(userId);
   }
 
   @Get(':id')
   async getById(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.charactersService.getById(userId, id);
   }
 
   @Get(':id/sheet')
   async getSheet(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.sheetService.computeSheet(userId, id);
   }
 
   @Post()
   async create(@Req() req: AuthRequest, @Body() body: CreateCharacterBody) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.charactersService.create({
       userId,
       name: body.name,
@@ -96,13 +107,13 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: UpdateCharacterBody,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.charactersService.update(userId, id, body);
   }
 
   @Delete(':id')
   async remove(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.charactersService.remove(userId, id);
   }
 
@@ -112,7 +123,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: HpUpdateDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.stateService.updateHp(userId, id, body);
   }
 
@@ -122,7 +133,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: XpUpdateDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.stateService.updateXp(userId, id, body);
   }
 
@@ -132,19 +143,19 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: DeathSaveDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.stateService.updateDeathSaves(userId, id, body);
   }
 
   @Get(':id/actions')
   async getActions(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.actionsService.getActions(userId, id);
   }
 
   @Get(':id/level-up-options')
   async getLevelUpOptions(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.levelUpService.getOptions(userId, id);
   }
 
@@ -154,19 +165,19 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: LevelUpDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.levelUpService.execute(userId, id, body);
   }
 
   @Get(':id/available-spells')
   async getAvailableSpells(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.spellService.getAvailableSpells(userId, id);
   }
 
   @Get(':id/manageable-spells')
   async getManageableSpells(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.spellService.getManageableSpells(userId, id);
   }
 
@@ -176,7 +187,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: LearnSpellDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.spellService.learnSpell(userId, id, body);
   }
 
@@ -186,7 +197,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Param('spellSlug') spellSlug: string,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.spellService.unlearnSpell(userId, id, spellSlug);
   }
 
@@ -196,7 +207,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: PreparedSpellsDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.spellService.updatePreparedSpells(userId, id, body);
   }
 
@@ -206,7 +217,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: SpellSlotUpdateDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.spellService.updateSpellSlots(userId, id, body);
   }
 
@@ -216,7 +227,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: RestDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.spellService.rest(userId, id, body);
   }
 
@@ -226,15 +237,47 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: KiPointsDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.stateService.updateKiPoints(userId, id, body);
+  }
+
+  // ---- Conditions, Exhaustion, Inspiration ----
+
+  @Patch(':id/conditions')
+  async updateConditions(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: ConditionsDto,
+  ) {
+    const userId = getUserId(req);
+    return this.stateService.updateConditions(userId, id, body);
+  }
+
+  @Patch(':id/exhaustion')
+  async updateExhaustion(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: ExhaustionDto,
+  ) {
+    const userId = getUserId(req);
+    return this.stateService.updateExhaustion(userId, id, body);
+  }
+
+  @Patch(':id/inspiration')
+  async updateInspiration(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: InspirationDto,
+  ) {
+    const userId = getUserId(req);
+    return this.stateService.updateInspiration(userId, id, body);
   }
 
   // ---- Inventory ----
 
   @Get(':id/inventory')
   async getInventory(@Req() req: AuthRequest, @Param('id') id: string) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.getInventory(userId, id);
   }
 
@@ -244,7 +287,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: AddItemDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.addItem(userId, id, body);
   }
 
@@ -255,7 +298,7 @@ export class CharactersController {
     @Param('itemId') itemId: string,
     @Body() body: UpdateItemDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.updateItemQuantity(userId, id, itemId, body);
   }
 
@@ -265,7 +308,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Param('itemId') itemId: string,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.removeItem(userId, id, itemId);
   }
 
@@ -275,7 +318,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Param('itemId') itemId: string,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.useItem(userId, id, itemId);
   }
 
@@ -285,7 +328,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: GoldUpdateDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.updateGold(userId, id, body);
   }
 
@@ -298,7 +341,7 @@ export class CharactersController {
     @Param('itemId') itemId: string,
     @Body() body: EquipToggleDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.toggleEquip(userId, id, itemId, body);
   }
 
@@ -310,7 +353,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Body() body: AddMagicItemDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.addMagicItem(userId, id, body);
   }
 
@@ -320,7 +363,7 @@ export class CharactersController {
     @Param('id') id: string,
     @Param('itemId') itemId: string,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.removeMagicItem(userId, id, itemId);
   }
 
@@ -331,7 +374,7 @@ export class CharactersController {
     @Param('itemId') itemId: string,
     @Body() body: AttuneToggleDto,
   ) {
-    const userId = req.user?.id ?? '';
+    const userId = getUserId(req);
     return this.inventoryService.toggleAttune(userId, id, itemId, body);
   }
 }

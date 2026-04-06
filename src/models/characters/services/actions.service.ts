@@ -16,9 +16,9 @@ import {
 import { ProficiencyTypeEnum } from 'src/entities/enums';
 import {
   PROF_BONUS_BY_LEVEL,
-  PROF_TO_CATEGORIES,
   getSpellcastingAbility,
 } from 'src/shared/srd-constants';
+import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
 
 // ---- Types ----
 
@@ -124,7 +124,7 @@ export class ActionsService {
     for (const ca of charAbilities) {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
     }
-    const mod = (slug: string) => Math.floor(((abilityMap.get(slug) ?? 10) - 10) / 2);
+    const mod = (slug: string) => getAbilityModifier(abilityMap.get(slug) ?? 10);
     const totalLevel = charClasses.reduce((s, cc) => s + cc.class_level, 0);
     const profBonus = PROF_BONUS_BY_LEVEL[Math.min(totalLevel, 20)] ?? 2;
 
@@ -174,10 +174,22 @@ export class ActionsService {
       }
     }
 
-    // Detect extra attack
+    // Detect extra attack — Fighter scales: 2 at 5, 3 at 11, 4 at 20
     const hasExtraAttack = charFeatures.some(
       (cf) => cf.feature?.slug?.includes('extra-attack') && cf.active,
     );
+    const fighterClass = charClasses.find((cc) =>
+      cc.class.slug === 'fighter' || cc.class.slug === 'fighter-phb',
+    );
+    let attackCount = 1;
+    if (hasExtraAttack) {
+      if (fighterClass) {
+        const fl = fighterClass.class_level;
+        attackCount = fl >= 20 ? 4 : fl >= 11 ? 3 : 2;
+      } else {
+        attackCount = 2;
+      }
+    }
 
     // Spellcasting info per class
     const spellSaveDc: Record<string, number> = {};
@@ -226,7 +238,7 @@ export class ActionsService {
       reactions,
       movement: { speed },
       summary: {
-        attackCount: hasExtraAttack ? 2 : 1,
+        attackCount,
         hasExtraAttack,
         spellSaveDc,
         spellAttackBonus,
@@ -276,7 +288,7 @@ export class ActionsService {
 
       // Check proficiency
       const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
-      const isProficient = this.isWeaponProficient(eq.slug, cats, profSlugs);
+      const isProficient = isEquipmentProficient(eq.slug, cats, profSlugs) === true;
 
       const attackBonus = abilityMod + (isProficient ? profBonus : 0);
       const damageDice = dmg.damage_dice;
@@ -636,11 +648,7 @@ export class ActionsService {
 
   // ---- Race trait actions ----
 
-  private static readonly DRACONIC_ANCESTRY_MAP: Record<string, string> = {
-    black: 'Acid', blue: 'Lightning', brass: 'Fire', bronze: 'Lightning',
-    copper: 'Acid', gold: 'Fire', green: 'Poison', red: 'Fire',
-    silver: 'Cold', white: 'Cold',
-  };
+  // Draconic ancestry map moved to shared srd-utils.ts
 
   private buildRaceTraitActions(
     character: CharacterEntity,
@@ -656,10 +664,10 @@ export class ActionsService {
     if (raceSlug !== 'dragonborn') return;
 
     const traitChoices: string[] = origin.race_trait_choices ?? [];
-    const dragonColor = traitChoices.find((c) => ActionsService.DRACONIC_ANCESTRY_MAP[c]);
+    const dragonColor = traitChoices.find((c) => DRACONIC_ANCESTRY_MAP[c]);
     if (!dragonColor) return;
 
-    const damageType = ActionsService.DRACONIC_ANCESTRY_MAP[dragonColor];
+    const damageType = DRACONIC_ANCESTRY_MAP[dragonColor].damageType;
     const damageDice = totalLevel >= 17 ? '4d10'
       : totalLevel >= 11 ? '3d10'
       : totalLevel >= 5 ? '2d10'
@@ -1098,22 +1106,6 @@ export class ActionsService {
   }
 
   // ---- Helpers ----
-
-  private isWeaponProficient(
-    equipSlug: string,
-    categorySlugs: Set<string>,
-    profSlugs: Set<string>,
-  ): boolean {
-    if (profSlugs.has(equipSlug)) return true;
-    if (profSlugs.has(equipSlug + 's')) return true;
-
-    for (const [profSlug, cats] of Object.entries(PROF_TO_CATEGORIES)) {
-      if (profSlugs.has(profSlug) && cats.some((c) => categorySlugs.has(c))) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   private parseVersatileDice(text: string | undefined, baseDice: string): string {
     if (!text) {

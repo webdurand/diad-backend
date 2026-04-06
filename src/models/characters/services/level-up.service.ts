@@ -35,6 +35,9 @@ import {
   getSpellcastingAbility,
   normalizeClassSlug,
 } from 'src/shared/srd-constants';
+import { getAbilityModifier } from 'src/shared/srd-utils';
+import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
+import { type EditionRules, getSubclassLevel as getSubclassLevelFromRules, getPreparedFormula } from 'src/shared/edition-rules';
 
 type CasterType = CasterClassType;
 
@@ -249,9 +252,10 @@ export class LevelUpService {
 
       const hasAsi = (levelData?.ability_score_bonuses ?? 0) > 0;
 
-      // Check if this level requires subclass choice
+      // Check if this level requires subclass choice (edition-aware)
+      const editionRules = character.source?.rules;
       const hasSubclass =
-        this.isSubclassLevel(cls.slug, nextClassLevel) &&
+        this.isSubclassLevel(cls.slug, nextClassLevel, editionRules) &&
         !charClass?.subclass_id;
 
       // Available subclasses
@@ -287,6 +291,7 @@ export class LevelUpService {
         isCurrentClass ? charClass!.class_level : 0,
         charSpells,
         charAbilities,
+        character.source?.rules,
       );
 
       hitDie[cls.slug] = cls.hit_die;
@@ -401,7 +406,7 @@ export class LevelUpService {
     for (const ca of charAbilities) {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
     }
-    const conMod = Math.floor(((abilityMap.get('con') ?? 10) - 10) / 2);
+    const conMod = getAbilityModifier(abilityMap.get('con') ?? 10);
 
     // Calculate HP gained
     let hpGained: number;
@@ -726,6 +731,7 @@ export class LevelUpService {
     currentClassLevel: number,
     charSpells: CharacterSpellEntity[],
     charAbilities: CharacterAbilityScoreEntity[],
+    editionRules?: EditionRules,
   ): Promise<SpellSelectionForLevelUp | null> {
     const casterType = getCasterClassType(cls.slug);
     if (!casterType) return null;
@@ -847,6 +853,7 @@ export class LevelUpService {
       cls.slug,
       newClassLevel,
       charAbilities,
+      editionRules,
     );
     const preparedSet = new Set<string>();
     charSpells
@@ -878,6 +885,7 @@ export class LevelUpService {
     classSlug: string,
     classLevel: number,
     charAbilities: CharacterAbilityScoreEntity[],
+    editionRules?: EditionRules,
   ): number {
     const casterType = getCasterClassType(classSlug);
     const scAbility = getSpellcastingAbility(classSlug);
@@ -888,14 +896,18 @@ export class LevelUpService {
     const totalScore = abilityScore
       ? abilityScore.base_score + abilityScore.bonus
       : 10;
-    const abilityMod = Math.floor((totalScore - 10) / 2);
+    const abilityMod = getAbilityModifier(totalScore);
 
     switch (casterType) {
-      case 'total_access':
-        if (normalizeClassSlug(classSlug) === 'paladin') {
+      case 'total_access': {
+        // Check edition-specific prepared formula
+        const formula = getPreparedFormula(normalizeClassSlug(classSlug), editionRules);
+        if (formula === 'halfLevel+mod') {
           return Math.max(1, Math.floor(classLevel / 2) + abilityMod);
         }
+        // Default (2024 or no override): level + mod
         return Math.max(1, classLevel + abilityMod);
+      }
       case 'spellbook':
         return Math.max(1, classLevel + abilityMod);
       case 'known':
@@ -910,23 +922,11 @@ export class LevelUpService {
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    const character = await this.characterRepo.findOne({
-      where: { id: characterId, userId },
-    });
-    if (!character) {
-      throw new NotFoundException('Personagem nao encontrado.');
-    }
-    return character;
+    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {
-    const state = await this.stateRepo.findOne({
-      where: { character_id: characterId },
-    });
-    if (!state) {
-      throw new NotFoundException('Estado do personagem nao encontrado.');
-    }
-    return state;
+    return getCharacterState(this.stateRepo, characterId);
   }
 
   private parsePrerequisites(
@@ -972,29 +972,15 @@ export class LevelUpService {
       .map((p) => ({ slug: p.index!, name: p.name! }));
   }
 
-  /** Subclass selection levels per class (SRD 5e) */
-  private isSubclassLevel(classSlug: string, level: number): boolean {
-    const subclassLevels: Record<string, number> = {
-      barbarian: 3,
-      bard: 3,
-      cleric: 1, // Divine Domain at 1 (already chosen at creation)
-      druid: 2,
-      fighter: 3,
-      monk: 3,
-      paladin: 3,
-      ranger: 3,
-      rogue: 3,
-      sorcerer: 1, // Sorcerous Origin at 1 (already chosen at creation)
-      warlock: 1, // Otherworldly Patron at 1 (already chosen at creation)
-      wizard: 2,
-    };
-    // Only trigger subclass choice at the defined level
+  /** Subclass selection level — edition-aware via EditionRules capabilities */
+  private isSubclassLevel(
+    classSlug: string,
+    level: number,
+    editionRules?: EditionRules,
+  ): boolean {
+    const normalized = classSlug.replace(/-phb$/, '');
+    const subclassLevel = getSubclassLevelFromRules(normalized, editionRules);
     // If class chooses subclass at level 1, it's done at creation, so skip
-    const subclassLevel = subclassLevels[classSlug];
-    return (
-      subclassLevel !== undefined &&
-      subclassLevel > 1 &&
-      level === subclassLevel
-    );
+    return subclassLevel > 1 && level === subclassLevel;
   }
 }

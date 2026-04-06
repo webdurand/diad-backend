@@ -32,6 +32,7 @@ import {
   SpellSourceEnum,
   SpellStatusEnum,
 } from 'src/entities/enums';
+import { getAbilityModifier } from 'src/shared/srd-utils';
 
 interface CharacterChoicesData {
   sourceCode?: string;
@@ -130,9 +131,17 @@ export class CharactersService {
   ) {}
 
   async listByUser(userId: string): Promise<CharacterEntity[]> {
+    // Sub-relations (class, subclass, race, etc.) use eager:true on their entities
+    // so only first-level relations need to be specified
     return this.characterRepository.find({
       where: { userId },
       order: { createdAt: 'DESC' },
+      relations: [
+        'character_classes',
+        'character_origin',
+        'character_ability_scores',
+        'character_skills',
+      ],
     });
   }
 
@@ -341,7 +350,7 @@ export class CharactersService {
       const conScore = choices.abilityScores?.constitution ?? 10;
       const conBonus =
         bgBonuses.find((b) => b.abilityScoreIndex === 'con')?.bonus ?? 0;
-      const conMod = Math.floor((conScore + conBonus - 10) / 2);
+      const conMod = getAbilityModifier(conScore + conBonus);
       const startHp = classEntity.hit_die + conMod;
       const gp =
         (choices.classStartingGold as { amount?: number } | undefined)
@@ -526,12 +535,13 @@ export class CharactersService {
           await manager
             .createQueryBuilder()
             .update(CharacterEquipmentEntity)
-            .set({ quantity: () => `quantity + ${quantity}` })
+            .set({ quantity: () => `quantity + :addQty` })
             .where(
               'character_id = :characterId AND equipment_id = :equipmentId',
               {
                 characterId,
                 equipmentId: eq.id,
+                addQty: quantity,
               },
             )
             .execute();
@@ -553,8 +563,8 @@ export class CharactersService {
       await manager
         .createQueryBuilder()
         .update('character_state')
-        .set({ gp: () => `gp + ${Math.floor(extraGold)}` })
-        .where('character_id = :characterId', { characterId })
+        .set({ gp: () => `gp + :addGold` })
+        .where('character_id = :characterId', { characterId, addGold: Math.floor(extraGold) })
         .execute();
     }
   }

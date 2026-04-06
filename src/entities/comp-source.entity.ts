@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import type { EditionRules } from 'src/shared/edition-rules';
 
 @Entity('comp_sources')
 export class CompSourceEntity {
@@ -22,6 +23,10 @@ export class CompSourceEntity {
 
   @Column({ nullable: true })
   group: string;
+
+  /** Edition-specific rules/capabilities for extensible ruleset support */
+  @Column({ type: 'jsonb', nullable: true })
+  rules?: EditionRules;
 
   @Column({ type: 'timestamptz', default: () => 'now()' })
   created_at: Date;

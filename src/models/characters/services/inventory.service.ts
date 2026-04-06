@@ -16,6 +16,7 @@ import {
 } from 'src/entities';
 import { EquipmentSourceEnum } from 'src/entities/enums';
 import { CharacterStateService } from './character-state.service';
+import { ensureCharacterOwnership } from 'src/shared/character-guard';
 
 // ---- DTOs ----
 
@@ -138,13 +139,7 @@ export class InventoryService {
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    const character = await this.characterRepo.findOne({
-      where: { id: characterId, userId },
-    });
-    if (!character) {
-      throw new NotFoundException('Personagem nao encontrado.');
-    }
-    return character;
+    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
   }
 
   private async getStrScore(characterId: string): Promise<number> {

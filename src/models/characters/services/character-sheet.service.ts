@@ -26,10 +26,11 @@ import {
   XP_THRESHOLDS,
   FULL_CASTER_SLOTS,
   WARLOCK_SLOTS,
-  PROF_TO_CATEGORIES,
   getSpellcastingAbility,
   getCasterSlotType,
 } from 'src/shared/srd-constants';
+import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
+import type { EquipmentArmorClass } from 'src/shared/equipment-types';
 
 // ---- Response DTOs ----
 
@@ -189,6 +190,8 @@ export interface CharacterSheet {
   levelUpAvailable: boolean;
   gold: { cp: number; sp: number; gp: number; pp: number };
   conditions: string[];
+  exhaustionLevel: number;
+  inspiration: boolean;
 
   // Equipment & Inventory
   equipment: EquipmentBlock[];
@@ -323,7 +326,7 @@ export class CharacterSheetService {
     const mod = (slug: string) => {
       const entry = abilityMap.get(slug);
       if (!entry) return 0;
-      return Math.floor((entry.score - 10) / 2);
+      return getAbilityModifier(entry.score);
     };
 
     const abilityScores: AbilityScoreBlock[] = [
@@ -357,30 +360,66 @@ export class CharacterSheetService {
     // Speed (from race)
     const speed = charOrigin.race?.speed ?? 30;
 
-    // AC (base: 10 + DEX mod; equipped armor handled in F6)
+    // AC calculation
     const dexMod = mod('dex');
-    let armorClass = 10 + dexMod;
 
-    // Check equipped armor & shield
+    // Step 1: Determine armor AC and whether shield is equipped
+    let armorAc: number | null = null;
+    let hasShield = false;
+    let wearingArmor = false;
+
     for (const eq of charEquip) {
       if (!eq.equipped || !eq.equipment?.armor_class) continue;
-      const ac = eq.equipment.armor_class as Record<string, unknown>;
-      const base = (ac.base as number) ?? 0;
-      const dexBonus = ac.dex_bonus as boolean | undefined;
-      const maxBonus = ac.max_bonus as number | undefined;
+      const ac = eq.equipment.armor_class as unknown as EquipmentArmorClass;
+      const base = ac.base ?? 0;
+      const dexBonus = ac.dex_bonus;
+      const maxBonus = ac.max_bonus;
 
       if (base > 0) {
+        // Armor piece
+        wearingArmor = true;
         if (dexBonus === false) {
-          armorClass = base;
+          armorAc = base;
         } else if (maxBonus !== undefined) {
-          armorClass = base + Math.min(dexMod, maxBonus);
+          armorAc = base + Math.min(dexMod, maxBonus);
         } else {
-          armorClass = base + dexMod;
+          armorAc = base + dexMod;
         }
       } else {
-        // Shield: +2
-        armorClass += 2;
+        // Shield
+        hasShield = true;
       }
+    }
+
+    // Step 2: Determine base AC (armor, unarmored defense, or default)
+    let armorClass: number;
+    if (armorAc !== null) {
+      // Wearing armor — use armor AC
+      armorClass = armorAc;
+    } else {
+      // Not wearing armor — check Unarmored Defense
+      const classSlugs = charClasses.map((cc) => cc.class.slug.replace(/-phb$/, ''));
+      if (classSlugs.includes('barbarian')) {
+        // Barbarian Unarmored Defense: 10 + DEX + CON (can use shield)
+        armorClass = 10 + dexMod + conMod;
+      } else if (classSlugs.includes('monk')) {
+        // Monk Unarmored Defense: 10 + DEX + WIS (no shield)
+        const wisMod = mod('wis');
+        armorClass = 10 + dexMod + wisMod;
+        // Monk Unarmored Defense doesn't work with shields
+        if (hasShield) {
+          armorClass = 10 + dexMod; // Fall back to default if using shield
+        }
+      } else {
+        armorClass = 10 + dexMod;
+      }
+    }
+
+    // Step 3: Add shield bonus (+2) — always applies unless Monk without armor
+    const classSlugsForShield = charClasses.map((cc) => cc.class.slug.replace(/-phb$/, ''));
+    const isMonkUnarmored = !wearingArmor && classSlugsForShield.includes('monk');
+    if (hasShield && !isMonkUnarmored) {
+      armorClass += 2;
     }
 
     // Initiative
@@ -539,25 +578,13 @@ export class CharacterSheetService {
     }));
 
     // Origin details (misc creation metadata)
-    const draconicAncestryMap: Record<string, string> = {
-      black: 'Acid',
-      blue: 'Lightning',
-      brass: 'Fire',
-      bronze: 'Lightning',
-      copper: 'Acid',
-      gold: 'Fire',
-      green: 'Poison',
-      red: 'Fire',
-      silver: 'Cold',
-      white: 'Cold',
-    };
     const raceTraitChoices = charOrigin.race_trait_choices ?? [];
-    const draconicChoice = raceTraitChoices.find((c) => draconicAncestryMap[c]);
+    const draconicChoice = raceTraitChoices.find((c) => DRACONIC_ANCESTRY_MAP[c]);
     const draconicAncestry = draconicChoice
       ? {
           dragon:
             draconicChoice.charAt(0).toUpperCase() + draconicChoice.slice(1),
-          damageType: draconicAncestryMap[draconicChoice],
+          damageType: DRACONIC_ANCESTRY_MAP[draconicChoice].damageType,
         }
       : undefined;
 
@@ -610,7 +637,7 @@ export class CharacterSheetService {
 
     const equipment: EquipmentBlock[] = charEquip.map((ce) => {
       const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
-      const proficient = this.isEquipmentProficient(
+      const proficient = isEquipmentProficient(
         ce.equipment.slug,
         cats,
         profSlugs,
@@ -722,6 +749,8 @@ export class CharacterSheetService {
         pp: charState?.pp ?? 0,
       },
       conditions: charState?.conditions ?? [],
+      exhaustionLevel: charState?.exhaustion_level ?? 0,
+      inspiration: charState?.inspiration ?? false,
 
       equipment,
       magicItems,
@@ -780,7 +809,7 @@ export class CharacterSheetService {
 
     // Standard spell slots (multiclass formula)
     const effectiveCasterLevel =
-      fullCasterLevels + Math.ceil(halfCasterLevels / 2);
+      fullCasterLevels + Math.floor(halfCasterLevels / 2);
 
     if (effectiveCasterLevel > 0) {
       const slotTable = FULL_CASTER_SLOTS[Math.min(effectiveCasterLevel, 20)];
@@ -810,38 +839,4 @@ export class CharacterSheetService {
     return result;
   }
 
-  private isEquipmentProficient(
-    equipSlug: string,
-    categorySlugs: Set<string>,
-    profSlugs: Set<string>,
-  ): boolean | null {
-    const isArmor =
-      categorySlugs.has('light-armor') ||
-      categorySlugs.has('medium-armor') ||
-      categorySlugs.has('heavy-armor') ||
-      categorySlugs.has('shields') ||
-      categorySlugs.has('shield');
-
-    const isWeapon =
-      categorySlugs.has('simple-melee-weapons') ||
-      categorySlugs.has('simple-ranged-weapons') ||
-      categorySlugs.has('martial-melee-weapons') ||
-      categorySlugs.has('martial-ranged-weapons');
-
-    if (!isArmor && !isWeapon) return null;
-
-    // Check individual weapon/armor proficiency by equipment slug
-    if (profSlugs.has(equipSlug)) return true;
-    // Also try plural form (e.g. "longsword" equip slug vs "longswords" proficiency slug)
-    if (profSlugs.has(equipSlug + 's')) return true;
-
-    // Check category-based proficiency
-    for (const [profSlug, cats] of Object.entries(PROF_TO_CATEGORIES)) {
-      if (profSlugs.has(profSlug) && cats.some((c) => categorySlugs.has(c))) {
-        return true;
-      }
-    }
-
-    return false;
-  }
 }

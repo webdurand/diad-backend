@@ -28,6 +28,9 @@ import {
   getCasterSlotType,
   normalizeClassSlug,
 } from 'src/shared/srd-constants';
+import { getAbilityModifier } from 'src/shared/srd-utils';
+import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
+import { type EditionRules, getCasterTypeOverride, getPreparedFormula } from 'src/shared/edition-rules';
 
 type CasterType = CasterClassType;
 
@@ -158,23 +161,11 @@ export class SpellService {
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    const character = await this.characterRepo.findOne({
-      where: { id: characterId, userId },
-    });
-    if (!character) {
-      throw new NotFoundException('Personagem nao encontrado.');
-    }
-    return character;
+    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {
-    const state = await this.stateRepo.findOne({
-      where: { character_id: characterId },
-    });
-    if (!state) {
-      throw new NotFoundException('Estado do personagem nao encontrado.');
-    }
-    return state;
+    return getCharacterState(this.stateRepo, characterId);
   }
 
   private getAbilityMod(
@@ -183,7 +174,7 @@ export class SpellService {
   ): number {
     const ab = charAbilities.find((a) => a.ability_score.slug === abilitySlug);
     if (!ab) return 0;
-    return Math.floor((ab.base_score + ab.bonus - 10) / 2);
+    return getAbilityModifier(ab.base_score + ab.bonus);
   }
 
   private getMaxSpellLevel(charClasses: CharacterClassEntity[]): number {
@@ -200,7 +191,7 @@ export class SpellService {
     }
 
     const effectiveCasterLevel =
-      fullCasterLevels + Math.ceil(halfCasterLevels / 2);
+      fullCasterLevels + Math.floor(halfCasterLevels / 2);
     let maxLevel = 0;
 
     if (effectiveCasterLevel > 0) {
@@ -236,7 +227,7 @@ export class SpellService {
     const result: Record<string, number> = {};
 
     const effectiveCasterLevel =
-      fullCasterLevels + Math.ceil(halfCasterLevels / 2);
+      fullCasterLevels + Math.floor(halfCasterLevels / 2);
     if (effectiveCasterLevel > 0) {
       const slots = FULL_CASTER_SLOTS[Math.min(effectiveCasterLevel, 20)];
       if (slots) {
@@ -267,21 +258,27 @@ export class SpellService {
     classSlug: string,
     classLevel: number,
     charAbilities: CharacterAbilityScoreEntity[],
+    editionRules?: EditionRules,
   ): number {
-    const casterType = getCasterClassType(classSlug);
+    const baseSlug = normalizeClassSlug(classSlug);
+    // Check edition-specific caster type override (e.g., Ranger -> total_access in 2024)
+    const casterTypeOverride = getCasterTypeOverride(baseSlug, editionRules) as CasterType | undefined;
+    const casterType = casterTypeOverride ?? getCasterClassType(classSlug);
     const scAbility = getSpellcastingAbility(classSlug);
     if (!casterType || !scAbility) return 0;
 
     const abilityMod = this.getAbilityMod(charAbilities, scAbility);
-    const baseSlug = normalizeClassSlug(classSlug);
 
     switch (casterType) {
-      case 'total_access':
-        // Paladin uses floor(level/2), Cleric/Druid use full level
-        if (baseSlug === 'paladin') {
+      case 'total_access': {
+        // Check edition-specific prepared formula
+        const formula = getPreparedFormula(baseSlug, editionRules);
+        if (formula === 'halfLevel+mod') {
           return Math.max(1, Math.floor(classLevel / 2) + abilityMod);
         }
+        // Default: level + mod (2024 Paladin, Cleric, Druid, 2024 Ranger)
         return Math.max(1, classLevel + abilityMod);
+      }
 
       case 'spellbook':
         // Wizard: INT mod + wizard level
@@ -304,7 +301,7 @@ export class SpellService {
     characterId: string,
     dto: PreparedSpellsDto,
   ): Promise<PreparedSpellsResult> {
-    await this.ensureOwnership(userId, characterId);
+    const character = await this.ensureOwnership(userId, characterId);
 
     const [charClasses, charAbilities, charSpells] = await Promise.all([
       this.charClassRepo.find({
@@ -337,6 +334,7 @@ export class SpellService {
       classSlug,
       casterClass.class_level,
       charAbilities,
+      character.source?.rules,
     );
 
     // Filter out cantrips from the request (cantrips are always known)
@@ -522,7 +520,7 @@ export class SpellService {
     userId: string,
     characterId: string,
   ): Promise<AvailableSpellsResult[]> {
-    await this.ensureOwnership(userId, characterId);
+    const character = await this.ensureOwnership(userId, characterId);
 
     const [charClasses, charAbilities, charSpells] = await Promise.all([
       this.charClassRepo.find({
@@ -535,6 +533,7 @@ export class SpellService {
 
     const maxSpellLevel = this.getMaxSpellLevel(charClasses);
     const results: AvailableSpellsResult[] = [];
+    const editionRules = character.source?.rules;
 
     for (const cc of charClasses) {
       const classSlug = cc.class.slug;
@@ -545,6 +544,7 @@ export class SpellService {
         classSlug,
         cc.class_level,
         charAbilities,
+        editionRules,
       );
 
       // Current prepared spells (deduplicated)
@@ -674,7 +674,7 @@ export class SpellService {
     userId: string,
     characterId: string,
   ): Promise<ManageableSpellsResult[]> {
-    await this.ensureOwnership(userId, characterId);
+    const character = await this.ensureOwnership(userId, characterId);
 
     const [charClasses, charAbilities, charSpells] = await Promise.all([
       this.charClassRepo.find({
@@ -690,6 +690,7 @@ export class SpellService {
 
     const maxSpellLevel = this.getMaxSpellLevel(charClasses);
     const results: ManageableSpellsResult[] = [];
+    const editionRules = character.source?.rules;
 
     for (const cc of charClasses) {
       const classSlug = cc.class.slug;
@@ -700,6 +701,7 @@ export class SpellService {
         classSlug,
         cc.class_level,
         charAbilities,
+        editionRules,
       );
 
       // Current character spells (deduplicated)

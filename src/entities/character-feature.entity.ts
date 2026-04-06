@@ -4,6 +4,7 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { CharacterEntity } from './character.entity';
 import { FeatureEntity } from './feature.entity';
@@ -14,6 +15,7 @@ export class CharacterFeatureEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index()
   @Column({ type: 'uuid' })
   character_id: string;
 
