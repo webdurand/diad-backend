@@ -77,10 +77,12 @@ describe('CharactersService', () => {
       repos.character.find!.mockResolvedValue(chars);
       const result = await service.listByUser('user-1');
       expect(result).toHaveLength(2);
-      expect(repos.character.find).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-        order: { createdAt: 'DESC' },
-      });
+      expect(repos.character.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'user-1' },
+          order: { createdAt: 'DESC' },
+        }),
+      );
     });
   });
 
@@ -203,9 +205,9 @@ describe('CharactersService', () => {
         userId: 'user-1',
         name: 'My Fighter',
         data: {
-          classIndex: 'fighter',
-          raceIndex: 'human',
-          backgroundIndex: 'acolyte',
+          classSlug: 'fighter',
+          raceSlug: 'human',
+          backgroundSlug: 'acolyte',
           abilityScores: {
             strength: 16,
             dexterity: 14,
@@ -278,9 +280,9 @@ describe('CharactersService', () => {
         userId: 'user-1',
         name: 'Fighter',
         data: {
-          classIndex: 'fighter',
-          raceIndex: 'human',
-          backgroundIndex: 'acolyte',
+          classSlug: 'fighter',
+          raceSlug: 'human',
+          backgroundSlug: 'acolyte',
           abilityScores: { constitution: 14, strength: 16, dexterity: 14, intelligence: 10, wisdom: 12, charisma: 8 },
         },
       });
@@ -345,9 +347,9 @@ describe('CharactersService', () => {
         userId: 'user-1',
         name: 'Squishy Wizard',
         data: {
-          classIndex: 'wizard',
-          raceIndex: 'human',
-          backgroundIndex: 'acolyte',
+          classSlug: 'wizard',
+          raceSlug: 'human',
+          backgroundSlug: 'acolyte',
           abilityScores: { constitution: 8, strength: 8, dexterity: 14, intelligence: 16, wisdom: 12, charisma: 10 },
         },
       });
@@ -418,9 +420,9 @@ describe('CharactersService', () => {
         userId: 'user-1',
         name: 'Wizard',
         data: {
-          classIndex: 'wizard',
-          raceIndex: 'human',
-          backgroundIndex: 'acolyte',
+          classSlug: 'wizard',
+          raceSlug: 'human',
+          backgroundSlug: 'acolyte',
           abilityScores: { constitution: 10, strength: 8, dexterity: 14, intelligence: 16, wisdom: 12, charisma: 10 },
           classCantrips: ['fire-bolt', 'mage-hand'],
           classPreparedSpells: ['shield'],
@@ -492,9 +494,9 @@ describe('CharactersService', () => {
         userId: 'user-1',
         name: 'Fighter with CON bonus',
         data: {
-          classIndex: 'fighter',
-          raceIndex: 'human',
-          backgroundIndex: 'soldier',
+          classSlug: 'fighter',
+          raceSlug: 'human',
+          backgroundSlug: 'soldier',
           abilityScores: { constitution: 14, strength: 16, dexterity: 14, intelligence: 10, wisdom: 12, charisma: 8 },
           backgroundAbilityBonuses: [{ abilityScoreIndex: 'con', bonus: 1 }],
         },
@@ -559,9 +561,9 @@ describe('CharactersService', () => {
         userId: 'user-1',
         name: 'Gold Fighter',
         data: {
-          classIndex: 'fighter',
-          raceIndex: 'human',
-          backgroundIndex: 'acolyte',
+          classSlug: 'fighter',
+          raceSlug: 'human',
+          backgroundSlug: 'acolyte',
           abilityScores: { constitution: 10, strength: 16, dexterity: 14, intelligence: 10, wisdom: 12, charisma: 8 },
           classStartingGold: { amount: 150 },
         },

@@ -210,9 +210,18 @@ describe('SpellService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should compute maxPrepared for paladin as floor(level/2) + CHA mod', async () => {
+    it('should compute maxPrepared for paladin as floor(level/2) + CHA mod (PHB 2014)', async () => {
       // Paladin level 6, CHA 16 mod +3: floor(6/2) + 3 = 6
       setupCaster({ classSlug: 'paladin', level: 6, cha: 16 });
+      // Source with PHB rules so paladin uses halfLevel+mod formula
+      repos.character.findOne!.mockResolvedValue(makeCharacter({
+        source: {
+          code: 'PHB',
+          rules: {
+            preparedFormulas: { paladin: 'halfLevel+mod' },
+          },
+        },
+      }));
       repos.spellClass.find!.mockResolvedValue([]);
 
       const result = await service.getAvailableSpells('user-1', 'char-1');

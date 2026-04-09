@@ -41,6 +41,7 @@ describe('CharacterSheetService', () => {
       classSavingThrow: createMockRepository(),
       classProf: createMockRepository(),
       equipCatItem: createMockRepository(),
+      skill: createMockRepository(),
     };
 
     service = new CharacterSheetService(
@@ -60,6 +61,7 @@ describe('CharacterSheetService', () => {
       repos.classSavingThrow as any,
       repos.classProf as any,
       repos.equipCatItem as any,
+      repos.skill as any,
     );
   });
 
@@ -96,6 +98,8 @@ describe('CharacterSheetService', () => {
       where: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValue([]),
     });
+    repos.equipCatItem.find!.mockResolvedValue([]);
+    repos.skill.find!.mockResolvedValue([]);
 
     extraSetup?.();
 
@@ -250,11 +254,13 @@ describe('CharacterSheetService', () => {
       expect(slotLevels).toEqual([4, 3, 2]);
     });
 
-    it('paladin level 5 (half caster, effective 3): [4, 2]', async () => {
+    it('paladin level 5 (half caster, effective floor(5/2)=2): [3]', async () => {
       setupBasicSheet('paladin', 5, { cha: 16 });
       const sheet = await service.computeSheet('user-1', 'char-1');
       const slotLevels = sheet.spellSlots.map((s) => s.total);
-      expect(slotLevels).toEqual([4, 2]); // effective caster level = ceil(5/2) = 3 -> FULL_CASTER_SLOTS[3] = [4, 2]
+      // Service uses multiclass formula: floor(5/2) = 2 effective caster level
+      // FULL_CASTER_SLOTS[2] = [3]
+      expect(slotLevels).toEqual([3]);
     });
 
     it('warlock level 5: pact slot {level: 3, slots: 2}', async () => {
@@ -274,10 +280,15 @@ describe('CharacterSheetService', () => {
 
   describe('Skills', () => {
     it('proficient skill: base mod + proficiency bonus', async () => {
+      const charSkill = makeCharacterSkill('stealth', 'dex', false);
       setupBasicSheet('fighter', 1, { dex: 14 }, () => {
-        repos.charSkill.find!.mockResolvedValue([
-          makeCharacterSkill('stealth', 'dex', false),
-        ]);
+        repos.charSkill.find!.mockResolvedValue([charSkill]);
+        repos.skill.find!.mockResolvedValue([{
+          id: charSkill.skill_id,
+          slug: 'stealth',
+          name: 'Stealth',
+          ability_score: { slug: 'dex' },
+        }]);
       });
       const sheet = await service.computeSheet('user-1', 'char-1');
       const stealth = sheet.skills.find((s) => s.slug === 'stealth');
@@ -285,10 +296,15 @@ describe('CharacterSheetService', () => {
     });
 
     it('expertise skill: base mod + 2x proficiency bonus', async () => {
+      const charSkill = makeCharacterSkill('stealth', 'dex', true);
       setupBasicSheet('rogue', 1, { dex: 16 }, () => {
-        repos.charSkill.find!.mockResolvedValue([
-          makeCharacterSkill('stealth', 'dex', true),
-        ]);
+        repos.charSkill.find!.mockResolvedValue([charSkill]);
+        repos.skill.find!.mockResolvedValue([{
+          id: charSkill.skill_id,
+          slug: 'stealth',
+          name: 'Stealth',
+          ability_score: { slug: 'dex' },
+        }]);
       });
       const sheet = await service.computeSheet('user-1', 'char-1');
       const stealth = sheet.skills.find((s) => s.slug === 'stealth');

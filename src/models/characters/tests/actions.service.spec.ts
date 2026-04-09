@@ -80,10 +80,25 @@ describe('ActionsService', () => {
     repos.charAbility.find!.mockResolvedValue(abilities);
     repos.charProf.find!.mockResolvedValue(opts.proficiencies ?? []);
     repos.charSpell.find!.mockResolvedValue(opts.spells ?? []);
-    repos.charEquip.find!.mockResolvedValue(opts.equip ?? []);
+    const equip = opts.equip ?? [];
+    repos.charEquip.find!.mockResolvedValue(equip);
     repos.charFeature.find!.mockResolvedValue(opts.features ?? []);
     repos.charState.findOne!.mockResolvedValue(state);
-    repos.equipCatItem.find!.mockResolvedValue([]);
+    // Build category items for all equipped weapons so proficiency checking works
+    const catItems = equip
+      .filter((ce: any) => ce.equipment?.damage)
+      .map((ce: any) => ({
+        equipment_id: ce.equipment_id,
+        category_id: 'cat-1',
+        category: {
+          slug: ce.equipment?.properties?.some((p: any) => p === 'finesse' || p?.slug === 'finesse')
+            ? 'martial-melee-weapons'
+            : ce.equipment?.range?.normal
+              ? 'simple-ranged-weapons'
+              : 'martial-melee-weapons',
+        },
+      }));
+    repos.equipCatItem.find!.mockResolvedValue(catItems);
     repos.classProf.createQueryBuilder!.mockReturnValue({
       innerJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
