@@ -53,6 +53,30 @@ import { WeaponMasteryPropertyEntity } from './weapon-mastery-property.entity';
 import { WeaponPropertyEntity } from './weapon-property.entity';
 import { UserEntity } from './user.entity';
 import { CharacterEntity } from './character.entity';
+import { GameSessionEntity } from './game-session.entity';
+import { EncounterEntity } from './encounter.entity';
+import { EncounterParticipantEntity } from './encounter-participant.entity';
+import { GameEventEntity } from './game-event.entity';
+import { CampaignEntity } from './campaign.entity';
+import { CampaignPlayerEntity } from './campaign-player.entity';
+import { LocationEntity } from './location.entity';
+import { LocationConnectionEntity } from './location-connection.entity';
+import { NpcEntity } from './npc.entity';
+import { NpcRelationshipEntity } from './npc-relationship.entity';
+import { FactionEntity } from './faction.entity';
+import { FactionRelationEntity } from './faction-relation.entity';
+import { StoryArcEntity } from './story-arc.entity';
+import { QuestEntity } from './quest.entity';
+import { QuestObjectiveEntity } from './quest-objective.entity';
+import { QuestPrerequisiteEntity } from './quest-prerequisite.entity';
+import { LootTableEntity } from './loot-table.entity';
+import { LootTableItemEntity } from './loot-table-item.entity';
+import { EncounterTemplateEntity } from './encounter-template.entity';
+import { SceneEntity } from './scene.entity';
+import { SceneNpcEntity } from './scene-npc.entity';
+import { SessionEventEntity } from './session-event.entity';
+import { CampaignChronicleEntity } from './campaign-chronicle.entity';
+import { PartyKnowledgeEntity } from './party-knowledge.entity';
 
 export {
   AbilityScoreEntity,
@@ -110,6 +134,30 @@ export {
   WeaponPropertyEntity,
   UserEntity,
   CharacterEntity,
+  GameSessionEntity,
+  EncounterEntity,
+  EncounterParticipantEntity,
+  GameEventEntity,
+  CampaignEntity,
+  CampaignPlayerEntity,
+  LocationEntity,
+  LocationConnectionEntity,
+  NpcEntity,
+  NpcRelationshipEntity,
+  FactionEntity,
+  FactionRelationEntity,
+  StoryArcEntity,
+  QuestEntity,
+  QuestObjectiveEntity,
+  QuestPrerequisiteEntity,
+  LootTableEntity,
+  LootTableItemEntity,
+  EncounterTemplateEntity,
+  SceneEntity,
+  SceneNpcEntity,
+  SessionEventEntity,
+  CampaignChronicleEntity,
+  PartyKnowledgeEntity,
 };
 
 export const ENTITIES = [
@@ -168,6 +216,30 @@ export const ENTITIES = [
   WeaponPropertyEntity,
   UserEntity,
   CharacterEntity,
+  GameSessionEntity,
+  EncounterEntity,
+  EncounterParticipantEntity,
+  GameEventEntity,
+  CampaignEntity,
+  CampaignPlayerEntity,
+  LocationEntity,
+  LocationConnectionEntity,
+  NpcEntity,
+  NpcRelationshipEntity,
+  FactionEntity,
+  FactionRelationEntity,
+  StoryArcEntity,
+  QuestEntity,
+  QuestObjectiveEntity,
+  QuestPrerequisiteEntity,
+  LootTableEntity,
+  LootTableItemEntity,
+  EncounterTemplateEntity,
+  SceneEntity,
+  SceneNpcEntity,
+  SessionEventEntity,
+  CampaignChronicleEntity,
+  PartyKnowledgeEntity,
 ];
 
 export * from './enums';

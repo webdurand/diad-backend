@@ -92,5 +92,12 @@ import { ActionsService } from './services/actions.service';
     InventoryService,
     ActionsService,
   ],
+  exports: [
+    CharacterSheetService,
+    CharacterStateService,
+    ActionsService,
+    SpellService,
+    InventoryService,
+  ],
 })
 export class CharactersModule {}
