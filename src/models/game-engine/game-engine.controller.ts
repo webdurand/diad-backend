@@ -71,6 +71,20 @@ export class GameEngineController {
     return this.sessionService.create(getUserId(req), dto);
   }
 
+  @Get('sessions/solo')
+  async listSoloSessions(@Req() req: AuthRequest) {
+    const sessions = await this.sessionService.listByUser(getUserId(req));
+    return sessions
+      .filter((s) => s.name?.startsWith('Solo:'))
+      .map((s) => ({
+        id: s.id,
+        name: s.name.replace('Solo: ', ''),
+        status: s.status,
+        updatedAt: s.updatedAt,
+        createdAt: s.createdAt,
+      }));
+  }
+
   @Get('sessions')
   async listSessions(@Req() req: AuthRequest) {
     return this.sessionService.listByUser(getUserId(req));
@@ -93,6 +107,12 @@ export class GameEngineController {
   ) {
     await this.sessionService.ensureOwnership(id, getUserId(req));
     return this.sessionService.update(id, dto);
+  }
+
+  @Delete('sessions/:id')
+  async deleteSession(@Req() req: AuthRequest, @Param('id') id: string) {
+    await this.sessionService.ensureOwnership(id, getUserId(req));
+    return this.sessionService.delete(id);
   }
 
   @Post('sessions/:id/characters')

@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserEntity } from './user.entity';
+import { CampaignEntity } from './campaign.entity';
 
 @Entity('game_sessions')
 export class GameSessionEntity {
@@ -25,6 +26,13 @@ export class GameSessionEntity {
   @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'owner_id' })
   owner: UserEntity;
+
+  @Column({ name: 'campaign_id', type: 'uuid', nullable: true })
+  campaignId?: string;
+
+  @ManyToOne(() => CampaignEntity, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'campaign_id' })
+  campaign?: CampaignEntity;
 
   @Column({
     type: 'varchar',

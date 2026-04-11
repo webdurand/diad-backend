@@ -2,9 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GameSessionEntity } from 'src/entities/game-session.entity';
+import { CampaignEntity } from 'src/entities/campaign.entity';
 
 export interface CreateSessionDto {
   name: string;
+  campaignId?: string;
   config?: {
     dice_seed?: number;
     critical_variant?: 'double_dice' | 'double_damage';
@@ -26,6 +28,8 @@ export class SessionService {
   constructor(
     @InjectRepository(GameSessionEntity)
     private readonly sessionRepo: Repository<GameSessionEntity>,
+    @InjectRepository(CampaignEntity)
+    private readonly campaignRepo: Repository<CampaignEntity>,
   ) {}
 
   async create(
@@ -35,6 +39,7 @@ export class SessionService {
     const session = this.sessionRepo.create({
       name: dto.name,
       ownerId,
+      campaignId: dto.campaignId ?? undefined,
       status: 'lobby',
       characterIds: [],
       scene: {},
@@ -78,6 +83,18 @@ export class SessionService {
       session.characterIds = [...session.characterIds, characterId];
     }
     return this.sessionRepo.save(session);
+  }
+
+  async delete(sessionId: string): Promise<void> {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    const campaignId = session?.campaignId;
+
+    await this.sessionRepo.delete(sessionId);
+
+    // Delete associated campaign (cascade removes locations, NPCs, quests, etc.)
+    if (campaignId) {
+      await this.campaignRepo.delete(campaignId);
+    }
   }
 
   async removeCharacter(

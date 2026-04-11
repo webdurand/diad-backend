@@ -10,6 +10,7 @@ import {
   LootTableEntity,
   LootTableItemEntity,
   SpellEntity,
+  CampaignEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersModule } from '../characters/characters.module';
@@ -39,6 +40,7 @@ import { WorldModule } from '../world/world.module';
       LootTableEntity,
       LootTableItemEntity,
       SpellEntity,
+      CampaignEntity,
     ]),
     AuthModule,
     CharactersModule,

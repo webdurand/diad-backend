@@ -5,28 +5,47 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthRequest } from './auth.types';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
+  private readonly serviceKey: string;
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {
+    this.serviceKey = this.configService.get<string>('SERVICE_KEY') ?? 'diad-internal-dev';
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthRequest>();
+
+    // Internal service-to-service calls (Python agent → NestJS)
+    const incomingServiceKey = request.headers['x-service-key'] as string | undefined;
+    if (incomingServiceKey && incomingServiceKey === this.serviceKey) {
+      const userId = request.headers['x-user-id'] as string | undefined;
+      request.user = {
+        id: userId ?? 'service',
+        email: 'service@diad.internal',
+        name: 'Service',
+        role: 'admin',
+      };
+      return true;
+    }
+
+    // Normal cookie-based auth
     const cookieName = this.authService.getCookieName();
     const token = request.cookies?.[cookieName];
 
     this.logger.debug(
-      `[AuthGuard] ${request.method} ${request.url} | origin=${request.headers.origin ?? 'none'} | cookie present=${!!token} | cookies keys=${Object.keys(request.cookies ?? {}).join(',')}`,
+      `[AuthGuard] ${request.method} ${request.url} | origin=${request.headers.origin ?? 'none'} | cookie present=${!!token}`,
     );
 
     if (!token) {
-      this.logger.warn(
-        `[AuthGuard] REJECTED - no cookie '${cookieName}' found. Headers: ${JSON.stringify({ cookie: request.headers.cookie?.substring(0, 80), origin: request.headers.origin, referer: request.headers.referer })}`,
-      );
       throw new UnauthorizedException('Sessao ausente.');
     }
 
