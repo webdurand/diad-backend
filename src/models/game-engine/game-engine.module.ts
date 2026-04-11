@@ -7,6 +7,9 @@ import {
   GameEventEntity,
   MonsterEntity,
   CharacterEntity,
+  LootTableEntity,
+  LootTableItemEntity,
+  SpellEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersModule } from '../characters/characters.module';
@@ -17,6 +20,12 @@ import { EventService } from './services/event.service';
 import { SessionService } from './services/session.service';
 import { EncounterService } from './services/encounter.service';
 import { CombatService } from './services/combat.service';
+import { SkillCheckService } from './services/skill-check.service';
+import { SavingThrowService } from './services/saving-throw.service';
+import { SpellCastingService } from './services/spell-casting.service';
+import { LootService } from './services/loot.service';
+import { CloudinaryService } from 'src/shared/cloudinary.service';
+import { WorldModule } from '../world/world.module';
 
 @Module({
   imports: [
@@ -27,9 +36,13 @@ import { CombatService } from './services/combat.service';
       GameEventEntity,
       MonsterEntity,
       CharacterEntity,
+      LootTableEntity,
+      LootTableItemEntity,
+      SpellEntity,
     ]),
     AuthModule,
     CharactersModule,
+    WorldModule,
   ],
   controllers: [GameEngineController],
   providers: [
@@ -39,6 +52,11 @@ import { CombatService } from './services/combat.service';
     SessionService,
     EncounterService,
     CombatService,
+    SkillCheckService,
+    SavingThrowService,
+    SpellCastingService,
+    LootService,
+    CloudinaryService,
   ],
   exports: [
     DiceService,
@@ -47,6 +65,10 @@ import { CombatService } from './services/combat.service';
     EncounterService,
     SessionService,
     EventService,
+    SkillCheckService,
+    SavingThrowService,
+    SpellCastingService,
+    LootService,
   ],
 })
 export class GameEngineModule {}

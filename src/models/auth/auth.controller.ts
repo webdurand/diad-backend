@@ -42,6 +42,7 @@ export class AuthController {
       email: user.email,
       name: user.name,
       username: user.username,
+      role: user.role,
     };
   }
 
@@ -58,6 +59,7 @@ export class AuthController {
       email: user.email,
       name: user.name,
       username: user.username,
+      role: user.role,
     };
   }
 
@@ -79,6 +81,7 @@ export class AuthController {
       email: user?.email,
       name: user?.name,
       username: user?.username,
+      role: user?.role,
     };
   }
 }

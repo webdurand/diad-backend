@@ -5,11 +5,12 @@ import { UserEntity } from 'src/entities';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './auth.guard';
+import { AdminGuard } from './admin.guard';
 
 @Module({
   imports: [TypeOrmModule.forFeature([UserEntity]), JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, AuthGuard],
-  exports: [AuthService, AuthGuard],
+  providers: [AuthService, AuthGuard, AdminGuard],
+  exports: [AuthService, AuthGuard, AdminGuard],
 })
 export class AuthModule {}

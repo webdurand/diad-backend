@@ -5,14 +5,25 @@ import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { MonsterEntity } from 'src/entities/monster.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
+import { CharacterStateService } from 'src/models/characters/services/character-state.service';
+import { InventoryService } from 'src/models/characters/services/inventory.service';
 import { DiceService } from './dice.service';
 import { EventService } from './event.service';
 import { SessionService } from './session.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { XP_THRESHOLDS } from 'src/shared/srd-constants';
+import { EquipmentSourceEnum } from 'src/entities/enums';
 
 export interface CreateEncounterDto {
   name: string;
+}
+
+export interface ResolveEncounterDto {
+  outcome: 'victory' | 'retreat' | 'negotiation' | 'defeat';
+  xpRewards: Array<{ characterId: string; xp: number }>;
+  goldRewards: Array<{ characterId: string; gp: number }>;
+  itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string }>;
+  ownerUserId: string;
 }
 
 export interface AddMonsterDto {
@@ -51,6 +62,8 @@ export class EncounterService {
     private readonly eventService: EventService,
     private readonly sessionService: SessionService,
     private readonly sheetService: CharacterSheetService,
+    private readonly stateService: CharacterStateService,
+    private readonly inventoryService: InventoryService,
   ) {}
 
   async create(
@@ -348,6 +361,129 @@ export class EncounterService {
       partySize,
       partyAverageLevel: avgLevel,
     };
+  }
+
+  async resolveEncounter(
+    encounterId: string,
+    dto: ResolveEncounterDto,
+  ): Promise<{
+    xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }>;
+    goldApplied: Array<{ characterId: string; gp: number }>;
+    itemsApplied: Array<{ characterId: string; itemName: string }>;
+  }> {
+    const encounter = await this.getById(encounterId);
+
+    // Apply XP
+    const xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }> = [];
+    for (const reward of dto.xpRewards) {
+      if (reward.xp <= 0) continue;
+      try {
+        const result = await this.stateService.updateXp(
+          dto.ownerUserId,
+          reward.characterId,
+          { amount: reward.xp },
+        );
+        xpApplied.push({
+          characterId: reward.characterId,
+          xp: reward.xp,
+          newTotal: result.xp,
+          levelUpAvailable: result.levelUpAvailable,
+        });
+      } catch {}
+    }
+
+    // Apply Gold
+    const goldApplied: Array<{ characterId: string; gp: number }> = [];
+    for (const reward of dto.goldRewards) {
+      if (reward.gp <= 0) continue;
+      try {
+        await this.inventoryService.updateGold(
+          dto.ownerUserId,
+          reward.characterId,
+          { gp: reward.gp },
+        );
+        goldApplied.push({ characterId: reward.characterId, gp: reward.gp });
+      } catch {}
+    }
+
+    // Apply Items
+    const itemsApplied: Array<{ characterId: string; itemName: string }> = [];
+    for (const reward of dto.itemRewards) {
+      try {
+        if (reward.equipmentId) {
+          const result = await this.inventoryService.addItem(
+            dto.ownerUserId,
+            reward.characterId,
+            { equipmentId: reward.equipmentId, source: EquipmentSourceEnum.Loot },
+          );
+          itemsApplied.push({
+            characterId: reward.characterId,
+            itemName: (result as any).equipment?.name ?? 'Item',
+          });
+        }
+        if (reward.magicItemId) {
+          await this.inventoryService.addMagicItem(
+            dto.ownerUserId,
+            reward.characterId,
+            { magicItemId: reward.magicItemId },
+          );
+          itemsApplied.push({
+            characterId: reward.characterId,
+            itemName: 'Magic Item',
+          });
+        }
+      } catch {}
+    }
+
+    // Mark encounter as completed
+    encounter.status = 'completed';
+    await this.encounterRepo.save(encounter);
+    await this.sessionService.setActiveEncounter(encounter.sessionId, null);
+
+    // Emit event
+    await this.eventService.emit(encounter.sessionId, encounterId, [
+      {
+        event_type: 'encounter_end',
+        data: {
+          name: encounter.name,
+          outcome: dto.outcome,
+          xpApplied,
+          goldApplied,
+          itemsApplied,
+        },
+      },
+    ]);
+
+    return { xpApplied, goldApplied, itemsApplied };
+  }
+
+  async updateMapData(
+    encounterId: string,
+    mapData: Partial<EncounterEntity['mapData']>,
+  ): Promise<EncounterEntity> {
+    const encounter = await this.getById(encounterId);
+    encounter.mapData = { ...encounter.mapData, ...mapData };
+    return this.encounterRepo.save(encounter);
+  }
+
+  async updateParticipantPosition(
+    participantId: string,
+    x: number,
+    y: number,
+  ): Promise<EncounterParticipantEntity> {
+    const p = await this.getParticipant(participantId);
+    p.positionX = x;
+    p.positionY = y;
+    return this.participantRepo.save(p);
+  }
+
+  async updateParticipantVisibility(
+    participantId: string,
+    visible: boolean,
+  ): Promise<EncounterParticipantEntity> {
+    const p = await this.getParticipant(participantId);
+    p.isVisible = visible;
+    return this.participantRepo.save(p);
   }
 
   async getParticipant(

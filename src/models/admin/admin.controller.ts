@@ -1,7 +1,17 @@
-import { Controller, Post, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  UseGuards,
+} from '@nestjs/common';
 import { AdminService, SeedResult } from './admin.service';
+import { AuthGuard } from '../auth/auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 
 @Controller('admin')
+@UseGuards(AuthGuard, AdminGuard)
 export class AdminController {
   private readonly logger = new Logger(AdminController.name);
 

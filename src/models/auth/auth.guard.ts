@@ -36,6 +36,7 @@ export class AuthGuard implements CanActivate {
       email: user.email,
       name: user.name ?? undefined,
       username: user.username ?? undefined,
+      role: user.role ?? 'user',
     };
     return true;
   }

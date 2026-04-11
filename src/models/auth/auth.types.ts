@@ -5,6 +5,7 @@ export interface AuthUserPayload {
   email: string;
   name?: string;
   username?: string;
+  role?: 'user' | 'admin';
 }
 
 export interface AuthRequest extends Request {

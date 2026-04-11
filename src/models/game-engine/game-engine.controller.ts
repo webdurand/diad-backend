@@ -10,7 +10,16 @@ import {
   Req,
   UseGuards,
   UnauthorizedException,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { CloudinaryService } from 'src/shared/cloudinary.service';
+import { QuestService } from '../world/services/quest.service';
+import { CharacterStateService } from '../characters/services/character-state.service';
+import { InventoryService } from '../characters/services/inventory.service';
+import { EquipmentSourceEnum } from 'src/entities/enums';
 import { AuthGuard } from '../auth/auth.guard';
 import { SessionService } from './services/session.service';
 import type { CreateSessionDto, UpdateSessionDto } from './services/session.service';
@@ -20,6 +29,10 @@ import { CombatService } from './services/combat.service';
 import type { AttackDto, DamageDto, HealDto, ConditionDto } from './services/combat.service';
 import { EventService } from './services/event.service';
 import { DiceService } from './services/dice.service';
+import { SkillCheckService } from './services/skill-check.service';
+import type { SkillCheckDto } from './services/skill-check.service';
+import { SavingThrowService } from './services/saving-throw.service';
+import type { SavingThrowDto } from './services/saving-throw.service';
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -40,6 +53,12 @@ export class GameEngineController {
     private readonly combatService: CombatService,
     private readonly eventService: EventService,
     private readonly diceService: DiceService,
+    private readonly cloudinaryService: CloudinaryService,
+    private readonly questService: QuestService,
+    private readonly stateService: CharacterStateService,
+    private readonly inventoryService: InventoryService,
+    private readonly skillCheckService: SkillCheckService,
+    private readonly savingThrowService: SavingThrowService,
   ) {}
 
   // ==================== SESSIONS ====================
@@ -173,6 +192,23 @@ export class GameEngineController {
     return this.encounterService.endEncounter(id);
   }
 
+  @Post('encounters/:id/resolve')
+  async resolveEncounter(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: {
+      outcome: 'victory' | 'retreat' | 'negotiation' | 'defeat';
+      xpRewards: Array<{ characterId: string; xp: number }>;
+      goldRewards: Array<{ characterId: string; gp: number }>;
+      itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string }>;
+    },
+  ) {
+    return this.encounterService.resolveEncounter(id, {
+      ...body,
+      ownerUserId: getUserId(req),
+    });
+  }
+
   @Post('encounters/:id/difficulty')
   async calculateDifficulty(
     @Param('id') id: string,
@@ -261,6 +297,72 @@ export class GameEngineController {
     );
   }
 
+  // ==================== MAP ====================
+
+  @Post('encounters/:id/map/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+      fileFilter: (_req, file, cb) => {
+        if (/\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname)) {
+          cb(null, true);
+        } else {
+          cb(new Error('Apenas imagens (jpg, png, webp, gif)'), false);
+        }
+      },
+    }),
+  )
+  async uploadMapBackground(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const result = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'maps',
+    );
+    return this.encounterService.updateMapData(id, {
+      backgroundUrl: result.secure_url,
+    });
+  }
+
+  @Patch('encounters/:id/map')
+  async updateMapData(
+    @Param('id') id: string,
+    @Body() body: {
+      gridSize?: number;
+      gridColumns?: number;
+      gridRows?: number;
+      gridVisible?: boolean;
+      gridColor?: string;
+    },
+  ) {
+    return this.encounterService.updateMapData(id, body);
+  }
+
+  @Patch('encounters/:id/participants/:participantId/position')
+  async updateParticipantPosition(
+    @Param('participantId') participantId: string,
+    @Body() body: { x: number; y: number },
+  ) {
+    return this.encounterService.updateParticipantPosition(
+      participantId,
+      body.x,
+      body.y,
+    );
+  }
+
+  @Patch('encounters/:id/participants/:participantId/visibility')
+  async updateParticipantVisibility(
+    @Param('participantId') participantId: string,
+    @Body() body: { visible: boolean },
+  ) {
+    return this.encounterService.updateParticipantVisibility(
+      participantId,
+      body.visible,
+    );
+  }
+
   // ==================== EVENTS ====================
 
   @Get('sessions/:id/events')
@@ -281,10 +383,112 @@ export class GameEngineController {
     return this.eventService.getEncounterTimeline(id);
   }
 
+  // ==================== QUEST REWARDS ====================
+
+  @Post('quests/:questId/resolve')
+  async resolveQuest(
+    @Req() req: AuthRequest,
+    @Param('questId') questId: string,
+    @Body() body: {
+      status: 'completed' | 'failed';
+      xpRewards: Array<{ characterId: string; xp: number }>;
+      goldRewards: Array<{ characterId: string; gp: number }>;
+      itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string }>;
+    },
+  ) {
+    const userId = getUserId(req);
+
+    // Update quest status
+    await this.questService.update(questId, { status: body.status });
+
+    // Apply XP
+    const xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }> = [];
+    for (const reward of body.xpRewards) {
+      if (reward.xp <= 0) continue;
+      try {
+        const result = await this.stateService.updateXp(userId, reward.characterId, { amount: reward.xp });
+        xpApplied.push({ characterId: reward.characterId, xp: reward.xp, newTotal: result.xp, levelUpAvailable: result.levelUpAvailable });
+      } catch {}
+    }
+
+    // Apply Gold
+    const goldApplied: Array<{ characterId: string; gp: number }> = [];
+    for (const reward of body.goldRewards) {
+      if (reward.gp <= 0) continue;
+      try {
+        await this.inventoryService.updateGold(userId, reward.characterId, { gp: reward.gp });
+        goldApplied.push({ characterId: reward.characterId, gp: reward.gp });
+      } catch {}
+    }
+
+    // Apply Items
+    const itemsApplied: Array<{ characterId: string; itemName: string }> = [];
+    for (const reward of body.itemRewards) {
+      try {
+        if (reward.equipmentId) {
+          const result = await this.inventoryService.addItem(userId, reward.characterId, {
+            equipmentId: reward.equipmentId,
+            source: EquipmentSourceEnum.Loot,
+          });
+          itemsApplied.push({ characterId: reward.characterId, itemName: (result as any).equipment?.name ?? 'Item' });
+        }
+        if (reward.magicItemId) {
+          await this.inventoryService.addMagicItem(userId, reward.characterId, { magicItemId: reward.magicItemId });
+          itemsApplied.push({ characterId: reward.characterId, itemName: 'Magic Item' });
+        }
+      } catch {}
+    }
+
+    return { xpApplied, goldApplied, itemsApplied };
+  }
+
+  // ==================== ENCOUNTERS BY USER ====================
+
+  @Get('encounters/mine')
+  async listMyEncounters(@Req() req: AuthRequest) {
+    const sessions = await this.sessionService.listByUser(getUserId(req));
+    const allEncounters: any[] = [];
+    for (const s of sessions) {
+      const encounters = await this.encounterService.listBySession(s.id);
+      allEncounters.push(...encounters);
+    }
+    return allEncounters;
+  }
+
   // ==================== DICE ====================
 
   @Post('dice/roll')
   async rollDice(@Body('expression') expression: string) {
     return this.diceService.rollExpression(expression);
+  }
+
+  // ==================== SKILL CHECKS ====================
+
+  @Post('skill-check')
+  async rollSkillCheck(@Body() dto: SkillCheckDto, @Req() req: AuthRequest) {
+    const result = await this.skillCheckService.rollAbilityCheck({
+      ...dto,
+      userId: getUserId(req),
+    });
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (dto.sessionId) {
+      await this.eventService.emit(dto.sessionId, dto.encounterId ?? null, result.events);
+    }
+    return { ok: true, value: result.value };
+  }
+
+  // ==================== SAVING THROWS ====================
+
+  @Post('saving-throw')
+  async rollSavingThrow(@Body() dto: SavingThrowDto, @Req() req: AuthRequest) {
+    const result = await this.savingThrowService.rollSavingThrow({
+      ...dto,
+      userId: getUserId(req),
+    });
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (dto.sessionId) {
+      await this.eventService.emit(dto.sessionId, dto.encounterId ?? null, result.events);
+    }
+    return { ok: true, value: result.value };
   }
 }

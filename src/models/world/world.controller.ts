@@ -148,6 +148,13 @@ export class WorldController {
     return this.locationService.remove(locId);
   }
 
+  @Get(':id/locations/:locId/connections')
+  async getConnections(
+    @Param('locId') locId: string,
+  ) {
+    return this.locationService.getConnections(locId);
+  }
+
   @Post(':id/locations/:locId/connections')
   async addConnection(
     @Req() req: AuthRequest,

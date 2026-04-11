@@ -9,6 +9,7 @@ import { CharactersModule } from './models/characters/characters.module';
 import { GameEngineModule } from './models/game-engine/game-engine.module';
 import { WorldModule } from './models/world/world.module';
 import { SessionModule } from './models/session/session.module';
+import { AiProxyModule } from './models/ai-proxy/ai-proxy.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SessionModule } from './models/session/session.module';
     GameEngineModule,
     WorldModule,
     SessionModule,
+    AiProxyModule,
   ],
   controllers: [],
   providers: [],

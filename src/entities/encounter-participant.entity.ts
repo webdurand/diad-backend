@@ -82,6 +82,16 @@ export class EncounterParticipantEntity {
   @Column({ name: 'reactions_used', type: 'int', default: 0 })
   reactionsUsed: number;
 
+  // Grid position for battle map
+  @Column({ name: 'position_x', type: 'int', nullable: true })
+  positionX?: number;
+
+  @Column({ name: 'position_y', type: 'int', nullable: true })
+  positionY?: number;
+
+  @Column({ name: 'is_visible', type: 'boolean', default: true })
+  isVisible: boolean; // DM can hide tokens from players
+
   @Column({ name: 'is_defeated', type: 'boolean', default: false })
   isDefeated: boolean;
 
