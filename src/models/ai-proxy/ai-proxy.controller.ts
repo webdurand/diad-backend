@@ -42,20 +42,11 @@ export class AiProxyController {
     res.setHeader('X-Accel-Buffering', 'no');
 
     try {
-      const stream = await this.aiProxyService.streamFromAgent(
+      await this.aiProxyService.pipeStream(
         '/assistant/message',
-        {
-          message: body.message,
-          session_id: body.sessionId,
-          user_id: req.user!.id,
-        },
+        { message: body.message, session_id: body.sessionId, user_id: req.user!.id },
+        res,
       );
-
-      stream.pipe(res);
-      stream.on('error', (err) => {
-        this.logger.error(`Stream error: ${err.message}`);
-        res.end();
-      });
     } catch (err: any) {
       this.logger.error(`Assistant proxy error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
@@ -82,19 +73,10 @@ export class AiProxyController {
     res.setHeader('X-Accel-Buffering', 'no');
 
     try {
-      const stream = await this.aiProxyService.streamFromAgent('/solo/start', {
-        character_id: body.characterId,
-        tone: body.tone,
-        difficulty: body.difficulty,
-        type: body.type,
-        user_id: req.user!.id,
-      });
-
-      stream.pipe(res);
-      stream.on('error', (err) => {
-        this.logger.error(`Stream error: ${err.message}`);
-        res.end();
-      });
+      await this.aiProxyService.pipeStream('/solo/start', {
+        character_id: body.characterId, tone: body.tone, difficulty: body.difficulty,
+        type: body.type, user_id: req.user!.id,
+      }, res);
     } catch (err: any) {
       this.logger.error(`Solo start error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
@@ -115,19 +97,11 @@ export class AiProxyController {
     res.setHeader('X-Accel-Buffering', 'no');
 
     try {
-      const stream = await this.aiProxyService.streamFromAgent(
+      await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/message`,
-        {
-          message: body.message,
-          user_id: req.user!.id,
-        },
+        { message: body.message, user_id: req.user!.id },
+        res,
       );
-
-      stream.pipe(res);
-      stream.on('error', (err) => {
-        this.logger.error(`Stream error: ${err.message}`);
-        res.end();
-      });
     } catch (err: any) {
       this.logger.error(`Solo message error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
@@ -148,16 +122,11 @@ export class AiProxyController {
     res.setHeader('X-Accel-Buffering', 'no');
 
     try {
-      const stream = await this.aiProxyService.streamFromAgent(
+      await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/action`,
         { ...body, user_id: req.user!.id },
+        res,
       );
-
-      stream.pipe(res);
-      stream.on('error', (err) => {
-        this.logger.error(`Stream error: ${err.message}`);
-        res.end();
-      });
     } catch (err: any) {
       this.logger.error(`Solo action error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
