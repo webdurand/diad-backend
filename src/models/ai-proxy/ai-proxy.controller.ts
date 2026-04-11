@@ -61,9 +61,24 @@ export class AiProxyController {
 
   // ────── Solo Play ──────
 
-  @Post('solo/start')
-  async soloStart(
+  @Post('solo/create')
+  async soloCreate(
     @Body() body: { characterId: string; tone: string; difficulty: string; type: string },
+    @Req() req: AuthRequest,
+  ) {
+    return this.aiProxyService.requestAgent('POST', '/solo/create', {
+      character_id: body.characterId,
+      tone: body.tone,
+      difficulty: body.difficulty,
+      type: body.type,
+      user_id: req.user!.id,
+    });
+  }
+
+  @Post('solo/:sessionId/narrate-start')
+  async soloNarrateStart(
+    @Param('sessionId') sessionId: string,
+    @Body() body: { characterId: string },
     @Req() req: AuthRequest,
     @Res() res: Response,
   ) {
@@ -73,12 +88,12 @@ export class AiProxyController {
     res.setHeader('X-Accel-Buffering', 'no');
 
     try {
-      await this.aiProxyService.pipeStream('/solo/start', {
-        character_id: body.characterId, tone: body.tone, difficulty: body.difficulty,
-        type: body.type, user_id: req.user!.id,
+      await this.aiProxyService.pipeStream(`/solo/${sessionId}/narrate-start`, {
+        character_id: body.characterId,
+        user_id: req.user!.id,
       }, res);
     } catch (err: any) {
-      this.logger.error(`Solo start error: ${err.message}`);
+      this.logger.error(`Solo narrate-start error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       res.end();
     }
