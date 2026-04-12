@@ -32,7 +32,9 @@ export type GameErrorCode =
   | 'INVALID_ACTION'
   | 'SESSION_NOT_FOUND'
   | 'ENCOUNTER_NOT_FOUND'
-  | 'PARTICIPANT_NOT_FOUND';
+  | 'PARTICIPANT_NOT_FOUND'
+  | 'POSITION_OUT_OF_BOUNDS'
+  | 'POSITION_OCCUPIED';
 
 export interface GameEventData {
   event_type: string;

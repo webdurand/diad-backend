@@ -82,6 +82,23 @@ export class EncounterParticipantEntity {
   @Column({ name: 'reactions_used', type: 'int', default: 0 })
   reactionsUsed: number;
 
+  // --- Movement & Action Economy (reset each turn) ---
+
+  @Column({ name: 'movement_remaining', type: 'int', nullable: true })
+  movementRemaining?: number;
+
+  @Column({ name: 'action_used', type: 'boolean', default: false })
+  actionUsed: boolean;
+
+  @Column({ name: 'bonus_action_used', type: 'boolean', default: false })
+  bonusActionUsed: boolean;
+
+  @Column({ name: 'has_dashed', type: 'boolean', default: false })
+  hasDashed: boolean;
+
+  @Column({ name: 'has_disengaged', type: 'boolean', default: false })
+  hasDisengaged: boolean;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;

@@ -98,3 +98,33 @@ export interface ConditionTurnEffect {
   effect: string;
   description: string;
 }
+
+export interface TurnActionBlock {
+  id: string;
+  name: string;
+  timing: string;
+  source: string;
+  sourceLabel: string;
+  description: string;
+  attackBonus?: number;
+  damage?: { dice: string; type: string; bonus?: number };
+  range?: string;
+  spellLevel?: number;
+  requiresConcentration?: boolean;
+}
+
+export interface TurnActionsResult {
+  participantId: string;
+  participantName: string;
+  participantType: 'pc' | 'monster' | 'npc';
+  actions: TurnActionBlock[];
+  bonusActions: TurnActionBlock[];
+  reactions: TurnActionBlock[];
+  canMove: boolean;
+  remainingMovement: number;
+  speed: number;
+  actionUsed: boolean;
+  bonusActionUsed: boolean;
+  hasDisengaged: boolean;
+  hasDashed: boolean;
+}

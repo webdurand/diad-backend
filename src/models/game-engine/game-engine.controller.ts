@@ -24,10 +24,12 @@ import { AuthGuard } from '../auth/auth.guard';
 import { SessionService } from './services/session.service';
 import type { CreateSessionDto, UpdateSessionDto } from './services/session.service';
 import { EncounterService } from './services/encounter.service';
-import type { CreateEncounterDto, AddMonsterDto } from './services/encounter.service';
+import type { CreateEncounterDto, AddMonsterDto, BatchPositionDto } from './services/encounter.service';
 import { CombatService } from './services/combat.service';
 import type { AttackDto, DamageDto, HealDto, ConditionDto } from './services/combat.service';
 import { EventService } from './services/event.service';
+import { MovementService } from './services/movement.service';
+import { SpellCastingService } from './services/spell-casting.service';
 import { DiceService } from './services/dice.service';
 import { SkillCheckService } from './services/skill-check.service';
 import type { SkillCheckDto } from './services/skill-check.service';
@@ -51,6 +53,8 @@ export class GameEngineController {
     private readonly sessionService: SessionService,
     private readonly encounterService: EncounterService,
     private readonly combatService: CombatService,
+    private readonly movementService: MovementService,
+    private readonly spellCastingService: SpellCastingService,
     private readonly eventService: EventService,
     private readonly diceService: DiceService,
     private readonly cloudinaryService: CloudinaryService,
@@ -299,6 +303,19 @@ export class GameEngineController {
     });
   }
 
+  @Get('encounters/:id/turn-actions/:participantId')
+  async getTurnActions(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+  ) {
+    return this.combatService.getTurnActions(
+      id,
+      participantId,
+      getUserId(req),
+    );
+  }
+
   @Post('encounters/:id/end-turn')
   async endTurn(@Param('id') id: string) {
     return this.combatService.endTurn(id);
@@ -311,6 +328,81 @@ export class GameEngineController {
     @Param('participantId') participantId: string,
   ) {
     return this.combatService.resolveDeathSave(
+      id,
+      participantId,
+      getUserId(req),
+    );
+  }
+
+  // ==================== SPELLCASTING ====================
+
+  @Post('encounters/:id/cast-spell')
+  async castSpellInCombat(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      participantId: string;
+      spellSlug: string;
+      slotLevel: number;
+      targetParticipantIds: string[];
+    },
+  ) {
+    return this.spellCastingService.castSpellInCombat({
+      encounterId: id,
+      participantId: body.participantId,
+      spellSlug: body.spellSlug,
+      slotLevel: body.slotLevel,
+      targetParticipantIds: body.targetParticipantIds,
+      ownerUserId: getUserId(req),
+    });
+  }
+
+  // ==================== MOVEMENT ====================
+
+  @Post('encounters/:id/move')
+  async moveParticipant(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: { participantId: string; targetX: number; targetY: number },
+  ) {
+    return this.movementService.moveParticipant(
+      id,
+      body.participantId,
+      body.targetX,
+      body.targetY,
+      getUserId(req),
+    );
+  }
+
+  @Post('encounters/:id/dash')
+  async dashAction(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: { participantId: string },
+  ) {
+    return this.movementService.dashAction(
+      id,
+      body.participantId,
+      getUserId(req),
+    );
+  }
+
+  @Post('encounters/:id/disengage')
+  async disengageAction(
+    @Param('id') id: string,
+    @Body() body: { participantId: string },
+  ) {
+    return this.movementService.disengageAction(id, body.participantId);
+  }
+
+  @Get('encounters/:id/movement/:participantId')
+  async getMovementState(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+  ) {
+    return this.movementService.getMovementState(
       id,
       participantId,
       getUserId(req),
@@ -358,6 +450,14 @@ export class GameEngineController {
     },
   ) {
     return this.encounterService.updateMapData(id, body);
+  }
+
+  @Patch('encounters/:id/participants/positions')
+  async batchUpdatePositions(
+    @Param('id') id: string,
+    @Body('positions') positions: BatchPositionDto[],
+  ) {
+    return this.encounterService.batchUpdatePositions(id, positions);
   }
 
   @Patch('encounters/:id/participants/:participantId/position')

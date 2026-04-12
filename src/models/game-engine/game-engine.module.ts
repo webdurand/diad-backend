@@ -24,6 +24,7 @@ import { CombatService } from './services/combat.service';
 import { SkillCheckService } from './services/skill-check.service';
 import { SavingThrowService } from './services/saving-throw.service';
 import { SpellCastingService } from './services/spell-casting.service';
+import { MovementService } from './services/movement.service';
 import { LootService } from './services/loot.service';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -57,6 +58,7 @@ import { WorldModule } from '../world/world.module';
     SkillCheckService,
     SavingThrowService,
     SpellCastingService,
+    MovementService,
     LootService,
     CloudinaryService,
   ],
@@ -65,6 +67,7 @@ import { WorldModule } from '../world/world.module';
     ConditionEffectsService,
     CombatService,
     EncounterService,
+    MovementService,
     SessionService,
     EventService,
     SkillCheckService,

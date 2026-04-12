@@ -10,6 +10,7 @@ import { DiceService } from './dice.service';
 import { ConditionEffectsService } from './condition-effects.service';
 import { EventService } from './event.service';
 import { EncounterService } from './encounter.service';
+import { MovementService } from './movement.service';
 import {
   GameResult,
   GameEventData,
@@ -22,6 +23,8 @@ import {
   RoundInfo,
   ConcentrationCheckResult,
   DeathSaveResult,
+  TurnActionsResult,
+  TurnActionBlock,
 } from '../interfaces/combat.interfaces';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 
@@ -73,6 +76,7 @@ export class CombatService {
     private readonly sheetService: CharacterSheetService,
     private readonly stateService: CharacterStateService,
     private readonly actionsService: ActionsService,
+    private readonly movementService: MovementService,
   ) {}
 
   // --- Turn Management ---
@@ -103,6 +107,90 @@ export class CombatService {
     });
   }
 
+  async getTurnActions(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+  ): Promise<GameResult<TurnActionsResult>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== 'active')
+      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+
+    const participant = await this.encounterService.getParticipant(participantId);
+    const speed = await this.movementService.getSpeed(participant, ownerUserId);
+
+    let actions: TurnActionBlock[] = [];
+    let bonusActions: TurnActionBlock[] = [];
+    let reactions: TurnActionBlock[] = [];
+
+    if (participant.type === 'pc' && participant.characterId) {
+      const pcActions = await this.actionsService.getActions(
+        ownerUserId,
+        participant.characterId,
+      );
+      actions = pcActions.actions.map(this.toTurnActionBlock);
+      bonusActions = pcActions.bonusActions.map(this.toTurnActionBlock);
+      reactions = pcActions.reactions.map(this.toTurnActionBlock);
+    } else if (participant.type === 'monster' && participant.monster) {
+      actions = this.parseMonsterActions(participant.monster);
+    }
+
+    return success({
+      participantId: participant.id,
+      participantName: participant.displayName,
+      participantType: participant.type as 'pc' | 'monster' | 'npc',
+      actions,
+      bonusActions,
+      reactions,
+      canMove: (participant.movementRemaining ?? speed) > 0,
+      remainingMovement: participant.movementRemaining ?? speed,
+      speed,
+      actionUsed: participant.actionUsed,
+      bonusActionUsed: participant.bonusActionUsed,
+      hasDisengaged: participant.hasDisengaged,
+      hasDashed: participant.hasDashed,
+    });
+  }
+
+  private toTurnActionBlock(a: any): TurnActionBlock {
+    return {
+      id: a.id,
+      name: a.name,
+      timing: a.timing,
+      source: a.source,
+      sourceLabel: a.sourceLabel,
+      description: a.description,
+      attackBonus: a.attackBonus,
+      damage: a.damage,
+      range: a.range,
+      spellLevel: a.spellLevel,
+      requiresConcentration: a.requiresConcentration,
+    };
+  }
+
+  private parseMonsterActions(monster: any): TurnActionBlock[] {
+    const monsterActions = (monster.actions as any[]) ?? [];
+    return monsterActions.map((a: any, i: number) => ({
+      id: `monster-action-${i}`,
+      name: a.name ?? 'Ataque',
+      timing: 'action' as const,
+      source: 'base' as const,
+      sourceLabel: monster.name,
+      description: a.desc ?? '',
+      attackBonus: a.attack_bonus,
+      damage: a.damage?.[0]
+        ? {
+            dice: a.damage[0].damage_dice ?? '1d4',
+            type: a.damage[0].damage_type?.name ?? 'bludgeoning',
+            bonus: 0,
+          }
+        : undefined,
+      range: a.reach ? `${a.reach} ft.` : undefined,
+    }));
+  }
+
   async endTurn(encounterId: string): Promise<GameResult<TurnInfo>> {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
@@ -121,13 +209,6 @@ export class CombatService {
         data: { round: encounter.currentRound },
       },
     ];
-
-    // Reset reactions for current participant
-    if (currentParticipantId) {
-      await this.participantRepo.update(currentParticipantId, {
-        reactionsUsed: 0,
-      });
-    }
 
     // Advance to next non-defeated participant
     let nextIndex = encounter.currentTurnIndex + 1;
@@ -161,6 +242,16 @@ export class CombatService {
     await this.encounterRepo.save(encounter);
 
     const nextParticipantId = encounter.turnOrder[nextIndex];
+
+    // Initialize movement & action economy for the next participant
+    const nextParticipant = await this.participantRepo.findOne({
+      where: { id: nextParticipantId },
+      relations: ['monster'],
+    });
+    if (nextParticipant) {
+      await this.movementService.initializeTurn(nextParticipant);
+    }
+
     events.push({
       event_type: 'turn_start',
       actor_participant_id: nextParticipantId,
@@ -210,6 +301,15 @@ export class CombatService {
       return failure('Atacante esta derrotado.', 'CONDITION_PREVENTS_ACTION');
     if (target.isDefeated)
       return failure('Alvo ja esta derrotado.', 'TARGET_DEFEATED');
+
+    // Validate it's the attacker's turn
+    const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
+    if (currentPid !== dto.attackerParticipantId)
+      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+
+    // Check if action is available
+    if (attacker.actionUsed)
+      return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
 
     // Check if attacker can act
     if (!this.conditionEffects.canTakeAction(attacker.conditions))
@@ -463,6 +563,10 @@ export class CombatService {
         }
       }
     }
+
+    // Mark action as used
+    attacker.actionUsed = true;
+    await this.participantRepo.save(attacker);
 
     await this.eventService.emit(
       encounter.sessionId,

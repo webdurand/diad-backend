@@ -33,6 +33,12 @@ export interface AddMonsterDto {
   hpOverride?: number;
 }
 
+export interface BatchPositionDto {
+  participantId: string;
+  x: number;
+  y: number;
+}
+
 export interface InitiativeRollResult {
   participantId: string;
   displayName: string;
@@ -472,9 +478,109 @@ export class EncounterService {
     y: number,
   ): Promise<EncounterParticipantEntity> {
     const p = await this.getParticipant(participantId);
+    const encounter = await this.getById(p.encounterId);
+
+    this.validatePositionBounds(x, y, encounter);
+    await this.validatePositionNotOccupied(p.encounterId, x, y, participantId);
+
     p.positionX = x;
     p.positionY = y;
     return this.participantRepo.save(p);
+  }
+
+  async batchUpdatePositions(
+    encounterId: string,
+    positions: BatchPositionDto[],
+  ): Promise<EncounterParticipantEntity[]> {
+    const encounter = await this.getById(encounterId);
+
+    // Validate all positions are in bounds
+    for (const pos of positions) {
+      this.validatePositionBounds(pos.x, pos.y, encounter);
+    }
+
+    // Check for duplicates within the batch itself
+    const cellKeys = new Set<string>();
+    for (const pos of positions) {
+      const key = `${pos.x},${pos.y}`;
+      if (cellKeys.has(key)) {
+        throw new Error(
+          `Posicao duplicada no batch: (${pos.x}, ${pos.y}).`,
+        );
+      }
+      cellKeys.add(key);
+    }
+
+    // Check against existing positioned participants not in this batch
+    const batchIds = new Set(positions.map((p) => p.participantId));
+    const existingParticipants = await this.participantRepo.find({
+      where: { encounterId },
+    });
+    for (const existing of existingParticipants) {
+      if (batchIds.has(existing.id)) continue;
+      if (existing.isDefeated) continue;
+      if (existing.positionX == null || existing.positionY == null) continue;
+      const key = `${existing.positionX},${existing.positionY}`;
+      if (cellKeys.has(key)) {
+        throw new Error(
+          `Posicao (${existing.positionX}, ${existing.positionY}) ja ocupada por ${existing.displayName}.`,
+        );
+      }
+    }
+
+    // Apply all positions
+    const updated: EncounterParticipantEntity[] = [];
+    for (const pos of positions) {
+      const p = existingParticipants.find((pp) => pp.id === pos.participantId);
+      if (!p) continue;
+      p.positionX = pos.x;
+      p.positionY = pos.y;
+      updated.push(p);
+    }
+
+    return this.participantRepo.save(updated);
+  }
+
+  // --- Position Validation Helpers ---
+
+  private validatePositionBounds(
+    x: number,
+    y: number,
+    encounter: EncounterEntity,
+  ): void {
+    const gridColumns = encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+    const gridRows = encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+
+    if (x < 0 || x >= gridColumns || y < 0 || y >= gridRows) {
+      throw new Error(
+        `Posicao (${x}, ${y}) fora dos limites do grid (${gridColumns}x${gridRows}).`,
+      );
+    }
+  }
+
+  private async validatePositionNotOccupied(
+    encounterId: string,
+    x: number,
+    y: number,
+    excludeParticipantId?: string,
+  ): Promise<void> {
+    const qb = this.participantRepo
+      .createQueryBuilder('p')
+      .where('p.encounter_id = :encounterId', { encounterId })
+      .andWhere('p.position_x = :x', { x })
+      .andWhere('p.position_y = :y', { y })
+      .andWhere('p.is_defeated = false');
+
+    if (excludeParticipantId) {
+      qb.andWhere('p.id != :excludeId', { excludeId: excludeParticipantId });
+    }
+
+    const occupant = await qb.getOne();
+    if (occupant) {
+      throw new Error(
+        `Posicao (${x}, ${y}) ja ocupada por ${occupant.displayName}.`,
+      );
+    }
   }
 
   async updateParticipantVisibility(
