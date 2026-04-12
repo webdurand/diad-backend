@@ -75,13 +75,26 @@ export class EncounterService {
   async create(
     sessionId: string,
     dto: CreateEncounterDto,
+    ownerUserId?: string,
   ): Promise<EncounterEntity> {
     const encounter = this.encounterRepo.create({
       sessionId,
       name: dto.name,
       status: 'preparing',
     });
-    return this.encounterRepo.save(encounter);
+    const saved = await this.encounterRepo.save(encounter);
+
+    // Auto-add all PCs from the session
+    if (ownerUserId) {
+      const session = await this.sessionService.getById(sessionId);
+      for (const charId of session.characterIds ?? []) {
+        try {
+          await this.addCharacter(saved.id, charId, ownerUserId);
+        } catch {}
+      }
+    }
+
+    return this.getById(saved.id);
   }
 
   async getById(
@@ -181,11 +194,121 @@ export class EncounterService {
     await this.participantRepo.delete(participantId);
   }
 
+  /**
+   * Add a participant to an active encounter (late join).
+   * Rolls initiative and inserts at the correct position in turnOrder.
+   */
+  async lateJoinCharacter(
+    encounterId: string,
+    characterId: string,
+    userId: string,
+  ): Promise<EncounterParticipantEntity> {
+    const encounter = await this.getById(encounterId);
+    if (encounter.status !== 'active') {
+      throw new Error('Late join so e permitido em encontros ativos.');
+    }
+
+    // Add the character
+    const participant = await this.addCharacter(encounterId, characterId, userId);
+
+    // Roll initiative
+    const mod = participant.initiativeModifier ?? 0;
+    const init = this.diceService.rollInitiative(mod);
+    participant.initiativeRoll = init.roll;
+    participant.initiativeTotal = init.total;
+    await this.participantRepo.save(participant);
+
+    // Insert into turnOrder at the correct position (sorted by initiative desc)
+    const allParticipants = await this.participantRepo.find({
+      where: { encounterId },
+    });
+
+    // Find where to insert based on initiative
+    let insertIndex = encounter.turnOrder.length;
+    for (let i = 0; i < encounter.turnOrder.length; i++) {
+      const existing = allParticipants.find((p) => p.id === encounter.turnOrder[i]);
+      if (existing && (existing.initiativeTotal ?? 0) < init.total) {
+        insertIndex = i;
+        break;
+      }
+    }
+
+    // Adjust currentTurnIndex if inserting before current turn
+    if (insertIndex <= encounter.currentTurnIndex) {
+      encounter.currentTurnIndex += 1;
+    }
+
+    encounter.turnOrder.splice(insertIndex, 0, participant.id);
+    await this.encounterRepo.save(encounter);
+
+    return participant;
+  }
+
+  async lateJoinMonster(
+    encounterId: string,
+    dto: AddMonsterDto,
+  ): Promise<EncounterParticipantEntity[]> {
+    const encounter = await this.getById(encounterId);
+    if (encounter.status !== 'active') {
+      throw new Error('Late join so e permitido em encontros ativos.');
+    }
+
+    const newParticipants = await this.addMonster(encounterId, dto);
+
+    const allParticipants = await this.participantRepo.find({
+      where: { encounterId },
+    });
+
+    for (const participant of newParticipants) {
+      // Roll initiative
+      const mod = participant.initiativeModifier ?? 0;
+      const init = this.diceService.rollInitiative(mod);
+      participant.initiativeRoll = init.roll;
+      participant.initiativeTotal = init.total;
+      await this.participantRepo.save(participant);
+
+      // Insert into turnOrder
+      let insertIndex = encounter.turnOrder.length;
+      for (let i = 0; i < encounter.turnOrder.length; i++) {
+        const existing = allParticipants.find((p) => p.id === encounter.turnOrder[i]);
+        if (existing && (existing.initiativeTotal ?? 0) < init.total) {
+          insertIndex = i;
+          break;
+        }
+      }
+
+      if (insertIndex <= encounter.currentTurnIndex) {
+        encounter.currentTurnIndex += 1;
+      }
+
+      encounter.turnOrder.splice(insertIndex, 0, participant.id);
+    }
+
+    await this.encounterRepo.save(encounter);
+    return newParticipants;
+  }
+
+  async deleteEncounter(encounterId: string): Promise<void> {
+    const encounter = await this.getById(encounterId);
+    // Clear activeEncounterId if this encounter is active
+    await this.sessionService.setActiveEncounter(encounter.sessionId, null);
+    // Cascade deletes participants via FK
+    await this.encounterRepo.delete(encounterId);
+  }
+
   async rollAllInitiative(
     encounterId: string,
   ): Promise<InitiativeRollResult[]> {
     const encounter = await this.getById(encounterId);
     const participants = encounter.participants ?? [];
+
+    const hasPc = participants.some((p) => p.type === 'pc' && !p.isDefeated);
+    const hasEnemy = participants.some((p) => p.type === 'monster' && !p.isDefeated);
+    if (!hasPc || !hasEnemy) {
+      throw new Error(
+        'O encontro precisa de pelo menos 1 jogador e 1 monstro para rolar iniciativa.',
+      );
+    }
 
     const results: InitiativeRollResult[] = [];
 

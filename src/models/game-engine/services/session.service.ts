@@ -16,6 +16,7 @@ export interface CreateSessionDto {
 export interface UpdateSessionDto {
   name?: string;
   status?: 'lobby' | 'active' | 'paused' | 'completed';
+  activeEncounterId?: string | null;
   scene?: {
     name?: string;
     description?: string;
@@ -70,6 +71,7 @@ export class SessionService {
     const session = await this.getById(sessionId);
     if (dto.name !== undefined) session.name = dto.name;
     if (dto.status !== undefined) session.status = dto.status;
+    if (dto.activeEncounterId !== undefined) session.activeEncounterId = dto.activeEncounterId ?? undefined;
     if (dto.scene !== undefined) session.scene = dto.scene;
     return this.sessionRepo.save(session);
   }

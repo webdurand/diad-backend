@@ -147,8 +147,9 @@ export class GameEngineController {
     @Param('sessionId') sessionId: string,
     @Body() dto: CreateEncounterDto,
   ) {
-    await this.sessionService.ensureOwnership(sessionId, getUserId(req));
-    return this.encounterService.create(sessionId, dto);
+    const userId = getUserId(req);
+    await this.sessionService.ensureOwnership(sessionId, userId);
+    return this.encounterService.create(sessionId, dto, userId);
   }
 
   @Get('sessions/:sessionId/encounters')
@@ -163,6 +164,12 @@ export class GameEngineController {
   @Get('encounters/:id')
   async getEncounter(@Param('id') id: string) {
     return this.encounterService.getById(id);
+  }
+
+  @Delete('encounters/:id')
+  async deleteEncounter(@Param('id') id: string) {
+    await this.encounterService.deleteEncounter(id);
+    return { ok: true };
   }
 
   @Post('encounters/:id/monsters')
@@ -184,6 +191,27 @@ export class GameEngineController {
       characterId,
       getUserId(req),
     );
+  }
+
+  @Post('encounters/:id/late-join/character')
+  async lateJoinCharacter(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body('characterId') characterId: string,
+  ) {
+    return this.encounterService.lateJoinCharacter(
+      id,
+      characterId,
+      getUserId(req),
+    );
+  }
+
+  @Post('encounters/:id/late-join/monster')
+  async lateJoinMonster(
+    @Param('id') id: string,
+    @Body() dto: AddMonsterDto,
+  ) {
+    return this.encounterService.lateJoinMonster(id, dto);
   }
 
   @Delete('encounters/:id/participants/:participantId')
