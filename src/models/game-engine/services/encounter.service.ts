@@ -144,7 +144,23 @@ export class EncounterService {
     });
     if (!encounter)
       throw new NotFoundException('Encontro nao encontrado.');
+    await this.enrichPcHp(encounter);
     return encounter;
+  }
+
+  private async enrichPcHp(encounter: EncounterEntity): Promise<void> {
+    const session = await this.sessionService.getById(encounter.sessionId).catch(() => null);
+    const campaignId = session?.campaignId ?? undefined;
+    for (const p of encounter.participants ?? []) {
+      if (p.type !== 'pc' || !p.characterId) continue;
+      const ownerId = await this.resolveCharacterOwner(p.characterId, '', campaignId);
+      if (!ownerId) continue;
+      try {
+        const sheet = await this.sheetService.computeSheet(ownerId, p.characterId);
+        (p as any).currentHp = sheet.currentHp;
+        (p as any).maxHp = sheet.maxHp;
+      } catch {}
+    }
   }
 
   async listBySession(sessionId: string): Promise<EncounterEntity[]> {
