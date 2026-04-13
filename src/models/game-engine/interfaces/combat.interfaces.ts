@@ -1,4 +1,5 @@
 import { DiceResult, AdvantageResult } from './dice.interfaces';
+import type { AreaEffect } from 'src/shared/aoe-origin.types';
 
 export interface AttackRollResult {
   roll: number;
@@ -99,7 +100,8 @@ export interface ConditionTurnEffect {
   description: string;
 }
 
-export type AoEShape = 'sphere' | 'cone' | 'line' | 'cube' | 'cylinder';
+// AoEShape re-exportado de shared/aoe-origin.types pra compat; preferir import direto de lá.
+export type { AoEShape } from 'src/shared/aoe-origin.types';
 
 export interface TurnActionBlock {
   id: string;
@@ -113,13 +115,8 @@ export interface TurnActionBlock {
   range?: string;
   spellLevel?: number;
   requiresConcentration?: boolean;
-  /** If set, action is area-of-effect. */
-  aoe?: {
-    shape: AoEShape;
-    sizeFt: number;
-    /** For cones/lines, the "throw" range (usually equals sizeFt). For spheres, the max range from caster. */
-    rangeFt?: number;
-  };
+  /** If set, action is area-of-effect. Inclui originType derivado pra decidir picker no frontend. */
+  aoe?: AreaEffect;
   /** Saving throw if the action uses one. */
   save?: {
     ability: string;

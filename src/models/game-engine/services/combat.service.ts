@@ -406,6 +406,7 @@ export class CombatService {
       range: a.range,
       spellLevel: a.spellLevel,
       requiresConcentration: a.requiresConcentration,
+      aoe: a.aoe,
     };
   }
 
@@ -439,6 +440,10 @@ export class CombatService {
         : undefined;
 
     // --- AoE detection ---
+    // Statblocks de monstro quase sempre descrevem AoE que emana do monstro
+    // (breath weapons, roars, auras). Por isso default = originType: 'self'.
+    // Se surgir counterexample (ex: monstro com fireball num ponto descrito em prose),
+    // tratar caso a caso. Ações de spell-casting reais vão por outra rota e usam deriveOriginType().
     const coneMatch = desc.match(/(\d+)[- ]?foot\s+cone/i);
     const lineMatch = desc.match(/(\d+)[- ]?foot(?:\s+long)?\s+line/i);
     const sphereMatch = desc.match(/(\d+)[- ]?foot[- ]?radius/i);
@@ -446,16 +451,16 @@ export class CombatService {
     let aoe: TurnActionBlock['aoe'];
     if (coneMatch) {
       const size = parseInt(coneMatch[1], 10);
-      aoe = { shape: 'cone', sizeFt: size, rangeFt: size };
+      aoe = { originType: 'self', shape: 'cone', sizeFt: size, rangeFt: 0 };
     } else if (lineMatch) {
       const size = parseInt(lineMatch[1], 10);
-      aoe = { shape: 'line', sizeFt: size, rangeFt: size };
+      aoe = { originType: 'self', shape: 'line', sizeFt: size, rangeFt: 0 };
     } else if (sphereMatch) {
       const size = parseInt(sphereMatch[1], 10);
-      aoe = { shape: 'sphere', sizeFt: size, rangeFt: 0 };
+      aoe = { originType: 'self', shape: 'sphere', sizeFt: size, rangeFt: 0 };
     } else if (cubeMatch) {
       const size = parseInt(cubeMatch[1], 10);
-      aoe = { shape: 'cube', sizeFt: size, rangeFt: 0 };
+      aoe = { originType: 'self', shape: 'cube', sizeFt: size, rangeFt: 0 };
     }
 
     // --- Save detection ---
