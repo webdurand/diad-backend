@@ -1,5 +1,9 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { CompSourceEntity } from './comp-source.entity';
+import type {
+  MonsterMultiattack,
+  MonsterSpellcasting,
+} from '../models/game-engine/interfaces/monster-typed';
 
 @Entity('monsters')
 export class MonsterEntity {
@@ -98,6 +102,13 @@ export class MonsterEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   forms?: Record<string, unknown>;
+
+  // Typed structures populated by data migrations from SRD free-text.
+  @Column({ type: 'jsonb', nullable: true })
+  multiattack: MonsterMultiattack | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  spellcasting: MonsterSpellcasting | null;
 
   @Column({ type: 'text', nullable: true })
   image?: string;

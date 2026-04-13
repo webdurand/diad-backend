@@ -1,0 +1,167 @@
+import { ForbiddenException } from '@nestjs/common';
+import { PermissionResolver } from '../services/permission-resolver.service';
+
+function mockServices(
+  participant: any,
+  encounter: any,
+  session: any,
+  campaignDmUserId?: string,
+) {
+  const encounterService: any = {
+    getParticipant: jest.fn(async () => participant),
+    getById: jest.fn(async () => encounter),
+    resolveCharacterOwner: jest.fn(async (_cid: string, fallback: string) => participant.__ownerUserId ?? fallback),
+  };
+  const sessionService: any = {
+    getById: jest.fn(async () => session),
+  };
+  const campaignService: any = {
+    getById: jest.fn(async () =>
+      campaignDmUserId ? { id: session.campaignId, dmUserId: campaignDmUserId } : { id: session.campaignId, dmUserId: 'someone-else' },
+    ),
+  };
+  return { encounterService, sessionService, campaignService };
+}
+
+describe('PermissionResolver', () => {
+  const encounter = { id: 'enc-1', sessionId: 'sess-1' };
+  const session = { id: 'sess-1', campaignId: 'camp-1' };
+
+  it('allows the PC owner to mutate their own participant', async () => {
+    const participant = {
+      id: 'p-1',
+      type: 'pc',
+      characterId: 'char-1',
+      encounterId: 'enc-1',
+      __ownerUserId: 'user-owner',
+    };
+    const { encounterService, sessionService, campaignService } = mockServices(
+      participant,
+      encounter,
+      session,
+    );
+    const resolver = new PermissionResolver(encounterService, sessionService, campaignService);
+
+    const result = await resolver.resolveMutationOwner('p-1', 'user-owner', 'enc-1');
+    expect(result).toBe('user-owner');
+  });
+
+  it('allows the campaign DM to mutate a PC owned by someone else', async () => {
+    const participant = {
+      id: 'p-2',
+      type: 'pc',
+      characterId: 'char-2',
+      encounterId: 'enc-1',
+      __ownerUserId: 'user-other',
+    };
+    const { encounterService, sessionService, campaignService } = mockServices(
+      participant,
+      encounter,
+      session,
+      'user-dm',
+    );
+    const resolver = new PermissionResolver(encounterService, sessionService, campaignService);
+
+    const result = await resolver.resolveMutationOwner('p-2', 'user-dm', 'enc-1');
+    expect(result).toBe('user-other');
+  });
+
+  it('rejects a random user that is neither owner nor DM', async () => {
+    const participant = {
+      id: 'p-3',
+      type: 'pc',
+      characterId: 'char-3',
+      encounterId: 'enc-1',
+      __ownerUserId: 'user-other',
+    };
+    const { encounterService, sessionService, campaignService } = mockServices(
+      participant,
+      encounter,
+      session,
+      'user-dm',
+    );
+    const resolver = new PermissionResolver(encounterService, sessionService, campaignService);
+
+    await expect(
+      resolver.resolveMutationOwner('p-3', 'user-outsider', 'enc-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('allows the DM to mutate a monster participant', async () => {
+    const participant = {
+      id: 'm-1',
+      type: 'monster',
+      monsterId: 'mon-1',
+      encounterId: 'enc-1',
+    };
+    const { encounterService, sessionService, campaignService } = mockServices(
+      participant,
+      encounter,
+      session,
+      'user-dm',
+    );
+    const resolver = new PermissionResolver(encounterService, sessionService, campaignService);
+
+    const result = await resolver.resolveMutationOwner('m-1', 'user-dm', 'enc-1');
+    expect(result).toBe('user-dm');
+  });
+
+  it('rejects a non-DM user trying to mutate a monster', async () => {
+    const participant = {
+      id: 'm-2',
+      type: 'monster',
+      monsterId: 'mon-2',
+      encounterId: 'enc-1',
+    };
+    const { encounterService, sessionService, campaignService } = mockServices(
+      participant,
+      encounter,
+      session,
+      'user-dm',
+    );
+    const resolver = new PermissionResolver(encounterService, sessionService, campaignService);
+
+    await expect(
+      resolver.resolveMutationOwner('m-2', 'user-other', 'enc-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects when participant belongs to a different encounter', async () => {
+    const participant = {
+      id: 'p-4',
+      type: 'pc',
+      characterId: 'char-4',
+      encounterId: 'other-enc',
+      __ownerUserId: 'user-owner',
+    };
+    const { encounterService, sessionService, campaignService } = mockServices(
+      participant,
+      encounter,
+      session,
+    );
+    const resolver = new PermissionResolver(encounterService, sessionService, campaignService);
+
+    await expect(
+      resolver.resolveMutationOwner('p-4', 'user-owner', 'enc-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects when auth user id is missing', async () => {
+    const participant = {
+      id: 'p-5',
+      type: 'pc',
+      characterId: 'char-5',
+      encounterId: 'enc-1',
+    };
+    const { encounterService, sessionService, campaignService } = mockServices(
+      participant,
+      encounter,
+      session,
+    );
+    const resolver = new PermissionResolver(encounterService, sessionService, campaignService);
+
+    await expect(
+      resolver.resolveMutationOwner('p-5', '', 'enc-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});

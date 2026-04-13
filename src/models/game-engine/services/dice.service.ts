@@ -49,9 +49,21 @@ export class DiceService {
   /**
    * Parse and roll a dice expression.
    * Supports: "2d6", "2d6+3", "1d20-2", "4d6kh3" (keep highest 3), "2d20kl1" (keep lowest 1).
+   * Also accepts literal numerics like "1" or "5" (spells with flat damage).
    */
   rollExpression(expr: string): DiceResult {
     const trimmed = expr.replace(/\s/g, '').toLowerCase();
+
+    // Literal numeric ("1", "5", "10") — fixed damage spells (Magic Missile base, Acid Splash 1 HP min).
+    if (/^\d+$/.test(trimmed)) {
+      const value = parseInt(trimmed, 10);
+      return {
+        expression: expr,
+        rolls: [],
+        modifier: value,
+        total: value,
+      };
+    }
 
     const match = trimmed.match(
       /^(\d+)d(\d+)(?:(kh|kl)(\d+))?([+-]\d+)?$/,

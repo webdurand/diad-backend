@@ -10,6 +10,7 @@ import { DiceService } from './dice.service';
 import { SavingThrowService } from './saving-throw.service';
 import { CombatService } from './combat.service';
 import { EncounterService } from './encounter.service';
+import { MonsterSpellcastingService } from './monster-spellcasting.service';
 import {
   GameResult,
   GameEventData,
@@ -93,6 +94,7 @@ export class SpellCastingService {
     private readonly savingThrowService: SavingThrowService,
     private readonly combatService: CombatService,
     private readonly encounterService: EncounterService,
+    private readonly monsterSpellcasting: MonsterSpellcastingService,
   ) {}
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
@@ -249,8 +251,11 @@ export class SpellCastingService {
       return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
 
     const participant = await this.encounterService.getParticipant(dto.participantId);
+    if (participant.type === 'monster') {
+      return this.castMonsterSpellInCombat(dto, participant);
+    }
     if (!participant.characterId)
-      return failure('Apenas PCs podem lancar magias.', 'INVALID_PARTICIPANT');
+      return failure('Apenas PCs e monstros casters podem lancar magias.', 'INVALID_PARTICIPANT');
 
     // 3. Get the spell to determine casting time
     const spell = await this.spellRepo.findOne({
@@ -377,5 +382,154 @@ export class SpellCastingService {
     }
 
     return success({ ...spellResult, targetsHit }, events);
+  }
+
+  /**
+   * Monster caster branch. Reads `monster.spellcasting` for DC/attack bonus,
+   * debits slots/uses via `MonsterSpellcastingService`, then applies damage
+   * (with saves) or healing to each target.
+   */
+  private async castMonsterSpellInCombat(
+    dto: CastSpellInCombatDto,
+    participant: EncounterParticipantEntity,
+  ): Promise<GameResult<CombatSpellResult>> {
+    const sc = (participant.monster as any)?.spellcasting;
+    if (!sc) return failure('Este monstro não possui magia.', 'INVALID_SPELL');
+
+    const check = this.monsterSpellcasting.canCast(participant, dto.spellSlug, dto.slotLevel);
+    if (!check.allowed) {
+      return failure(
+        check.message ?? 'Não pode lançar esta magia.',
+        check.code ?? 'INVALID_SPELL',
+      );
+    }
+
+    let spell = await this.spellRepo.findOne({ where: { slug: dto.spellSlug } });
+    if (!spell) {
+      spell = await this.spellRepo.findOne({ where: { name: dto.spellSlug } });
+    }
+    if (!spell) {
+      return failure(`Magia '${dto.spellSlug}' nao encontrada.`, 'INVALID_SPELL');
+    }
+
+    const castingTime = (spell.casting_time ?? 'action').toLowerCase();
+    const isBonusAction = castingTime.includes('bonus');
+    if (isBonusAction) {
+      if (participant.bonusActionUsed)
+        return failure('Bonus action ja utilizada neste turno.', 'NO_BONUS_ACTION_AVAILABLE');
+    } else {
+      if (participant.actionUsed)
+        return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+    }
+
+    // Damage from spell.damage JSON (damage_at_slot_level keyed by slot number).
+    const damageInfo: any = (spell as any).damage ?? {};
+    const damageType: string =
+      damageInfo?.damage_type?.name ??
+      damageInfo?.damage_type ??
+      'force';
+
+    let damageExpression: string | undefined;
+    if (damageInfo.damage_at_slot_level) {
+      damageExpression = damageInfo.damage_at_slot_level[String(dto.slotLevel)];
+    } else if (damageInfo.damage_at_character_level) {
+      damageExpression = damageInfo.damage_at_character_level[String(sc.casterLevel ?? 1)];
+    }
+
+    const concentration = Boolean((spell as any).concentration);
+    const saveAbility = this.resolveSaveAbility(spell);
+
+    const baseRoll = damageExpression
+      ? this.diceService.rollExpression(damageExpression)
+      : null;
+
+    const events: GameEventData[] = [];
+    events.push({
+      event_type: 'spell_cast',
+      actor_participant_id: participant.id,
+      data: {
+        spellSlug: dto.spellSlug,
+        spellName: spell.name,
+        slotLevel: dto.slotLevel,
+        casterType: 'monster',
+        saveDc: sc.saveDc,
+      },
+    });
+
+    const targetsHit: CombatSpellResult['targetsHit'] = [];
+
+    for (const targetId of dto.targetParticipantIds) {
+      const target = await this.encounterService.getParticipant(targetId);
+      const entry: CombatSpellResult['targetsHit'][0] = {
+        participantId: targetId,
+        displayName: target.displayName,
+      };
+
+      if (baseRoll) {
+        let finalDamage = baseRoll.total;
+        if (saveAbility) {
+          if (target.type === 'pc' && target.characterId) {
+            const saveRes = await this.savingThrowService.rollSavingThrow({
+              characterId: target.characterId,
+              ability: saveAbility,
+              dc: sc.saveDc,
+              userId: dto.ownerUserId,
+            });
+            if (saveRes.ok && saveRes.value?.success) {
+              finalDamage = Math.floor(finalDamage / 2);
+              entry.savedSuccessfully = true;
+            }
+          }
+        }
+
+        const dmg = await this.combatService.applyDamage(dto.encounterId, {
+          targetParticipantId: targetId,
+          amount: finalDamage,
+          damageType,
+          ownerUserId: dto.ownerUserId,
+        });
+        entry.damageDealt = finalDamage;
+        if (dmg.ok) entry.defeated = dmg.value.defeated;
+      }
+
+      targetsHit.push(entry);
+    }
+
+    this.monsterSpellcasting.debit(participant, dto.spellSlug, dto.slotLevel);
+
+    if (isBonusAction) participant.bonusActionUsed = true;
+    else participant.actionUsed = true;
+
+    if (concentration) {
+      participant.isConcentrating = true;
+      participant.concentratingOn = spell.name;
+    }
+
+    await this.participantRepo.save(participant);
+
+    const result: CombatSpellResult = {
+      spellName: spell.name,
+      spellLevel: dto.slotLevel,
+      slotUsed: sc.type === 'standard' ? dto.slotLevel : 0,
+      concentration,
+      damage: baseRoll
+        ? {
+            expression: damageExpression ?? '',
+            total: baseRoll.total,
+            type: damageType,
+          }
+        : undefined,
+      targetsHit,
+    };
+
+    return success(result, events);
+  }
+
+  private resolveSaveAbility(spell: SpellEntity): string | null {
+    const dc = (spell as any).dc;
+    if (!dc) return null;
+    const ability = dc.dc_type?.name ?? dc.dc_type ?? null;
+    if (typeof ability !== 'string') return null;
+    return ability.toLowerCase().substring(0, 3);
   }
 }

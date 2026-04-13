@@ -35,6 +35,8 @@ import { SkillCheckService } from './services/skill-check.service';
 import type { SkillCheckDto } from './services/skill-check.service';
 import { SavingThrowService } from './services/saving-throw.service';
 import type { SavingThrowDto } from './services/saving-throw.service';
+import { PermissionResolver } from './services/permission-resolver.service';
+import { DeathSaveDto } from './dto/death-save.dto';
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -63,6 +65,7 @@ export class GameEngineController {
     private readonly inventoryService: InventoryService,
     private readonly skillCheckService: SkillCheckService,
     private readonly savingThrowService: SavingThrowService,
+    private readonly permissionResolver: PermissionResolver,
   ) {}
 
   // ==================== SESSIONS ====================
@@ -320,14 +323,34 @@ export class GameEngineController {
     @Body()
     body: {
       attackerParticipantId: string;
-      targetParticipantId: string;
+      targetParticipantId?: string;
+      targetParticipantIds?: string[];
       actionName: string;
       forceAdvantage?: boolean;
       forceDisadvantage?: boolean;
     },
   ) {
+    const isMultiattack = /multiataque|multiattack/i.test(body.actionName ?? '');
+    if (isMultiattack) {
+      return this.combatService.resolveMultiattack(id, {
+        ...body,
+        targetParticipantId: body.targetParticipantId ?? '',
+        ownerUserId: getUserId(req),
+      });
+    }
+    if (!body.targetParticipantId) {
+      return {
+        ok: false,
+        error: 'targetParticipantId é obrigatório para ataque simples.',
+        code: 'INVALID_PAYLOAD',
+      };
+    }
     return this.combatService.resolveAttack(id, {
-      ...body,
+      attackerParticipantId: body.attackerParticipantId,
+      targetParticipantId: body.targetParticipantId,
+      actionName: body.actionName,
+      forceAdvantage: body.forceAdvantage,
+      forceDisadvantage: body.forceDisadvantage,
       ownerUserId: getUserId(req),
     });
   }
@@ -336,12 +359,14 @@ export class GameEngineController {
   async applyDamage(
     @Req() req: AuthRequest,
     @Param('id') id: string,
-    @Body() body: { targetParticipantId: string; amount: number; damageType: string },
+    @Body() body: { targetParticipantId: string; amount: number; damageType: string; fromCriticalHit?: boolean },
   ) {
-    return this.combatService.applyDamage(id, {
-      ...body,
-      ownerUserId: getUserId(req),
-    });
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.targetParticipantId,
+      getUserId(req),
+      id,
+    );
+    return this.combatService.applyDamage(id, { ...body, ownerUserId });
   }
 
   @Post('encounters/:id/heal')
@@ -350,10 +375,12 @@ export class GameEngineController {
     @Param('id') id: string,
     @Body() body: { targetParticipantId: string; amount: number },
   ) {
-    return this.combatService.applyHealing(id, {
-      ...body,
-      ownerUserId: getUserId(req),
-    });
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.targetParticipantId,
+      getUserId(req),
+      id,
+    );
+    return this.combatService.applyHealing(id, { ...body, ownerUserId });
   }
 
   @Post('encounters/:id/condition')
@@ -362,10 +389,12 @@ export class GameEngineController {
     @Param('id') id: string,
     @Body() body: { participantId: string; condition: string; apply: boolean },
   ) {
-    return this.combatService.applyCondition(id, {
-      ...body,
-      ownerUserId: getUserId(req),
-    });
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    return this.combatService.applyCondition(id, { ...body, ownerUserId });
   }
 
   @Get('encounters/:id/turn-actions/:participantId')
@@ -391,12 +420,15 @@ export class GameEngineController {
     @Req() req: AuthRequest,
     @Param('id') id: string,
     @Param('participantId') participantId: string,
+    @Body() _body: DeathSaveDto,
   ) {
-    return this.combatService.resolveDeathSave(
-      id,
+    const authUserId = getUserId(req);
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
       participantId,
-      getUserId(req),
+      authUserId,
+      id,
     );
+    return this.combatService.resolveDeathSave(id, participantId, ownerUserId);
   }
 
   // ==================== SPELLCASTING ====================

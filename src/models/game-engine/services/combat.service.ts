@@ -31,12 +31,16 @@ import {
 } from '../interfaces/combat.interfaces';
 import { SavingThrowService } from './saving-throw.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
+import { MonsterActionResolver } from './monster-action-resolver.service';
 
 // --- DTOs ---
 
 export interface AttackDto {
   attackerParticipantId: string;
+  /** Single-target: required for regular attacks. */
   targetParticipantId: string;
+  /** Multiattack only: one entry per sub-attack in sequence order. */
+  targetParticipantIds?: string[];
   /** Action name/id from ActionsService (for PCs) or monster action name */
   actionName: string;
   /** Manual override from DM */
@@ -44,6 +48,26 @@ export interface AttackDto {
   forceDisadvantage?: boolean;
   /** UserId of the session owner (DM), needed for CharacterState delegation */
   ownerUserId: string;
+  /** Internal: skip turn/action validation and action-consumption. Set only by resolveMultiattack. */
+  _isSubAttack?: boolean;
+}
+
+export interface SubAttackResult {
+  subActionName: string;
+  targetParticipantId: string;
+  attackRoll: AttackResult['attackRoll'];
+  damageRoll?: AttackResult['damageRoll'];
+  targetHpAfter?: number;
+  targetDefeated: boolean;
+  targetDyingState?: 'none' | 'dying' | 'stable' | 'dead';
+  concentrationBroken?: boolean;
+}
+
+export interface MultiattackResult {
+  kind: 'multiattack';
+  actionConsumed: boolean;
+  subAttacks: SubAttackResult[];
+  interruptedAt: { index: number; reason: 'target_defeated' | 'action_cancelled' } | null;
 }
 
 export interface DamageDto {
@@ -51,6 +75,8 @@ export interface DamageDto {
   amount: number;
   damageType: string;
   ownerUserId: string;
+  /** Set by attack resolver when the hit was a critical. Used for death-save failures at 0 HP. */
+  fromCriticalHit?: boolean;
 }
 
 export interface HealDto {
@@ -83,6 +109,7 @@ export class CombatService {
     private readonly movementService: MovementService,
     private readonly sessionService: SessionService,
     private readonly savingThrowService: SavingThrowService,
+    private readonly monsterActionResolver: MonsterActionResolver,
   ) {}
 
   async resolveAoeAction(
@@ -212,6 +239,7 @@ export class CombatService {
       if (finalDamage > 0) {
         if (target.type === 'pc' && target.characterId) {
           const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+          const wasDying = target.dyingState === 'dying';
           const hpResult = await this.stateService.updateHp(
             targetOwnerId,
             target.characterId,
@@ -219,9 +247,25 @@ export class CombatService {
           );
           targetHpAfter = hpResult.currentHp;
           targetDefeated = hpResult.isDown;
-          if (targetDefeated) {
+          if (hpResult.instantDeath) {
+            target.dyingState = 'dead';
             target.isDefeated = true;
             await this.participantRepo.save(target);
+          } else if (targetDefeated && !wasDying) {
+            target.dyingState = 'dying';
+            target.isDefeated = false;
+            await this.participantRepo.save(target);
+          } else if (wasDying) {
+            const ds = await this.stateService.updateDeathSaves(
+              targetOwnerId,
+              target.characterId,
+              { failuresDelta: 1 },
+            );
+            if (ds.dead) {
+              target.dyingState = 'dead';
+              target.isDefeated = true;
+              await this.participantRepo.save(target);
+            }
           }
         } else {
           const r = this.applyDamageToMonster(target, finalDamage);
@@ -348,6 +392,53 @@ export class CombatService {
       reactions = pcActions.reactions.map(this.toTurnActionBlock);
     } else if (participant.type === 'monster' && participant.monster) {
       actions = this.parseMonsterActions(participant.monster);
+      const multiattack = (participant.monster as any).multiattack;
+      if (multiattack && Array.isArray(multiattack.sequence) && multiattack.sequence.length > 0) {
+        actions = [
+          {
+            id: 'monster-multiattack',
+            name: 'Multiataque',
+            kind: 'multiattack',
+            timing: 'action',
+            source: 'base',
+            sourceLabel: 'Multiataque',
+            description: multiattack.description ?? '',
+            sequence: multiattack.sequence,
+            rechargeRequired: multiattack.recharge ?? null,
+          },
+          ...actions,
+        ];
+      }
+      const spellcasting = (participant.monster as any).spellcasting;
+      if (spellcasting && Array.isArray(spellcasting.knownSpells) && spellcasting.knownSpells.length > 0) {
+        const spellBlocks: TurnActionBlock[] = spellcasting.knownSpells.map(
+          (ks: any, i: number) => ({
+            id: `monster-spell-${i}`,
+            name: ks.slug,
+            timing: 'action',
+            source: 'spell',
+            sourceLabel: spellcasting.type === 'innate' ? 'Inata' : 'Preparada',
+            description:
+              spellcasting.type === 'innate'
+                ? `Uso: ${spellcasting.dailyUses?.[ks.slug] ?? 'at-will'}`
+                : `Nível ${ks.level}${ks.level === 0 ? ' (cantrip)' : ''}`,
+            spellLevel: ks.level,
+          }),
+        );
+        actions = [
+          {
+            id: 'monster-spell-opener',
+            name: 'Magia',
+            kind: 'spell-opener',
+            timing: 'action',
+            source: 'base',
+            sourceLabel: 'Magia',
+            description: `${spellcasting.type === 'innate' ? 'Magia inata' : 'Conjuração'} — DC ${spellcasting.saveDc}, +${spellcasting.attackBonus} ataque mágico.`,
+          },
+          ...actions,
+          ...spellBlocks,
+        ];
+      }
       const legendary = (participant.monster as any).legendary_actions as any[] | undefined;
       if (legendary?.length) {
         actions = actions.concat(
@@ -423,21 +514,19 @@ export class CombatService {
     i: number,
     idPrefix: string,
   ): TurnActionBlock {
-    const desc = a.desc ?? '';
-    const hitMatch = desc.match(/([+-]?\d+)\s*to hit/i);
-    const attackBonus = a.attack_bonus ?? (hitMatch ? parseInt(hitMatch[1], 10) : undefined);
-    const reachMatch = desc.match(/reach\s+(\d+)\s*ft/i);
-    const rangeMatch = desc.match(/range\s+(\d+)(?:\/(\d+))?\s*ft/i);
-    const damageMatch = desc.match(/\(([^)]+)\)\s+(\w+)\s+damage/i);
-    const damage = a.damage?.[0]
+    // Delegate attack bonus + damage resolution to the single source of truth.
+    // Keeps the number displayed in turn-actions identical to the one rolled
+    // in resolveAttack (US4 / D7).
+    const resolved = this.monsterActionResolver.resolve(a, monster?.name);
+    const desc = resolved.description;
+    const attackBonus = resolved.hasAttack ? resolved.attackBonus : undefined;
+    const damage = resolved.damageDice
       ? {
-          dice: a.damage[0].damage_dice ?? '1d4',
-          type: a.damage[0].damage_type?.name ?? 'bludgeoning',
+          dice: resolved.damageDice,
+          type: resolved.damageType ?? 'bludgeoning',
           bonus: 0,
         }
-      : damageMatch
-        ? { dice: damageMatch[1].trim(), type: damageMatch[2].toLowerCase(), bonus: 0 }
-        : undefined;
+      : undefined;
 
     // --- AoE detection ---
     // Statblocks de monstro quase sempre descrevem AoE que emana do monstro
@@ -475,13 +564,7 @@ export class CombatService {
         }
       : undefined;
 
-    const range = a.reach
-      ? `${a.reach} ft.`
-      : reachMatch
-        ? `${reachMatch[1]} ft.`
-        : rangeMatch
-          ? `${rangeMatch[1]}/${rangeMatch[2] ?? rangeMatch[1]} ft.`
-          : undefined;
+    const range = resolved.reach ?? resolved.range;
 
     return {
       id: `${idPrefix}-${i}`,
@@ -517,31 +600,54 @@ export class CombatService {
       },
     ];
 
-    // Advance to next non-defeated participant
     let nextIndex = encounter.currentTurnIndex + 1;
     let newRound = encounter.currentRound;
 
     if (nextIndex >= encounter.turnOrder.length) {
       nextIndex = 0;
       newRound += 1;
-      events.push({
-        event_type: 'round_start',
-        data: { round: newRound },
-      });
+      events.push({ event_type: 'round_start', data: { round: newRound } });
+      await this.pruneDeadFromTurnOrder(encounter);
     }
 
-    // Skip defeated participants
-    const totalParticipants = encounter.turnOrder.length;
+    const turnOrderLen = encounter.turnOrder.length;
+    let autoSkip = false;
     let skipped = 0;
-    while (skipped < totalParticipants) {
+
+    while (skipped < turnOrderLen) {
       const pid = encounter.turnOrder[nextIndex];
       const p = await this.participantRepo.findOne({ where: { id: pid } });
-      if (p && !p.isDefeated) break;
-      nextIndex = (nextIndex + 1) % totalParticipants;
-      if (nextIndex === 0) {
-        newRound += 1;
+      if (!p) {
+        nextIndex = (nextIndex + 1) % turnOrderLen;
+        if (nextIndex === 0) newRound += 1;
+        skipped++;
+        continue;
       }
-      skipped++;
+
+      // Monster: skip when isDefeated.
+      if (p.type !== 'pc' && p.isDefeated) {
+        nextIndex = (nextIndex + 1) % turnOrderLen;
+        if (nextIndex === 0) newRound += 1;
+        skipped++;
+        continue;
+      }
+
+      // PC dead: skip (participants-ordered removal happens at round boundary).
+      if (p.type === 'pc' && p.dyingState === 'dead') {
+        nextIndex = (nextIndex + 1) % turnOrderLen;
+        if (nextIndex === 0) newRound += 1;
+        skipped++;
+        continue;
+      }
+
+      // PC stable: deliver turn but mark autoSkip so frontend calls end-turn immediately.
+      if (p.type === 'pc' && p.dyingState === 'stable') {
+        autoSkip = true;
+        break;
+      }
+
+      // Everyone else (including PC dying): deliver turn normally.
+      break;
     }
 
     encounter.currentTurnIndex = nextIndex;
@@ -550,7 +656,6 @@ export class CombatService {
 
     const nextParticipantId = encounter.turnOrder[nextIndex];
 
-    // Initialize movement & action economy for the next participant
     const nextParticipant = await this.participantRepo.findOne({
       where: { id: nextParticipantId },
       relations: ['monster'],
@@ -563,7 +668,11 @@ export class CombatService {
     events.push({
       event_type: 'turn_start',
       actor_participant_id: nextParticipantId,
-      data: { round: newRound },
+      data: {
+        round: newRound,
+        dyingState: nextParticipant?.dyingState,
+        autoSkip,
+      },
     });
 
     await this.eventService.emit(
@@ -572,18 +681,36 @@ export class CombatService {
       events,
     );
 
-    const nextP = await this.participantRepo.findOne({
-      where: { id: nextParticipantId },
-    });
-
     return success({
       encounterId,
       round: newRound,
       participantId: nextParticipantId,
-      participantName: nextP?.displayName ?? '',
-      participantType: (nextP?.type as 'pc' | 'monster' | 'npc') ?? 'monster',
-      isDefeated: nextP?.isDefeated ?? false,
-    });
+      participantName: nextParticipant?.displayName ?? '',
+      participantType: (nextParticipant?.type as 'pc' | 'monster' | 'npc') ?? 'monster',
+      isDefeated: nextParticipant?.isDefeated ?? false,
+      dyingState: nextParticipant?.dyingState,
+      autoSkip,
+    }, events);
+  }
+
+  /**
+   * Removes dead PCs from the turnOrder. Called at round boundary so indices
+   * stay stable during the round. Monsters are never removed (isDefeated
+   * monsters stay indexed but are skipped each round).
+   */
+  private async pruneDeadFromTurnOrder(encounter: EncounterEntity): Promise<void> {
+    const toRemove: string[] = [];
+    for (const pid of encounter.turnOrder) {
+      const p = await this.participantRepo.findOne({ where: { id: pid } });
+      if (p?.type === 'pc' && p.dyingState === 'dead') {
+        toRemove.push(pid);
+      }
+    }
+    if (toRemove.length === 0) return;
+    encounter.turnOrder = encounter.turnOrder.filter((pid) => !toRemove.includes(pid));
+    if (encounter.currentTurnIndex >= encounter.turnOrder.length) {
+      encounter.currentTurnIndex = 0;
+    }
   }
 
   // --- Attack Resolution ---
@@ -610,16 +737,16 @@ export class CombatService {
     if (target.isDefeated)
       return failure('Alvo ja esta derrotado.', 'TARGET_DEFEATED');
 
-    // Validate it's the attacker's turn
-    const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
-    if (currentPid !== dto.attackerParticipantId)
-      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+    if (!dto._isSubAttack) {
+      const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
+      if (currentPid !== dto.attackerParticipantId)
+        return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
 
-    // Check if action is available
-    if (attacker.actionUsed)
-      return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+      if (attacker.actionUsed)
+        return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+    }
 
-    // Check if attacker can act
+    // Check if attacker can act (condition still applies even for sub-attacks).
     if (!this.conditionEffects.canTakeAction(attacker.conditions))
       return failure(
         'Atacante nao pode agir devido a condicoes.',
@@ -658,19 +785,20 @@ export class CombatService {
         damageBonus = action.damage.bonus ?? 0;
       }
     } else if (attacker.type === 'monster' && attacker.monster) {
-      const monsterActions = (attacker.monster.actions as unknown) as any[];
-      const mAction = monsterActions?.find(
-        (a: any) =>
-          a.name?.toLowerCase() === dto.actionName.toLowerCase(),
+      const resolved = this.monsterActionResolver.resolveByName(
+        attacker.monster,
+        dto.actionName,
       );
-      if (mAction) {
-        attackBonus = mAction.attack_bonus ?? 0;
-        if (mAction.damage?.length > 0) {
-          damageDice = mAction.damage[0].damage_dice ?? '1d4';
-          damageType = mAction.damage[0].damage_type?.name ?? 'bludgeoning';
-          damageBonus = 0; // monster damage_dice already includes bonus
-        }
+      if (!resolved) {
+        return failure(
+          `Acao "${dto.actionName}" nao encontrada no statblock do monstro.`,
+          'INVALID_ACTION',
+        );
       }
+      attackBonus = resolved.attackBonus;
+      if (resolved.damageDice) damageDice = resolved.damageDice;
+      if (resolved.damageType) damageType = resolved.damageType;
+      damageBonus = resolved.damageBonus;
     }
 
     // Determine advantage/disadvantage
@@ -874,15 +1002,16 @@ export class CombatService {
       }
     }
 
-    // Mark action as used
-    attacker.actionUsed = true;
-    await this.participantRepo.save(attacker);
+    if (!dto._isSubAttack) {
+      attacker.actionUsed = true;
+      await this.participantRepo.save(attacker);
 
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounterId,
-      events,
-    );
+      await this.eventService.emit(
+        encounter.sessionId,
+        encounterId,
+        events,
+      );
+    }
 
     return success(
       {
@@ -896,12 +1025,133 @@ export class CombatService {
     );
   }
 
+  // --- Multiattack ---
+
+  async resolveMultiattack(
+    encounterId: string,
+    dto: AttackDto,
+  ): Promise<GameResult<MultiattackResult>> {
+    const encounter = await this.encounterRepo.findOne({ where: { id: encounterId } });
+    if (!encounter || encounter.status !== 'active')
+      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+
+    const attacker = await this.encounterService.getParticipant(dto.attackerParticipantId);
+
+    if (attacker.isDefeated)
+      return failure('Atacante esta derrotado.', 'CONDITION_PREVENTS_ACTION');
+
+    const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
+    if (currentPid !== dto.attackerParticipantId)
+      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+
+    if (attacker.actionUsed)
+      return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+
+    if (!this.conditionEffects.canTakeAction(attacker.conditions))
+      return failure('Atacante nao pode agir devido a condicoes.', 'CONDITION_PREVENTS_ACTION');
+
+    if (attacker.type !== 'monster' || !attacker.monster) {
+      return failure('Multiataque só se aplica a monstros.', 'INVALID_MULTIATTACK');
+    }
+    const multiattack = (attacker.monster as any).multiattack;
+    if (!multiattack || !Array.isArray(multiattack.sequence) || multiattack.sequence.length === 0) {
+      return failure('Este monstro não possui multiataque configurado.', 'INVALID_MULTIATTACK');
+    }
+
+    const expectedTargets = multiattack.sequence.reduce(
+      (acc: number, s: { count: number }) => acc + (s.count ?? 1),
+      0,
+    );
+    const targetIds = Array.isArray(dto.targetParticipantIds) ? dto.targetParticipantIds : [];
+    if (targetIds.length !== expectedTargets) {
+      return failure(
+        `Multiataque exige targetParticipantIds com ${expectedTargets} alvos.`,
+        'INVALID_PAYLOAD',
+      );
+    }
+
+    const subAttacks: SubAttackResult[] = [];
+    const allEvents: GameEventData[] = [
+      {
+        event_type: 'multiattack_start',
+        actor_participant_id: attacker.id,
+        data: { sequence: multiattack.sequence },
+      },
+    ];
+
+    let targetIdx = 0;
+    let interruptedAt: MultiattackResult['interruptedAt'] = null;
+
+    outer: for (const sub of multiattack.sequence) {
+      for (let i = 0; i < (sub.count ?? 1); i++) {
+        const tid = targetIds[targetIdx];
+        targetIdx++;
+        const target = await this.encounterService.getParticipant(tid);
+        if (target.isDefeated) {
+          interruptedAt = { index: targetIdx - 1, reason: 'target_defeated' };
+          break outer;
+        }
+        const subDto: AttackDto = {
+          ...dto,
+          targetParticipantId: tid,
+          actionName: sub.actionName,
+          _isSubAttack: true,
+        };
+        const res = await this.resolveAttack(encounterId, subDto);
+        if (!res.ok) {
+          interruptedAt = { index: targetIdx - 1, reason: 'action_cancelled' };
+          break outer;
+        }
+        const updatedTarget = await this.encounterService.getParticipant(tid);
+        subAttacks.push({
+          subActionName: sub.actionName,
+          targetParticipantId: tid,
+          attackRoll: res.value.attackRoll,
+          damageRoll: res.value.damageRoll,
+          targetHpAfter: res.value.targetHpAfter,
+          targetDefeated: res.value.targetDefeated,
+          targetDyingState: updatedTarget.dyingState,
+          concentrationBroken: res.value.concentrationBroken,
+        });
+        allEvents.push(...res.events);
+
+        if (res.value.targetDefeated && targetIdx < expectedTargets) {
+          interruptedAt = { index: targetIdx - 1, reason: 'target_defeated' };
+          break outer;
+        }
+      }
+    }
+
+    attacker.actionUsed = true;
+    await this.participantRepo.save(attacker);
+
+    allEvents.push({
+      event_type: 'multiattack_end',
+      actor_participant_id: attacker.id,
+      data: { subAttackCount: subAttacks.length, interruptedAt },
+    });
+
+    await this.eventService.emit(encounter.sessionId, encounterId, allEvents);
+
+    return success(
+      { kind: 'multiattack', actionConsumed: true, subAttacks, interruptedAt },
+      allEvents,
+    );
+  }
+
   // --- Arbitrary Damage/Heal ---
 
   async applyDamage(
     encounterId: string,
     dto: DamageDto,
-  ): Promise<GameResult<{ hpAfter: number; defeated: boolean }>> {
+  ): Promise<
+    GameResult<{
+      hpAfter: number;
+      defeated: boolean;
+      dyingState?: 'none' | 'dying' | 'stable' | 'dead';
+      instantDeath?: boolean;
+    }>
+  > {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
@@ -913,18 +1163,78 @@ export class CombatService {
 
     let hpAfter: number;
     let defeated: boolean;
+    let dyingState: 'none' | 'dying' | 'stable' | 'dead' | undefined;
+    let instantDeath = false;
+    const events: GameEventData[] = [];
 
     if (target.type === 'pc' && target.characterId) {
-      const result = await this.stateService.updateHp(
-        dto.ownerUserId,
-        target.characterId,
-        { damage: dto.amount },
-      );
-      hpAfter = result.currentHp;
-      defeated = result.isDown;
-      if (defeated) {
-        target.isDefeated = true;
+      const wasDying = target.dyingState === 'dying';
+
+      // Rule: PC already at 0 HP and dying takes damage → death-save failure
+      // (+2 on crit, +1 otherwise) instead of further HP loss.
+      if (wasDying) {
+        const failuresDelta = dto.fromCriticalHit ? 2 : 1;
+        const ds = await this.stateService.updateDeathSaves(
+          dto.ownerUserId,
+          target.characterId,
+          { failuresDelta },
+        );
+        hpAfter = 0;
+        if (ds.dead) {
+          target.dyingState = 'dead';
+          target.isDefeated = true;
+          dyingState = 'dead';
+          defeated = true;
+          events.push({
+            event_type: 'death_save_failed_from_damage',
+            target_participant_id: target.id,
+            data: { failuresAdded: failuresDelta, failures: ds.failures, dyingState: 'dead' },
+          });
+        } else {
+          dyingState = 'dying';
+          defeated = false;
+          events.push({
+            event_type: 'death_save_failed_from_damage',
+            target_participant_id: target.id,
+            data: { failuresAdded: failuresDelta, failures: ds.failures, dyingState: 'dying' },
+          });
+        }
         await this.participantRepo.save(target);
+      } else {
+        const result = await this.stateService.updateHp(
+          dto.ownerUserId,
+          target.characterId,
+          { damage: dto.amount },
+        );
+        hpAfter = result.currentHp;
+        instantDeath = result.instantDeath;
+
+        if (instantDeath) {
+          target.dyingState = 'dead';
+          target.isDefeated = true;
+          dyingState = 'dead';
+          defeated = true;
+          events.push({
+            event_type: 'instant_death',
+            target_participant_id: target.id,
+            data: { damage: dto.amount, dyingState: 'dead' },
+          });
+          await this.participantRepo.save(target);
+        } else if (result.isDown) {
+          target.dyingState = 'dying';
+          target.isDefeated = false;
+          dyingState = 'dying';
+          defeated = false;
+          events.push({
+            event_type: 'fell_unconscious',
+            target_participant_id: target.id,
+            data: { dyingState: 'dying' },
+          });
+          await this.participantRepo.save(target);
+        } else {
+          dyingState = target.dyingState;
+          defeated = false;
+        }
       }
     } else {
       const result = this.applyDamageToMonster(target, dto.amount);
@@ -933,13 +1243,11 @@ export class CombatService {
       await this.participantRepo.save(target);
     }
 
-    const events: GameEventData[] = [
-      {
-        event_type: 'hp_change',
-        target_participant_id: target.id,
-        data: { damage: dto.amount, type: dto.damageType, hpAfter, defeated },
-      },
-    ];
+    events.unshift({
+      event_type: 'hp_change',
+      target_participant_id: target.id,
+      data: { damage: dto.amount, type: dto.damageType, hpAfter, defeated, dyingState },
+    });
 
     await this.eventService.emit(
       encounter.sessionId,
@@ -947,13 +1255,20 @@ export class CombatService {
       events,
     );
 
-    return success({ hpAfter, defeated }, events);
+    return success({ hpAfter, defeated, dyingState, instantDeath }, events);
   }
 
   async applyHealing(
     encounterId: string,
     dto: HealDto,
-  ): Promise<GameResult<{ hpAfter: number }>> {
+  ): Promise<
+    GameResult<{
+      hpAfter: number;
+      defeated: boolean;
+      dyingState?: 'none' | 'dying' | 'stable' | 'dead';
+      deathSavesReset?: boolean;
+    }>
+  > {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
@@ -964,17 +1279,34 @@ export class CombatService {
     );
 
     let hpAfter: number;
+    let deathSavesReset = false;
+    let dyingState: 'none' | 'dying' | 'stable' | 'dead' | undefined;
+    let defeated = false;
 
     if (target.type === 'pc' && target.characterId) {
+      const wasDyingOrStable =
+        target.dyingState === 'dying' || target.dyingState === 'stable';
+      const isDead = target.dyingState === 'dead';
+
+      if (isDead) {
+        return failure('Este participante ja esta morto.', 'ALREADY_DEAD');
+      }
+
       const result = await this.stateService.updateHp(
         dto.ownerUserId,
         target.characterId,
         { healing: dto.amount },
       );
       hpAfter = result.currentHp;
-      if (!result.isDown && target.isDefeated) {
+
+      if (wasDyingOrStable && result.currentHp > 0) {
+        target.dyingState = 'none';
         target.isDefeated = false;
+        dyingState = 'none';
+        deathSavesReset = true;
         await this.participantRepo.save(target);
+      } else {
+        dyingState = target.dyingState;
       }
     } else {
       target.currentHp = Math.min(
@@ -985,6 +1317,7 @@ export class CombatService {
         target.isDefeated = false;
       }
       hpAfter = target.currentHp;
+      defeated = target.isDefeated;
       await this.participantRepo.save(target);
     }
 
@@ -992,7 +1325,7 @@ export class CombatService {
       {
         event_type: 'hp_change',
         target_participant_id: target.id,
-        data: { healing: dto.amount, hpAfter },
+        data: { healing: dto.amount, hpAfter, dyingState, deathSavesReset },
       },
     ];
 
@@ -1002,7 +1335,7 @@ export class CombatService {
       events,
     );
 
-    return success({ hpAfter }, events);
+    return success({ hpAfter, defeated, dyingState, deathSavesReset }, events);
   }
 
   // --- Conditions ---
@@ -1082,28 +1415,46 @@ export class CombatService {
       );
     }
 
+    if (participant.dyingState !== 'dying') {
+      return failure('NOT_DYING' as any, 'NOT_DYING');
+    }
+
     const roll = this.diceService.roll(20);
+    const naturalOne = roll === 1;
+    const naturalTwenty = roll === 20;
+
     const dsResult = await this.stateService.updateDeathSaves(
       ownerUserId,
       participant.characterId,
       { rollValue: roll },
     );
 
-    if (dsResult.dead) {
-      participant.isDefeated = true;
-      await this.participantRepo.save(participant);
-    } else if (dsResult.revivedHp) {
-      participant.isDefeated = false;
-      await this.participantRepo.save(participant);
+    let dyingState: 'none' | 'dying' | 'stable' | 'dead' = 'dying';
+    let revivedHp: number | null = null;
+
+    if (dsResult.revivedHp) {
+      dyingState = 'none';
+      revivedHp = dsResult.revivedHp;
+    } else if (dsResult.dead) {
+      dyingState = 'dead';
+    } else if (dsResult.stabilized) {
+      dyingState = 'stable';
     }
+
+    participant.dyingState = dyingState;
+    participant.isDefeated = dyingState === 'dead';
+    await this.participantRepo.save(participant);
 
     const result: DeathSaveResult = {
       roll,
+      naturalOne,
+      naturalTwenty,
       successes: dsResult.successes,
       failures: dsResult.failures,
-      stabilized: dsResult.stabilized,
-      dead: dsResult.dead,
-      revivedHp: dsResult.revivedHp,
+      dyingState,
+      stabilized: dyingState === 'stable',
+      dead: dyingState === 'dead',
+      revivedHp,
     };
 
     const events: GameEventData[] = [
@@ -1164,9 +1515,20 @@ export class CombatService {
 
     if (participant.type === 'monster' && participant.monster) {
       conMod = getAbilityModifier(participant.monster.constitution);
+    } else if (participant.type === 'pc' && participant.characterId) {
+      // Read real CON save bonus from the computed sheet (includes proficiency
+      // when the class grants it — e.g., Barbarian, Cleric, Fighter, etc.).
+      try {
+        const ownerId = await this.resolveParticipantOwner(participant, '');
+        if (ownerId) {
+          const sheet = await this.sheetService.computeSheet(ownerId, participant.characterId);
+          const conSave = sheet.savingThrows?.find((s: any) => s.slug === 'con');
+          if (conSave) conMod = conSave.bonus;
+        }
+      } catch {
+        // Fall through: conMod stays 0. The check still runs, just with no bonus.
+      }
     }
-    // For PCs, CON mod would need to be fetched from sheet
-    // V1: simplified — uses monster's CON or 0 for PCs
 
     const roll = this.diceService.roll(20);
     const total = roll + conMod;

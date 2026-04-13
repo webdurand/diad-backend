@@ -17,24 +17,99 @@ export interface GameFailure {
   code: GameErrorCode;
 }
 
-export type GameErrorCode =
-  | 'NOT_YOUR_TURN'
-  | 'INVALID_TARGET'
-  | 'OUT_OF_RANGE'
-  | 'NO_ACTION_AVAILABLE'
-  | 'INSUFFICIENT_SPELL_SLOTS'
-  | 'ALREADY_CONCENTRATING'
-  | 'TARGET_DEFEATED'
-  | 'ENCOUNTER_NOT_ACTIVE'
-  | 'ENCOUNTER_NOT_PREPARING'
-  | 'INVALID_PARTICIPANT'
-  | 'CONDITION_PREVENTS_ACTION'
-  | 'INVALID_ACTION'
-  | 'SESSION_NOT_FOUND'
-  | 'ENCOUNTER_NOT_FOUND'
-  | 'PARTICIPANT_NOT_FOUND'
-  | 'POSITION_OUT_OF_BOUNDS'
-  | 'POSITION_OCCUPIED';
+/**
+ * Catalog of canonical error codes used in the envelope `{ok:false, error, code}`.
+ * See `specs/002-encounter-correctness/contracts/error-codes-catalog.md` for semantics.
+ */
+export enum GameErrorCode {
+  // Generic validation and permissions
+  INVALID_PAYLOAD = 'INVALID_PAYLOAD',
+  FORBIDDEN = 'FORBIDDEN',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+
+  // Encounter lifecycle
+  ENCOUNTER_NOT_FOUND = 'ENCOUNTER_NOT_FOUND',
+  ENCOUNTER_NOT_ACTIVE = 'ENCOUNTER_NOT_ACTIVE',
+  ENCOUNTER_NOT_PREPARING = 'ENCOUNTER_NOT_PREPARING',
+  SESSION_NOT_FOUND = 'SESSION_NOT_FOUND',
+
+  // Participants
+  PARTICIPANT_NOT_FOUND = 'PARTICIPANT_NOT_FOUND',
+  INVALID_PARTICIPANT = 'INVALID_PARTICIPANT',
+  INVALID_TARGET = 'INVALID_TARGET',
+  TARGET_DEFEATED = 'TARGET_DEFEATED',
+  OUT_OF_RANGE = 'OUT_OF_RANGE',
+
+  // Turn and action economy
+  NOT_YOUR_TURN = 'NOT_YOUR_TURN',
+  NO_ACTION_AVAILABLE = 'NO_ACTION_AVAILABLE',
+  NO_BONUS_ACTION_AVAILABLE = 'NO_BONUS_ACTION_AVAILABLE',
+  NO_REACTION_AVAILABLE = 'NO_REACTION_AVAILABLE',
+  CONDITION_PREVENTS_ACTION = 'CONDITION_PREVENTS_ACTION',
+  INVALID_ACTION = 'INVALID_ACTION',
+
+  // Death saves (novos na spec 002)
+  NOT_DYING = 'NOT_DYING',
+  ALREADY_DEAD = 'ALREADY_DEAD',
+
+  // Multiataque (novos na spec 002)
+  INVALID_MULTIATTACK = 'INVALID_MULTIATTACK',
+  MULTIATTACK_NOT_RECHARGED = 'MULTIATTACK_NOT_RECHARGED',
+
+  // Magia
+  INVALID_SPELL = 'INVALID_SPELL',
+  INSUFFICIENT_SPELL_SLOTS = 'INSUFFICIENT_SPELL_SLOTS',
+  ALREADY_CONCENTRATING = 'ALREADY_CONCENTRATING',
+  NO_CONCENTRATION = 'NO_CONCENTRATION',
+
+  // Movement
+  POSITION_OUT_OF_BOUNDS = 'POSITION_OUT_OF_BOUNDS',
+  POSITION_OCCUPIED = 'POSITION_OCCUPIED',
+  OUT_OF_MOVEMENT = 'OUT_OF_MOVEMENT',
+}
+
+/**
+ * Canonical PT-BR messages per code.
+ * Source of truth for error text. Tests should assert on `code`, not message.
+ */
+export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
+  [GameErrorCode.INVALID_PAYLOAD]: 'Payload invalido.',
+  [GameErrorCode.FORBIDDEN]: 'Voce nao tem permissao para esta operacao.',
+  [GameErrorCode.UNAUTHORIZED]: 'Sessao ausente.',
+
+  [GameErrorCode.ENCOUNTER_NOT_FOUND]: 'Encontro nao encontrado.',
+  [GameErrorCode.ENCOUNTER_NOT_ACTIVE]: 'Encontro nao esta ativo.',
+  [GameErrorCode.ENCOUNTER_NOT_PREPARING]: 'Encontro nao esta em preparacao.',
+  [GameErrorCode.SESSION_NOT_FOUND]: 'Sessao nao encontrada.',
+
+  [GameErrorCode.PARTICIPANT_NOT_FOUND]: 'Participante nao encontrado.',
+  [GameErrorCode.INVALID_PARTICIPANT]: 'Participante invalido para esta operacao.',
+  [GameErrorCode.INVALID_TARGET]: 'Alvo invalido.',
+  [GameErrorCode.TARGET_DEFEATED]: 'Alvo ja esta derrotado.',
+  [GameErrorCode.OUT_OF_RANGE]: 'Alvo fora de alcance.',
+
+  [GameErrorCode.NOT_YOUR_TURN]: 'Nao e o turno deste participante.',
+  [GameErrorCode.NO_ACTION_AVAILABLE]: 'Acao ja utilizada neste turno.',
+  [GameErrorCode.NO_BONUS_ACTION_AVAILABLE]: 'Acao bonus ja utilizada neste turno.',
+  [GameErrorCode.NO_REACTION_AVAILABLE]: 'Reacao ja utilizada neste round.',
+  [GameErrorCode.CONDITION_PREVENTS_ACTION]: 'Uma condicao impede esta acao.',
+  [GameErrorCode.INVALID_ACTION]: 'Acao invalida ou nao disponivel.',
+
+  [GameErrorCode.NOT_DYING]: 'Este participante nao esta fazendo testes de morte.',
+  [GameErrorCode.ALREADY_DEAD]: 'Este participante ja esta morto.',
+
+  [GameErrorCode.INVALID_MULTIATTACK]: 'Multiataque invalido ou nao disponivel.',
+  [GameErrorCode.MULTIATTACK_NOT_RECHARGED]: 'Multiataque ainda nao recarregou.',
+
+  [GameErrorCode.INVALID_SPELL]: 'Magia nao encontrada ou nao disponivel para este caster.',
+  [GameErrorCode.INSUFFICIENT_SPELL_SLOTS]: 'Sem slot de magia disponivel deste nivel.',
+  [GameErrorCode.ALREADY_CONCENTRATING]: 'Ja ha uma magia de concentracao ativa.',
+  [GameErrorCode.NO_CONCENTRATION]: 'Nenhuma concentracao ativa.',
+
+  [GameErrorCode.POSITION_OUT_OF_BOUNDS]: 'Posicao fora dos limites do mapa.',
+  [GameErrorCode.POSITION_OCCUPIED]: 'Posicao ja esta ocupada.',
+  [GameErrorCode.OUT_OF_MOVEMENT]: 'Movimento insuficiente.',
+};
 
 export interface GameEventData {
   event_type: string;
@@ -43,10 +118,29 @@ export interface GameEventData {
   data: Record<string, any>;
 }
 
+/**
+ * Helper para resposta de sucesso.
+ */
 export function success<T>(value: T, events: GameEventData[] = []): GameSuccess<T> {
   return { ok: true, value, events };
 }
 
-export function failure(error: string, code: GameErrorCode): GameFailure {
-  return { ok: false, error, code };
+/**
+ * Helper para resposta de falha.
+ * Aceita (code) - mensagem vem do catálogo PT-BR.
+ * Ou (message, code) - mensagem customizada.
+ *
+ * O segundo parâmetro aceita `GameErrorCode` ou string (porque os valores do
+ * enum são strings idênticas aos códigos canônicos). Isso mantém backwards
+ * compatibility com call sites que passam literais antes de migrar pro enum.
+ */
+export function failure(
+  codeOrMessage: GameErrorCode | string,
+  code?: GameErrorCode | string,
+): GameFailure {
+  if (code === undefined) {
+    const c = codeOrMessage as GameErrorCode;
+    return { ok: false, error: ERROR_MESSAGES_PT_BR[c] ?? String(c), code: c };
+  }
+  return { ok: false, error: String(codeOrMessage), code: code as GameErrorCode };
 }

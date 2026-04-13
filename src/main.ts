@@ -1,6 +1,8 @@
 import { NestFactory } from '@nestjs/core';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
+import { GameErrorFilter } from './models/game-engine/filters/game-error.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,7 +16,6 @@ async function bootstrap() {
   ];
   app.enableCors({
     origin: (origin, callback) => {
-      // Permite requisições sem origin (proxy/server-side como Vercel rewrites, curl, etc)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -25,6 +26,24 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type,Authorization',
   });
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: (errors) => {
+        const messages = errors.flatMap((e) =>
+          Object.values(e.constraints ?? {}),
+        );
+        return new BadRequestException({
+          ok: false,
+          error: messages.join('; ') || 'Payload invalido.',
+          code: 'INVALID_PAYLOAD',
+        });
+      },
+    }),
+  );
+  app.useGlobalFilters(new GameErrorFilter());
   await app.listen(process.env.PORT || 3000, '0.0.0.0');
 }
 bootstrap();

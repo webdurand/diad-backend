@@ -52,11 +52,18 @@ export interface ConcentrationCheckResult {
 
 export interface DeathSaveResult {
   roll: number;
+  naturalOne: boolean;
+  naturalTwenty: boolean;
   successes: number;
   failures: number;
+  /** Final dying state after this roll. */
+  dyingState: 'none' | 'dying' | 'stable' | 'dead';
+  /** Back-compat: `dyingState === 'stable'`. */
   stabilized: boolean;
+  /** Back-compat: `dyingState === 'dead'`. */
   dead: boolean;
-  revivedHp?: number;
+  /** Non-null only on natural 20 revival. */
+  revivedHp: number | null;
 }
 
 export interface TurnInfo {
@@ -66,6 +73,10 @@ export interface TurnInfo {
   participantName: string;
   participantType: 'pc' | 'monster' | 'npc';
   isDefeated: boolean;
+  /** Only meaningful for PCs; monsters are always 'none'. */
+  dyingState?: 'none' | 'dying' | 'stable' | 'dead';
+  /** True when turn was auto-skipped (stable PC); frontend should call /end-turn immediately. */
+  autoSkip?: boolean;
 }
 
 export interface RoundInfo {
@@ -110,6 +121,8 @@ export interface TurnActionBlock {
   source: string;
   sourceLabel: string;
   description: string;
+  /** Discriminator for aggregators — 'multiattack' | 'spell-opener' | undefined (regular). */
+  kind?: 'multiattack' | 'spell-opener' | 'attack';
   attackBonus?: number;
   damage?: { dice: string; type: string; bonus?: number };
   range?: string;
@@ -123,6 +136,10 @@ export interface TurnActionBlock {
     dc: number;
     halfOnSuccess?: boolean;
   };
+  /** Multiattack aggregator: ordered list of sub-attacks. */
+  sequence?: Array<{ actionName: string; count: number }>;
+  /** Multiattack recharge gate (e.g. '5-6' on a breath weapon). null when always available. */
+  rechargeRequired?: '5-6' | '6' | null;
 }
 
 export interface AoEResolveResult {

@@ -159,6 +159,8 @@ export class EncounterService {
         const sheet = await this.sheetService.computeSheet(ownerId, p.characterId);
         (p as any).currentHp = sheet.currentHp;
         (p as any).maxHp = sheet.maxHp;
+        (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
+        (p as any).deathSaveFailures = sheet.deathSaves?.failures ?? 0;
       } catch {}
     }
   }

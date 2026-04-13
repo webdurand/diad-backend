@@ -27,6 +27,9 @@ import { SavingThrowService } from './services/saving-throw.service';
 import { SpellCastingService } from './services/spell-casting.service';
 import { MovementService } from './services/movement.service';
 import { LootService } from './services/loot.service';
+import { MonsterActionResolver } from './services/monster-action-resolver.service';
+import { PermissionResolver } from './services/permission-resolver.service';
+import { MonsterSpellcastingService } from './services/monster-spellcasting.service';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
 
@@ -62,6 +65,9 @@ import { WorldModule } from '../world/world.module';
     SpellCastingService,
     MovementService,
     LootService,
+    MonsterActionResolver,
+    PermissionResolver,
+    MonsterSpellcastingService,
     CloudinaryService,
   ],
   exports: [
@@ -76,6 +82,9 @@ import { WorldModule } from '../world/world.module';
     SavingThrowService,
     SpellCastingService,
     LootService,
+    MonsterActionResolver,
+    PermissionResolver,
+    MonsterSpellcastingService,
   ],
 })
 export class GameEngineModule {}

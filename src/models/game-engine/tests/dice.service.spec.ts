@@ -133,6 +133,36 @@ describe('DiceService', () => {
       expect(result.rolls).toEqual([]);
     });
 
+    it('should treat literal numerics as fixed damage ("1")', () => {
+      const result = service.rollExpression('1');
+      expect(result.rolls).toEqual([]);
+      expect(result.modifier).toBe(1);
+      expect(result.total).toBe(1);
+    });
+
+    it('should treat literal numerics as fixed damage ("5")', () => {
+      const result = service.rollExpression('5');
+      expect(result.total).toBe(5);
+      expect(result.modifier).toBe(5);
+      expect(result.rolls).toEqual([]);
+    });
+
+    it('should still parse "1d4+2" normally after literal fix', () => {
+      service.setSeed(42);
+      const result = service.rollExpression('1d4+2');
+      expect(result.rolls).toHaveLength(1);
+      expect(result.modifier).toBe(2);
+      expect(result.total).toBe(result.rolls[0] + 2);
+    });
+
+    it('should still parse "2d6" normally after literal fix', () => {
+      service.setSeed(42);
+      const result = service.rollExpression('2d6');
+      expect(result.rolls).toHaveLength(2);
+      expect(result.modifier).toBe(0);
+      expect(result.total).toBe(result.rolls.reduce((a, b) => a + b, 0));
+    });
+
     it('should be deterministic with seed', () => {
       service.setSeed(123);
       const r1 = service.rollExpression('2d6+3');

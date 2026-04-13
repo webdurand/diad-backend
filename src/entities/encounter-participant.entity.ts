@@ -9,6 +9,7 @@ import {
 import { EncounterEntity } from './encounter.entity';
 import { CharacterEntity } from './character.entity';
 import { MonsterEntity } from './monster.entity';
+import type { ParticipantSpellSlotsUsed } from '../models/game-engine/interfaces/monster-typed';
 
 @Entity('encounter_participants')
 export class EncounterParticipantEntity {
@@ -111,6 +112,26 @@ export class EncounterParticipantEntity {
 
   @Column({ name: 'is_defeated', type: 'boolean', default: false })
   isDefeated: boolean;
+
+  // Death save state for PCs. Monsters stay 'none' (their "death" uses isDefeated).
+  // See migration 1774900000000-AddDyingStateToParticipant.
+  @Column({
+    name: 'dying_state',
+    type: 'varchar',
+    length: 16,
+    default: 'none',
+  })
+  dyingState: 'none' | 'dying' | 'stable' | 'dead';
+
+  // Spell slots consumed by this participant during the current encounter.
+  // Monsters: tracks slotsByLevel/innateUses against `MonsterSpellcasting`.
+  // PCs: ignored (slots live on CharacterState.spell_slots).
+  @Column({
+    name: 'spell_slots_used',
+    type: 'jsonb',
+    default: () => `'{}'`,
+  })
+  spellSlotsUsed: ParticipantSpellSlotsUsed;
 
   @Column({ type: 'varchar', default: 'enemy' })
   faction: 'ally' | 'enemy' | 'neutral';

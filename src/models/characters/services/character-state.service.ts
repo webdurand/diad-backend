@@ -28,6 +28,8 @@ export interface DeathSaveDto {
   reset?: boolean;
   /** If provided, handles natural 20 (regain 1 HP + reset) and natural 1 (2 failures) */
   rollValue?: number;
+  /** Direct delta for failures — used when taking damage at 0 HP (1, or 2 on critical hit). */
+  failuresDelta?: number;
 }
 
 export interface KiPointsDto {
@@ -253,6 +255,8 @@ export class CharacterStateService {
     if (dto.reset) {
       state.death_saves_success = 0;
       state.death_saves_fail = 0;
+    } else if (dto.failuresDelta !== undefined && dto.failuresDelta > 0) {
+      state.death_saves_fail = Math.min(3, state.death_saves_fail + dto.failuresDelta);
     } else if (dto.rollValue === 20) {
       // Natural 20: regain 1 HP, reset all death saves, regain consciousness
       state.current_hp = 1;
