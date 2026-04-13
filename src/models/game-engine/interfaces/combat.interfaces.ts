@@ -99,6 +99,8 @@ export interface ConditionTurnEffect {
   description: string;
 }
 
+export type AoEShape = 'sphere' | 'cone' | 'line' | 'cube' | 'cylinder';
+
 export interface TurnActionBlock {
   id: string;
   name: string;
@@ -111,6 +113,31 @@ export interface TurnActionBlock {
   range?: string;
   spellLevel?: number;
   requiresConcentration?: boolean;
+  /** If set, action is area-of-effect. */
+  aoe?: {
+    shape: AoEShape;
+    sizeFt: number;
+    /** For cones/lines, the "throw" range (usually equals sizeFt). For spheres, the max range from caster. */
+    rangeFt?: number;
+  };
+  /** Saving throw if the action uses one. */
+  save?: {
+    ability: string;
+    dc: number;
+    halfOnSuccess?: boolean;
+  };
+}
+
+export interface AoEResolveResult {
+  affectedParticipantIds: string[];
+  results: Array<{
+    participantId: string;
+    participantName: string;
+    save?: SavingThrowResult;
+    damageRoll?: DamageRollResult;
+    targetHpAfter?: number;
+    targetDefeated: boolean;
+  }>;
 }
 
 export interface TurnActionsResult {

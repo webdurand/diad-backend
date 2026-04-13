@@ -296,6 +296,23 @@ export class GameEngineController {
     return this.combatService.getCurrentTurn(id);
   }
 
+  @Post('encounters/:id/aoe-action')
+  async resolveAoeAction(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      casterParticipantId: string;
+      actionName: string;
+      affectedParticipantIds: string[];
+    },
+  ) {
+    return this.combatService.resolveAoeAction(id, {
+      ...body,
+      ownerUserId: getUserId(req),
+    });
+  }
+
   @Post('encounters/:id/attack')
   async resolveAttack(
     @Req() req: AuthRequest,

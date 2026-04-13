@@ -26,7 +26,10 @@ import {
   DeathSaveResult,
   TurnActionsResult,
   TurnActionBlock,
+  AoEResolveResult,
+  SavingThrowResult,
 } from '../interfaces/combat.interfaces';
+import { SavingThrowService } from './saving-throw.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 
 // --- DTOs ---
@@ -79,7 +82,199 @@ export class CombatService {
     private readonly actionsService: ActionsService,
     private readonly movementService: MovementService,
     private readonly sessionService: SessionService,
+    private readonly savingThrowService: SavingThrowService,
   ) {}
+
+  async resolveAoeAction(
+    encounterId: string,
+    dto: {
+      casterParticipantId: string;
+      actionName: string;
+      affectedParticipantIds: string[];
+      ownerUserId: string;
+    },
+  ): Promise<GameResult<AoEResolveResult>> {
+    const encounter = await this.encounterRepo.findOne({ where: { id: encounterId } });
+    if (!encounter || encounter.status !== 'active')
+      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+
+    const caster = await this.encounterService.getParticipant(dto.casterParticipantId);
+    if (caster.actionUsed)
+      return failure('Acao ja utilizada.', 'NO_ACTION_AVAILABLE');
+    if (encounter.turnOrder[encounter.currentTurnIndex] !== caster.id)
+      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+
+    // Find action definition
+    let actionBlock: TurnActionBlock | undefined;
+    if (caster.type === 'monster' && caster.monster) {
+      const all = [
+        ...this.parseMonsterActions(caster.monster),
+        ...((caster.monster as any).legendary_actions ?? []).map((a: any, i: number) => {
+          const b = this.buildMonsterActionBlock(caster.monster, a, i, 'monster-legendary');
+          return { ...b, name: `⭐ ${b.name}` };
+        }),
+      ];
+      actionBlock = all.find(
+        (a) => a.name.toLowerCase() === dto.actionName.toLowerCase(),
+      );
+    } else if (caster.type === 'pc' && caster.characterId) {
+      const ownerId = await this.resolveParticipantOwner(caster, dto.ownerUserId);
+      const pc = await this.actionsService.getActions(ownerId, caster.characterId);
+      const all = [...pc.actions, ...pc.bonusActions];
+      actionBlock = all
+        .map(this.toTurnActionBlock)
+        .find((a) => a.name.toLowerCase() === dto.actionName.toLowerCase());
+    }
+
+    if (!actionBlock || !actionBlock.aoe || !actionBlock.damage) {
+      return failure('Acao em area invalida.', 'INVALID_ACTION');
+    }
+
+    const events: GameEventData[] = [];
+    const results: AoEResolveResult['results'] = [];
+
+    for (const targetId of dto.affectedParticipantIds) {
+      if (targetId === caster.id) continue;
+      const target = await this.encounterService.getParticipant(targetId).catch(() => null);
+      if (!target || target.isDefeated) continue;
+
+      // Roll save
+      let saveResult: SavingThrowResult | undefined;
+      let saved = false;
+      if (actionBlock.save) {
+        if (target.type === 'pc' && target.characterId) {
+          const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+          const sr = await this.savingThrowService.rollSavingThrow({
+            characterId: target.characterId,
+            userId: targetOwnerId,
+            ability: actionBlock.save.ability,
+            dc: actionBlock.save.dc,
+            encounterId,
+            sessionId: encounter.sessionId,
+          });
+          if (sr.ok && sr.value) {
+            saveResult = sr.value;
+            saved = sr.value.success;
+          }
+        } else if (target.type === 'monster' && target.monster) {
+          const m: any = target.monster;
+          const abilityMap: Record<string, string> = {
+            str: 'strength', dex: 'dexterity', con: 'constitution',
+            int: 'intelligence', wis: 'wisdom', cha: 'charisma',
+          };
+          const fullName = abilityMap[actionBlock.save.ability] ?? actionBlock.save.ability;
+          const saveBonus = m[`${fullName}_save`] ?? getAbilityModifier(m[fullName] ?? 10);
+          const roll = this.diceService.roll(20);
+          const total = roll + saveBonus;
+          saved = total >= actionBlock.save.dc;
+          saveResult = {
+            ability: actionBlock.save.ability,
+            dc: actionBlock.save.dc,
+            roll,
+            modifier: saveBonus,
+            total,
+            success: saved,
+          };
+        }
+      }
+
+      // Roll damage
+      const dmgResult = this.diceService.rollExpression(actionBlock.damage.dice);
+      let totalDamage = dmgResult.total;
+      if (saved && actionBlock.save?.halfOnSuccess) {
+        totalDamage = Math.floor(totalDamage / 2);
+      } else if (saved && !actionBlock.save?.halfOnSuccess) {
+        totalDamage = 0;
+      }
+
+      let finalDamage = totalDamage;
+      let resisted = false;
+      let immune = false;
+      let vulnerable = false;
+      const dtLower = actionBlock.damage.type.toLowerCase();
+      if (target.type === 'monster' && target.monster) {
+        const m: any = target.monster;
+        const imms = (m.damage_immunities ?? []) as string[];
+        const ress = (m.damage_resistances ?? []) as string[];
+        const vuls = (m.damage_vulnerabilities ?? []) as string[];
+        if (imms.some((i) => i.toLowerCase().includes(dtLower))) {
+          immune = true; finalDamage = 0;
+        } else if (ress.some((r) => r.toLowerCase().includes(dtLower))) {
+          resisted = true; finalDamage = Math.floor(finalDamage / 2);
+        } else if (vuls.some((v) => v.toLowerCase().includes(dtLower))) {
+          vulnerable = true; finalDamage = finalDamage * 2;
+        }
+      }
+
+      // Apply damage
+      let targetHpAfter: number | undefined;
+      let targetDefeated = false;
+      if (finalDamage > 0) {
+        if (target.type === 'pc' && target.characterId) {
+          const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+          const hpResult = await this.stateService.updateHp(
+            targetOwnerId,
+            target.characterId,
+            { damage: finalDamage },
+          );
+          targetHpAfter = hpResult.currentHp;
+          targetDefeated = hpResult.isDown;
+          if (targetDefeated) {
+            target.isDefeated = true;
+            await this.participantRepo.save(target);
+          }
+        } else {
+          const r = this.applyDamageToMonster(target, finalDamage);
+          targetHpAfter = r.hpAfter;
+          targetDefeated = r.defeated;
+          await this.participantRepo.save(target);
+        }
+      }
+
+      const damageRoll = {
+        rolls: [dmgResult],
+        bonus: 0,
+        total: dmgResult.total,
+        type: actionBlock.damage.type,
+        resisted,
+        immune,
+        vulnerable,
+        finalDamage,
+      };
+
+      events.push({
+        event_type: 'aoe_target_hit',
+        actor_participant_id: caster.id,
+        target_participant_id: target.id,
+        data: {
+          actionName: dto.actionName,
+          save: saveResult,
+          damage: damageRoll,
+          targetHpAfter,
+        },
+      });
+
+      results.push({
+        participantId: target.id,
+        participantName: target.displayName,
+        save: saveResult,
+        damageRoll,
+        targetHpAfter,
+        targetDefeated,
+      });
+    }
+
+    // Mark action as used
+    caster.actionUsed = true;
+    await this.participantRepo.save(caster);
+
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
+
+    return success({
+      affectedParticipantIds: dto.affectedParticipantIds,
+      results,
+    }, events);
+  }
 
   private async resolveParticipantOwner(
     participant: EncounterParticipantEntity,
@@ -153,6 +348,32 @@ export class CombatService {
       reactions = pcActions.reactions.map(this.toTurnActionBlock);
     } else if (participant.type === 'monster' && participant.monster) {
       actions = this.parseMonsterActions(participant.monster);
+      const legendary = (participant.monster as any).legendary_actions as any[] | undefined;
+      if (legendary?.length) {
+        actions = actions.concat(
+          legendary.map((a: any, i: number) => {
+            const block = this.buildMonsterActionBlock(
+              participant.monster,
+              a,
+              i,
+              'monster-legendary',
+            );
+            return { ...block, name: `⭐ ${block.name}` };
+          }),
+        );
+      }
+      const monsterReactions = (participant.monster as any).reactions as any[] | undefined;
+      if (monsterReactions?.length) {
+        reactions = monsterReactions.map((a: any, i: number) => {
+          const block = this.buildMonsterActionBlock(
+            participant.monster,
+            a,
+            i,
+            'monster-reaction',
+          );
+          return { ...block, timing: 'reaction' };
+        });
+      }
     }
 
     return success({
@@ -190,41 +411,86 @@ export class CombatService {
 
   private parseMonsterActions(monster: any): TurnActionBlock[] {
     const monsterActions = (monster.actions as any[]) ?? [];
-    return monsterActions.map((a: any, i: number) => {
-      const desc = a.desc ?? '';
-      const hitMatch = desc.match(/([+-]?\d+)\s*to hit/i);
-      const attackBonus = a.attack_bonus ?? (hitMatch ? parseInt(hitMatch[1], 10) : undefined);
-      const reachMatch = desc.match(/reach\s+(\d+)\s*ft/i);
-      const rangeMatch = desc.match(/range\s+(\d+)(?:\/(\d+))?\s*ft/i);
-      const damageMatch = desc.match(/\(([^)]+)\)\s+(\w+)\s+damage/i);
-      const damage = a.damage?.[0]
-        ? {
-            dice: a.damage[0].damage_dice ?? '1d4',
-            type: a.damage[0].damage_type?.name ?? 'bludgeoning',
-            bonus: 0,
-          }
-        : damageMatch
-          ? { dice: damageMatch[1].trim(), type: damageMatch[2].toLowerCase(), bonus: 0 }
+    return monsterActions.map((a: any, i: number) =>
+      this.buildMonsterActionBlock(monster, a, i, 'monster-action'),
+    );
+  }
+
+  private buildMonsterActionBlock(
+    monster: any,
+    a: any,
+    i: number,
+    idPrefix: string,
+  ): TurnActionBlock {
+    const desc = a.desc ?? '';
+    const hitMatch = desc.match(/([+-]?\d+)\s*to hit/i);
+    const attackBonus = a.attack_bonus ?? (hitMatch ? parseInt(hitMatch[1], 10) : undefined);
+    const reachMatch = desc.match(/reach\s+(\d+)\s*ft/i);
+    const rangeMatch = desc.match(/range\s+(\d+)(?:\/(\d+))?\s*ft/i);
+    const damageMatch = desc.match(/\(([^)]+)\)\s+(\w+)\s+damage/i);
+    const damage = a.damage?.[0]
+      ? {
+          dice: a.damage[0].damage_dice ?? '1d4',
+          type: a.damage[0].damage_type?.name ?? 'bludgeoning',
+          bonus: 0,
+        }
+      : damageMatch
+        ? { dice: damageMatch[1].trim(), type: damageMatch[2].toLowerCase(), bonus: 0 }
+        : undefined;
+
+    // --- AoE detection ---
+    const coneMatch = desc.match(/(\d+)[- ]?foot\s+cone/i);
+    const lineMatch = desc.match(/(\d+)[- ]?foot(?:\s+long)?\s+line/i);
+    const sphereMatch = desc.match(/(\d+)[- ]?foot[- ]?radius/i);
+    const cubeMatch = desc.match(/(\d+)[- ]?foot\s+cube/i);
+    let aoe: TurnActionBlock['aoe'];
+    if (coneMatch) {
+      const size = parseInt(coneMatch[1], 10);
+      aoe = { shape: 'cone', sizeFt: size, rangeFt: size };
+    } else if (lineMatch) {
+      const size = parseInt(lineMatch[1], 10);
+      aoe = { shape: 'line', sizeFt: size, rangeFt: size };
+    } else if (sphereMatch) {
+      const size = parseInt(sphereMatch[1], 10);
+      aoe = { shape: 'sphere', sizeFt: size, rangeFt: 0 };
+    } else if (cubeMatch) {
+      const size = parseInt(cubeMatch[1], 10);
+      aoe = { shape: 'cube', sizeFt: size, rangeFt: 0 };
+    }
+
+    // --- Save detection ---
+    const saveMatch = desc.match(
+      /DC\s+(\d+)\s+(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+saving throw/i,
+    );
+    const save = saveMatch
+      ? {
+          dc: parseInt(saveMatch[1], 10),
+          ability: saveMatch[2].substring(0, 3).toLowerCase(),
+          halfOnSuccess: /half as much damage on a successful/i.test(desc),
+        }
+      : undefined;
+
+    const range = a.reach
+      ? `${a.reach} ft.`
+      : reachMatch
+        ? `${reachMatch[1]} ft.`
+        : rangeMatch
+          ? `${rangeMatch[1]}/${rangeMatch[2] ?? rangeMatch[1]} ft.`
           : undefined;
-      const range = a.reach
-        ? `${a.reach} ft.`
-        : reachMatch
-          ? `${reachMatch[1]} ft.`
-          : rangeMatch
-            ? `${rangeMatch[1]}/${rangeMatch[2] ?? rangeMatch[1]} ft.`
-            : undefined;
-      return {
-        id: `monster-action-${i}`,
-        name: a.name ?? 'Ataque',
-        timing: 'action' as const,
-        source: 'base' as const,
-        sourceLabel: monster.name,
-        description: desc,
-        attackBonus,
-        damage,
-        range,
-      };
-    });
+
+    return {
+      id: `${idPrefix}-${i}`,
+      name: a.name ?? 'Ataque',
+      timing: 'action',
+      source: 'base',
+      sourceLabel: monster.name,
+      description: desc,
+      attackBonus,
+      damage,
+      range,
+      aoe,
+      save,
+    };
   }
 
   async endTurn(encounterId: string): Promise<GameResult<TurnInfo>> {
