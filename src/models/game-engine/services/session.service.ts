@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GameSessionEntity } from 'src/entities/game-session.entity';
 import { CampaignEntity } from 'src/entities/campaign.entity';
+import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
 
 export interface CreateSessionDto {
   name: string;
@@ -31,6 +32,8 @@ export class SessionService {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     @InjectRepository(CampaignEntity)
     private readonly campaignRepo: Repository<CampaignEntity>,
+    @InjectRepository(CampaignPlayerEntity)
+    private readonly campaignPlayerRepo: Repository<CampaignPlayerEntity>,
   ) {}
 
   async create(
@@ -128,5 +131,20 @@ export class SessionService {
       throw new NotFoundException('Sessao nao encontrada.');
     }
     return session;
+  }
+
+  async ensureAccess(
+    sessionId: string,
+    userId: string,
+  ): Promise<GameSessionEntity> {
+    const session = await this.getById(sessionId);
+    if (session.ownerId === userId) return session;
+    if (session.campaignId) {
+      const player = await this.campaignPlayerRepo.findOne({
+        where: { campaignId: session.campaignId, userId, isActive: true },
+      });
+      if (player) return session;
+    }
+    throw new NotFoundException('Sessao nao encontrada.');
   }
 }

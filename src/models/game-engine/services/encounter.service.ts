@@ -10,6 +10,7 @@ import { InventoryService } from 'src/models/characters/services/inventory.servi
 import { DiceService } from './dice.service';
 import { EventService } from './event.service';
 import { SessionService } from './session.service';
+import { CampaignService } from 'src/models/world/services/campaign.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { XP_THRESHOLDS } from 'src/shared/srd-constants';
 import { EquipmentSourceEnum } from 'src/entities/enums';
@@ -70,6 +71,7 @@ export class EncounterService {
     private readonly sheetService: CharacterSheetService,
     private readonly stateService: CharacterStateService,
     private readonly inventoryService: InventoryService,
+    private readonly campaignService: CampaignService,
   ) {}
 
   async create(
@@ -84,17 +86,53 @@ export class EncounterService {
     });
     const saved = await this.encounterRepo.save(encounter);
 
-    // Auto-add all PCs from the session
     if (ownerUserId) {
       const session = await this.sessionService.getById(sessionId);
+      const charIds = new Set<string>();
+
+      // 1. Add PCs explicitly added to the session
       for (const charId of session.characterIds ?? []) {
+        charIds.add(charId);
+      }
+
+      // 2. Add PCs from campaign players (their chosen characters)
+      if (session.campaignId) {
         try {
-          await this.addCharacter(saved.id, charId, ownerUserId);
+          const players = await this.campaignService.getPlayers(session.campaignId);
+          for (const player of players) {
+            if (player.characterId) {
+              charIds.add(player.characterId);
+            }
+          }
+        } catch {}
+      }
+
+      // Add all unique characters with their respective owner IDs
+      for (const charId of charIds) {
+        try {
+          // For DM-owned characters use ownerUserId; for player characters use their userId
+          const userId = await this.resolveCharacterOwner(charId, ownerUserId, session.campaignId);
+          await this.addCharacter(saved.id, charId, userId);
         } catch {}
       }
     }
 
     return this.getById(saved.id);
+  }
+
+  async resolveCharacterOwner(
+    characterId: string,
+    fallbackUserId: string,
+    campaignId?: string,
+  ): Promise<string> {
+    if (!campaignId) return fallbackUserId;
+    try {
+      const players = await this.campaignService.getPlayers(campaignId);
+      const owner = players.find((p) => p.characterId === characterId);
+      return owner?.userId ?? fallbackUserId;
+    } catch {
+      return fallbackUserId;
+    }
   }
 
   async getById(
@@ -112,8 +150,25 @@ export class EncounterService {
   async listBySession(sessionId: string): Promise<EncounterEntity[]> {
     return this.encounterRepo.find({
       where: { sessionId },
+      relations: ['participants'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async listByCampaign(campaignId: string): Promise<EncounterEntity[]> {
+    // Find all sessions for this campaign, then all encounters
+    const sessions = await this.encounterRepo.manager.find('GameSessionEntity' as any, {
+      where: { campaignId },
+    } as any);
+    const sessionIds = sessions.map((s: any) => s.id);
+    if (sessionIds.length === 0) return [];
+
+    return this.encounterRepo
+      .createQueryBuilder('e')
+      .leftJoinAndSelect('e.participants', 'p')
+      .where('e.session_id IN (:...sessionIds)', { sessionIds })
+      .orderBy('e.createdAt', 'DESC')
+      .getMany();
   }
 
   async addMonster(
@@ -172,7 +227,14 @@ export class EncounterService {
     characterId: string,
     userId: string,
   ): Promise<EncounterParticipantEntity> {
-    const sheet = await this.sheetService.computeSheet(userId, characterId);
+    const encounter = await this.getById(encounterId);
+    const session = await this.sessionService.getById(encounter.sessionId);
+    const ownerUserId = await this.resolveCharacterOwner(
+      characterId,
+      userId,
+      session.campaignId ?? undefined,
+    );
+    const sheet = await this.sheetService.computeSheet(ownerUserId, characterId);
 
     const participant = this.participantRepo.create({
       encounterId,

@@ -99,7 +99,7 @@ export class GameEngineController {
     @Req() req: AuthRequest,
     @Param('id') id: string,
   ) {
-    await this.sessionService.ensureOwnership(id, getUserId(req));
+    await this.sessionService.ensureAccess(id, getUserId(req));
     return this.sessionService.getById(id);
   }
 
@@ -164,6 +164,11 @@ export class GameEngineController {
   @Get('encounters/:id')
   async getEncounter(@Param('id') id: string) {
     return this.encounterService.getById(id);
+  }
+
+  @Get('campaigns/:campaignId/encounters')
+  async listEncountersByCampaign(@Param('campaignId') campaignId: string) {
+    return this.encounterService.listByCampaign(campaignId);
   }
 
   @Delete('encounters/:id')
@@ -235,8 +240,23 @@ export class GameEngineController {
   }
 
   @Post('encounters/:id/start')
-  async startCombat(@Param('id') id: string) {
-    return this.encounterService.startCombat(id);
+  async startCombat(@Param('id') id: string, @Req() req: AuthRequest) {
+    const encounter = await this.encounterService.startCombat(id);
+    const firstId = encounter.turnOrder?.[0];
+    if (firstId) {
+      const first = await this.encounterService.getParticipant(firstId);
+      const session = await this.sessionService.getById(encounter.sessionId);
+      const ownerId =
+        first.type === 'pc' && first.characterId
+          ? await this.encounterService.resolveCharacterOwner(
+              first.characterId,
+              getUserId(req),
+              session.campaignId ?? undefined,
+            )
+          : getUserId(req);
+      await this.movementService.initializeTurn(first, ownerId);
+    }
+    return this.encounterService.getById(id);
   }
 
   @Post('encounters/:id/end')

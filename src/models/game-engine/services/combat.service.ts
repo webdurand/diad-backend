@@ -11,6 +11,7 @@ import { ConditionEffectsService } from './condition-effects.service';
 import { EventService } from './event.service';
 import { EncounterService } from './encounter.service';
 import { MovementService } from './movement.service';
+import { SessionService } from './session.service';
 import {
   GameResult,
   GameEventData,
@@ -77,7 +78,23 @@ export class CombatService {
     private readonly stateService: CharacterStateService,
     private readonly actionsService: ActionsService,
     private readonly movementService: MovementService,
+    private readonly sessionService: SessionService,
   ) {}
+
+  private async resolveParticipantOwner(
+    participant: EncounterParticipantEntity,
+    requesterUserId: string,
+  ): Promise<string> {
+    if (participant.type !== 'pc' || !participant.characterId) return requesterUserId;
+    const encounter = await this.encounterRepo.findOne({ where: { id: participant.encounterId } });
+    if (!encounter) return requesterUserId;
+    const session = await this.sessionService.getById(encounter.sessionId);
+    return this.encounterService.resolveCharacterOwner(
+      participant.characterId,
+      requesterUserId,
+      session.campaignId ?? undefined,
+    );
+  }
 
   // --- Turn Management ---
 
@@ -119,7 +136,8 @@ export class CombatService {
       return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
 
     const participant = await this.encounterService.getParticipant(participantId);
-    const speed = await this.movementService.getSpeed(participant, ownerUserId);
+    const resolvedOwnerId = await this.resolveParticipantOwner(participant, ownerUserId);
+    const speed = await this.movementService.getSpeed(participant, resolvedOwnerId);
 
     let actions: TurnActionBlock[] = [];
     let bonusActions: TurnActionBlock[] = [];
@@ -127,7 +145,7 @@ export class CombatService {
 
     if (participant.type === 'pc' && participant.characterId) {
       const pcActions = await this.actionsService.getActions(
-        ownerUserId,
+        resolvedOwnerId,
         participant.characterId,
       );
       actions = pcActions.actions.map(this.toTurnActionBlock);
@@ -172,23 +190,41 @@ export class CombatService {
 
   private parseMonsterActions(monster: any): TurnActionBlock[] {
     const monsterActions = (monster.actions as any[]) ?? [];
-    return monsterActions.map((a: any, i: number) => ({
-      id: `monster-action-${i}`,
-      name: a.name ?? 'Ataque',
-      timing: 'action' as const,
-      source: 'base' as const,
-      sourceLabel: monster.name,
-      description: a.desc ?? '',
-      attackBonus: a.attack_bonus,
-      damage: a.damage?.[0]
+    return monsterActions.map((a: any, i: number) => {
+      const desc = a.desc ?? '';
+      const hitMatch = desc.match(/([+-]?\d+)\s*to hit/i);
+      const attackBonus = a.attack_bonus ?? (hitMatch ? parseInt(hitMatch[1], 10) : undefined);
+      const reachMatch = desc.match(/reach\s+(\d+)\s*ft/i);
+      const rangeMatch = desc.match(/range\s+(\d+)(?:\/(\d+))?\s*ft/i);
+      const damageMatch = desc.match(/\(([^)]+)\)\s+(\w+)\s+damage/i);
+      const damage = a.damage?.[0]
         ? {
             dice: a.damage[0].damage_dice ?? '1d4',
             type: a.damage[0].damage_type?.name ?? 'bludgeoning',
             bonus: 0,
           }
-        : undefined,
-      range: a.reach ? `${a.reach} ft.` : undefined,
-    }));
+        : damageMatch
+          ? { dice: damageMatch[1].trim(), type: damageMatch[2].toLowerCase(), bonus: 0 }
+          : undefined;
+      const range = a.reach
+        ? `${a.reach} ft.`
+        : reachMatch
+          ? `${reachMatch[1]} ft.`
+          : rangeMatch
+            ? `${rangeMatch[1]}/${rangeMatch[2] ?? rangeMatch[1]} ft.`
+            : undefined;
+      return {
+        id: `monster-action-${i}`,
+        name: a.name ?? 'Ataque',
+        timing: 'action' as const,
+        source: 'base' as const,
+        sourceLabel: monster.name,
+        description: desc,
+        attackBonus,
+        damage,
+        range,
+      };
+    });
   }
 
   async endTurn(encounterId: string): Promise<GameResult<TurnInfo>> {
@@ -249,7 +285,8 @@ export class CombatService {
       relations: ['monster'],
     });
     if (nextParticipant) {
-      await this.movementService.initializeTurn(nextParticipant);
+      const ownerId = await this.resolveParticipantOwner(nextParticipant, '');
+      await this.movementService.initializeTurn(nextParticipant, ownerId || undefined);
     }
 
     events.push({
@@ -410,8 +447,9 @@ export class CombatService {
     // Get target AC
     let targetAc = 10;
     if (target.type === 'pc' && target.characterId) {
+      const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
       const sheet = await this.sheetService.computeSheet(
-        dto.ownerUserId,
+        targetOwnerId,
         target.characterId,
       );
       targetAc = sheet.armorClass;
@@ -521,8 +559,9 @@ export class CombatService {
 
       // Apply damage
       if (target.type === 'pc' && target.characterId) {
+        const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
         const hpResult = await this.stateService.updateHp(
-          dto.ownerUserId,
+          targetOwnerId,
           target.characterId,
           { damage: finalDamage },
         );
