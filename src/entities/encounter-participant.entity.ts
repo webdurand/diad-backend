@@ -13,6 +13,9 @@ import type { ParticipantSpellSlotsUsed } from '../models/game-engine/interfaces
 import type {
   ReadiedAction,
   TurnExecutionResult,
+  ConditionInstance,
+  AppliedEffect,
+  RechargeState,
 } from '../models/game-engine/interfaces/combat.interfaces';
 
 @Entity('encounter_participants')
@@ -198,4 +201,44 @@ export class EncounterParticipantEntity {
   /** Idempotência do `/ai-turn` — resposta cacheada do último run no round. */
   @Column({ name: 'last_ai_turn_result', type: 'jsonb', nullable: true })
   lastAiTurnResult: TurnExecutionResult | null;
+
+  // --- Spec 004: completude RAW ---
+  // Ver migration 1776000000000-AddRawCombatCompleteness.
+
+  /** ConditionInstance[] com fonte/DC/save/duração/concentração. Substitui `conditions: string[]` (coexistência por 1 release). */
+  @Column({ name: 'condition_instances', type: 'jsonb', default: () => `'[]'` })
+  conditionInstances: ConditionInstance[];
+
+  /** Quantos rounds restam da magia de concentração ativa. Null se não concentrando. */
+  @Column({ name: 'concentration_rounds_remaining', type: 'int', nullable: true })
+  concentrationRoundsRemaining: number | null;
+
+  /** DC base do save de concentração na magia ativa (ex: spell save DC do caster). */
+  @Column({ name: 'concentration_save_dc', type: 'int', nullable: true })
+  concentrationSaveDc: number | null;
+
+  /** O que esta magia de concentração aplicou em alvos/área. Removido em cascata ao quebrar. */
+  @Column({ name: 'applied_effects', type: 'jsonb', default: () => `'[]'` })
+  appliedEffects: AppliedEffect[];
+
+  /** Pontos lendários disponíveis (null para criaturas não-lendárias). */
+  @Column({ name: 'legendary_points_available', type: 'int', nullable: true })
+  legendaryPointsAvailable: number | null;
+
+  /** Pool máximo de pontos lendários (default 3 para a maioria). */
+  @Column({ name: 'legendary_points_max', type: 'int', nullable: true })
+  legendaryPointsMax: number | null;
+
+  /** Estado de recharge por habilidade ('available'|'used'), keyed por nome. */
+  @Column({ name: 'recharge_state', type: 'jsonb', default: () => `'{}'` })
+  rechargeState: RechargeState;
+
+  /** Id do agarrador, quando este participante está com a condição `grappled`. */
+  @Column({
+    name: 'grappled_by_participant_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  grappledByParticipantId: string | null;
 }

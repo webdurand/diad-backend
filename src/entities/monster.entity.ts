@@ -4,6 +4,7 @@ import type {
   MonsterMultiattack,
   MonsterSpellcasting,
 } from '../models/game-engine/interfaces/monster-typed';
+import type { LairAction } from '../models/game-engine/interfaces/combat.interfaces';
 
 @Entity('monsters')
 export class MonsterEntity {
@@ -109,6 +110,13 @@ export class MonsterEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   spellcasting: MonsterSpellcasting | null;
+
+  // Spec 004: lair actions e mapa de custo de ações lendárias
+  @Column({ name: 'lair_actions', type: 'jsonb', nullable: true })
+  lair_actions: LairAction[] | null;
+
+  @Column({ name: 'legendary_action_cost_map', type: 'jsonb', nullable: true })
+  legendary_action_cost_map: Record<string, 1 | 2 | 3> | null;
 
   @Column({ type: 'text', nullable: true })
   image?: string;

@@ -43,6 +43,10 @@ export class EncounterEntity {
   @Column({ name: 'turn_order', type: 'jsonb', default: [] })
   turnOrder: string[];
 
+  /** Spec 004: encontro acontece no covil de criatura lendária? Habilita lair actions. */
+  @Column({ name: 'in_lair', type: 'boolean', default: false })
+  inLair: boolean;
+
   @Column({ type: 'jsonb', nullable: true })
   difficulty?: {
     adjusted_xp: number;

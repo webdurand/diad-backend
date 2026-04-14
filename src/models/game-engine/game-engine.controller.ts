@@ -42,6 +42,19 @@ import { GenericActionsService } from './services/generic-actions.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
+// Spec 004
+import { LegendaryActionDto } from './dto/legendary-action.dto';
+import { GrappleEscapeDto } from './dto/grapple-escape.dto';
+import { LairActionDto } from './dto/lair-action.dto';
+import { LegendaryActionService } from './services/legendary-action.service';
+import { GrappleEscapeService } from './services/grapple-escape.service';
+import { LairActionService } from './services/lair-action.service';
+import { ConditionLifecycleService } from './services/condition-lifecycle.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { EncounterEntity } from 'src/entities/encounter.entity';
+import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { failure, GameErrorCode } from './interfaces/result.type';
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -74,6 +87,15 @@ export class GameEngineController {
     private readonly genericActionsService: GenericActionsService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
+    // Spec 004
+    private readonly legendaryActionService: LegendaryActionService,
+    private readonly grappleEscapeService: GrappleEscapeService,
+    private readonly lairActionService: LairActionService,
+    private readonly conditionLifecycle: ConditionLifecycleService,
+    @InjectRepository(EncounterEntity)
+    private readonly encounterRepo: Repository<EncounterEntity>,
+    @InjectRepository(EncounterParticipantEntity)
+    private readonly participantRepo: Repository<EncounterParticipantEntity>,
   ) {}
 
   // ==================== SESSIONS ====================
@@ -421,6 +443,119 @@ export class GameEngineController {
   @Post('encounters/:id/end-turn')
   async endTurn(@Param('id') id: string) {
     return this.combatService.endTurn(id);
+  }
+
+  // ==================== SPEC 004: RAW COMBAT ENDPOINTS ====================
+
+  @Post('encounters/:id/legendary-action')
+  async legendaryAction(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: LegendaryActionDto,
+  ) {
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.monsterParticipantId,
+      getUserId(req),
+      id,
+    );
+    const monster = await this.participantRepo.findOne({
+      where: { id: body.monsterParticipantId, encounterId: id },
+      relations: ['monster'],
+    });
+    if (!monster) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
+    const can = this.legendaryActionService.canExecute(monster, body.actionName);
+    if (!can.ok) return can;
+    const cost = can.value.cost;
+    const spent = await this.legendaryActionService.spendPoints(
+      monster,
+      cost,
+      body.actionName,
+    );
+    void ownerUserId; // resolveMutationOwner garante autorização
+    return { ok: true, value: spent.result, events: spent.events };
+  }
+
+  @Post('encounters/:id/grapple-escape')
+  async grappleEscape(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: GrappleEscapeDto,
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    const target = await this.participantRepo.findOne({
+      where: { id: body.participantId, encounterId: id },
+    });
+    if (!target) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
+    // Modificadores simples para v1: usar bonus de proficiência fixo (refinar com character-sheet em iteração futura)
+    const targetMod = body.ability === 'athletics' ? 3 : 3;
+    const grapplerMod = 3;
+    return this.grappleEscapeService.attemptEscape(
+      target,
+      body.ability,
+      targetMod,
+      grapplerMod,
+    );
+  }
+
+  @Post('encounters/:id/lair-action')
+  async lairAction(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: LairActionDto,
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.monsterParticipantId,
+      getUserId(req),
+      id,
+    );
+    const encounter = await this.encounterRepo.findOne({ where: { id } });
+    if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
+    return this.lairActionService.execute(
+      encounter,
+      body.monsterParticipantId,
+      body.actionIndex,
+    );
+  }
+
+  @Patch('encounters/:id/in-lair')
+  async setInLair(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: { inLair: boolean },
+  ) {
+    const encounter = await this.encounterRepo.findOne({ where: { id } });
+    if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
+    encounter.inLair = !!body.inLair;
+    await this.encounterRepo.save(encounter);
+    void req;
+    return { ok: true, value: { inLair: encounter.inLair } };
+  }
+
+  @Delete('encounters/:id/conditions/:instanceId')
+  async removeConditionInstance(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('instanceId') instanceId: string,
+  ) {
+    void req;
+    // Localiza o participante que tem essa instância
+    const participants = await this.participantRepo.find({
+      where: { encounterId: id },
+    });
+    const target = participants.find((p) =>
+      (p.conditionInstances ?? []).some((ci) => ci.id === instanceId),
+    );
+    if (!target) return failure(GameErrorCode.INVALID_CONDITION_INSTANCE);
+    const r = await this.conditionLifecycle.removeConditionInstance(
+      target,
+      instanceId,
+      'manual',
+    );
+    return { ok: true, value: { instanceId, removed: r.removed }, events: r.events };
   }
 
   // ==================== CONTROL TOGGLE (SPEC 003 US4) ====================

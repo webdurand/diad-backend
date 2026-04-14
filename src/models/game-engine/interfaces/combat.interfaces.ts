@@ -248,3 +248,125 @@ export interface TurnExecutionResult {
   tookMs: number;
   rationale?: string;
 }
+
+// ============================================================================
+// Spec 004 — Encounter RAW Completeness
+// ============================================================================
+
+export type ConditionSlug =
+  | 'blinded'
+  | 'charmed'
+  | 'deafened'
+  | 'frightened'
+  | 'grappled'
+  | 'incapacitated'
+  | 'invisible'
+  | 'paralyzed'
+  | 'petrified'
+  | 'poisoned'
+  | 'prone'
+  | 'restrained'
+  | 'stunned'
+  | 'unconscious'
+  | 'exhaustion'
+  | 'hidden';
+
+export type SaveAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+
+export type RepeatSaveTiming = 'end_of_turn' | 'start_of_turn' | 'never';
+
+/**
+ * Instância de condição com metadata completa.
+ * Substitui `conditions: string[]` ao longo do tempo (coexistência por 1 release).
+ */
+export interface ConditionInstance {
+  /** uuid v4 — identificador estável para remoção precisa. */
+  id: string;
+  slug: ConditionSlug;
+  /** Quem aplicou; null para "ambient" (poison de armadilha sem dono). */
+  appliedBy: string | null;
+  /** Nome da magia/feature/efeito que originou; null para aplicação manual do DM. */
+  sourceSpell: string | null;
+  /** True se a fonte é magia de concentração — quebrou = removida em cascata. */
+  sourceConcentration: boolean;
+  saveAbility: SaveAbility | null;
+  saveDc: number | null;
+  repeatSaveTiming: RepeatSaveTiming;
+  /** Quantos rounds restam antes de remoção automática; null = sem prazo. */
+  durationRoundsRemaining: number | null;
+  /** Para exhaustion, level cumulativo (1-6 para 2014). */
+  level?: number;
+  appliedAt: string;
+}
+
+export type AppliedEffectKind = 'condition' | 'persistent-area';
+
+/**
+ * Rastreia o que uma magia de concentração aplicou.
+ * Persistido no caster; ao quebrar concentração, itera e remove tudo atomicamente.
+ */
+export interface AppliedEffect {
+  kind: AppliedEffectKind;
+  /** Quando kind='condition': id do ConditionInstance no participante alvo. */
+  /** Quando kind='persistent-area': id do PersistentAreaEffect. */
+  refId: string;
+  /** Quando kind='condition': id do participante alvo. Senão null. */
+  targetParticipantId: string | null;
+  /** Snapshot textual para auditoria/log. */
+  description: string;
+}
+
+export interface LairAction {
+  name: string;
+  description: string;
+  rangeFt?: number;
+  saveAbility?: SaveAbility;
+  saveDc?: number;
+  damageDice?: string;
+  damageType?: string;
+  appliesCondition?: ConditionSlug;
+  /** Se a ação cria área persistente, descritor pra criação. */
+  createsPersistentArea?: {
+    shapeKind: 'sphere' | 'cube' | 'cylinder' | 'line' | 'cone';
+    radiusCells: number;
+    damageDice: string;
+    damageType: string;
+    durationRoundsRemaining: number;
+    halfOnSave: boolean;
+  };
+  /** Algumas lair actions têm half-on-save próprio mesmo sem persistent area. */
+  halfOnSave?: boolean;
+}
+
+export interface LegendaryActionStatblock {
+  name: string;
+  description: string;
+  cost: 1 | 2 | 3;
+  resolverHint: 'attack' | 'save' | 'movement' | 'special';
+}
+
+export type RechargeState = Record<string, 'available' | 'used'>;
+
+export interface DamageInstance {
+  type: string;
+  amount: number;
+}
+
+export interface ApplyDamageOptions {
+  ignoreResistance?: boolean;
+  ignoreImmunity?: boolean;
+}
+
+export interface DamageProfile {
+  resistances: string[];
+  immunities: string[];
+  vulnerabilities: string[];
+}
+
+export interface ResistanceApplyResult {
+  finalDamage: number;
+  perPartFinal: Array<DamageInstance & {
+    afterModifier: number;
+    modifier: 'resist' | 'immune' | 'vuln' | 'none';
+  }>;
+}
