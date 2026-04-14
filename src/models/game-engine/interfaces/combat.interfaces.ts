@@ -158,7 +158,11 @@ export interface TurnActionsResult {
   participantId: string;
   participantName: string;
   participantType: 'pc' | 'monster' | 'npc';
+  /** Ataques de arma, multiataques e ações específicas (source !== 'generic'). Spec 005 US13. */
   actions: TurnActionBlock[];
+  /** As 8 ações PHB (Dodge/Dash/Disengage/Help/Hide/Ready/Search/Use Object). Spec 005 US13.
+   *  Opcional durante rollout — clientes antigos leem do `actions[]` filtrando source==='generic'. */
+  genericActions?: TurnActionBlock[];
   bonusActions: TurnActionBlock[];
   reactions: TurnActionBlock[];
   canMove: boolean;

@@ -86,6 +86,11 @@ export enum GameErrorCode {
   CONCENTRATION_ALREADY_BROKEN = 'CONCENTRATION_ALREADY_BROKEN',
   INVALID_CONDITION_INSTANCE = 'INVALID_CONDITION_INSTANCE',
   PERSISTENT_AREA_NOT_FOUND = 'PERSISTENT_AREA_NOT_FOUND',
+
+  // Spec 005: polish + bug fixes (US14 + US9)
+  SPELL_NOT_AOE = 'SPELL_NOT_AOE',
+  SPELL_OUT_OF_RANGE = 'SPELL_OUT_OF_RANGE',
+  LIBRARY_MONSTER_NOT_FOUND = 'LIBRARY_MONSTER_NOT_FOUND',
 }
 
 /**
@@ -159,6 +164,13 @@ export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
     'Instancia de condicao invalida.',
   [GameErrorCode.PERSISTENT_AREA_NOT_FOUND]:
     'Efeito de area persistente nao encontrado.',
+
+  [GameErrorCode.SPELL_NOT_AOE]:
+    'Essa magia nao e de area; selecione apenas um alvo.',
+  [GameErrorCode.SPELL_OUT_OF_RANGE]:
+    'Alvo esta fora do alcance da magia.',
+  [GameErrorCode.LIBRARY_MONSTER_NOT_FOUND]:
+    'Monstro nao encontrado na biblioteca.',
 };
 
 export interface GameEventData {

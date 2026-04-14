@@ -479,11 +479,15 @@ export class CombatService {
       this.makeGenericAction('use-object', 'Usar Objeto'),
     ];
 
+    // Spec 005 US13 — `actions` contém apenas ataques/multiataque/ações de monstro
+    // (source !== 'generic'); as 8 ações PHB vão em `genericActions` separado, para
+    // que a aba "Ações" do frontend possa renderizar subgrupos Ataques + PHB.
     return success({
       participantId: participant.id,
       participantName: participant.displayName,
       participantType: participant.type as 'pc' | 'monster' | 'npc',
-      actions: [...actions, ...genericActions],
+      actions,
+      genericActions,
       bonusActions,
       reactions,
       canMove: (participant.movementRemaining ?? speed) > 0,
@@ -509,6 +513,9 @@ export class CombatService {
       | 'use-object',
     label: string,
   ): TurnActionBlock {
+    // Spec 005 US13 — não marcamos mais como `kind: 'attack'` porque essas ações
+    // são agora retornadas em `genericActions[]` (não em `actions[]`), e `kind`
+    // é um discriminator para aggregators de ataque.
     return {
       id: `generic-${genericKind}`,
       name: label,
@@ -516,7 +523,6 @@ export class CombatService {
       source: 'generic',
       sourceLabel: 'Ação PHB',
       description: `Ação genérica: ${label}`,
-      kind: 'attack',
     } as unknown as TurnActionBlock;
   }
 

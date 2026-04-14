@@ -14,9 +14,15 @@ import { MonsterSpellcastingService } from './monster-spellcasting.service';
 import {
   GameResult,
   GameEventData,
+  GameErrorCode,
   success,
   failure,
 } from '../interfaces/result.type';
+import {
+  isAoeSpell,
+  isMultiTargetNonAoeSpell,
+  maxTargetsFor,
+} from './spell-targeting';
 
 // --- Result interfaces ---
 
@@ -167,9 +173,21 @@ export class SpellCastingService {
     if (spell.damage) {
       const damageInfo = spell.damage as Record<string, any>;
       const slotKey = String(dto.slotLevel);
+      // Cantrip scaling RAW: damage_at_character_level tem chaves só em 1/5/11/17;
+      // escolher a maior chave <= totalLevel (se char nivel 3, usa chave "1" = 1d6).
+      const cantripScalingExpr = (() => {
+        const map = damageInfo?.damage_at_character_level;
+        if (!map || typeof map !== 'object') return null;
+        const lvl = sheet.totalLevel;
+        const validKeys = Object.keys(map)
+          .map((k) => parseInt(k, 10))
+          .filter((n) => Number.isFinite(n) && n <= lvl)
+          .sort((a, b) => b - a);
+        return validKeys.length > 0 ? map[String(validKeys[0])] : null;
+      })();
       const expression =
         damageInfo?.damage_at_slot_level?.[slotKey] ??
-        damageInfo?.damage_at_character_level?.[String(sheet.totalLevel)] ??
+        cantripScalingExpr ??
         damageInfo?.base ??
         null;
 
@@ -271,6 +289,24 @@ export class SpellCastingService {
       dto.spellSlug = byName.slug;
     }
     const spellData = spell ?? (await this.spellRepo.findOne({ where: { slug: dto.spellSlug } }))!;
+
+    // 3.5 Spec 005 US14 — validar número de alvos:
+    //   - AoE (area_of_effect != null): aceita N >= 1 (forma define).
+    //   - Multi-target não-AoE curada (Magic Missile, Eldritch Blast, Scorching Ray):
+    //     aceita N até o limite do spell/slot/nível.
+    //   - Single-target default: rejeita length > 1 com SPELL_NOT_AOE.
+    const targetCount = dto.targetParticipantIds?.length ?? 0;
+    if (targetCount > 1 && !isAoeSpell(spellData)) {
+      let casterLevel = 0;
+      if (isMultiTargetNonAoeSpell(spellData)) {
+        const sheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
+        casterLevel = (sheet as any)?.totalLevel ?? 0;
+      }
+      const maxTargets = maxTargetsFor(spellData, dto.slotLevel, casterLevel);
+      if (targetCount > maxTargets) {
+        return failure(GameErrorCode.SPELL_NOT_AOE);
+      }
+    }
 
     // 4. Check action economy based on casting time
     const castingTime = (spellData.casting_time ?? 'action').toLowerCase();

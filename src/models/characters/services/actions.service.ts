@@ -53,6 +53,14 @@ export interface ActionBlock {
   requiresConcentration?: boolean;
   isRitual?: boolean;
   castingTime?: string;
+  /** Spec 005 US14 — área de efeito derivada de `spell.area_of_effect` + `spell.range`.
+   *  Populado somente para spells AoE (Acid Splash, Burning Hands, Fireball, etc.). */
+  aoe?: {
+    originType: 'self' | 'point' | 'fixed';
+    shape: 'sphere' | 'cone' | 'line' | 'cube' | 'cylinder';
+    sizeFt: number;
+    rangeFt: number;
+  };
 }
 
 export interface ActionsResponse {
@@ -515,6 +523,29 @@ export class ActionsService {
         isRitual: spell.ritual ?? false,
         castingTime: spell.casting_time,
       };
+
+      // Spec 005 US14 — popular `aoe` quando a spell é de área. Sem isso,
+      // o frontend abre TargetSelector single em vez de MultiTargetSpellPicker.
+      const aoeRaw = spell.area_of_effect as
+        | { type?: string; size?: number }
+        | null
+        | undefined;
+      if (aoeRaw && aoeRaw.type && typeof aoeRaw.size === 'number') {
+        const validShapes = ['sphere', 'cone', 'line', 'cube', 'cylinder'] as const;
+        const shape = (validShapes as readonly string[]).includes(aoeRaw.type)
+          ? (aoeRaw.type as (typeof validShapes)[number])
+          : 'sphere';
+        const rangeStr = spell.range ?? 'Self';
+        const isSelf = rangeStr.toLowerCase().includes('self');
+        const rangeMatch = rangeStr.match(/(\d+)/);
+        const rangeFt = isSelf ? 0 : rangeMatch ? parseInt(rangeMatch[1], 10) : 0;
+        action.aoe = {
+          originType: isSelf ? 'self' : 'point',
+          shape,
+          sizeFt: aoeRaw.size,
+          rangeFt,
+        };
+      }
 
       if (spell.attack_type) {
         action.attackBonus = defaultAttackBonus;
