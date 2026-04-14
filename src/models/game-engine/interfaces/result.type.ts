@@ -76,6 +76,16 @@ export enum GameErrorCode {
   INVALID_READY_TRIGGER = 'INVALID_READY_TRIGGER',
   ITEM_NOT_USABLE = 'ITEM_NOT_USABLE',
   CONTROL_CHANGE_FORBIDDEN = 'CONTROL_CHANGE_FORBIDDEN',
+
+  // Spec 004: completude RAW
+  INSUFFICIENT_LEGENDARY_POINTS = 'INSUFFICIENT_LEGENDARY_POINTS',
+  CONDITION_PREVENTS_LEGENDARY = 'CONDITION_PREVENTS_LEGENDARY',
+  LAIR_ACTION_NOT_AVAILABLE = 'LAIR_ACTION_NOT_AVAILABLE',
+  NOT_GRAPPLED = 'NOT_GRAPPLED',
+  RESISTANCE_NOT_APPLICABLE = 'RESISTANCE_NOT_APPLICABLE',
+  CONCENTRATION_ALREADY_BROKEN = 'CONCENTRATION_ALREADY_BROKEN',
+  INVALID_CONDITION_INSTANCE = 'INVALID_CONDITION_INSTANCE',
+  PERSISTENT_AREA_NOT_FOUND = 'PERSISTENT_AREA_NOT_FOUND',
 }
 
 /**
@@ -133,6 +143,22 @@ export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
   [GameErrorCode.ITEM_NOT_USABLE]: 'Este item nao pode ser usado em combate.',
   [GameErrorCode.CONTROL_CHANGE_FORBIDDEN]:
     'Apenas o DM da sessao pode alterar o controle de um participante.',
+
+  [GameErrorCode.INSUFFICIENT_LEGENDARY_POINTS]:
+    'Pontos lendarios insuficientes para usar essa acao.',
+  [GameErrorCode.CONDITION_PREVENTS_LEGENDARY]:
+    'A criatura esta incapacitada e nao pode usar acoes lendarias.',
+  [GameErrorCode.LAIR_ACTION_NOT_AVAILABLE]:
+    'Lair actions nao estao disponiveis para este encontro.',
+  [GameErrorCode.NOT_GRAPPLED]: 'O participante nao esta agarrado.',
+  [GameErrorCode.RESISTANCE_NOT_APPLICABLE]:
+    'Resistencia nao se aplica a este tipo de dano.',
+  [GameErrorCode.CONCENTRATION_ALREADY_BROKEN]:
+    'A concentracao ja foi quebrada.',
+  [GameErrorCode.INVALID_CONDITION_INSTANCE]:
+    'Instancia de condicao invalida.',
+  [GameErrorCode.PERSISTENT_AREA_NOT_FOUND]:
+    'Efeito de area persistente nao encontrado.',
 };
 
 export interface GameEventData {

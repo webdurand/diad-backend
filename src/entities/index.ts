@@ -56,6 +56,7 @@ import { CharacterEntity } from './character.entity';
 import { GameSessionEntity } from './game-session.entity';
 import { EncounterEntity } from './encounter.entity';
 import { EncounterParticipantEntity } from './encounter-participant.entity';
+import { PersistentAreaEffectEntity } from './persistent-area-effect.entity';
 import { GameEventEntity } from './game-event.entity';
 import { CampaignEntity } from './campaign.entity';
 import { CampaignPlayerEntity } from './campaign-player.entity';
@@ -137,6 +138,7 @@ export {
   GameSessionEntity,
   EncounterEntity,
   EncounterParticipantEntity,
+  PersistentAreaEffectEntity,
   GameEventEntity,
   CampaignEntity,
   CampaignPlayerEntity,
@@ -219,6 +221,7 @@ export const ENTITIES = [
   GameSessionEntity,
   EncounterEntity,
   EncounterParticipantEntity,
+  PersistentAreaEffectEntity,
   GameEventEntity,
   CampaignEntity,
   CampaignPlayerEntity,

@@ -4,6 +4,7 @@ import {
   GameSessionEntity,
   EncounterEntity,
   EncounterParticipantEntity,
+  PersistentAreaEffectEntity,
   GameEventEntity,
   MonsterEntity,
   CharacterEntity,
@@ -36,6 +37,16 @@ import { AiTurnService } from './services/ai-turn.service';
 import { AiTurnExecutor } from './services/ai-turn-executor.interface';
 import { MockAiTurnExecutor } from './services/mock-ai-turn.executor';
 import { RemoteAgentExecutor } from './services/remote-agent.executor';
+// Spec 004 — completude RAW
+import { ConcentrationService } from './services/concentration.service';
+import { ConditionLifecycleService } from './services/condition-lifecycle.service';
+import { DamageResistanceService } from './services/damage-resistance.service';
+import { ExhaustionService } from './services/exhaustion.service';
+import { LegendaryActionService } from './services/legendary-action.service';
+import { LairActionService } from './services/lair-action.service';
+import { PersistentAreaService } from './services/persistent-area.service';
+import { GrappleEscapeService } from './services/grapple-escape.service';
+import { StartTurnOrchestratorService } from './services/start-turn-orchestrator.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -46,6 +57,7 @@ import { WorldModule } from '../world/world.module';
       GameSessionEntity,
       EncounterEntity,
       EncounterParticipantEntity,
+      PersistentAreaEffectEntity,
       GameEventEntity,
       MonsterEntity,
       CharacterEntity,
@@ -91,6 +103,16 @@ import { WorldModule } from '../world/world.module';
     MockAiTurnExecutor,
     RemoteAgentExecutor,
     CloudinaryService,
+    // Spec 004
+    ConcentrationService,
+    ConditionLifecycleService,
+    DamageResistanceService,
+    ExhaustionService,
+    LegendaryActionService,
+    LairActionService,
+    PersistentAreaService,
+    GrappleEscapeService,
+    StartTurnOrchestratorService,
   ],
   exports: [
     DiceService,
@@ -110,6 +132,16 @@ import { WorldModule } from '../world/world.module';
     GenericActionsService,
     EncounterSnapshotService,
     AiTurnService,
+    // Spec 004 — exportados para uso por hooks externos (combat, spell-casting)
+    ConcentrationService,
+    ConditionLifecycleService,
+    DamageResistanceService,
+    ExhaustionService,
+    LegendaryActionService,
+    LairActionService,
+    PersistentAreaService,
+    GrappleEscapeService,
+    StartTurnOrchestratorService,
   ],
 })
 export class GameEngineModule {}
