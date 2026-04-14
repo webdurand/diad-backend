@@ -233,6 +233,9 @@ export class EncounterService {
         conditions: [],
         isDefeated: false,
         faction: 'enemy',
+        // Spec 003 FR-018 — monstros default 'dm' (backfill da migration só
+        // pega rows existentes; novos precisam explícito).
+        controlledBy: 'dm',
       });
       participants.push(participant);
     }
