@@ -8,7 +8,9 @@ Todos os endpoints `/game/encounters/...` retornam envelope padronizado em caso 
 
 Os códigos canônicos estão em [`src/models/game-engine/interfaces/result.type.ts`](../src/models/game-engine/interfaces/result.type.ts) (enum `GameErrorCode`).
 
-Referência completa, incluindo descrição semântica de cada código e HTTP status associado, está em [`diad-meta/specs/002-encounter-correctness/contracts/error-codes-catalog.md`](../../diad-meta/specs/002-encounter-correctness/contracts/error-codes-catalog.md).
+Referência completa, incluindo descrição semântica de cada código e HTTP status associado:
+- Base: [`diad-meta/specs/002-encounter-correctness/contracts/error-codes-catalog.md`](../../diad-meta/specs/002-encounter-correctness/contracts/error-codes-catalog.md)
+- Adições spec 003 (IA + ações genéricas): `NOT_AI_CONTROLLED`, `AI_UNAVAILABLE`, `AI_TIMEOUT`, `NOT_DODGING`, `NOT_HIDDEN`, `INVALID_READY_TRIGGER`, `ITEM_NOT_USABLE`, `CONTROL_CHANGE_FORBIDDEN` — ver [`diad-meta/specs/003-encounter-parity-and-ai-hooks/data-model.md`](../../diad-meta/specs/003-encounter-parity-and-ai-hooks/data-model.md#gameerrorcode-enum-existente--adições).
 
 ## Regras
 

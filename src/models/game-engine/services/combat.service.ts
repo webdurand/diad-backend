@@ -467,11 +467,23 @@ export class CombatService {
       }
     }
 
+    // Spec 003 T034 — as 8 ações genéricas PHB aparecem em qualquer participant.
+    const genericActions: TurnActionBlock[] = [
+      this.makeGenericAction('dodge', 'Esquivar'),
+      this.makeGenericAction('dash', 'Disparada'),
+      this.makeGenericAction('disengage', 'Desengajar'),
+      this.makeGenericAction('help', 'Ajudar'),
+      this.makeGenericAction('hide', 'Esconder'),
+      this.makeGenericAction('ready', 'Preparar'),
+      this.makeGenericAction('search', 'Procurar'),
+      this.makeGenericAction('use-object', 'Usar Objeto'),
+    ];
+
     return success({
       participantId: participant.id,
       participantName: participant.displayName,
       participantType: participant.type as 'pc' | 'monster' | 'npc',
-      actions,
+      actions: [...actions, ...genericActions],
       bonusActions,
       reactions,
       canMove: (participant.movementRemaining ?? speed) > 0,
@@ -482,6 +494,30 @@ export class CombatService {
       hasDisengaged: participant.hasDisengaged,
       hasDashed: participant.hasDashed,
     });
+  }
+
+  /** Monta um TurnActionBlock para uma das 8 ações genéricas PHB (spec 003 T034). */
+  private makeGenericAction(
+    genericKind:
+      | 'dodge'
+      | 'dash'
+      | 'disengage'
+      | 'help'
+      | 'hide'
+      | 'ready'
+      | 'search'
+      | 'use-object',
+    label: string,
+  ): TurnActionBlock {
+    return {
+      id: `generic-${genericKind}`,
+      name: label,
+      timing: 'action',
+      source: 'generic',
+      sourceLabel: 'Ação PHB',
+      description: `Ação genérica: ${label}`,
+      kind: 'attack',
+    } as unknown as TurnActionBlock;
   }
 
   private toTurnActionBlock(a: any): TurnActionBlock {
@@ -599,6 +635,45 @@ export class CombatService {
         data: { round: encounter.currentRound },
       },
     ];
+
+    // Spec 003 T013: limpa estados reativos que expiram no início do próximo
+    // turno do próprio ator (Dodge, Help armado, Ready não disparado).
+    const currentParticipant = await this.participantRepo.findOne({
+      where: { id: currentParticipantId },
+    });
+    if (currentParticipant) {
+      const expired: string[] = [];
+      if (
+        currentParticipant.dodgingUntilTurnOfParticipantId ===
+        currentParticipant.id
+      ) {
+        currentParticipant.dodgingUntilTurnOfParticipantId = null;
+        expired.push('dodge');
+      }
+      if (
+        currentParticipant.helpingUntilTurnOfParticipantId ===
+        currentParticipant.id
+      ) {
+        currentParticipant.helpingAllyParticipantId = null;
+        currentParticipant.helpingTargetParticipantId = null;
+        currentParticipant.helpingUntilTurnOfParticipantId = null;
+        expired.push('help');
+      }
+      if (currentParticipant.readiedAction) {
+        currentParticipant.readiedAction = null;
+        expired.push('ready');
+      }
+      if (expired.length > 0) {
+        await this.participantRepo.save(currentParticipant);
+        for (const state of expired) {
+          events.push({
+            event_type: 'state_expired',
+            actor_participant_id: currentParticipantId,
+            data: { state, round: encounter.currentRound },
+          });
+        }
+      }
+    }
 
     let nextIndex = encounter.currentTurnIndex + 1;
     let newRound = encounter.currentRound;
@@ -809,13 +884,50 @@ export class CombatService {
       target.conditions,
     );
 
+    // Spec 003 T032 — estados reativos (Dodge, Help, Hidden) lidos dos campos
+    // da entity (não apenas de `conditions[]`). Help vive no AJUDANTE, não no
+    // atacante — buscamos o helper cujo `helpingAllyParticipantId` aponta pro
+    // atacante E `helpingTargetParticipantId` pro alvo atual.
+    const activeHelper = await this.participantRepo.findOne({
+      where: {
+        encounterId: encounter.id,
+        helpingAllyParticipantId: attacker.id,
+        helpingTargetParticipantId: target.id,
+      },
+    });
+    const helpingState = activeHelper
+      ? {
+          allyParticipantId: attacker.id,
+          targetParticipantId: target.id,
+          expiresAtNextTurnOfParticipantId:
+            activeHelper.helpingUntilTurnOfParticipantId ?? activeHelper.id,
+        }
+      : undefined;
+    const reactive = this.conditionEffects.getReactiveAttackModifiers(
+      {
+        id: attacker.id,
+        conditions: attacker.conditions ?? [],
+        dodgingUntilTurnOfParticipantId:
+          attacker.dodgingUntilTurnOfParticipantId,
+      },
+      {
+        id: target.id,
+        conditions: target.conditions ?? [],
+        dodgingUntilTurnOfParticipantId:
+          target.dodgingUntilTurnOfParticipantId,
+      },
+      helpingState ? { helpingAgainst: helpingState } : undefined,
+    );
+
     let hasAdvantage =
       attackerMods.hasAdvantage ||
       defenderMods.attacksHaveAdvantage ||
+      reactive.advantage ||
       (dto.forceAdvantage ?? false);
     let hasDisadvantage =
       attackerMods.hasDisadvantage ||
       defenderMods.attacksHaveDisadvantage ||
+      reactive.disadvantage ||
       (dto.forceDisadvantage ?? false);
 
     // Advantage and disadvantage cancel out
@@ -959,16 +1071,54 @@ export class CombatService {
       // Apply damage
       if (target.type === 'pc' && target.characterId) {
         const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
-        const hpResult = await this.stateService.updateHp(
-          targetOwnerId,
-          target.characterId,
-          { damage: finalDamage },
-        );
-        targetHpAfter = hpResult.currentHp;
-        targetDefeated = hpResult.isDown;
-        if (targetDefeated) {
-          target.isDefeated = true;
-          await this.participantRepo.save(target);
+        const wasDying = target.dyingState === 'dying';
+        if (wasDying) {
+          // RAW: damage to a dying PC is a death-save failure (2 on crit).
+          const failuresDelta = isCritical ? 2 : 1;
+          const ds = await this.stateService.updateDeathSaves(
+            targetOwnerId,
+            target.characterId,
+            { failuresDelta },
+          );
+          targetHpAfter = 0;
+          if (ds.dead) {
+            target.dyingState = 'dead';
+            target.isDefeated = true;
+            targetDefeated = true;
+            await this.participantRepo.save(target);
+          }
+          events.push({
+            event_type: 'death_save_failed_from_damage',
+            target_participant_id: target.id,
+            data: { failuresAdded: failuresDelta, failures: ds.failures, dyingState: target.dyingState },
+          });
+        } else {
+          const hpResult = await this.stateService.updateHp(
+            targetOwnerId,
+            target.characterId,
+            { damage: finalDamage },
+          );
+          targetHpAfter = hpResult.currentHp;
+          targetDefeated = hpResult.isDown;
+          if (hpResult.instantDeath) {
+            target.dyingState = 'dead';
+            target.isDefeated = true;
+            await this.participantRepo.save(target);
+            events.push({
+              event_type: 'instant_death',
+              target_participant_id: target.id,
+              data: { dyingState: 'dead' },
+            });
+          } else if (targetDefeated) {
+            target.dyingState = 'dying';
+            target.isDefeated = false;
+            await this.participantRepo.save(target);
+            events.push({
+              event_type: 'fell_unconscious',
+              target_participant_id: target.id,
+              data: { dyingState: 'dying' },
+            });
+          }
         }
       } else {
         // Monster: apply directly
@@ -1004,6 +1154,36 @@ export class CombatService {
 
     if (!dto._isSubAttack) {
       attacker.actionUsed = true;
+
+      // Spec 003 T032 — ataque remove Hidden do atacante (RAW PHB cap. 9).
+      if (attacker.conditions?.includes('hidden')) {
+        attacker.conditions = attacker.conditions.filter(
+          (c) => c !== 'hidden',
+        );
+        events.push({
+          event_type: 'condition_removed',
+          actor_participant_id: attacker.id,
+          data: { condition: 'hidden', reason: 'attacked' },
+        });
+      }
+
+      // Spec 003 T032 — consome Help (limpa a tríade no ajudante) se
+      // o ataque foi contra o alvo escolhido.
+      if (reactive.consumedHelp && activeHelper) {
+        activeHelper.helpingAllyParticipantId = null;
+        activeHelper.helpingTargetParticipantId = null;
+        activeHelper.helpingUntilTurnOfParticipantId = null;
+        await this.participantRepo.save(activeHelper);
+        events.push({
+          event_type: 'help_consumed',
+          actor_participant_id: activeHelper.id,
+          data: {
+            allyParticipantId: attacker.id,
+            targetParticipantId: target.id,
+          },
+        });
+      }
+
       await this.participantRepo.save(attacker);
 
       await this.eventService.emit(
@@ -1416,7 +1596,7 @@ export class CombatService {
     }
 
     if (participant.dyingState !== 'dying') {
-      return failure('NOT_DYING' as any, 'NOT_DYING');
+      return failure('NOT_DYING');
     }
 
     const roll = this.diceService.roll(20);

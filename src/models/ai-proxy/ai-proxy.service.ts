@@ -117,4 +117,51 @@ export class AiProxyService {
 
     return response.json() as Promise<T>;
   }
+
+  /**
+   * Spec 003 T046 — chama `POST /monsters/decide` em `diad-agents` para que o
+   * motor de IA (rule-based/medium/LLM conforme INT+WIS do monstro) retorne o
+   * plano do turno. O `RemoteAgentExecutor` envolve este método.
+   */
+  async decideMonsterTurn(payload: {
+    snapshot: unknown;
+    participantId: string;
+    continuationFrom?: number | null;
+  }): Promise<MonsterDecideResponse> {
+    const serviceKey =
+      this.configService.get<string>('DIAD_SERVICE_KEY') ?? 'diad-internal-dev';
+
+    const controller = new AbortController();
+    const timeoutMs = Number(
+      this.configService.get<string>('AI_TURN_TIMEOUT_MS') ?? '30000',
+    );
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(`${this.agentBaseUrl}/monsters/decide`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-Key': serviceKey,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`diad-agents responded ${response.status}: ${text}`);
+      }
+      return (await response.json()) as MonsterDecideResponse;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+}
+
+export interface MonsterDecideResponse {
+  steps: unknown[];
+  rationale?: string;
+  llmCostUsd?: number;
+  tookMs?: number;
+  decisionMode?: 'rule-based' | 'medium-heuristic' | 'llm';
 }

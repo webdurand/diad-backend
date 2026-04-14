@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
@@ -804,5 +804,75 @@ export class EncounterService {
     });
     if (!p) throw new NotFoundException('Participante nao encontrado.');
     return p;
+  }
+
+  /**
+   * Spec 003 T062 — DM altera `controlledBy` do participante.
+   * Apenas DM da sessão tem permissão (CONTROL_CHANGE_FORBIDDEN).
+   * Retorna {previousMode, newMode, effectiveFrom} para o frontend decidir
+   * quando a mudança vale (imediato vs próximo turno).
+   */
+  async updateControlMode(
+    encounterId: string,
+    participantId: string,
+    mode: 'human' | 'ai' | 'dm',
+    authUserId: string,
+  ): Promise<{
+    participantId: string;
+    previousMode: 'human' | 'ai' | 'dm';
+    newMode: 'human' | 'ai' | 'dm';
+    effectiveFrom: 'immediate' | 'next_turn_of_participant';
+  }> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter) throw new NotFoundException('Encontro nao encontrado.');
+
+    // Permissão: DM da sessão
+    const session = await this.sessionService.getById(encounter.sessionId);
+    if (!session) throw new NotFoundException('Sessao nao encontrada.');
+    if (session.ownerId !== authUserId) {
+      throw new ForbiddenException(
+        'Apenas o DM da sessao pode alterar o controle de um participante.',
+      );
+    }
+
+    const participant = await this.getParticipant(participantId);
+    const previousMode = participant.controlledBy ?? 'human';
+
+    if (previousMode === mode) {
+      return {
+        participantId,
+        previousMode,
+        newMode: mode,
+        effectiveFrom: 'immediate',
+      };
+    }
+
+    const isActiveTurn =
+      encounter.turnOrder[encounter.currentTurnIndex] === participant.id;
+    participant.controlledBy = mode;
+    await this.participantRepo.save(participant);
+
+    await this.eventService.emit(encounter.sessionId, encounter.id, [
+      {
+        event_type: 'control_changed',
+        actor_participant_id: participant.id,
+        data: {
+          previousMode,
+          newMode: mode,
+          actorUserId: authUserId,
+        },
+      },
+    ]);
+
+    return {
+      participantId,
+      previousMode,
+      newMode: mode,
+      effectiveFrom: isActiveTurn
+        ? 'next_turn_of_participant'
+        : 'immediate',
+    };
   }
 }

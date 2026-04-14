@@ -37,6 +37,11 @@ import { SavingThrowService } from './services/saving-throw.service';
 import type { SavingThrowDto } from './services/saving-throw.service';
 import { PermissionResolver } from './services/permission-resolver.service';
 import { DeathSaveDto } from './dto/death-save.dto';
+import { GenericActionDto } from './dto/generic-action.dto';
+import { GenericActionsService } from './services/generic-actions.service';
+import { AiTurnService } from './services/ai-turn.service';
+import { EncounterSnapshotService } from './services/encounter-snapshot.service';
+import { UpdateControlDto } from './dto/update-control.dto';
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -66,6 +71,9 @@ export class GameEngineController {
     private readonly skillCheckService: SkillCheckService,
     private readonly savingThrowService: SavingThrowService,
     private readonly permissionResolver: PermissionResolver,
+    private readonly genericActionsService: GenericActionsService,
+    private readonly aiTurnService: AiTurnService,
+    private readonly snapshotService: EncounterSnapshotService,
   ) {}
 
   // ==================== SESSIONS ====================
@@ -413,6 +421,67 @@ export class GameEngineController {
   @Post('encounters/:id/end-turn')
   async endTurn(@Param('id') id: string) {
     return this.combatService.endTurn(id);
+  }
+
+  // ==================== CONTROL TOGGLE (SPEC 003 US4) ====================
+
+  @Patch('encounters/:id/participants/:participantId/control')
+  async updateControlMode(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+    @Body() dto: UpdateControlDto,
+  ) {
+    const authUserId = getUserId(req);
+    return this.encounterService.updateControlMode(
+      id,
+      participantId,
+      dto.mode,
+      authUserId,
+    );
+  }
+
+  // ==================== AI TURN + SNAPSHOT (SPEC 003 US3) ====================
+
+  @Post('encounters/:id/ai-turn')
+  async executeAiTurn(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: { participantId: string },
+  ) {
+    const authUserId = getUserId(req);
+    return this.aiTurnService.executeAiTurn(
+      id,
+      body.participantId,
+      authUserId,
+    );
+  }
+
+  @Get('encounters/:id/snapshot')
+  async getEncounterSnapshot(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
+    const authUserId = getUserId(req);
+    return this.snapshotService.build(id, authUserId);
+  }
+
+  // ==================== GENERIC ACTIONS (SPEC 003 US2) ====================
+
+  @Post('encounters/:id/generic-action')
+  async executeGenericAction(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: GenericActionDto,
+  ) {
+    const authUserId = getUserId(req);
+    // Valida permissão: dono do PC ou DM da sessão
+    await this.permissionResolver.resolveMutationOwner(
+      dto.participantId,
+      authUserId,
+      id,
+    );
+    return this.genericActionsService.execute(id, dto);
   }
 
   @Post('encounters/:id/death-save/:participantId')

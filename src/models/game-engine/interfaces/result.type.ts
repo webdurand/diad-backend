@@ -66,6 +66,16 @@ export enum GameErrorCode {
   POSITION_OUT_OF_BOUNDS = 'POSITION_OUT_OF_BOUNDS',
   POSITION_OCCUPIED = 'POSITION_OCCUPIED',
   OUT_OF_MOVEMENT = 'OUT_OF_MOVEMENT',
+
+  // Spec 003: IA e ações genéricas
+  NOT_AI_CONTROLLED = 'NOT_AI_CONTROLLED',
+  AI_UNAVAILABLE = 'AI_UNAVAILABLE',
+  AI_TIMEOUT = 'AI_TIMEOUT',
+  NOT_DODGING = 'NOT_DODGING',
+  NOT_HIDDEN = 'NOT_HIDDEN',
+  INVALID_READY_TRIGGER = 'INVALID_READY_TRIGGER',
+  ITEM_NOT_USABLE = 'ITEM_NOT_USABLE',
+  CONTROL_CHANGE_FORBIDDEN = 'CONTROL_CHANGE_FORBIDDEN',
 }
 
 /**
@@ -109,6 +119,20 @@ export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
   [GameErrorCode.POSITION_OUT_OF_BOUNDS]: 'Posicao fora dos limites do mapa.',
   [GameErrorCode.POSITION_OCCUPIED]: 'Posicao ja esta ocupada.',
   [GameErrorCode.OUT_OF_MOVEMENT]: 'Movimento insuficiente.',
+
+  [GameErrorCode.NOT_AI_CONTROLLED]:
+    'Este participante nao esta sob controle de IA.',
+  [GameErrorCode.AI_UNAVAILABLE]:
+    'O servico de IA esta indisponivel no momento.',
+  [GameErrorCode.AI_TIMEOUT]:
+    'A IA excedeu o tempo limite para decidir o turno.',
+  [GameErrorCode.NOT_DODGING]: 'Este participante nao esta esquivando.',
+  [GameErrorCode.NOT_HIDDEN]: 'Este participante nao esta escondido.',
+  [GameErrorCode.INVALID_READY_TRIGGER]:
+    'O gatilho da acao preparada e invalido.',
+  [GameErrorCode.ITEM_NOT_USABLE]: 'Este item nao pode ser usado em combate.',
+  [GameErrorCode.CONTROL_CHANGE_FORBIDDEN]:
+    'Apenas o DM da sessao pode alterar o controle de um participante.',
 };
 
 export interface GameEventData {

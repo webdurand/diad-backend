@@ -10,6 +10,10 @@ import { EncounterEntity } from './encounter.entity';
 import { CharacterEntity } from './character.entity';
 import { MonsterEntity } from './monster.entity';
 import type { ParticipantSpellSlotsUsed } from '../models/game-engine/interfaces/monster-typed';
+import type {
+  ReadiedAction,
+  TurnExecutionResult,
+} from '../models/game-engine/interfaces/combat.interfaces';
 
 @Entity('encounter_participants')
 export class EncounterParticipantEntity {
@@ -135,4 +139,63 @@ export class EncounterParticipantEntity {
 
   @Column({ type: 'varchar', default: 'enemy' })
   faction: 'ally' | 'enemy' | 'neutral';
+
+  // --- Spec 003: controle (human/ai/dm) + estados de ações genéricas ---
+  // Ver migration 1775000000000-AddControlAndReactionsToParticipant.
+
+  /** Quem executa o turno deste participante: dono do PC (human), IA externa, ou DM. */
+  @Column({
+    name: 'controlled_by',
+    type: 'varchar',
+    length: 8,
+    default: 'human',
+  })
+  controlledBy: 'human' | 'ai' | 'dm';
+
+  /** Dodge — id do próprio ator; expira no início do seu próximo turno. */
+  @Column({
+    name: 'dodging_until_turn_of_participant_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  dodgingUntilTurnOfParticipantId: string | null;
+
+  /** Help — aliado que recebe vantagem no próximo ataque contra o alvo escolhido. */
+  @Column({
+    name: 'helping_ally_participant_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  helpingAllyParticipantId: string | null;
+
+  @Column({
+    name: 'helping_target_participant_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  helpingTargetParticipantId: string | null;
+
+  /** Ajuda expira no início do próximo turno do ajudante (este participante). */
+  @Column({
+    name: 'helping_until_turn_of_participant_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  helpingUntilTurnOfParticipantId: string | null;
+
+  /** Ready — gatilho + ação armada. Consome reação quando dispara. */
+  @Column({ name: 'readied_action', type: 'jsonb', nullable: true })
+  readiedAction: ReadiedAction | null;
+
+  /** Idempotência do `/ai-turn` — round em que IA rodou pela última vez. */
+  @Column({ name: 'last_ai_turn_round', type: 'int', nullable: true })
+  lastAiTurnRound: number | null;
+
+  /** Idempotência do `/ai-turn` — resposta cacheada do último run no round. */
+  @Column({ name: 'last_ai_turn_result', type: 'jsonb', nullable: true })
+  lastAiTurnResult: TurnExecutionResult | null;
 }

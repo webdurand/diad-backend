@@ -169,3 +169,82 @@ export interface TurnActionsResult {
   hasDisengaged: boolean;
   hasDashed: boolean;
 }
+
+// ============================================================================
+// Spec 003 — ações genéricas, estados de reação e orquestração de turno IA
+// ============================================================================
+
+/** Gatilho de Ready (PHB cap. 9). Spec 003 cobre apenas os 2 enums pré-definidos;
+ * gatilhos textuais livres ("custom") ficam pra spec futura. */
+export type ReadyTrigger =
+  | { kind: 'enemy_enters_range'; rangeFt: number }
+  | { kind: 'enemy_attacks_ally'; allyParticipantId: string };
+
+/** Ação armada via Ready; dispara quando o gatilho ocorre, consumindo a reação. */
+export interface ReadiedAction {
+  trigger: ReadyTrigger;
+  actionDescriptor: PlannedActionStep;
+  armedAtTurnOfParticipantId: string;
+}
+
+/** Efeito ativo de Help — o próximo ataque de `allyParticipantId` contra
+ * `targetParticipantId` tem vantagem, até o próximo turno do ajudante. */
+export interface HelpingState {
+  allyParticipantId: string;
+  targetParticipantId: string;
+  expiresAtNextTurnOfParticipantId: string;
+}
+
+/** Discriminated union — planos emitidos pelo `AiTurnExecutor` antes da execução. */
+export type PlannedActionStep =
+  | { kind: 'move'; to: { x: number; y: number } }
+  | { kind: 'attack'; actionName: string; targetParticipantIds: string[] }
+  | {
+      kind: 'cast-spell';
+      spellSlug: string;
+      slotLevel?: number;
+      targetParticipantIds?: string[];
+      point?: { x: number; y: number };
+    }
+  | { kind: 'dodge' }
+  | { kind: 'dash' }
+  | { kind: 'disengage' }
+  | { kind: 'help'; allyParticipantId: string; targetParticipantId: string }
+  | { kind: 'hide' }
+  | { kind: 'ready'; trigger: ReadyTrigger; readiedAction: PlannedActionStep }
+  | { kind: 'search'; ability: 'perception' | 'investigation' }
+  | {
+      kind: 'use-object';
+      objectRef: { source: 'inventory' | 'environment'; slug: string };
+    }
+  | { kind: 'end-turn' };
+
+/** Resultado de um step executado, com descritor do evento gerado. */
+export interface ActionStep {
+  kind: PlannedActionStep['kind'];
+  payload: Record<string, unknown>;
+  result: {
+    ok: boolean;
+    summary: string;
+    events: Array<{ type: string; [k: string]: unknown }>;
+    error?: { code: string; message: string };
+  };
+  timestamp: string;
+}
+
+/** Resposta completa de `POST /ai-turn` após aplicar todos os steps. */
+export interface TurnExecutionResult {
+  steps: ActionStep[];
+  finalState: {
+    actionUsed: boolean;
+    bonusUsed: boolean;
+    movementRemaining: number;
+    reactionUsed: boolean;
+    hp: { current: number; max: number };
+    conditions: string[];
+    dyingState: 'none' | 'dying' | 'stable' | 'dead';
+  };
+  llmCostUsd?: number;
+  tookMs: number;
+  rationale?: string;
+}
