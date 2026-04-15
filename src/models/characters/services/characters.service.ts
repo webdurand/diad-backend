@@ -81,20 +81,47 @@ interface CreateCharacterInput {
   userId: string;
   name: string;
   data: Record<string, unknown>;
+  choices?: Record<string, unknown>;
 }
 
 interface UpdateCharacterInput {
   name?: string;
 }
 
-const SLUG_MAP: Record<string, string> = {
+const ABILITY_SLUGS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
+type AbilitySlug = (typeof ABILITY_SLUGS)[number];
+
+// Aceita tanto slugs longos (strength/dexterity/...) quanto curtos (str/dex/...).
+const SLUG_MAP: Record<string, AbilitySlug> = {
   strength: 'str',
   dexterity: 'dex',
   constitution: 'con',
   intelligence: 'int',
   wisdom: 'wis',
   charisma: 'cha',
+  str: 'str',
+  dex: 'dex',
+  con: 'con',
+  int: 'int',
+  wis: 'wis',
+  cha: 'cha',
 };
+
+function normalizeAbilityScores(
+  raw: Record<string, unknown> | undefined,
+): Record<AbilitySlug, number> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Partial<Record<AbilitySlug, number>> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const slug = SLUG_MAP[key.toLowerCase()];
+    if (!slug) continue;
+    if (typeof value !== 'number' || !Number.isInteger(value)) continue;
+    out[slug] = value;
+  }
+  return Object.keys(out).length > 0
+    ? (out as Record<AbilitySlug, number>)
+    : undefined;
+}
 
 @Injectable()
 export class CharactersService {
@@ -160,7 +187,47 @@ export class CharactersService {
       throw new BadRequestException('Nome do personagem e obrigatorio.');
     }
 
-    const choices = input.data as unknown as CharacterChoicesData;
+    // Normaliza input: aceita abilityScores e equipment choices em data ou choices.
+    // Quando ambos presentes, choices vence (shape canônico interno).
+    const rawData = (input.data ?? {}) as Record<string, unknown>;
+    const rawChoices = (input.choices ?? {}) as Record<string, unknown>;
+    const merged: Record<string, unknown> = { ...rawData, ...rawChoices };
+    const normalizedAbilities = normalizeAbilityScores(
+      (rawChoices.abilityScores as Record<string, unknown>) ??
+        (rawData.abilityScores as Record<string, unknown>),
+    );
+    if (normalizedAbilities) {
+      merged.abilityScores = normalizedAbilities;
+    }
+    const choices = merged as unknown as CharacterChoicesData;
+
+    // Validação dura: ability scores são obrigatórios e completos (6 abilities).
+    if (!choices.abilityScores) {
+      throw new BadRequestException({
+        ok: false,
+        code: 'MISSING_ABILITY_SCORES',
+        error: 'Pontuações de habilidade são obrigatórias.',
+        expectedShape: {
+          str: 'integer 1-30',
+          dex: 'integer 1-30',
+          con: 'integer 1-30',
+          int: 'integer 1-30',
+          wis: 'integer 1-30',
+          cha: 'integer 1-30',
+        },
+      });
+    }
+    const missingAbilities = ABILITY_SLUGS.filter(
+      (slug) => !(slug in choices.abilityScores!),
+    );
+    if (missingAbilities.length > 0) {
+      throw new BadRequestException({
+        ok: false,
+        code: 'INCOMPLETE_ABILITY_SCORES',
+        error: `Pontuações de habilidade incompletas: faltam ${missingAbilities.join(', ')}.`,
+        missing: missingAbilities,
+      });
+    }
 
     return this.dataSource.transaction(async (manager) => {
       // Resolve source
@@ -347,7 +414,7 @@ export class CharactersService {
       }
 
       // character_state
-      const conScore = choices.abilityScores?.constitution ?? 10;
+      const conScore = choices.abilityScores?.con ?? 10;
       const conBonus =
         bgBonuses.find((b) => b.abilityScoreIndex === 'con')?.bonus ?? 0;
       const conMod = getAbilityModifier(conScore + conBonus);
