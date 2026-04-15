@@ -50,6 +50,7 @@ import { PersistentAreaService } from './services/persistent-area.service';
 import { GrappleEscapeService } from './services/grapple-escape.service';
 import { StartTurnOrchestratorService } from './services/start-turn-orchestrator.service';
 import { EffectInstanceService } from './services/effect-instance.service';
+import { ClassFeatureResolverService } from './services/class-feature-resolver.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -129,6 +130,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     GrappleEscapeService,
     StartTurnOrchestratorService,
     EffectInstanceService,
+    ClassFeatureResolverService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -164,6 +166,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     GrappleEscapeService,
     StartTurnOrchestratorService,
     EffectInstanceService,
+    ClassFeatureResolverService,
     // Spec 002
     JoinRequestService,
   ],

@@ -20,6 +20,7 @@ import {
   type FeatureSpec,
 } from './action-resolvers/class-feature-catalog';
 import { GenericActionsService } from './generic-actions.service';
+import { ClassFeatureResolverService } from './class-feature-resolver.service';
 
 /**
  * Spec 003 Fatia 7/8 — executor de class features ativáveis.
@@ -44,6 +45,7 @@ export class ClassFeatureExecutorService {
     private readonly stateService: CharacterStateService,
     private readonly diceService: DiceService,
     private readonly genericActionsService: GenericActionsService,
+    private readonly classFeatureResolver: ClassFeatureResolverService,
   ) {}
 
   /**
@@ -510,15 +512,55 @@ export class ClassFeatureExecutorService {
     };
     await this.eventService.emit(encounter.sessionId, encounter.id, [event]);
 
+    // Spec 004 — consumer resolve o efeito mecanico imediatamente
+    // (rage aplica effects, turn-undead rola saves, etc).
+    const resolution = await this.classFeatureResolver.resolveInvocation(
+      participant.id,
+      {
+        featureSlug: spec.slug,
+        actionCost: spec.actionCost,
+        targets,
+        options: this.extractOptions(body),
+        saveDc,
+        saveAbility: this.saveAbilityForFeature(spec.slug) as any,
+        caster: {
+          abilityMods,
+          profBonus: sheet.proficiencyBonus ?? 2,
+          classSlug: spec.classSlug,
+          classLevel: this.getClassLevel(sheet, spec.classSlug),
+        },
+      },
+    );
+    if (resolution.resolved && resolution.events.length > 0) {
+      await this.eventService.emit(
+        encounter.sessionId,
+        encounter.id,
+        resolution.events,
+      );
+    }
+
     return success(
       {
         featureSlug: spec.slug,
-        deferred: true,
+        deferred: !resolution.resolved,
+        resolved: resolution.resolved,
         saveDc,
-        status: 'emitted_pending_resolution',
+        status: resolution.resolved
+          ? 'resolved'
+          : 'emitted_pending_resolution',
+        resolutionPayload: resolution.resolutionPayload,
       },
-      [event],
+      [event, ...resolution.events],
     );
+  }
+
+  /** Extrai classLevel para a classe owner da feature (ex: barbarian 3). */
+  private getClassLevel(sheet: any, classSlug?: string): number {
+    if (!classSlug || !sheet?.classes) return 1;
+    const cls = sheet.classes.find(
+      (c: any) => (c.slug ?? c.name ?? '').toLowerCase().startsWith(classSlug.toLowerCase()),
+    );
+    return cls?.level ?? 1;
   }
 
   // ---- helpers ----

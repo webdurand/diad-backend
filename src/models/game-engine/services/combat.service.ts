@@ -36,6 +36,7 @@ import { CombatActionRegistry } from './combat-action-registry.service';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { EffectInstanceService } from './effect-instance.service';
 import { ConcentrationService } from './concentration.service';
+import { ClassFeatureResolverService } from './class-feature-resolver.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 
 // --- DTOs ---
@@ -127,6 +128,7 @@ export class CombatService {
     private readonly conditionLifecycle: ConditionLifecycleService,
     private readonly effectInstances: EffectInstanceService,
     private readonly concentration: ConcentrationService,
+    private readonly classFeatureResolver: ClassFeatureResolverService,
   ) {}
 
   /**
@@ -1235,18 +1237,40 @@ export class CombatService {
           encounterId,
           [event],
         );
+        // Spec 004 — resolver consome o evento imediatamente
+        const resolution = await this.classFeatureResolver.resolveInvocation(
+          attacker.id,
+          {
+            featureSlug: mode,
+            actionCost: 'action',
+            targets: [target.id],
+            saveDc,
+            saveAbility: 'str',
+            options: { mode, outcome: 'pending' },
+            caster: { abilityMods: { str: strMod }, profBonus },
+          },
+        );
+        if (resolution.resolved && resolution.events.length > 0) {
+          await this.eventService.emit(
+            encounter.sessionId,
+            encounterId,
+            resolution.events,
+          );
+        }
         return success(
           {
             attackerParticipantId: attacker.id,
             targetParticipantId: target.id,
             actionSlug: 'unarmed-strike',
             unarmedMode: mode,
-            deferred: true,
+            deferred: !resolution.resolved,
+            resolved: resolution.resolved,
             featureSlug: mode,
             saveDc,
             saveAbility: 'str',
+            resolutionPayload: resolution.resolutionPayload,
           } as unknown as AttackResult,
-          [event],
+          [event, ...resolution.events],
         );
       }
 
