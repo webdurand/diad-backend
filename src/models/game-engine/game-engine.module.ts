@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   GameSessionEntity,
   EncounterEntity,
   EncounterParticipantEntity,
+  EncounterJoinRequestEntity,
   PersistentAreaEffectEntity,
   GameEventEntity,
   MonsterEntity,
@@ -13,6 +14,7 @@ import {
   SpellEntity,
   CampaignEntity,
   CampaignPlayerEntity,
+  UserEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CharactersModule } from '../characters/characters.module';
@@ -50,6 +52,11 @@ import { StartTurnOrchestratorService } from './services/start-turn-orchestrator
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
+// Spec 002 — realtime + join-request loop
+import { RealtimeModule } from 'src/realtime/realtime.module';
+import { RoomAuthorizerRegistry } from 'src/realtime/room-authorizer.registry';
+import { EncounterRoomAuthorizer } from './authorizers/encounter-room.authorizer';
+import { JoinRequestService } from './services/join-request.service';
 
 @Module({
   imports: [
@@ -57,6 +64,7 @@ import { WorldModule } from '../world/world.module';
       GameSessionEntity,
       EncounterEntity,
       EncounterParticipantEntity,
+      EncounterJoinRequestEntity,
       PersistentAreaEffectEntity,
       GameEventEntity,
       MonsterEntity,
@@ -66,11 +74,13 @@ import { WorldModule } from '../world/world.module';
       SpellEntity,
       CampaignEntity,
       CampaignPlayerEntity,
+      UserEntity,
     ]),
     AuthModule,
     CharactersModule,
     WorldModule,
     AiProxyModule,
+    RealtimeModule,
   ],
   controllers: [GameEngineController],
   providers: [
@@ -113,6 +123,9 @@ import { WorldModule } from '../world/world.module';
     PersistentAreaService,
     GrappleEscapeService,
     StartTurnOrchestratorService,
+    // Spec 002
+    JoinRequestService,
+    EncounterRoomAuthorizer,
   ],
   exports: [
     DiceService,
@@ -142,6 +155,19 @@ import { WorldModule } from '../world/world.module';
     PersistentAreaService,
     GrappleEscapeService,
     StartTurnOrchestratorService,
+    // Spec 002
+    JoinRequestService,
   ],
 })
-export class GameEngineModule {}
+export class GameEngineModule implements OnModuleInit {
+  constructor(
+    private readonly authorizerRegistry: RoomAuthorizerRegistry,
+    private readonly encounterAuthorizer: EncounterRoomAuthorizer,
+  ) {}
+
+  onModuleInit(): void {
+    // Imperative registration: NestJS multi-providers don't cross module
+    // boundaries, so each domain module registers its authorizers at init.
+    this.authorizerRegistry.register(this.encounterAuthorizer);
+  }
+}

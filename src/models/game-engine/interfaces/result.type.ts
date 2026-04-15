@@ -27,6 +27,13 @@ export enum GameErrorCode {
   FORBIDDEN = 'FORBIDDEN',
   UNAUTHORIZED = 'UNAUTHORIZED',
 
+  // Spec 002: Encounter DM-led setup
+  FORBIDDEN_CAMPAIGN_MEMBER = 'FORBIDDEN_CAMPAIGN_MEMBER',
+  ENCOUNTER_ALREADY_ACTIVE = 'ENCOUNTER_ALREADY_ACTIVE',
+  ENCOUNTER_COMPLETED = 'ENCOUNTER_COMPLETED',
+  CHARACTER_NOT_FOUND = 'CHARACTER_NOT_FOUND',
+  CHARACTER_ALREADY_IN_ENCOUNTER = 'CHARACTER_ALREADY_IN_ENCOUNTER',
+
   // Encounter lifecycle
   ENCOUNTER_NOT_FOUND = 'ENCOUNTER_NOT_FOUND',
   ENCOUNTER_NOT_ACTIVE = 'ENCOUNTER_NOT_ACTIVE',
@@ -101,6 +108,16 @@ export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
   [GameErrorCode.INVALID_PAYLOAD]: 'Payload invalido.',
   [GameErrorCode.FORBIDDEN]: 'Voce nao tem permissao para esta operacao.',
   [GameErrorCode.UNAUTHORIZED]: 'Sessao ausente.',
+
+  [GameErrorCode.FORBIDDEN_CAMPAIGN_MEMBER]:
+    'Voce nao e um membro autorizado desta campanha.',
+  [GameErrorCode.ENCOUNTER_ALREADY_ACTIVE]:
+    'O combate ja esta em andamento.',
+  [GameErrorCode.ENCOUNTER_COMPLETED]:
+    'Este combate ja foi encerrado.',
+  [GameErrorCode.CHARACTER_NOT_FOUND]: 'Personagem nao encontrado.',
+  [GameErrorCode.CHARACTER_ALREADY_IN_ENCOUNTER]:
+    'Este personagem ja participa deste encontro.',
 
   [GameErrorCode.ENCOUNTER_NOT_FOUND]: 'Encontro nao encontrado.',
   [GameErrorCode.ENCOUNTER_NOT_ACTIVE]: 'Encontro nao esta ativo.',

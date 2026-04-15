@@ -73,6 +73,7 @@ import { QuestPrerequisiteEntity } from './quest-prerequisite.entity';
 import { LootTableEntity } from './loot-table.entity';
 import { LootTableItemEntity } from './loot-table-item.entity';
 import { EncounterTemplateEntity } from './encounter-template.entity';
+import { EncounterJoinRequestEntity } from './encounter-join-request.entity';
 import { SceneEntity } from './scene.entity';
 import { SceneNpcEntity } from './scene-npc.entity';
 import { SessionEventEntity } from './session-event.entity';
@@ -155,6 +156,7 @@ export {
   LootTableEntity,
   LootTableItemEntity,
   EncounterTemplateEntity,
+  EncounterJoinRequestEntity,
   SceneEntity,
   SceneNpcEntity,
   SessionEventEntity,
@@ -238,6 +240,7 @@ export const ENTITIES = [
   LootTableEntity,
   LootTableItemEntity,
   EncounterTemplateEntity,
+  EncounterJoinRequestEntity,
   SceneEntity,
   SceneNpcEntity,
   SessionEventEntity,

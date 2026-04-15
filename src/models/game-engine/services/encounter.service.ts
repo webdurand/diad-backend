@@ -1,9 +1,17 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { MonsterEntity } from 'src/entities/monster.entity';
+import { CharacterEntity } from 'src/entities/character.entity';
+import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
 import { InventoryService } from 'src/models/characters/services/inventory.service';
@@ -58,6 +66,8 @@ export interface EncounterDifficulty {
 
 @Injectable()
 export class EncounterService {
+  private readonly logger = new Logger(EncounterService.name);
+
   constructor(
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
@@ -65,6 +75,8 @@ export class EncounterService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     @InjectRepository(MonsterEntity)
     private readonly monsterRepo: Repository<MonsterEntity>,
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo: Repository<CharacterEntity>,
     private readonly diceService: DiceService,
     private readonly eventService: EventService,
     private readonly sessionService: SessionService,
@@ -107,32 +119,58 @@ export class EncounterService {
         } catch {}
       }
 
-      // Add all unique characters with their respective owner IDs
-      for (const charId of charIds) {
+      // Add all unique characters with their respective owner IDs.
+      // Iterate in deterministic order for snapshot stability.
+      // Uses the internal helper to bypass auth/status guards — we already
+      // know the encounter is in 'preparing' and the PCs come from trusted
+      // sources (session.characterIds or active CampaignPlayers).
+      const orderedIds = Array.from(charIds).sort();
+      for (const charId of orderedIds) {
+        const userId = await this.resolveCharacterOwner(
+          charId,
+          ownerUserId,
+          session.campaignId ?? undefined,
+        );
         try {
-          // For DM-owned characters use ownerUserId; for player characters use their userId
-          const userId = await this.resolveCharacterOwner(charId, ownerUserId, session.campaignId);
-          await this.addCharacter(saved.id, charId, userId);
-        } catch {}
+          await this.attachCharacterToEncounter(saved.id, charId, userId);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `auto-include skipped character=${charId} on encounter=${saved.id}: ${msg}`,
+          );
+        }
       }
     }
 
     return this.getById(saved.id);
   }
 
+  /**
+   * Resolves the owning userId of a character. Lookup order:
+   *  1. CampaignPlayer with this characterId (when campaignId is given)
+   *  2. CharacterEntity.userId direct DB lookup
+   *  3. fallbackUserId (caller — typically the DM)
+   */
   async resolveCharacterOwner(
     characterId: string,
     fallbackUserId: string,
     campaignId?: string,
   ): Promise<string> {
-    if (!campaignId) return fallbackUserId;
-    try {
-      const players = await this.campaignService.getPlayers(campaignId);
-      const owner = players.find((p) => p.characterId === characterId);
-      return owner?.userId ?? fallbackUserId;
-    } catch {
-      return fallbackUserId;
+    if (campaignId) {
+      try {
+        const players = await this.campaignService.getPlayers(campaignId);
+        const owner = players.find((p) => p.characterId === characterId);
+        if (owner?.userId) return owner.userId;
+      } catch {
+        // fall through to direct lookup
+      }
     }
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId },
+      select: ['id', 'userId'],
+    });
+    if (character?.userId) return character.userId;
+    return fallbackUserId;
   }
 
   async getById(
@@ -159,9 +197,20 @@ export class EncounterService {
         const sheet = await this.sheetService.computeSheet(ownerId, p.characterId);
         (p as any).currentHp = sheet.currentHp;
         (p as any).maxHp = sheet.maxHp;
+        (p as any).armorClass = sheet.armorClass;
+        // initiativeModifier may already be persisted but keep it in sync with
+        // the computed sheet (e.g. after ASI/feat changes).
+        if (p.initiativeModifier == null || p.initiativeModifier !== sheet.initiative) {
+          (p as any).initiativeModifier = sheet.initiative;
+        }
         (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
         (p as any).deathSaveFailures = sheet.deathSaves?.failures ?? 0;
-      } catch {}
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.debug(
+          `enrichPcHp skipped characterId=${p.characterId}: ${msg}`,
+        );
+      }
     }
   }
 
@@ -243,33 +292,149 @@ export class EncounterService {
     return this.participantRepo.save(participants);
   }
 
+  /**
+   * Adds a PC to an encounter in 'preparing' status.
+   *
+   * Authorization (F2 fix): allows either the PC owner or the DM of the
+   * encounter's campaign (when the character belongs to an active
+   * CampaignPlayer). Encounter status transitions return 409, never 404.
+   */
   async addCharacter(
     encounterId: string,
     characterId: string,
-    userId: string,
+    callerUserId: string,
   ): Promise<EncounterParticipantEntity> {
-    const encounter = await this.getById(encounterId);
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+      relations: ['participants'],
+    });
+    if (!encounter) {
+      throw new NotFoundException({
+        ok: false,
+        code: 'ENCOUNTER_NOT_FOUND',
+        error: 'Encontro nao encontrado.',
+      });
+    }
+    this.assertStatusAllowsDirectAdd(encounter.status);
+
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId },
+      select: ['id', 'userId'],
+    });
+    if (!character) {
+      throw new NotFoundException({
+        ok: false,
+        code: 'CHARACTER_NOT_FOUND',
+        error: 'Personagem nao encontrado.',
+      });
+    }
+
+    // Auth comes before duplicate check so a non-member always gets 403,
+    // never a conflicting 409 that leaks whether the PC is in the encounter.
     const session = await this.sessionService.getById(encounter.sessionId);
-    const ownerUserId = await this.resolveCharacterOwner(
-      characterId,
-      userId,
+    await this.assertCanAddPc(
+      callerUserId,
+      character,
       session.campaignId ?? undefined,
     );
-    const sheet = await this.sheetService.computeSheet(ownerUserId, characterId);
 
+    const dup = (encounter.participants ?? []).find(
+      (p) => p.type === 'pc' && p.characterId === characterId,
+    );
+    if (dup) {
+      throw new ConflictException({
+        ok: false,
+        code: 'CHARACTER_ALREADY_IN_ENCOUNTER',
+        error: 'Este personagem ja participa deste encontro.',
+      });
+    }
+
+    return this.attachCharacterToEncounter(
+      encounterId,
+      characterId,
+      character.userId,
+    );
+  }
+
+  /**
+   * Authorization rule shared by /characters and /late-join/character.
+   * Throws 403 FORBIDDEN_CAMPAIGN_MEMBER when the caller is neither the PC
+   * owner nor the DM of the encounter's campaign (with an active
+   * CampaignPlayer for the PC's owner).
+   */
+  private async assertCanAddPc(
+    callerUserId: string,
+    character: { id: string; userId: string },
+    campaignId: string | undefined,
+  ): Promise<void> {
+    if (character.userId === callerUserId) return;
+    if (campaignId) {
+      const campaign = await this.campaignService
+        .getById(campaignId)
+        .catch(() => null);
+      if (campaign && campaign.dmUserId === callerUserId) {
+        const players = await this.campaignService
+          .getPlayers(campaignId)
+          .catch(() => [] as CampaignPlayerEntity[]);
+        const match = players.find(
+          (p) => p.userId === character.userId && p.isActive,
+        );
+        if (match) return;
+      }
+    }
+    throw new ForbiddenException({
+      ok: false,
+      code: 'FORBIDDEN_CAMPAIGN_MEMBER',
+      error: 'Voce nao e um membro autorizado desta campanha.',
+    });
+  }
+
+  /**
+   * Status guard for direct /characters add. Active and completed encounters
+   * return 409 pointing callers to the correct flow (late-join for DM,
+   * join-requests for players).
+   */
+  private assertStatusAllowsDirectAdd(status: string): void {
+    if (status === 'active' || status === 'rolling_initiative') {
+      throw new ConflictException({
+        ok: false,
+        code: 'ENCOUNTER_ALREADY_ACTIVE',
+        error: 'O combate ja esta em andamento.',
+        hint: 'Players devem usar POST /encounters/:id/join-requests. DM pode forcar entrada via POST /encounters/:id/late-join/character.',
+      });
+    }
+    if (status === 'completed') {
+      throw new ConflictException({
+        ok: false,
+        code: 'ENCOUNTER_COMPLETED',
+        error: 'Este combate ja foi encerrado.',
+      });
+    }
+  }
+
+  /**
+   * Low-level helper: creates the EncounterParticipant without any
+   * authorization or status guard. Used by create() (trusted inputs) and by
+   * addCharacter/lateJoinCharacter (after guards).
+   */
+  private async attachCharacterToEncounter(
+    encounterId: string,
+    characterId: string,
+    ownerUserId: string,
+  ): Promise<EncounterParticipantEntity> {
+    const sheet = await this.sheetService.computeSheet(ownerUserId, characterId);
     const participant = this.participantRepo.create({
       encounterId,
       type: 'pc',
       characterId,
       displayName: sheet.name,
       initiativeModifier: sheet.initiative,
-      // PCs delegate HP to CharacterStateService — currentHp/maxHp stay undefined
+      // HP/AC exposed via enrichPcHp() in GET responses — backed by sheet.
       tempHp: 0,
       conditions: [],
       isDefeated: false,
       faction: 'ally',
     });
-
     return this.participantRepo.save(participant);
   }
 
@@ -284,15 +449,63 @@ export class EncounterService {
   async lateJoinCharacter(
     encounterId: string,
     characterId: string,
-    userId: string,
+    callerUserId: string,
   ): Promise<EncounterParticipantEntity> {
-    const encounter = await this.getById(encounterId);
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+      relations: ['participants'],
+    });
+    if (!encounter) {
+      throw new NotFoundException({
+        ok: false,
+        code: 'ENCOUNTER_NOT_FOUND',
+        error: 'Encontro nao encontrado.',
+      });
+    }
     if (encounter.status !== 'active') {
-      throw new Error('Late join so e permitido em encontros ativos.');
+      throw new ConflictException({
+        ok: false,
+        code: 'ENCOUNTER_NOT_ACTIVE',
+        error: 'Late-join so e permitido em encontros ativos.',
+      });
     }
 
-    // Add the character
-    const participant = await this.addCharacter(encounterId, characterId, userId);
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId },
+      select: ['id', 'userId'],
+    });
+    if (!character) {
+      throw new NotFoundException({
+        ok: false,
+        code: 'CHARACTER_NOT_FOUND',
+        error: 'Personagem nao encontrado.',
+      });
+    }
+
+    // Auth before duplicate (same rationale as addCharacter).
+    const session = await this.sessionService.getById(encounter.sessionId);
+    await this.assertCanAddPc(
+      callerUserId,
+      character,
+      session.campaignId ?? undefined,
+    );
+
+    const dup = (encounter.participants ?? []).find(
+      (p) => p.type === 'pc' && p.characterId === characterId,
+    );
+    if (dup) {
+      throw new ConflictException({
+        ok: false,
+        code: 'CHARACTER_ALREADY_IN_ENCOUNTER',
+        error: 'Este personagem ja participa deste encontro.',
+      });
+    }
+
+    const participant = await this.attachCharacterToEncounter(
+      encounterId,
+      characterId,
+      character.userId,
+    );
 
     // Roll initiative
     const mod = participant.initiativeModifier ?? 0;
