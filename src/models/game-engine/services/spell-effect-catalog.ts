@@ -86,6 +86,24 @@ export function materializeSpellEffects(
   const slug = spellSlug.toLowerCase();
 
   switch (slug) {
+    case 'shield': {
+      // RAW Shield: "+5 bonus to AC, including against the triggering attack,
+      //  until the start of your next turn."
+      // Self-target (caster). Reaction.
+      return [
+        {
+          targetParticipantId: ctx.casterParticipantId,
+          input: {
+            kind: 'ac_bonus',
+            sourceSpellSlug: 'shield',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { amount: 5 },
+            expiresAt: { kind: 'until_caster_turn', value: 1 },
+            requiresConcentration: false,
+          },
+        },
+      ];
+    }
     case 'bless': {
       // RAW Bless: escolhe até 3 alvos. Por 1 min (concentration), +1d4 em
       // attack rolls e saving throws.
