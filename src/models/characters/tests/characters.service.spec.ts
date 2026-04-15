@@ -853,6 +853,127 @@ describe('CharactersService', () => {
         ).resolves.toBeDefined();
       });
 
+      it('auto-applies race ability bonuses when edition does not grant them via background (PHB)', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        const dwarfRace = {
+          id: 'race-1',
+          slug: 'dwarf',
+          ability_bonuses: [
+            { ability_score: { slug: 'con', name: 'CON' }, bonus: 2 },
+          ],
+        };
+        const phbSource = {
+          id: 'src-phb',
+          code: 'PHB',
+          rules: { backgroundGrantsAbilityBonuses: false },
+        };
+
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue(dwarfRace);
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.compSource.findOneBy!.mockResolvedValue(phbSource);
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+
+        dataSource.transaction!.mockImplementation(async (cb: any) => {
+          const mgr = {
+            create: jest.fn((_: any, data: any) => ({ id: 'char-new', ...data })),
+            save: jest.fn(async (entityClass: any, data: any) => {
+              const entityName = typeof entityClass === 'function' ? entityClass.name : entityClass;
+              saves.push({ entity: entityName, data });
+              return { id: data?.id ?? 'rec-auto', ...data };
+            }),
+            findOneBy: jest.fn().mockImplementation((_: any, criteria: any) => {
+              if (criteria?.slug === 'fighter') return fighterClass;
+              if (criteria?.slug === 'dwarf') return dwarfRace;
+              if (criteria?.slug === 'soldier') return { id: 'bg-1', slug: 'soldier' };
+              if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(criteria?.slug)) {
+                return { id: `as-${criteria.slug}`, slug: criteria.slug };
+              }
+              return null;
+            }),
+            find: jest.fn().mockResolvedValue([]),
+            createQueryBuilder: jest.fn().mockReturnValue({
+              update: jest.fn().mockReturnThis(),
+              set: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({}),
+            }),
+          };
+          return cb(mgr);
+        });
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Dwarf Fighter',
+          data: {
+            sourceCode: 'PHB',
+            classSlug: 'fighter',
+            raceSlug: 'dwarf',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 10, con: 13, int: 10, wis: 12, cha: 8 },
+            classEquipmentChoices: ['chain-mail'],
+          },
+        });
+
+        const abilitySaves = saves.filter((s) => s.entity === 'CharacterAbilityScoreEntity');
+        const conSave = abilitySaves.find((s) => s.data.ability_score_id === 'as-con');
+        expect(conSave!.data.base_score).toBe(13);
+        expect(conSave!.data.bonus).toBe(2);
+      });
+
+      it('does NOT auto-apply race ability bonuses when edition grants them via background (XPHB)', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        const dwarfRace = {
+          id: 'race-1',
+          slug: 'dwarf',
+          ability_bonuses: [
+            { ability_score: { slug: 'con', name: 'CON' }, bonus: 2 },
+          ],
+        };
+        const xphbSource = {
+          id: 'src-xphb',
+          code: 'XPHB',
+          rules: { backgroundGrantsAbilityBonuses: true },
+        };
+
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue(dwarfRace);
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.compSource.findOneBy!.mockResolvedValue(xphbSource);
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Dwarf Fighter XPHB',
+          data: {
+            sourceCode: 'XPHB',
+            classSlug: 'fighter',
+            raceSlug: 'dwarf',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 10, con: 13, int: 10, wis: 12, cha: 8 },
+            backgroundAbilityBonuses: [
+              { abilityScoreIndex: 'str', bonus: 1 },
+            ],
+            classEquipmentChoices: ['chain-mail'],
+          },
+        });
+
+        const abilitySaves = saves.filter((s) => s.entity === 'CharacterAbilityScoreEntity');
+        const conSave = abilitySaves.find((s) => s.data.ability_score_id === 'as-con');
+        expect(conSave!.data.bonus).toBe(0);
+        const strSave = abilitySaves.find((s) => s.data.ability_score_id === 'as-str');
+        expect(strSave!.data.bonus).toBe(1);
+      });
+
       it('reads abilityScores from input.choices when both data and choices are present (choices wins)', async () => {
         const saves: Array<{ entity: string; data: any }> = [];
         const fighterClass = makeClass('fighter');

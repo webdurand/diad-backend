@@ -345,6 +345,27 @@ export class CharactersService {
 
       // character_ability_scores
       const bgBonuses = choices.backgroundAbilityBonuses ?? [];
+      // Em edições onde o background NÃO dá bonuses (PHB 2014), aplica
+      // automaticamente os bonuses raciais (RAW: Hill Dwarf CON +2, etc.).
+      // Em XPHB 2024 os bonuses vêm do background via choices.backgroundAbilityBonuses.
+      const editionGrantsBgBonuses =
+        sourceEntity?.rules?.backgroundGrantsAbilityBonuses === true;
+      const raceBonusMap: Record<string, number> = {};
+      if (!editionGrantsBgBonuses) {
+        const raceBonuses =
+          (raceEntity as unknown as {
+            ability_bonuses?: Array<{
+              ability_score?: { slug?: string };
+              bonus?: number;
+            }>;
+          }).ability_bonuses ?? [];
+        for (const rb of raceBonuses) {
+          const slug = rb.ability_score?.slug;
+          if (slug && typeof rb.bonus === 'number') {
+            raceBonusMap[slug] = (raceBonusMap[slug] ?? 0) + rb.bonus;
+          }
+        }
+      }
       if (choices.abilityScores) {
         for (const [key, value] of Object.entries(choices.abilityScores)) {
           const slug = SLUG_MAP[key];
@@ -355,11 +376,12 @@ export class CharactersService {
           if (!asEntity) continue;
           const bgBonus =
             bgBonuses.find((b) => b.abilityScoreIndex === slug)?.bonus ?? 0;
+          const raceBonus = raceBonusMap[slug] ?? 0;
           await manager.save(CharacterAbilityScoreEntity, {
             character_id: charId,
             ability_score_id: asEntity.id,
             base_score: value,
-            bonus: bgBonus,
+            bonus: bgBonus + raceBonus,
           });
         }
       }
