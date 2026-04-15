@@ -303,7 +303,7 @@ export interface ConditionInstance {
   appliedAt: string;
 }
 
-export type AppliedEffectKind = 'condition' | 'persistent-area';
+export type AppliedEffectKind = 'condition' | 'persistent-area' | 'effect-instance';
 
 /**
  * Rastreia o que uma magia de concentração aplicou.
@@ -313,11 +313,72 @@ export interface AppliedEffect {
   kind: AppliedEffectKind;
   /** Quando kind='condition': id do ConditionInstance no participante alvo. */
   /** Quando kind='persistent-area': id do PersistentAreaEffect. */
+  /** Quando kind='effect-instance': id do EffectInstance (na própria effectInstances do target). */
   refId: string;
-  /** Quando kind='condition': id do participante alvo. Senão null. */
+  /** Quando kind='condition'|'effect-instance': id do participante alvo. Senão null. */
   targetParticipantId: string | null;
   /** Snapshot textual para auditoria/log. */
   description: string;
+}
+
+// ============================================================================
+// Spec 004 (Effect Resolution Engine) — EffectInstance carrier
+// ============================================================================
+
+export type EffectInstanceKind =
+  | 'ac_bonus'                          // Mage Armor, Shield
+  | 'attack_bonus'                      // Bless (attack portion), Divine Favor
+  | 'save_bonus'                        // Bless (save portion)
+  | 'damage_bonus'                      // Rage, Divine Favor
+  | 'damage_resistance'                 // Rage, Protection from Energy
+  | 'grant_advantage_to_attackers'      // Guiding Bolt, Reckless Attack target
+  | 'grant_disadvantage_to_attackers'   // Dodge, Sanctuary
+  | 'self_advantage'                    // Rage STR checks
+  | 'self_disadvantage'
+  | 'self_advantage_next_attack'        // Steady Aim (one-shot flag)
+  | 'hp_shield'                         // False Life, Heroism absorption
+  | 'statblock_swap'                    // Wild Shape
+  | 'inspiration_die';                  // Bardic Inspiration (consumível)
+
+export type EffectExpirationKind =
+  | 'rounds'
+  | 'turns'
+  | 'concentration'
+  | 'until_caster_turn'
+  | 'until_consumed'
+  | 'end_of_encounter';
+
+export interface EffectInstancePayload {
+  amount?: number;
+  diceExpression?: string;
+  damageTypes?: string[];
+  beastSlug?: string;
+  absorptionHp?: number;
+  triggerEventId?: string;
+  scope?: 'any' | 'melee' | 'ranged' | 'str-check' | 'str-save' | 'dex-save';
+}
+
+/**
+ * Instância de efeito mecânico aplicada a um participant.
+ * Vive em `encounter_participant.effectInstances[]` JSONB.
+ * Separado de AppliedEffect por SRP: AppliedEffect rastreia concentração,
+ * EffectInstance carrega a mecânica (bônus, advantage grant, resistance, etc).
+ */
+export interface EffectInstance {
+  id: string;
+  sourceSpellSlug?: string;
+  sourceFeatureSlug?: string;
+  /** Quem aplicou o efeito (caster / user da feature). */
+  sourceCasterParticipantId: string;
+  kind: EffectInstanceKind;
+  payload: EffectInstancePayload;
+  expiresAt: {
+    kind: EffectExpirationKind;
+    value?: number;
+  };
+  /** true = removido em cascata quando ConcentrationService.break(source) dispara. */
+  requiresConcentration: boolean;
+  appliedAt: string;
 }
 
 export interface LairAction {
