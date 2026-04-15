@@ -552,6 +552,24 @@ export class GameEngineController {
     );
   }
 
+  /**
+   * Spec 003 — ActionDescriptor[] tipado do participant no encounter,
+   * com action economy corrente (turno ativo, actionUsed, attacksUsedThisTurn,
+   * reactionUsed) e rest state (feature_uses_used, spell_slots_used) aplicados.
+   */
+  @Get('encounters/:id/participants/:participantId/actions')
+  async getParticipantActions(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+  ) {
+    return this.combatService.getParticipantCombatActions(
+      id,
+      participantId,
+      getUserId(req),
+    );
+  }
+
   @Post('encounters/:id/end-turn')
   async endTurn(@Param('id') id: string) {
     return this.combatService.endTurn(id);

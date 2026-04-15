@@ -198,6 +198,129 @@ export class CombatService {
       .replace(/^-+|-+$/g, '');
   }
 
+  /**
+   * Spec 003 Fatia 5 — lista ActionDescriptor[] para um participant no encounter,
+   * com action economy aplicada (`available`/`disabledReason` refletem turno atual,
+   * actionUsed, attacksUsedThisTurn, etc).
+   */
+  async getParticipantCombatActions(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+  ): Promise<GameResult<unknown>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter)
+      return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
+
+    const participant = await this.encounterService
+      .getParticipant(participantId)
+      .catch(() => null);
+    if (!participant)
+      return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+
+    const isOnTurn =
+      encounter.turnOrder[encounter.currentTurnIndex] === participantId;
+
+    const actionEconomy = {
+      actionUsed: participant.actionUsed,
+      bonusActionUsed: participant.bonusActionUsed,
+      reactionUsed: participant.reactionsUsed > 0,
+      movementUsed: (participant.movementRemaining ?? 0) < 30
+        ? 30 - (participant.movementRemaining ?? 30)
+        : 0,
+      attacksUsedThisTurn: participant.attacksUsedThisTurn,
+      attacksMaxThisTurn: participant.attacksMaxThisTurn,
+      isOnTurn,
+    };
+
+    if (participant.type === 'pc' && participant.characterId) {
+      const pcOwnerId = await this.resolveParticipantOwner(
+        participant,
+        ownerUserId,
+      );
+      const sheet = await this.sheetService.computeSheet(
+        pcOwnerId,
+        participant.characterId,
+      );
+      const abilityMods = sheet.abilityScores.reduce<Record<string, number>>(
+        (acc, a) => {
+          acc[a.slug] = a.modifier;
+          return acc;
+        },
+        {},
+      );
+      const descriptors = await this.combatActionRegistry.listActions({
+        type: 'pc',
+        participantId,
+        characterId: participant.characterId,
+        actionEconomy,
+        conditions: participant.conditions ?? [],
+        sheet: {
+          equipment: sheet.equipment.map((e) => ({
+            id: e.id,
+            slug: e.slug,
+            name: e.name,
+            equipped: e.equipped,
+            damage: e.damage,
+            range: e.range,
+            properties: e.properties,
+          })),
+          classes: sheet.classes.map((c) => ({
+            slug: c.slug,
+            name: c.name,
+            level: c.level,
+          })),
+          features: sheet.features.map((f) => ({
+            slug: f.slug,
+            name: f.name,
+            level: f.level,
+            active: f.active,
+          })),
+          abilityMods,
+          proficiencyBonus: sheet.proficiencyBonus,
+          totalLevel: sheet.totalLevel,
+        },
+      });
+      return success(descriptors, []);
+    }
+
+    if (participant.type === 'monster' && participant.monster) {
+      const monster: any = participant.monster;
+      const monsterSlug: string = monster.slug ?? '';
+      const rawActions: any[] = Array.isArray(monster.actions) ? monster.actions : [];
+      const monsterActions = rawActions.map((a) => {
+        const resolved = this.monsterActionResolver.resolveByName(monster, a.name);
+        return {
+          name: a.name,
+          desc: a.desc,
+          attackBonus: resolved?.attackBonus,
+          damageDice: resolved?.damageDice,
+          damageType: resolved?.damageType,
+        };
+      });
+      const descriptors = await this.combatActionRegistry.listActions({
+        type: 'monster',
+        participantId,
+        monsterSlug,
+        monsterActions,
+        actionEconomy,
+        conditions: participant.conditions ?? [],
+      });
+      return success(descriptors, []);
+    }
+
+    // NPC: cobertura minima via generic resolver
+    const descriptors = await this.combatActionRegistry.listActions({
+      type: 'npc',
+      participantId,
+      actionEconomy,
+      conditions: participant.conditions ?? [],
+    });
+    return success(descriptors, []);
+  }
+
   async resolveAoeAction(
     encounterId: string,
     dto: {
