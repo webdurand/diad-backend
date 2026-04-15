@@ -35,6 +35,7 @@ import {
   CompSourceEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
+import { CombatActionsModule } from '../combat-actions/combat-actions.module';
 import { CharactersController } from './characters.controller';
 import { CharactersService } from './services/characters.service';
 import { CharacterSheetService } from './services/character-sheet.service';
@@ -81,6 +82,7 @@ import { ActionsService } from './services/actions.service';
       CompSourceEntity,
     ]),
     AuthModule,
+    CombatActionsModule,
   ],
   controllers: [CharactersController],
   providers: [

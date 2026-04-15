@@ -126,6 +126,16 @@ export class EncounterParticipantEntity {
   @Column({ name: 'attacks_max_this_turn', type: 'int', default: 1 })
   attacksMaxThisTurn: number;
 
+  /**
+   * Spec 003 B-lite — Reckless Attack (Barbarian L2+).
+   * Ativa até o fim do turno do próprio barbarian. Enquanto ativa:
+   *  - attacks STR melee do barbarian ganham advantage (Spec 4)
+   *  - attacks contra o barbarian ganham advantage (Spec 4)
+   * Reset em start-turn.
+   */
+  @Column({ name: 'reckless_attack_active', type: 'boolean', default: false })
+  recklessAttackActive: boolean;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;
