@@ -107,6 +107,37 @@ const SLUG_MAP: Record<string, AbilitySlug> = {
   cha: 'cha',
 };
 
+function hasStartingEquipmentOptions(
+  raw: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!raw) return false;
+  const options = (raw as { options?: unknown }).options;
+  if (Array.isArray(options)) return options.length > 0;
+  if (Array.isArray(raw as unknown as unknown[])) {
+    return (raw as unknown as unknown[]).length > 0;
+  }
+  return Object.keys(raw).length > 0;
+}
+
+type EquipmentLite = {
+  id: string;
+  slug: string;
+  name: string;
+  armor_class?: Record<string, unknown> | null;
+  weapon_category?: string | null;
+};
+
+function decideEquipSlot(
+  eq: EquipmentLite,
+): 'armor' | 'shield' | 'weapon' | null {
+  const slug = (eq.slug ?? '').toLowerCase();
+  const name = (eq.name ?? '').toLowerCase();
+  if (slug === 'shield' || name === 'shield') return 'shield';
+  if (eq.armor_class && Object.keys(eq.armor_class).length > 0) return 'armor';
+  if (eq.weapon_category) return 'weapon';
+  return null;
+}
+
 function normalizeAbilityScores(
   raw: Record<string, unknown> | undefined,
 ): Record<AbilitySlug, number> | undefined {
@@ -227,6 +258,30 @@ export class CharactersService {
         error: `Pontuações de habilidade incompletas: faltam ${missingAbilities.join(', ')}.`,
         missing: missingAbilities,
       });
+    }
+
+    // Validação: equipment choices obrigatórias quando a classe oferece opções.
+    const classSlugForOptions = choices.classSlug;
+    if (classSlugForOptions) {
+      const classForOptions = await this.classRepository.findOneBy({
+        slug: classSlugForOptions,
+      });
+      const hasOptions = hasStartingEquipmentOptions(
+        classForOptions?.starting_equipment_options,
+      );
+      const providedChoices = choices.classEquipmentChoices;
+      const noChoicesProvided =
+        !providedChoices ||
+        (Array.isArray(providedChoices) && providedChoices.length === 0);
+      if (hasOptions && noChoicesProvided && !choices.classStartingGold) {
+        throw new BadRequestException({
+          ok: false,
+          code: 'MISSING_CLASS_EQUIPMENT_CHOICES',
+          error:
+            'Esta classe oferece opções de equipamento inicial. Selecione uma ou envie classStartingGold.',
+          classSlug: classSlugForOptions,
+        });
+      }
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -530,13 +585,27 @@ export class CharactersService {
     });
 
     const seenEquipIds = new Set<string>();
+    // Auto-equip o primeiro item de cada slot (armor, shield, weapon) que chegar.
+    // Resolve o critério de aceite do spec 001: Fighter L1 com chain mail + longsword + shield → AC 18.
+    const equippedSlots = new Set<'armor' | 'shield' | 'weapon'>();
+    const shouldEquip = (eq: EquipmentLite | undefined): boolean => {
+      if (!eq) return false;
+      const slot = decideEquipSlot(eq);
+      if (!slot || equippedSlots.has(slot)) return false;
+      equippedSlots.add(slot);
+      return true;
+    };
+
     for (const cse of classStarting) {
       seenEquipIds.add(cse.equipment_id);
+      const eq = (
+        cse as unknown as { equipment?: EquipmentLite }
+      ).equipment;
       await manager.save(CharacterEquipmentEntity, {
         character_id: characterId,
         equipment_id: cse.equipment_id,
         quantity: 1,
-        equipped: false,
+        equipped: shouldEquip(eq),
         source: EquipmentSourceEnum.Starting,
       });
     }
@@ -619,7 +688,7 @@ export class CharactersService {
           character_id: characterId,
           equipment_id: eq.id,
           quantity,
-          equipped: false,
+          equipped: shouldEquip(eq as unknown as EquipmentLite),
           source: EquipmentSourceEnum.Starting,
         });
       }

@@ -722,6 +722,137 @@ describe('CharactersService', () => {
         });
       });
 
+      it('auto-equips armor, weapon and shield from starting equipment', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        const chainMail = {
+          id: 'eq-chain-mail',
+          slug: 'chain-mail',
+          name: 'Chain Mail',
+          armor_class: { base: 16, dex_bonus: false },
+        };
+        const longsword = {
+          id: 'eq-longsword',
+          slug: 'longsword',
+          name: 'Longsword',
+          weapon_category: 'martial',
+        };
+        const shield = { id: 'eq-shield', slug: 'shield', name: 'Shield', armor_class: { base: 2 } };
+
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([chainMail, longsword, shield]);
+        repos.level.findOne!.mockResolvedValue(null);
+
+        dataSource.transaction!.mockImplementation(async (cb: any) => {
+          const mgr = {
+            create: jest.fn((_: any, data: any) => ({ id: 'char-new', ...data })),
+            save: jest.fn(async (entityClass: any, data: any) => {
+              const entityName = typeof entityClass === 'function' ? entityClass.name : entityClass;
+              saves.push({ entity: entityName, data });
+              return { id: data?.id ?? 'rec-auto', ...data };
+            }),
+            findOneBy: jest.fn().mockImplementation((_: any, criteria: any) => {
+              if (criteria?.slug === 'fighter') return fighterClass;
+              if (criteria?.slug === 'human') return { id: 'race-1', slug: 'human' };
+              if (criteria?.slug === 'soldier') return { id: 'bg-1', slug: 'soldier' };
+              if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(criteria?.slug)) {
+                return { id: `as-${criteria.slug}`, slug: criteria.slug };
+              }
+              return null;
+            }),
+            find: jest.fn().mockResolvedValue([]),
+            createQueryBuilder: jest.fn().mockReturnValue({
+              update: jest.fn().mockReturnThis(),
+              set: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({}),
+            }),
+          };
+          return cb(mgr);
+        });
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Brom Autoequip',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+            classEquipmentChoices: ['1x Chain Mail', '1x Longsword', '1x Shield'],
+          },
+        });
+
+        const equipSaves = saves.filter((s) => s.entity === 'CharacterEquipmentEntity');
+        const bySlug = Object.fromEntries(
+          equipSaves.map((s) => {
+            const eqId = s.data.equipment_id;
+            const name = [chainMail, longsword, shield].find((e) => e.id === eqId)?.name;
+            return [name, s.data.equipped];
+          }),
+        );
+        expect(bySlug['Chain Mail']).toBe(true);
+        expect(bySlug['Longsword']).toBe(true);
+        expect(bySlug['Shield']).toBe(true);
+      });
+
+      it('throws MISSING_CLASS_EQUIPMENT_CHOICES when class offers options and client sends none', async () => {
+        const fighterClass = {
+          ...makeClass('fighter'),
+          starting_equipment_options: { options: [{ label: 'Chain Mail' }, { label: 'Leather + Longbow' }] },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'No Equipment',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: [],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'MISSING_CLASS_EQUIPMENT_CHOICES' }),
+        });
+      });
+
+      it('accepts empty classEquipmentChoices when class has no starting_equipment_options', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'No Options Class',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: [],
+            },
+          }),
+        ).resolves.toBeDefined();
+      });
+
       it('reads abilityScores from input.choices when both data and choices are present (choices wins)', async () => {
         const saves: Array<{ entity: string; data: any }> = [];
         const fighterClass = makeClass('fighter');
