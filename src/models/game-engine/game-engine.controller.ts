@@ -295,6 +295,20 @@ export class GameEngineController {
     return this.joinRequestService.reject(id, reqId, getUserId(req), reason);
   }
 
+  @Post('encounters/:id/invites')
+  async inviteToEncounter(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: { playerUserIds?: string[]; message?: string } = {},
+  ) {
+    return this.joinRequestService.createInvites(
+      id,
+      getUserId(req),
+      body.playerUserIds,
+      body.message,
+    );
+  }
+
   @Post('encounters/:id/late-join/monster')
   async lateJoinMonster(
     @Param('id') id: string,

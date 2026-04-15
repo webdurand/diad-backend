@@ -398,6 +398,128 @@ export class JoinRequestService {
     };
   }
 
+  // ----- invites (R2) ------------------------------------------------------
+
+  async createInvites(
+    encounterId: string,
+    callerUserId: string,
+    playerUserIds?: string[],
+    message?: string,
+  ): Promise<{
+    encounterId: string;
+    invitedAt: Date;
+    invitedUserIds: string[];
+    skippedUserIds: Array<{ userId: string; reason: string }>;
+  }> {
+    const encounter = await this.loadEncounter(encounterId);
+    if (encounter.status === 'completed') {
+      throw new ConflictException({
+        ok: false,
+        code: 'ENCOUNTER_COMPLETED',
+        error: 'Nao e possivel convocar players para um combate encerrado.',
+      });
+    }
+    const session = await this.sessionService.getById(encounter.sessionId);
+
+    // Only the DM of the campaign (or the solo session owner) can invite.
+    if (!session.campaignId) {
+      if (session.ownerId !== callerUserId) {
+        throw new ForbiddenException({
+          ok: false,
+          code: 'FORBIDDEN',
+          error: 'Apenas o dono da sessao pode convocar.',
+        });
+      }
+    } else {
+      const campaign = await this.campaignService
+        .getById(session.campaignId)
+        .catch(() => null);
+      if (!campaign || campaign.dmUserId !== callerUserId) {
+        throw new ForbiddenException({
+          ok: false,
+          code: 'FORBIDDEN',
+          error: 'Apenas o DM da campanha pode convocar players.',
+        });
+      }
+    }
+
+    // Build the eligible set: CampaignPlayer active with a characterId.
+    const players: CampaignPlayerEntity[] = session.campaignId
+      ? await this.campaignService
+          .getPlayers(session.campaignId)
+          .catch(() => [] as CampaignPlayerEntity[])
+      : [];
+    const eligible = players.filter((p) => p.isActive && !!p.characterId);
+    const eligibleByUserId = new Map(eligible.map((p) => [p.userId, p]));
+
+    const invited: string[] = [];
+    const skipped: Array<{ userId: string; reason: string }> = [];
+
+    const targets =
+      playerUserIds && playerUserIds.length > 0
+        ? playerUserIds
+        : eligible.map((p) => p.userId);
+
+    for (const userId of targets) {
+      const p = eligibleByUserId.get(userId);
+      if (!p) {
+        skipped.push({ userId, reason: 'not_member' });
+        continue;
+      }
+      if (!p.isActive) {
+        skipped.push({ userId, reason: 'inactive' });
+        continue;
+      }
+      if (!p.characterId) {
+        skipped.push({ userId, reason: 'no_character' });
+        continue;
+      }
+      invited.push(userId);
+    }
+
+    const invitedAt = new Date();
+    const campaignName =
+      session.campaignId
+        ? (await this.campaignService
+            .getById(session.campaignId)
+            .catch(() => null))?.name ?? null
+        : null;
+
+    for (const userId of invited) {
+      this.realtime.emitToUser(userId, 'encounter:invited', {
+        encounterId,
+        sessionId: encounter.sessionId,
+        campaignId: session.campaignId ?? null,
+        campaignName,
+        encounterName: encounter.name,
+        dmUserId: callerUserId,
+        invitedAt,
+        message: message ?? null,
+      });
+    }
+
+    await this.eventService
+      .emit(encounter.sessionId, encounterId, [
+        {
+          event_type: 'player_invited',
+          data: {
+            invited_user_ids: invited,
+            skipped_user_ids: skipped,
+            message: message ?? null,
+            invited_by_dm_user_id: callerUserId,
+          },
+        },
+      ])
+      .catch(() => undefined);
+
+    return {
+      encounterId,
+      invitedAt,
+      invitedUserIds: invited,
+      skippedUserIds: skipped,
+    };
+  }
+
   // ----- auto-reject pending requests when encounter completes -------------
 
   async autoRejectPendingOnEncounterEnd(encounterId: string): Promise<number> {
