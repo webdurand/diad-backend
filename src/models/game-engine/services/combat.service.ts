@@ -34,7 +34,8 @@ import { getAbilityModifier } from 'src/shared/srd-utils';
 import { MonsterActionResolver } from './monster-action-resolver.service';
 import { CombatActionRegistry } from './combat-action-registry.service';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
-import type { ConditionSlug } from '../interfaces/combat.interfaces';
+import { EffectInstanceService } from './effect-instance.service';
+import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 
 // --- DTOs ---
 
@@ -123,6 +124,7 @@ export class CombatService {
     private readonly monsterActionResolver: MonsterActionResolver,
     private readonly combatActionRegistry: CombatActionRegistry,
     private readonly conditionLifecycle: ConditionLifecycleService,
+    private readonly effectInstances: EffectInstanceService,
   ) {}
 
   /**
@@ -566,6 +568,37 @@ export class CombatService {
   }
 
   /**
+   * Spec 004 — remove effects one-shot (expiresAt.kind='until_consumed') após
+   * um attack. Itera nos dois participants.
+   */
+  private async consumeOneShotEffects(
+    attacker: EncounterParticipantEntity,
+    target: EncounterParticipantEntity,
+  ): Promise<void> {
+    const isOneShot = (e: EffectInstance, side: 'attacker' | 'target'): boolean => {
+      if (e.expiresAt.kind !== 'until_consumed') return false;
+      if (side === 'attacker') return e.kind === 'self_advantage_next_attack';
+      // target side: only consume advantage/disadvantage-grant kinds
+      return (
+        e.kind === 'grant_advantage_to_attackers' ||
+        e.kind === 'grant_disadvantage_to_attackers'
+      );
+    };
+    const toConsumeAttacker = (attacker.effectInstances ?? []).filter((e) =>
+      isOneShot(e, 'attacker'),
+    );
+    const toConsumeTarget = (target.effectInstances ?? []).filter((e) =>
+      isOneShot(e, 'target'),
+    );
+    for (const e of toConsumeAttacker) {
+      await this.effectInstances.removeEffect(attacker, e.id, 'consumed');
+    }
+    for (const e of toConsumeTarget) {
+      await this.effectInstances.removeEffect(target, e.id, 'consumed');
+    }
+  }
+
+  /**
    * Spec 004 — consulta EffectInstances do attacker e target para decidir
    * advantage/disadvantage/bonuses e ac_bonus. Nao consome effects one-shot
    * (Steady Aim, Guiding Bolt) — isso acontece pos-roll em resolveAttack.
@@ -930,20 +963,15 @@ export class CombatService {
       },
     ];
 
-    // Spec 003 T013: limpa estados reativos que expiram no início do próximo
-    // turno do próprio ator (Dodge, Help armado, Ready não disparado).
+    // Spec 003 T013 + Spec 004 fix: Dodge RAW expira NO INICIO DO PROXIMO TURNO
+    // DO ATOR (nao ao terminar seu turno). Legacy clearava aqui o que quebrava
+    // RAW (dodge nunca durava). Mantem Help/Ready clear aqui (essas expiram
+    // quando o ator termina de ajudar/armar).
     const currentParticipant = await this.participantRepo.findOne({
       where: { id: currentParticipantId },
     });
     if (currentParticipant) {
       const expired: string[] = [];
-      if (
-        currentParticipant.dodgingUntilTurnOfParticipantId ===
-        currentParticipant.id
-      ) {
-        currentParticipant.dodgingUntilTurnOfParticipantId = null;
-        expired.push('dodge');
-      }
       if (
         currentParticipant.helpingUntilTurnOfParticipantId ===
         currentParticipant.id
@@ -1029,6 +1057,21 @@ export class CombatService {
       where: { id: nextParticipantId },
       relations: ['monster'],
     });
+
+    // Spec 004 — Dodge expira no INICIO do proximo turno do dodger (RAW PHB p.192).
+    // Se o nextParticipant eh o proprio dodger, limpar agora.
+    if (
+      nextParticipant &&
+      nextParticipant.dodgingUntilTurnOfParticipantId === nextParticipant.id
+    ) {
+      nextParticipant.dodgingUntilTurnOfParticipantId = null;
+      await this.participantRepo.save(nextParticipant);
+      events.push({
+        event_type: 'state_expired',
+        actor_participant_id: nextParticipant.id,
+        data: { state: 'dodge', round: newRound },
+      });
+    }
     if (nextParticipant) {
       const ownerId = await this.resolveParticipantOwner(nextParticipant, '');
       await this.movementService.initializeTurn(nextParticipant, ownerId || undefined);
@@ -1391,6 +1434,11 @@ export class CombatService {
         ...attackRollResult,
       },
     });
+
+    // Spec 004 — consumir effects one-shot (until_consumed):
+    //  - attacker: self_advantage_next_attack (Steady Aim)
+    //  - target: grant_advantage_to_attackers / grant_disadvantage_to_attackers (Guiding Bolt etc)
+    await this.consumeOneShotEffects(attacker, target);
 
     let damageRollResult;
     let targetHpAfter: number | undefined;

@@ -118,6 +118,7 @@ function createHarness() {
     monsterActionResolver,
     { listActions: async () => [], resolveSlug: async () => null, listAvailableSlugs: async () => [] } as any,
     { applyCondition: async () => ({ events: [], instance: {} as any, concentrationBroken: false }), removeConditionInstance: async () => ({ events: [], removed: false }) } as any,
+    { addEffect: async () => ({ effect: {} as any, events: [] }), removeEffect: async () => ({ removed: false, events: [] }), removeAllByConcentrationBreak: async () => ({ events: [] }), tickAtEndOfTurn: async () => ({ events: [], ticked: [], expired: [] }) } as any,
   );
 
   return { combat, participants, encounter, hpByChar, diceService };

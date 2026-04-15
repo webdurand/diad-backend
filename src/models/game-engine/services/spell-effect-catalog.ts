@@ -86,6 +86,28 @@ export function materializeSpellEffects(
   const slug = spellSlug.toLowerCase();
 
   switch (slug) {
+    case 'guiding-bolt': {
+      // RAW: "Make a ranged spell attack against the creature" — on hit, 4d6 radiant
+      // + "until the end of your next turn, the next attack roll made against
+      //   this target by an attacker other than you has advantage."
+      // Simplificacao MVP: assume hit (o damage resolver da spell-casting.service
+      // ainda aplica damage sem attack roll; spec 005 adiciona attack roll).
+      const target = ctx.targetParticipantIds[0];
+      if (!target) return [];
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'grant_advantage_to_attackers',
+            sourceSpellSlug: 'guiding-bolt',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: {},
+            expiresAt: { kind: 'until_consumed', value: 1 },
+            requiresConcentration: false,
+          },
+        },
+      ];
+    }
     case 'mage-armor': {
       // RAW: "Until the spell ends, the target's base AC becomes 13 + DEX mod."
       // Simplificacao: assume alvo unarmored (caso contrario, spell nao se aplica).
