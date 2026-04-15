@@ -23,6 +23,9 @@ import {
   isMultiTargetNonAoeSpell,
   maxTargetsFor,
 } from './spell-targeting';
+import { EffectInstanceService } from './effect-instance.service';
+import { materializeSpellEffects } from './spell-effect-catalog';
+import { getAbilityModifier } from 'src/shared/srd-utils';
 
 // --- Result interfaces ---
 
@@ -107,6 +110,7 @@ export class SpellCastingService {
     private readonly combatService: CombatService,
     private readonly encounterService: EncounterService,
     private readonly monsterSpellcasting: MonsterSpellcastingService,
+    private readonly effectInstanceService: EffectInstanceService,
   ) {}
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
@@ -441,7 +445,53 @@ export class SpellCastingService {
       targetsHit.push(targetResult);
     }
 
-    return success({ ...spellResult, targetsHit }, events);
+    // 9. Spec 004 — materializar EffectInstance (catalogo de spells conhecidas).
+    const casterDex =
+      spellResult && (spellResult as any).casterDex != null
+        ? (spellResult as any).casterDex
+        : await this.getCasterDexModifier(participant, dto.ownerUserId);
+    const materializations = materializeSpellEffects(dto.spellSlug, {
+      casterParticipantId: participant.id,
+      targetParticipantIds: dto.targetParticipantIds,
+      slotLevel: dto.slotLevel,
+      casterDexModifier: casterDex,
+    });
+    const appliedEffectIds: string[] = [];
+    for (const m of materializations) {
+      const targetP = await this.encounterService
+        .getParticipant(m.targetParticipantId)
+        .catch(() => null);
+      if (!targetP) continue;
+      const { effect, events: effectEvents } =
+        await this.effectInstanceService.addEffect(targetP, m.input);
+      appliedEffectIds.push(effect.id);
+      events.push(...effectEvents);
+    }
+
+    return success(
+      { ...spellResult, targetsHit, appliedEffectIds } as any,
+      events,
+    );
+  }
+
+  /** Retorna DEX modifier do caster (PC via sheet, monster via statblock). */
+  private async getCasterDexModifier(
+    participant: EncounterParticipantEntity,
+    ownerUserId: string,
+  ): Promise<number> {
+    if (participant.type === 'pc' && participant.characterId) {
+      const sheet = await this.sheetService.computeSheet(
+        ownerUserId,
+        participant.characterId,
+      );
+      const dexBlock = (sheet?.abilityScores ?? []).find(
+        (a) => a.slug === 'dex' || a.slug === 'dexterity',
+      );
+      if (dexBlock) return dexBlock.modifier;
+      return 0;
+    }
+    const dex = (participant.monster as any)?.stats?.dex ?? 10;
+    return getAbilityModifier(dex);
   }
 
   /**
