@@ -57,6 +57,9 @@ import { RealtimeModule } from 'src/realtime/realtime.module';
 import { RoomAuthorizerRegistry } from 'src/realtime/room-authorizer.registry';
 import { EncounterRoomAuthorizer } from './authorizers/encounter-room.authorizer';
 import { JoinRequestService } from './services/join-request.service';
+// Spec 003 — Combat Action Registry (módulo extraído para evitar circular)
+import { CombatActionsModule } from '../combat-actions/combat-actions.module';
+import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
 
 @Module({
   imports: [
@@ -81,6 +84,7 @@ import { JoinRequestService } from './services/join-request.service';
     WorldModule,
     AiProxyModule,
     RealtimeModule,
+    CombatActionsModule,
   ],
   controllers: [GameEngineController],
   providers: [
@@ -126,6 +130,8 @@ import { JoinRequestService } from './services/join-request.service';
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
+    // Spec 003 Fatia 7 — class features executor
+    ClassFeatureExecutorService,
   ],
   exports: [
     DiceService,

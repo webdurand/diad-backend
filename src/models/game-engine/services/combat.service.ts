@@ -32,6 +32,7 @@ import {
 import { SavingThrowService } from './saving-throw.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { MonsterActionResolver } from './monster-action-resolver.service';
+import { CombatActionRegistry } from './combat-action-registry.service';
 
 // --- DTOs ---
 
@@ -41,8 +42,16 @@ export interface AttackDto {
   targetParticipantId: string;
   /** Multiattack only: one entry per sub-attack in sequence order. */
   targetParticipantIds?: string[];
-  /** Action name/id from ActionsService (for PCs) or monster action name */
+  /** Action name/id from ActionsService (for PCs) or monster action name.
+   *  Spec 003: preserved for internal multiattack / legacy flows. Novos
+   *  chamadores externos devem usar `actionSlug`; o service traduz. */
   actionName: string;
+  /** Spec 003: slug canônico vindo do CombatActionRegistry (ex: 'longsword-attack',
+   *  'unarmed-strike', 'bugbear-morningstar'). Quando presente, `actionName`
+   *  é derivado e o slug é usado para log/events. */
+  actionSlug?: string;
+  /** Spec 003: opções específicas da ação (ex: Unarmed Strike mode='damage'|'grapple'|'shove'). */
+  options?: Record<string, unknown>;
   /** Manual override from DM */
   forceAdvantage?: boolean;
   forceDisadvantage?: boolean;
@@ -110,7 +119,208 @@ export class CombatService {
     private readonly sessionService: SessionService,
     private readonly savingThrowService: SavingThrowService,
     private readonly monsterActionResolver: MonsterActionResolver,
+    private readonly combatActionRegistry: CombatActionRegistry,
   ) {}
+
+  /**
+   * Spec 003 — traduz `actionSlug` em `actionName` interno.
+   *
+   * - `unarmed-strike`                → "Unarmed Strike"
+   * - `<equip>-attack`  (PC weapon)   → nome humano do equipment (ex: "Longsword")
+   * - `<monsterSlug>-<rest>` (monster) → nome canônico do monster.action
+   *
+   * Retorna failure INVALID_ACTION_SLUG se nenhum resolver bate.
+   */
+  async translateSlugToActionName(
+    encounterId: string,
+    attackerParticipantId: string,
+    slug: string,
+    ownerUserId: string,
+  ): Promise<GameResult<string>> {
+    const attacker = await this.encounterService
+      .getParticipant(attackerParticipantId)
+      .catch(() => null);
+    if (!attacker) {
+      return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+    }
+
+    if (slug === 'unarmed-strike') {
+      return success('Unarmed Strike' as string, []);
+    }
+
+    // PC weapon-attack: `<equipmentSlug>-attack` → busca nome do equipment equipado.
+    if (attacker.type === 'pc' && attacker.characterId && slug.endsWith('-attack')) {
+      const equipSlug = slug.slice(0, -'-attack'.length);
+      const pcOwnerId = await this.resolveParticipantOwner(attacker, ownerUserId);
+      const sheet = await this.sheetService.computeSheet(
+        pcOwnerId,
+        attacker.characterId,
+      );
+      const eq = sheet.equipment.find(
+        (e) => e.slug === equipSlug && e.equipped && !!e.damage,
+      );
+      if (!eq) {
+        return failure(
+          `Arma '${equipSlug}' nao esta equipada.`,
+          'NOT_EQUIPPED',
+        );
+      }
+      return success(eq.name, []);
+    }
+
+    // Monster: slug prefixado por monster.slug. Match por rest == action name (kebab).
+    if (attacker.type === 'monster' && attacker.monster) {
+      const monsterSlug: string = (attacker.monster as any).slug ?? '';
+      if (monsterSlug && slug.startsWith(monsterSlug + '-')) {
+        const rest = slug.slice(monsterSlug.length + 1);
+        const actions = ((attacker.monster as any).actions ?? []) as Array<{
+          name: string;
+        }>;
+        const match = actions.find(
+          (a) => this.slugifyName(a.name) === rest,
+        );
+        if (match) {
+          return success(match.name, []);
+        }
+      }
+    }
+
+    return failure(
+      `Slug '${slug}' nao reconhecido para este atacante.`,
+      'INVALID_ACTION_SLUG',
+    );
+  }
+
+  private slugifyName(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  /**
+   * Spec 003 Fatia 5 — lista ActionDescriptor[] para um participant no encounter,
+   * com action economy aplicada (`available`/`disabledReason` refletem turno atual,
+   * actionUsed, attacksUsedThisTurn, etc).
+   */
+  async getParticipantCombatActions(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+  ): Promise<GameResult<unknown>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter)
+      return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
+
+    const participant = await this.encounterService
+      .getParticipant(participantId)
+      .catch(() => null);
+    if (!participant)
+      return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+
+    const isOnTurn =
+      encounter.turnOrder[encounter.currentTurnIndex] === participantId;
+
+    const actionEconomy = {
+      actionUsed: participant.actionUsed,
+      bonusActionUsed: participant.bonusActionUsed,
+      reactionUsed: participant.reactionsUsed > 0,
+      movementUsed: (participant.movementRemaining ?? 0) < 30
+        ? 30 - (participant.movementRemaining ?? 30)
+        : 0,
+      attacksUsedThisTurn: participant.attacksUsedThisTurn,
+      attacksMaxThisTurn: participant.attacksMaxThisTurn,
+      isOnTurn,
+    };
+
+    if (participant.type === 'pc' && participant.characterId) {
+      const pcOwnerId = await this.resolveParticipantOwner(
+        participant,
+        ownerUserId,
+      );
+      const [sheet, featureUsesUsed] = await Promise.all([
+        this.sheetService.computeSheet(pcOwnerId, participant.characterId),
+        this.stateService.getFeatureUsesUsed(participant.characterId),
+      ]);
+      const abilityMods = sheet.abilityScores.reduce<Record<string, number>>(
+        (acc, a) => {
+          acc[a.slug] = a.modifier;
+          return acc;
+        },
+        {},
+      );
+      const descriptors = await this.combatActionRegistry.listActions({
+        type: 'pc',
+        participantId,
+        characterId: participant.characterId,
+        actionEconomy,
+        conditions: participant.conditions ?? [],
+        featureUsesUsed,
+        sheet: {
+          equipment: sheet.equipment.map((e) => ({
+            id: e.id,
+            slug: e.slug,
+            name: e.name,
+            equipped: e.equipped,
+            damage: e.damage,
+            range: e.range,
+            properties: e.properties,
+          })),
+          classes: sheet.classes.map((c) => ({
+            slug: c.slug,
+            name: c.name,
+            level: c.level,
+          })),
+          features: sheet.features.map((f) => ({
+            slug: f.slug,
+            name: f.name,
+            level: f.level,
+            active: f.active,
+          })),
+          abilityMods,
+          proficiencyBonus: sheet.proficiencyBonus,
+          totalLevel: sheet.totalLevel,
+        },
+      });
+      return success(descriptors, []);
+    }
+
+    if (participant.type === 'monster' && participant.monster) {
+      const monster: any = participant.monster;
+      const monsterSlug: string = monster.slug ?? '';
+      const rawActions: any[] = Array.isArray(monster.actions) ? monster.actions : [];
+      const monsterActions = rawActions.map((a) => {
+        const resolved = this.monsterActionResolver.resolveByName(monster, a.name);
+        return {
+          name: a.name,
+          desc: a.desc,
+          attackBonus: resolved?.attackBonus,
+          damageDice: resolved?.damageDice,
+          damageType: resolved?.damageType,
+        };
+      });
+      const descriptors = await this.combatActionRegistry.listActions({
+        type: 'monster',
+        participantId,
+        monsterSlug,
+        monsterActions,
+        actionEconomy,
+        conditions: participant.conditions ?? [],
+      });
+      return success(descriptors, []);
+    }
+
+    // NPC: cobertura minima via generic resolver
+    const descriptors = await this.combatActionRegistry.listActions({
+      type: 'npc',
+      participantId,
+      actionEconomy,
+      conditions: participant.conditions ?? [],
+    });
+    return success(descriptors, []);
+  }
 
   async resolveAoeAction(
     encounterId: string,
@@ -823,7 +1033,13 @@ export class CombatService {
       if (currentPid !== dto.attackerParticipantId)
         return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
 
-      if (attacker.actionUsed)
+      // Spec 003 Fatia 6 — respeita Extra Attack: bloqueia só quando attacker
+      // esgotou attacksMaxThisTurn (ou actionUsed foi setado por feature tipo
+      // Action Surge consumindo o slot inteiro de action).
+      if (
+        attacker.actionUsed &&
+        attacker.attacksUsedThisTurn >= attacker.attacksMaxThisTurn
+      )
         return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
     }
 
@@ -840,7 +1056,83 @@ export class CombatService {
     let damageType = 'bludgeoning';
     let damageBonus = 0;
 
-    if (attacker.type === 'pc' && attacker.characterId) {
+    // Spec 003 Fatia 4 — Unarmed Strike (XPHB 2024) com 3 modes:
+    //   damage   → attack roll normal (1 + STR mod bludgeoning)
+    //   grapple  → STR save DC 8+prof+STR; falha aplica condition 'grappled' (Spec 4)
+    //   shove    → STR save mesmo DC; falha = push 5ft OU prone (Spec 4)
+    if (
+      dto.actionSlug === 'unarmed-strike' &&
+      attacker.type === 'pc' &&
+      attacker.characterId
+    ) {
+      const pcOwnerId = await this.resolveParticipantOwner(
+        attacker,
+        dto.ownerUserId,
+      );
+      const sheet = await this.sheetService.computeSheet(
+        pcOwnerId,
+        attacker.characterId,
+      );
+      const strScore = sheet.abilityScores.find((a) => a.slug === 'str');
+      const strMod = strScore?.modifier ?? 0;
+      const profBonus = sheet.proficiencyBonus ?? 2;
+      const mode = (dto.options?.mode as string | undefined) ?? 'damage';
+
+      if (mode === 'grapple' || mode === 'shove') {
+        // Short-circuit: sem attack roll; emite evento para a Spec 4 resolver o save.
+        const saveDc = 8 + profBonus + strMod;
+        if (!dto._isSubAttack) {
+          attacker.actionUsed = true;
+          attacker.attacksUsedThisTurn = Math.min(
+            attacker.attacksUsedThisTurn + 1,
+            attacker.attacksMaxThisTurn,
+          );
+          await this.participantRepo.save(attacker);
+        }
+        const event: GameEventData = {
+          event_type: 'class_feature_invoked',
+          actor_participant_id: attacker.id,
+          target_participant_id: target.id,
+          data: {
+            featureSlug: mode, // 'grapple' | 'shove'
+            actionCost: 'action',
+            targets: [target.id],
+            saveDc,
+            saveAbility: 'str',
+            options: { mode, outcome: 'pending' },
+            caster: {
+              abilityMods: { str: strMod },
+              profBonus,
+            },
+            status: 'emitted_pending_resolution',
+          },
+        };
+        await this.eventService.emit(
+          encounter.sessionId,
+          encounterId,
+          [event],
+        );
+        return success(
+          {
+            attackerParticipantId: attacker.id,
+            targetParticipantId: target.id,
+            actionSlug: 'unarmed-strike',
+            unarmedMode: mode,
+            deferred: true,
+            featureSlug: mode,
+            saveDc,
+            saveAbility: 'str',
+          } as unknown as AttackResult,
+          [event],
+        );
+      }
+
+      // mode === 'damage' (default): populamos stats e seguimos o fluxo de attack roll.
+      attackBonus = strMod + profBonus;
+      damageDice = '1';
+      damageType = 'bludgeoning';
+      damageBonus = strMod;
+    } else if (attacker.type === 'pc' && attacker.characterId) {
       const actions = await this.actionsService.getActions(
         dto.ownerUserId,
         attacker.characterId,
@@ -1159,7 +1451,15 @@ export class CombatService {
     }
 
     if (!dto._isSubAttack) {
-      attacker.actionUsed = true;
+      // Spec 003 Fatia 6 — weapon attacks consomem 1 slot de Extra Attack.
+      // `actionUsed` só vai a true quando atingir o limite (attacksMaxThisTurn).
+      attacker.attacksUsedThisTurn = Math.min(
+        attacker.attacksUsedThisTurn + 1,
+        attacker.attacksMaxThisTurn,
+      );
+      if (attacker.attacksUsedThisTurn >= attacker.attacksMaxThisTurn) {
+        attacker.actionUsed = true;
+      }
 
       // Spec 003 T032 — ataque remove Hidden do atacante (RAW PHB cap. 9).
       if (attacker.conditions?.includes('hidden')) {

@@ -61,6 +61,15 @@ export class CharacterStateEntity {
   @Column({ type: 'int', default: 0 })
   ki_points_used: number;
 
+  /**
+   * Spec 003 — usos consumidos por class-feature slug.
+   * Max vem do SRD derivado de classe+nível; remaining = max - used.
+   * Reset em short/long rest conforme `feature.rechargeOn`.
+   * Para pools (ex: `lay-on-hands`), armazena HP gasto contra pool máximo `5 × paladinLevel`.
+   */
+  @Column({ type: 'jsonb', default: {} })
+  feature_uses_used: Record<string, number>;
+
   /** Exhaustion level (0-10 for 2024 rules, 0-6 for 2014) */
   @Column({ type: 'int', default: 0 })
   exhaustion_level: number;

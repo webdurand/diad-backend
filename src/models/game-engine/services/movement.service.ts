@@ -367,6 +367,42 @@ export class MovementService {
     participant.hasDashed = false;
     participant.hasDisengaged = false;
     participant.reactionsUsed = 0;
+
+    // Spec 003 Fatia 6 — Extra Attack counter.
+    participant.attacksUsedThisTurn = 0;
+    participant.attacksMaxThisTurn = await this.computeAttacksMaxThisTurn(
+      participant,
+      ownerUserId,
+    );
+
+    // Spec 003 B-lite — Reckless Attack (Barbarian) expira no próprio turno.
+    participant.recklessAttackActive = false;
+
     await this.participantRepo.save(participant);
+  }
+
+  /**
+   * Spec 003 — computa o máximo de weapon attacks por action para este turno.
+   * Regra XPHB: classes marciais com Extra Attack (Fighter L5/11/20, Monk L5,
+   * Paladin/Barb/Ranger L5) somam +1 attack. Default 1. Monstros usam 1 (multiattack
+   * é resolvido em fluxo separado).
+   */
+  private async computeAttacksMaxThisTurn(
+    participant: EncounterParticipantEntity,
+    ownerUserId?: string,
+  ): Promise<number> {
+    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+      try {
+        const actions = await this.actionsService.getActions(
+          ownerUserId,
+          participant.characterId,
+        );
+        const count = actions.summary?.attackCount;
+        if (typeof count === 'number' && count > 0) return count;
+      } catch {
+        // fallthrough to default
+      }
+    }
+    return 1;
   }
 }

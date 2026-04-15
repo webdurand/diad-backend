@@ -98,6 +98,26 @@ export enum GameErrorCode {
   SPELL_NOT_AOE = 'SPELL_NOT_AOE',
   SPELL_OUT_OF_RANGE = 'SPELL_OUT_OF_RANGE',
   LIBRARY_MONSTER_NOT_FOUND = 'LIBRARY_MONSTER_NOT_FOUND',
+
+  // Spec 003 (combat action registry) — novos codes
+  MISSING_ACTION_SLUG = 'MISSING_ACTION_SLUG',
+  INVALID_ACTION_SLUG = 'INVALID_ACTION_SLUG',
+  USE_UNARMED_STRIKE = 'USE_UNARMED_STRIKE',
+  ACTION_SUBOPTION_REQUIRED = 'ACTION_SUBOPTION_REQUIRED',
+  NO_USES_REMAINING = 'NO_USES_REMAINING',
+  FEATURE_NOT_AVAILABLE = 'FEATURE_NOT_AVAILABLE',
+  WRONG_CLASS = 'WRONG_CLASS',
+  BELOW_REQUIRED_LEVEL = 'BELOW_REQUIRED_LEVEL',
+  PREREQUISITE_NOT_MET = 'PREREQUISITE_NOT_MET',
+  ACTION_ALREADY_USED = 'ACTION_ALREADY_USED',
+  BONUS_ACTION_ALREADY_USED = 'BONUS_ACTION_ALREADY_USED',
+  REACTION_ALREADY_USED = 'REACTION_ALREADY_USED',
+  NOT_EQUIPPED = 'NOT_EQUIPPED',
+  SPELL_NOT_REACTION = 'SPELL_NOT_REACTION',
+  MISSING_TRIGGER_EVENT = 'MISSING_TRIGGER_EVENT',
+  INVALID_TRIGGER_EVENT = 'INVALID_TRIGGER_EVENT',
+  STEADY_AIM_MOVEMENT_USED = 'STEADY_AIM_MOVEMENT_USED',
+  LAY_ON_HANDS_INSUFFICIENT_POOL = 'LAY_ON_HANDS_INSUFFICIENT_POOL',
 }
 
 /**
@@ -188,6 +208,44 @@ export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
     'Alvo esta fora do alcance da magia.',
   [GameErrorCode.LIBRARY_MONSTER_NOT_FOUND]:
     'Monstro nao encontrado na biblioteca.',
+
+  // Spec 003 (combat action registry)
+  [GameErrorCode.MISSING_ACTION_SLUG]:
+    "Campo 'actionSlug' e obrigatorio. O shape antigo ('actionName') foi removido.",
+  [GameErrorCode.INVALID_ACTION_SLUG]:
+    'Slug de acao invalido para este participante.',
+  [GameErrorCode.USE_UNARMED_STRIKE]:
+    "Shove e Grapple sao sub-opcoes de Unarmed Strike. Use actionSlug='unarmed-strike' com options.mode='grapple' ou 'shove'.",
+  [GameErrorCode.ACTION_SUBOPTION_REQUIRED]:
+    'Esta acao exige uma sub-opcao em options.',
+  [GameErrorCode.NO_USES_REMAINING]:
+    'Sem usos restantes desta feature ate o proximo descanso adequado.',
+  [GameErrorCode.FEATURE_NOT_AVAILABLE]:
+    'Este participante nao possui a feature solicitada.',
+  [GameErrorCode.WRONG_CLASS]:
+    'Esta feature exige uma classe especifica que este participante nao possui.',
+  [GameErrorCode.BELOW_REQUIRED_LEVEL]:
+    'Nivel atual abaixo do requisito desta feature.',
+  [GameErrorCode.PREREQUISITE_NOT_MET]:
+    'Pre-requisito da acao nao foi atendido.',
+  [GameErrorCode.ACTION_ALREADY_USED]:
+    'Acao ja utilizada neste turno.',
+  [GameErrorCode.BONUS_ACTION_ALREADY_USED]:
+    'Acao bonus ja utilizada neste turno.',
+  [GameErrorCode.REACTION_ALREADY_USED]:
+    'Reacao ja utilizada neste round.',
+  [GameErrorCode.NOT_EQUIPPED]:
+    'A arma referenciada pela acao nao esta equipada.',
+  [GameErrorCode.SPELL_NOT_REACTION]:
+    'Esta magia nao possui casting time de reaction.',
+  [GameErrorCode.MISSING_TRIGGER_EVENT]:
+    "asReaction=true exige 'triggerEventId'.",
+  [GameErrorCode.INVALID_TRIGGER_EVENT]:
+    'Evento trigger referenciado nao existe ou nao e aceitavel para esta reaction.',
+  [GameErrorCode.STEADY_AIM_MOVEMENT_USED]:
+    'Steady Aim exige que o movimento ainda nao tenha sido usado neste turno.',
+  [GameErrorCode.LAY_ON_HANDS_INSUFFICIENT_POOL]:
+    'Pool de Lay on Hands insuficiente para a cura solicitada.',
 };
 
 export interface GameEventData {

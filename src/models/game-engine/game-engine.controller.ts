@@ -39,6 +39,7 @@ import { PermissionResolver } from './services/permission-resolver.service';
 import { DeathSaveDto } from './dto/death-save.dto';
 import { GenericActionDto } from './dto/generic-action.dto';
 import { GenericActionsService } from './services/generic-actions.service';
+import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -87,6 +88,7 @@ export class GameEngineController {
     private readonly savingThrowService: SavingThrowService,
     private readonly permissionResolver: PermissionResolver,
     private readonly genericActionsService: GenericActionsService,
+    private readonly classFeatureExecutor: ClassFeatureExecutorService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -420,17 +422,62 @@ export class GameEngineController {
       attackerParticipantId: string;
       targetParticipantId?: string;
       targetParticipantIds?: string[];
-      actionName: string;
+      /** Spec 003: breaking change — aceita apenas `actionSlug`. `actionName` antigo rejeitado. */
+      actionSlug?: string;
+      /** @deprecated Shape pre-spec-003. Rejected with 400 MISSING_ACTION_SLUG. */
+      actionName?: string;
+      /** Opções específicas da ação (ex: Unarmed Strike { mode: 'damage'|'grapple'|'shove' }). */
+      options?: Record<string, unknown>;
       forceAdvantage?: boolean;
       forceDisadvantage?: boolean;
     },
   ) {
-    const isMultiattack = /multiataque|multiattack/i.test(body.actionName ?? '');
+    // Spec 003 breaking: só aceita actionSlug.
+    if (!body.actionSlug) {
+      return {
+        ok: false,
+        error:
+          "Campo 'actionSlug' e obrigatorio. O shape antigo ('actionName') foi removido em Spec 003.",
+        code: 'MISSING_ACTION_SLUG',
+        hint:
+          'Use actionSlug de GET /characters/:id/combat-actions ou GET /encounters/:id/participants/:pid/actions.',
+      };
+    }
+    // Shove/Grapple standalone foram removidos — viram sub-opções do Unarmed Strike.
+    if (body.actionSlug === 'shove' || body.actionSlug === 'grapple') {
+      return {
+        ok: false,
+        error:
+          'Shove e Grapple sao sub-opcoes de Unarmed Strike (XPHB 2024).',
+        code: 'USE_UNARMED_STRIKE',
+        hint:
+          `Use actionSlug='unarmed-strike' com options.mode='${body.actionSlug}'.`,
+      };
+    }
+
+    const ownerUserId = getUserId(req);
+    // Traduz slug → actionName interno para manter o fluxo de resolveAttack intacto.
+    const translated = await this.combatService.translateSlugToActionName(
+      id,
+      body.attackerParticipantId,
+      body.actionSlug,
+      ownerUserId,
+    );
+    if (!translated.ok) return translated;
+    const actionName = translated.value;
+
+    const isMultiattack = /multiataque|multiattack/i.test(actionName);
     if (isMultiattack) {
       return this.combatService.resolveMultiattack(id, {
-        ...body,
+        attackerParticipantId: body.attackerParticipantId,
         targetParticipantId: body.targetParticipantId ?? '',
-        ownerUserId: getUserId(req),
+        targetParticipantIds: body.targetParticipantIds,
+        actionName,
+        actionSlug: body.actionSlug,
+        options: body.options,
+        forceAdvantage: body.forceAdvantage,
+        forceDisadvantage: body.forceDisadvantage,
+        ownerUserId,
       });
     }
     if (!body.targetParticipantId) {
@@ -443,10 +490,12 @@ export class GameEngineController {
     return this.combatService.resolveAttack(id, {
       attackerParticipantId: body.attackerParticipantId,
       targetParticipantId: body.targetParticipantId,
-      actionName: body.actionName,
+      actionName,
+      actionSlug: body.actionSlug,
+      options: body.options,
       forceAdvantage: body.forceAdvantage,
       forceDisadvantage: body.forceDisadvantage,
-      ownerUserId: getUserId(req),
+      ownerUserId,
     });
   }
 
@@ -499,6 +548,24 @@ export class GameEngineController {
     @Param('participantId') participantId: string,
   ) {
     return this.combatService.getTurnActions(
+      id,
+      participantId,
+      getUserId(req),
+    );
+  }
+
+  /**
+   * Spec 003 — ActionDescriptor[] tipado do participant no encounter,
+   * com action economy corrente (turno ativo, actionUsed, attacksUsedThisTurn,
+   * reactionUsed) e rest state (feature_uses_used, spell_slots_used) aplicados.
+   */
+  @Get('encounters/:id/participants/:participantId/actions')
+  async getParticipantActions(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+  ) {
+    return this.combatService.getParticipantCombatActions(
       id,
       participantId,
       getUserId(req),
@@ -684,6 +751,42 @@ export class GameEngineController {
     return this.genericActionsService.execute(id, dto);
   }
 
+  /**
+   * Spec 003 Fatia 7/8 — endpoint unificado para invocar class features
+   * ativaveis (Second Wind, Action Surge, Reckless Attack, Lay on Hands,
+   * Cunning Action wrapper, Turn Undead/Channel Divinity, Rage, Wild Shape,
+   * Bardic Inspiration, Cunning Strike, Uncanny Dodge, Flurry of Blows,
+   * Metamagic, Pact of the Blade, Divine Sense, Steady Aim).
+   *
+   * Features FULL resolvem mecanica aqui (heal, flags, pool). Features
+   * STUB emitem evento `class_feature_invoked` que a Spec 4 consome.
+   */
+  @Post('encounters/:id/class-feature')
+  async invokeClassFeature(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      participantId: string;
+      featureSlug: string;
+      [key: string]: unknown;
+    },
+  ) {
+    const authUserId = getUserId(req);
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      authUserId,
+      id,
+    );
+    return this.classFeatureExecutor.execute(
+      id,
+      body.participantId,
+      body.featureSlug,
+      body,
+      authUserId,
+    );
+  }
+
   @Post('encounters/:id/death-save/:participantId')
   async resolveDeathSave(
     @Req() req: AuthRequest,
@@ -712,6 +815,10 @@ export class GameEngineController {
       spellSlug: string;
       slotLevel: number;
       targetParticipantIds: string[];
+      /** Spec 003 Fatia 9 — cast como reaction (Shield, Counterspell, etc.). */
+      asReaction?: boolean;
+      /** Evento que disparou a reaction (ex: attack_rolled). Obrigatorio se asReaction=true. */
+      triggerEventId?: string;
     },
   ) {
     return this.spellCastingService.castSpellInCombat({
@@ -721,6 +828,8 @@ export class GameEngineController {
       slotLevel: body.slotLevel,
       targetParticipantIds: body.targetParticipantIds,
       ownerUserId: getUserId(req),
+      asReaction: body.asReaction,
+      triggerEventId: body.triggerEventId,
     });
   }
 

@@ -133,6 +133,7 @@ function createHarness() {
     sessionService,
     savingThrowService,
     monsterActionResolver,
+    { listActions: async () => [], resolveSlug: async () => null, listAvailableSlugs: async () => [] } as any,
   );
 
   return { combat, participants, encounter };
@@ -156,7 +157,7 @@ describe('CombatService.getTurnActions — US13 bucketing (Spec 005)', () => {
     h.participants.set(pc.id, pc);
     h.encounter.turnOrder = [pc.id];
 
-    const res = await h.combat.getTurnActions(h.encounter.id, pc.id);
+    const res = await h.combat.getTurnActions(h.encounter.id, pc.id, 'dm-1');
 
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -171,7 +172,7 @@ describe('CombatService.getTurnActions — US13 bucketing (Spec 005)', () => {
     h.participants.set(pc.id, pc);
     h.encounter.turnOrder = [pc.id];
 
-    const res = await h.combat.getTurnActions(h.encounter.id, pc.id);
+    const res = await h.combat.getTurnActions(h.encounter.id, pc.id, 'dm-1');
 
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -212,7 +213,7 @@ describe('CombatService.getTurnActions — US13 bucketing (Spec 005)', () => {
     h.participants.set(goblin.id, goblin);
     h.encounter.turnOrder = [goblin.id];
 
-    const res = await h.combat.getTurnActions(h.encounter.id, goblin.id);
+    const res = await h.combat.getTurnActions(h.encounter.id, goblin.id, 'dm-1');
 
     expect(res.ok).toBe(true);
     if (!res.ok) return;

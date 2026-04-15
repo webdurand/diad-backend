@@ -40,6 +40,11 @@ import {
   type AddMagicItemDto,
 } from './services/inventory.service';
 import { ActionsService } from './services/actions.service';
+import { CombatActionRegistry } from '../game-engine/services/combat-action-registry.service';
+import type {
+  ParticipantContext,
+  ResolverSheetSlice,
+} from '../game-engine/interfaces/combat-action.interfaces';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 import { UnauthorizedException } from '@nestjs/common';
@@ -70,6 +75,7 @@ export class CharactersController {
     private readonly spellService: SpellService,
     private readonly inventoryService: InventoryService,
     private readonly actionsService: ActionsService,
+    private readonly combatActionRegistry: CombatActionRegistry,
   ) {}
 
   @Get()
@@ -151,6 +157,63 @@ export class CharactersController {
   async getActions(@Req() req: AuthRequest, @Param('id') id: string) {
     const userId = getUserId(req);
     return this.actionsService.getActions(userId, id);
+  }
+
+  /**
+   * Spec 003 — lista tipada (`ActionDescriptor[]`) de ações disponíveis ao PC,
+   * consultando o `CombatActionRegistry` (weapon + unarmed + generic + class-feature).
+   * Out-of-encounter: ignora action economy (always available se o PC tem a ação),
+   * mas respeita rest state (feature_uses_used, slots, equipment equipado).
+   */
+  @Get(':id/combat-actions')
+  async getCombatActions(@Req() req: AuthRequest, @Param('id') id: string) {
+    const userId = getUserId(req);
+    const [sheet, featureUsesUsed] = await Promise.all([
+      this.sheetService.computeSheet(userId, id),
+      this.stateService.getFeatureUsesUsed(id),
+    ]);
+    const sheetSlice: ResolverSheetSlice = {
+      equipment: sheet.equipment.map((e) => ({
+        id: e.id,
+        slug: e.slug,
+        name: e.name,
+        equipped: e.equipped,
+        damage: e.damage,
+        range: e.range,
+        properties: e.properties,
+      })),
+      classes: sheet.classes.map((c) => ({
+        slug: c.slug,
+        name: c.name,
+        level: c.level,
+      })),
+      features: sheet.features.map((f) => ({
+        slug: f.slug,
+        name: f.name,
+        level: f.level,
+        active: f.active,
+      })),
+      abilityMods: sheet.abilityScores.reduce<Record<string, number>>(
+        (acc, a) => {
+          acc[a.slug] = a.modifier;
+          return acc;
+        },
+        {},
+      ),
+      proficiencyBonus: sheet.proficiencyBonus,
+      totalLevel: sheet.totalLevel,
+    };
+
+    const ctx: ParticipantContext = {
+      type: 'pc',
+      characterId: id,
+      conditions: sheet.conditions,
+      featureUsesUsed,
+      sheet: sheetSlice,
+      // out-of-encounter: sem action economy → resolvers tratam available só por rest state
+    };
+
+    return this.combatActionRegistry.listActions(ctx);
   }
 
   @Get(':id/level-up-options')

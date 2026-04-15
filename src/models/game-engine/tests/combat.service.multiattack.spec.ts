@@ -116,6 +116,7 @@ function createHarness() {
     sessionService,
     savingThrowService,
     monsterActionResolver,
+    { listActions: async () => [], resolveSlug: async () => null, listAvailableSlugs: async () => [] } as any,
   );
 
   return { combat, participants, encounter, hpByChar, diceService };
