@@ -39,6 +39,7 @@ import { PermissionResolver } from './services/permission-resolver.service';
 import { DeathSaveDto } from './dto/death-save.dto';
 import { GenericActionDto } from './dto/generic-action.dto';
 import { GenericActionsService } from './services/generic-actions.service';
+import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -87,6 +88,7 @@ export class GameEngineController {
     private readonly savingThrowService: SavingThrowService,
     private readonly permissionResolver: PermissionResolver,
     private readonly genericActionsService: GenericActionsService,
+    private readonly classFeatureExecutor: ClassFeatureExecutorService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -747,6 +749,42 @@ export class GameEngineController {
       id,
     );
     return this.genericActionsService.execute(id, dto);
+  }
+
+  /**
+   * Spec 003 Fatia 7/8 — endpoint unificado para invocar class features
+   * ativaveis (Second Wind, Action Surge, Reckless Attack, Lay on Hands,
+   * Cunning Action wrapper, Turn Undead/Channel Divinity, Rage, Wild Shape,
+   * Bardic Inspiration, Cunning Strike, Uncanny Dodge, Flurry of Blows,
+   * Metamagic, Pact of the Blade, Divine Sense, Steady Aim).
+   *
+   * Features FULL resolvem mecanica aqui (heal, flags, pool). Features
+   * STUB emitem evento `class_feature_invoked` que a Spec 4 consome.
+   */
+  @Post('encounters/:id/class-feature')
+  async invokeClassFeature(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      participantId: string;
+      featureSlug: string;
+      [key: string]: unknown;
+    },
+  ) {
+    const authUserId = getUserId(req);
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      authUserId,
+      id,
+    );
+    return this.classFeatureExecutor.execute(
+      id,
+      body.participantId,
+      body.featureSlug,
+      body,
+      authUserId,
+    );
   }
 
   @Post('encounters/:id/death-save/:participantId')

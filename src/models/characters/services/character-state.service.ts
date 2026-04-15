@@ -98,6 +98,39 @@ export class CharacterStateService {
     return getCharacterState(this.stateRepo, characterId);
   }
 
+  /**
+   * Spec 003 — retorna o record `feature_uses_used` do PC (vazio se state não existe).
+   * Usado pelo CombatActionRegistry para decidir `available` de class features.
+   */
+  async getFeatureUsesUsed(
+    characterId: string,
+  ): Promise<Record<string, number>> {
+    const state = await this.stateRepo.findOne({
+      where: { character_id: characterId },
+    });
+    return state?.feature_uses_used ?? {};
+  }
+
+  /**
+   * Spec 003 — incrementa usos consumidos de uma feature. Usado pelo executor.
+   * Se delta for HP gasto (ex: lay-on-hands), passar delta variável.
+   */
+  async incrementFeatureUses(
+    characterId: string,
+    featureSlug: string,
+    delta = 1,
+  ): Promise<number> {
+    const state = await this.getState(characterId);
+    const current = state.feature_uses_used?.[featureSlug] ?? 0;
+    const next = current + delta;
+    state.feature_uses_used = {
+      ...(state.feature_uses_used ?? {}),
+      [featureSlug]: next,
+    };
+    await this.stateRepo.save(state);
+    return next;
+  }
+
   private async computeMaxHp(characterId: string): Promise<number> {
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },

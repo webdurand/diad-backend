@@ -4,6 +4,7 @@ import { GenericActionResolver } from '../game-engine/services/action-resolvers/
 import { UnarmedStrikeResolver } from '../game-engine/services/action-resolvers/unarmed-strike.resolver';
 import { WeaponActionResolver } from '../game-engine/services/action-resolvers/weapon-action.resolver';
 import { MonsterActionAdapterResolver } from '../game-engine/services/action-resolvers/monster-action-adapter.resolver';
+import { ClassFeatureActionResolver } from '../game-engine/services/action-resolvers/class-feature.resolver';
 import { ACTION_RESOLVERS } from '../game-engine/services/action-resolvers/action-resolver.interface';
 
 /**
@@ -21,6 +22,7 @@ import { ACTION_RESOLVERS } from '../game-engine/services/action-resolvers/actio
     UnarmedStrikeResolver,
     WeaponActionResolver,
     MonsterActionAdapterResolver,
+    ClassFeatureActionResolver,
     {
       provide: ACTION_RESOLVERS,
       useFactory: (
@@ -28,12 +30,14 @@ import { ACTION_RESOLVERS } from '../game-engine/services/action-resolvers/actio
         unarmed: UnarmedStrikeResolver,
         weapon: WeaponActionResolver,
         monster: MonsterActionAdapterResolver,
-      ) => [weapon, unarmed, monster, generic] as const,
+        features: ClassFeatureActionResolver,
+      ) => [weapon, unarmed, features, monster, generic] as const,
       inject: [
         GenericActionResolver,
         UnarmedStrikeResolver,
         WeaponActionResolver,
         MonsterActionAdapterResolver,
+        ClassFeatureActionResolver,
       ],
     },
     CombatActionRegistry,

@@ -168,7 +168,10 @@ export class CharactersController {
   @Get(':id/combat-actions')
   async getCombatActions(@Req() req: AuthRequest, @Param('id') id: string) {
     const userId = getUserId(req);
-    const sheet = await this.sheetService.computeSheet(userId, id);
+    const [sheet, featureUsesUsed] = await Promise.all([
+      this.sheetService.computeSheet(userId, id),
+      this.stateService.getFeatureUsesUsed(id),
+    ]);
     const sheetSlice: ResolverSheetSlice = {
       equipment: sheet.equipment.map((e) => ({
         id: e.id,
@@ -205,6 +208,7 @@ export class CharactersController {
       type: 'pc',
       characterId: id,
       conditions: sheet.conditions,
+      featureUsesUsed,
       sheet: sheetSlice,
       // out-of-encounter: sem action economy → resolvers tratam available só por rest state
     };

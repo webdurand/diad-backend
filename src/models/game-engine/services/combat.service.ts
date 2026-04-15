@@ -240,10 +240,10 @@ export class CombatService {
         participant,
         ownerUserId,
       );
-      const sheet = await this.sheetService.computeSheet(
-        pcOwnerId,
-        participant.characterId,
-      );
+      const [sheet, featureUsesUsed] = await Promise.all([
+        this.sheetService.computeSheet(pcOwnerId, participant.characterId),
+        this.stateService.getFeatureUsesUsed(participant.characterId),
+      ]);
       const abilityMods = sheet.abilityScores.reduce<Record<string, number>>(
         (acc, a) => {
           acc[a.slug] = a.modifier;
@@ -257,6 +257,7 @@ export class CombatService {
         characterId: participant.characterId,
         actionEconomy,
         conditions: participant.conditions ?? [],
+        featureUsesUsed,
         sheet: {
           equipment: sheet.equipment.map((e) => ({
             id: e.id,
