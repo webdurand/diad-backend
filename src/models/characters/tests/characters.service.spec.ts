@@ -974,6 +974,101 @@ describe('CharactersService', () => {
         expect(strSave!.data.bonus).toBe(1);
       });
 
+      it('throws INVALID_CLASS_EQUIPMENT_CHOICE when choice is not in class starting_equipment_options.default', async () => {
+        const fighterClass = {
+          ...makeClass('fighter'),
+          starting_equipment_options: {
+            default: ['1x Chain Mail', '1x Longsword', '1x Shield', '1x Light Crossbow'],
+            defaultData: null,
+            goldAlternative: null,
+            additionalFromBackground: true,
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Invalid Choice',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: ['1x Goblin Bone Flute'],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'INVALID_CLASS_EQUIPMENT_CHOICE',
+            invalidChoices: ['1x Goblin Bone Flute'],
+          }),
+        });
+      });
+
+      it('throws MISSING_BACKGROUND_EQUIPMENT_CHOICES when background offers options and client sends none', async () => {
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        const bgWithOptions = {
+          id: 'bg-1',
+          slug: 'soldier',
+          equipment_options: { default: ['1x Spear', '1x Playing Card Set'] },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue(bgWithOptions);
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'No BG Equipment',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              backgroundEquipmentChoices: [],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'MISSING_BACKGROUND_EQUIPMENT_CHOICES',
+          }),
+        });
+      });
+
+      it('throws INVALID_BACKGROUND_EQUIPMENT_CHOICE when choice is not in background options', async () => {
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        const bgWithOptions = {
+          id: 'bg-1',
+          slug: 'soldier',
+          equipment_options: { default: ['1x Spear', '1x Playing Card Set'] },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue(bgWithOptions);
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Invalid BG',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              backgroundEquipmentChoices: ['1x Invalid Thing'],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
+            invalidChoices: ['1x Invalid Thing'],
+          }),
+        });
+      });
+
       it('reads abilityScores from input.choices when both data and choices are present (choices wins)', async () => {
         const saves: Array<{ entity: string; data: any }> = [];
         const fighterClass = makeClass('fighter');

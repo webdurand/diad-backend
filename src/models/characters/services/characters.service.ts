@@ -107,16 +107,75 @@ const SLUG_MAP: Record<string, AbilitySlug> = {
   cha: 'cha',
 };
 
+function extractEquipmentOptionLabels(
+  raw: Record<string, unknown> | null | undefined,
+): string[] {
+  // Extrai apenas labels textuais (shape { default: [strings] } ou
+  // { options: [{ label/name }] }). Shape XPHB usa { defaultData: [{A: [items], B: [...]}] }
+  // que NÃO expõe labels textuais — nesse caso retornamos [] e pulamos validação
+  // de conteúdo (materializeEquipment faz matching permissivo).
+  if (!raw) return [];
+  const candidates: unknown[] = [];
+  const push = (v: unknown) => {
+    if (Array.isArray(v)) candidates.push(...v);
+  };
+  push((raw as { default?: unknown }).default);
+  push((raw as { options?: unknown }).options);
+  if (Array.isArray(raw as unknown as unknown[])) {
+    push(raw as unknown as unknown[]);
+  }
+  return candidates
+    .map((c) => {
+      if (typeof c === 'string') return c;
+      if (c && typeof c === 'object') {
+        const obj = c as { label?: unknown; name?: unknown };
+        if (typeof obj.label === 'string') return obj.label;
+        if (typeof obj.name === 'string') return obj.name;
+      }
+      return null;
+    })
+    .filter((s): s is string => s !== null && s.length > 0);
+}
+
 function hasStartingEquipmentOptions(
   raw: Record<string, unknown> | null | undefined,
 ): boolean {
   if (!raw) return false;
-  const options = (raw as { options?: unknown }).options;
-  if (Array.isArray(options)) return options.length > 0;
-  if (Array.isArray(raw as unknown as unknown[])) {
-    return (raw as unknown as unknown[]).length > 0;
+  // Textuais
+  if (extractEquipmentOptionLabels(raw).length > 0) return true;
+  // Shape XPHB { defaultData: [{ A: [...], B: [...] }, ...] }
+  const defaultData = (raw as { defaultData?: unknown }).defaultData;
+  if (Array.isArray(defaultData)) {
+    for (const group of defaultData) {
+      if (group && typeof group === 'object' && Object.keys(group).length > 0) {
+        return true;
+      }
+    }
   }
-  return Object.keys(raw).length > 0;
+  // Objeto não-vazio em top-level (shape background { A: [...], B: [...] })
+  if (!Array.isArray(raw) && Object.keys(raw).length > 0) {
+    const keys = Object.keys(raw).filter(
+      (k) => !['additionalFromBackground', 'goldAlternative'].includes(k),
+    );
+    for (const k of keys) {
+      const v = (raw as Record<string, unknown>)[k];
+      if (v && (Array.isArray(v) || typeof v === 'object')) return true;
+    }
+  }
+  return false;
+}
+
+function validateEquipmentChoices(
+  providedChoices: string[] | undefined,
+  validLabels: string[],
+): string[] {
+  if (!providedChoices || providedChoices.length === 0) return [];
+  // Sem catálogo de opções: não há o que validar (classe/background livre).
+  if (validLabels.length === 0) return [];
+  const validSet = new Set(validLabels.map((l) => l.toLowerCase().trim()));
+  return providedChoices.filter(
+    (c) => !validSet.has(String(c).toLowerCase().trim()),
+  );
 }
 
 type EquipmentLite = {
@@ -260,26 +319,82 @@ export class CharactersService {
       });
     }
 
-    // Validação: equipment choices obrigatórias quando a classe oferece opções.
+    // Validação: equipment choices contra as opções do SRD (classe + background).
     const classSlugForOptions = choices.classSlug;
     if (classSlugForOptions) {
       const classForOptions = await this.classRepository.findOneBy({
         slug: classSlugForOptions,
       });
-      const hasOptions = hasStartingEquipmentOptions(
-        classForOptions?.starting_equipment_options,
-      );
-      const providedChoices = choices.classEquipmentChoices;
-      const noChoicesProvided =
-        !providedChoices ||
-        (Array.isArray(providedChoices) && providedChoices.length === 0);
-      if (hasOptions && noChoicesProvided && !choices.classStartingGold) {
+      const classRaw = classForOptions?.starting_equipment_options;
+      const classOptionLabels = extractEquipmentOptionLabels(classRaw);
+      const classHasOptions = hasStartingEquipmentOptions(classRaw);
+      const providedClassChoices = choices.classEquipmentChoices;
+      const noClassChoicesProvided =
+        !providedClassChoices ||
+        (Array.isArray(providedClassChoices) &&
+          providedClassChoices.length === 0);
+      if (
+        classHasOptions &&
+        noClassChoicesProvided &&
+        !choices.classStartingGold
+      ) {
         throw new BadRequestException({
           ok: false,
           code: 'MISSING_CLASS_EQUIPMENT_CHOICES',
           error:
             'Esta classe oferece opções de equipamento inicial. Selecione uma ou envie classStartingGold.',
           classSlug: classSlugForOptions,
+          validOptions: classOptionLabels,
+        });
+      }
+      const invalidClassChoices = validateEquipmentChoices(
+        providedClassChoices,
+        classOptionLabels,
+      );
+      if (invalidClassChoices.length > 0) {
+        throw new BadRequestException({
+          ok: false,
+          code: 'INVALID_CLASS_EQUIPMENT_CHOICE',
+          error: `Opções inválidas para ${classSlugForOptions}: ${invalidClassChoices.join(', ')}.`,
+          invalidChoices: invalidClassChoices,
+          validOptions: classOptionLabels,
+        });
+      }
+    }
+
+    const bgSlugForOptions = choices.backgroundSlug;
+    if (bgSlugForOptions) {
+      const bgForOptions = await this.backgroundRepository.findOneBy({
+        slug: bgSlugForOptions,
+      });
+      const bgRaw = bgForOptions?.equipment_options;
+      const bgOptionLabels = extractEquipmentOptionLabels(bgRaw);
+      const bgHasOptions = hasStartingEquipmentOptions(bgRaw);
+      const providedBgChoices = choices.backgroundEquipmentChoices;
+      const noBgChoicesProvided =
+        !providedBgChoices ||
+        (Array.isArray(providedBgChoices) && providedBgChoices.length === 0);
+      if (bgHasOptions && noBgChoicesProvided) {
+        throw new BadRequestException({
+          ok: false,
+          code: 'MISSING_BACKGROUND_EQUIPMENT_CHOICES',
+          error:
+            'Este background oferece opções de equipamento inicial. Selecione uma.',
+          backgroundSlug: bgSlugForOptions,
+          validOptions: bgOptionLabels,
+        });
+      }
+      const invalidBgChoices = validateEquipmentChoices(
+        providedBgChoices,
+        bgOptionLabels,
+      );
+      if (invalidBgChoices.length > 0) {
+        throw new BadRequestException({
+          ok: false,
+          code: 'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
+          error: `Opções inválidas para background ${bgSlugForOptions}: ${invalidBgChoices.join(', ')}.`,
+          invalidChoices: invalidBgChoices,
+          validOptions: bgOptionLabels,
         });
       }
     }
