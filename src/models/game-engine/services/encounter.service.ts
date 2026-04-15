@@ -1,9 +1,10 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { MonsterEntity } from 'src/entities/monster.entity';
+import { CharacterEntity } from 'src/entities/character.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
 import { InventoryService } from 'src/models/characters/services/inventory.service';
@@ -58,6 +59,8 @@ export interface EncounterDifficulty {
 
 @Injectable()
 export class EncounterService {
+  private readonly logger = new Logger(EncounterService.name);
+
   constructor(
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
@@ -65,6 +68,8 @@ export class EncounterService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     @InjectRepository(MonsterEntity)
     private readonly monsterRepo: Repository<MonsterEntity>,
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo: Repository<CharacterEntity>,
     private readonly diceService: DiceService,
     private readonly eventService: EventService,
     private readonly sessionService: SessionService,
@@ -107,32 +112,58 @@ export class EncounterService {
         } catch {}
       }
 
-      // Add all unique characters with their respective owner IDs
-      for (const charId of charIds) {
+      // Add all unique characters with their respective owner IDs.
+      // Iterate in deterministic order for snapshot stability.
+      const orderedIds = Array.from(charIds).sort();
+      for (const charId of orderedIds) {
+        const userId = await this.resolveCharacterOwner(
+          charId,
+          ownerUserId,
+          session.campaignId ?? undefined,
+        );
         try {
-          // For DM-owned characters use ownerUserId; for player characters use their userId
-          const userId = await this.resolveCharacterOwner(charId, ownerUserId, session.campaignId);
           await this.addCharacter(saved.id, charId, userId);
-        } catch {}
+        } catch (err) {
+          // Don't block the encounter creation if a single PC fails
+          // (e.g. orphan characterId in session, sheet compute error).
+          // Log + continue — the DM can add manually later.
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `auto-include skipped character=${charId} on encounter=${saved.id}: ${msg}`,
+          );
+        }
       }
     }
 
     return this.getById(saved.id);
   }
 
+  /**
+   * Resolves the owning userId of a character. Lookup order:
+   *  1. CampaignPlayer with this characterId (when campaignId is given)
+   *  2. CharacterEntity.userId direct DB lookup
+   *  3. fallbackUserId (caller — typically the DM)
+   */
   async resolveCharacterOwner(
     characterId: string,
     fallbackUserId: string,
     campaignId?: string,
   ): Promise<string> {
-    if (!campaignId) return fallbackUserId;
-    try {
-      const players = await this.campaignService.getPlayers(campaignId);
-      const owner = players.find((p) => p.characterId === characterId);
-      return owner?.userId ?? fallbackUserId;
-    } catch {
-      return fallbackUserId;
+    if (campaignId) {
+      try {
+        const players = await this.campaignService.getPlayers(campaignId);
+        const owner = players.find((p) => p.characterId === characterId);
+        if (owner?.userId) return owner.userId;
+      } catch {
+        // fall through to direct lookup
+      }
     }
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId },
+      select: ['id', 'userId'],
+    });
+    if (character?.userId) return character.userId;
+    return fallbackUserId;
   }
 
   async getById(
@@ -159,9 +190,20 @@ export class EncounterService {
         const sheet = await this.sheetService.computeSheet(ownerId, p.characterId);
         (p as any).currentHp = sheet.currentHp;
         (p as any).maxHp = sheet.maxHp;
+        (p as any).armorClass = sheet.armorClass;
+        // initiativeModifier may already be persisted but keep it in sync with
+        // the computed sheet (e.g. after ASI/feat changes).
+        if (p.initiativeModifier == null || p.initiativeModifier !== sheet.initiative) {
+          (p as any).initiativeModifier = sheet.initiative;
+        }
         (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
         (p as any).deathSaveFailures = sheet.deathSaves?.failures ?? 0;
-      } catch {}
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.debug(
+          `enrichPcHp skipped characterId=${p.characterId}: ${msg}`,
+        );
+      }
     }
   }
 
