@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -428,31 +429,38 @@ export class LevelUpService {
     const newClassLevel = isNewClass ? 1 : existingCharClass!.class_level + 1;
     const newTotalLevel = totalLevel + 1;
 
-    // Validate multiclass prerequisites
+    // Spec 005: multiclass prereqs — 403 with structured missingPrerequisites.
     if (isNewClass) {
       const abilityMap = new Map<string, number>();
       for (const ca of charAbilities) {
         abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
       }
 
-      // Must meet new class prereqs
       const newPrereqs = this.parsePrerequisites(classEntity.multi_classing);
-      if (!this.checkPrerequisites(newPrereqs, abilityMap, charClasses)) {
-        throw new BadRequestException(
-          `Pre-requisitos de multiclasse para ${classEntity.name} nao atendidos.`,
-        );
+      const missingNew = this.computeMissingPrerequisites(newPrereqs, abilityMap);
+      if (missingNew.length > 0) {
+        throw new ForbiddenException({
+          code: 'MULTICLASS_PREREQ_NOT_MET',
+          error: `Pre-requisitos de multiclasse para ${classEntity.name} nao atendidos.`,
+          missingPrerequisites: missingNew,
+        });
       }
 
-      // Must meet current class prereqs
       const primaryClass = charClasses[0]?.class;
       if (primaryClass) {
         const currentPrereqs = this.parsePrerequisites(
           primaryClass.multi_classing,
         );
-        if (!this.checkPrerequisites(currentPrereqs, abilityMap, charClasses)) {
-          throw new BadRequestException(
-            'Pre-requisitos de multiclasse da classe atual nao atendidos.',
-          );
+        const missingCurrent = this.computeMissingPrerequisites(
+          currentPrereqs,
+          abilityMap,
+        );
+        if (missingCurrent.length > 0) {
+          throw new ForbiddenException({
+            code: 'MULTICLASS_PREREQ_NOT_MET',
+            error: `Pre-requisitos de multiclasse da classe atual (${primaryClass.name}) nao atendidos.`,
+            missingPrerequisites: missingCurrent,
+          });
         }
       }
     }

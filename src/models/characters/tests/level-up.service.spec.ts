@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { LevelUpService } from 'src/models/characters/services/level-up.service';
 import {
   createMockRepository,
@@ -15,6 +19,12 @@ import {
 } from 'src/shared/test-utils/entity-factories';
 import { XP_THRESHOLDS, CASTER_CLASS_TYPE } from 'src/shared/srd-constants';
 import { SpellStatusEnum } from 'src/entities/enums';
+
+interface MissingPrereqPayload {
+  ability: string;
+  required: number;
+  current: number;
+}
 
 describe('LevelUpService', () => {
   let service: LevelUpService;
@@ -529,6 +539,86 @@ describe('LevelUpService', () => {
       expect(bard!.missingPrerequisites).toEqual([
         { ability: 'cha', required: 13, current: 8 },
       ]);
+    });
+
+    it('POST /level-up: Fighter CHA 8 attempting Bard → 403 MULTICLASS_PREREQ_NOT_MET with missingPrerequisites', async () => {
+      const fighterCc = makeCharacterClass('fighter', 1);
+      const bardEntity = makeClass('bard', {
+        multi_classing: {
+          prerequisites: [
+            { ability_score: { index: 'cha' }, minimum_score: 13 },
+          ],
+        },
+      });
+      const state = makeCharacterState({ xp: 300, current_hp: 10 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([fighterCc]);
+      // CHA 8 (below bard prereq), STR 13 (multiclass fighter prereq)
+      repos.charAbility.find!.mockResolvedValue(
+        makeCharacterAbilityScores({ str: 13, cha: 8 }),
+      );
+      repos.class.findOneBy!.mockImplementation(
+        async (where: { slug: string }) => {
+          if (where.slug === 'bard') return bardEntity;
+          if (where.slug === 'fighter') return fighterCc.class;
+          return null;
+        },
+      );
+      repos.level.findOne!.mockResolvedValue(null);
+
+      let caught: ForbiddenException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'bard',
+          hpMethod: 'fixed',
+        });
+      } catch (e) {
+        caught = e as ForbiddenException;
+      }
+      expect(caught).toBeInstanceOf(ForbiddenException);
+      const body = caught!.getResponse() as {
+        code: string;
+        missingPrerequisites: MissingPrereqPayload[];
+      };
+      expect(body.code).toBe('MULTICLASS_PREREQ_NOT_MET');
+      expect(body.missingPrerequisites).toEqual([
+        { ability: 'cha', required: 13, current: 8 },
+      ]);
+    });
+
+    it('POST /level-up: Fighter CHA 13 → Bard multiclass allowed', async () => {
+      const fighterCc = makeCharacterClass('fighter', 1);
+      const bardEntity = makeClass('bard', {
+        multi_classing: {
+          prerequisites: [
+            { ability_score: { index: 'cha' }, minimum_score: 13 },
+          ],
+        },
+      });
+      const state = makeCharacterState({ xp: 300, current_hp: 10 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([fighterCc]);
+      repos.charAbility.find!.mockResolvedValue(
+        makeCharacterAbilityScores({ str: 13, cha: 13 }),
+      );
+      repos.class.findOneBy!.mockImplementation(
+        async (where: { slug: string }) => {
+          if (where.slug === 'bard') return bardEntity;
+          return null;
+        },
+      );
+      repos.level.findOne!.mockResolvedValue(null);
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'bard',
+        hpMethod: 'fixed',
+      });
+      expect(result.totalLevel).toBe(2);
+      expect(result.classLevel).toBe(1);
     });
 
     it('PC fighter-phb + classSlug "wizard" → multiclass (different canonical root)', async () => {
