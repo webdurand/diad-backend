@@ -39,6 +39,7 @@ import {
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
 import { type EditionRules, getSubclassLevel as getSubclassLevelFromRules, getPreparedFormula } from 'src/shared/edition-rules';
+import { Logger } from '@nestjs/common';
 
 type CasterType = CasterClassType;
 
@@ -64,6 +65,7 @@ export interface LevelUpOptionsResult {
 export interface AvailableClassOption {
   slug: string;                      // canonical: 'fighter' (no suffix)
   sourceQualifiedSlug: string;       // ClassEntity.slug actually used: 'fighter-phb' or 'fighter'
+  featureSourceFallback?: string;    // Spec 005: 'XPHB' when PHB LevelEntity was missing
   name: string;
   isCurrentClass: boolean;
   isMulticlass: boolean;             // true when picking this class would create a new CharacterClass
@@ -126,10 +128,18 @@ export interface LevelUpResult {
   hpGained: number;
   newFeatures: string[];
   message: string;
+  /**
+   * Spec 005 — presente quando o LevelEntity da edição do PC não existia e o
+   * service caiu no fallback via EditionRules.featureFallbackSource. Valor =
+   * CompSourceEntity.code da fonte usada (ex: 'XPHB').
+   */
+  featureSourceFallback?: string;
 }
 
 @Injectable()
 export class LevelUpService {
+  private readonly logger = new Logger(LevelUpService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(CharacterEntity)
@@ -255,15 +265,13 @@ export class LevelUpService {
         }
       }
 
-      // Load level data for the next class level
-      const levelData = await this.levelRepo.findOne({
-        where: {
-          class_id: cls.id,
-          level: nextClassLevel,
-          subclass_id: IsNull(),
-        },
-        relations: ['level_features', 'level_features.feature'],
-      });
+      // Spec 005 — load level data with PHB→XPHB fallback when seeded gaps exist
+      const { levelData, fallbackSource } = await this.resolveLevelData(
+        cls,
+        nextClassLevel,
+        character.source?.rules,
+        null,
+      );
 
       // Also load subclass level data if character has a subclass for this class
       let subclassFeatures: Array<{
@@ -274,14 +282,12 @@ export class LevelUpService {
       }> = [];
 
       if (charClass?.subclass_id) {
-        const subLevelData = await this.levelRepo.findOne({
-          where: {
-            class_id: cls.id,
-            level: nextClassLevel,
-            subclass_id: charClass.subclass_id,
-          },
-          relations: ['level_features', 'level_features.feature'],
-        });
+        const { levelData: subLevelData } = await this.resolveLevelData(
+          cls,
+          nextClassLevel,
+          character.source?.rules,
+          charClass.subclass_id,
+        );
         if (subLevelData?.level_features) {
           subclassFeatures = subLevelData.level_features.map((lf) => ({
             slug: lf.feature.slug,
@@ -341,6 +347,7 @@ export class LevelUpService {
       availableClasses.push({
         slug: canonical,
         sourceQualifiedSlug: cls.slug,
+        ...(fallbackSource ? { featureSourceFallback: fallbackSource } : {}),
         name: cls.name,
         isCurrentClass,
         isMulticlass,
@@ -544,15 +551,14 @@ export class LevelUpService {
       state.current_hp += hpGained;
       await manager.save(CharacterStateEntity, state);
 
-      // 4. Add features from the level
-      const levelData = await this.levelRepo.findOne({
-        where: {
-          class_id: classEntity.id,
-          level: newClassLevel,
-          subclass_id: IsNull(),
-        },
-        relations: ['level_features', 'level_features.feature'],
-      });
+      // Spec 005 — load features with PHB→XPHB fallback (tracks source used)
+      const character = await this.ensureOwnership(userId, characterId);
+      const { levelData, fallbackSource } = await this.resolveLevelData(
+        classEntity,
+        newClassLevel,
+        character.source?.rules,
+        null,
+      );
 
       if (levelData?.level_features) {
         for (const lf of levelData.level_features) {
@@ -575,14 +581,12 @@ export class LevelUpService {
         : existingCharClass;
 
       if (charClass?.subclass_id) {
-        const subLevelData = await this.levelRepo.findOne({
-          where: {
-            class_id: classEntity.id,
-            level: newClassLevel,
-            subclass_id: charClass.subclass_id,
-          },
-          relations: ['level_features', 'level_features.feature'],
-        });
+        const { levelData: subLevelData } = await this.resolveLevelData(
+          classEntity,
+          newClassLevel,
+          character.source?.rules,
+          charClass.subclass_id,
+        );
         if (subLevelData?.level_features) {
           for (const lf of subLevelData.level_features) {
             await manager.save(CharacterFeatureEntity, {
@@ -781,6 +785,7 @@ export class LevelUpService {
         hpGained,
         newFeatures,
         message: `${classEntity.name} nivel ${newClassLevel}! (Nivel total: ${newTotalLevel})`,
+        ...(fallbackSource ? { featureSourceFallback: fallbackSource } : {}),
       };
     });
   }
@@ -993,6 +998,60 @@ export class LevelUpService {
     return ensureCharacterOwnership(this.characterRepo, userId, characterId, [
       'source',
     ]);
+  }
+
+  /**
+   * Spec 005 — Resolve LevelEntity for (classEntity, nextLevel). When the
+   * native row is missing and the rules declare a `featureFallbackSource`,
+   * look up the same canonical class in that source and return it, tagged
+   * with the fallback source code. Emits a warning log so seed gaps are
+   * visible in production.
+   */
+  private async resolveLevelData(
+    classEntity: ClassEntity,
+    nextLevel: number,
+    rules: EditionRules | undefined,
+    subclassId: string | null,
+  ): Promise<{
+    levelData: LevelEntity | null;
+    fallbackSource?: string;
+  }> {
+    const whereClause = subclassId
+      ? { class_id: classEntity.id, level: nextLevel, subclass_id: subclassId }
+      : { class_id: classEntity.id, level: nextLevel, subclass_id: IsNull() };
+    const nativeData = await this.levelRepo.findOne({
+      where: whereClause,
+      relations: ['level_features', 'level_features.feature'],
+    });
+    if (nativeData) return { levelData: nativeData };
+
+    // Native row missing — try fallback source if configured
+    const fallbackCode = rules?.featureFallbackSource;
+    if (!fallbackCode || subclassId) {
+      // Don't fall back subclass data — subclasses are edition-specific by design
+      return { levelData: null };
+    }
+
+    const canonical = normalizeClassSlug(classEntity.slug);
+    const fallbackClass = await this.classRepo.findOne({
+      where: { slug: canonical },
+      relations: ['source'],
+    });
+    if (!fallbackClass || fallbackClass.source?.code !== fallbackCode) {
+      return { levelData: null };
+    }
+
+    const fallbackData = await this.levelRepo.findOne({
+      where: { class_id: fallbackClass.id, level: nextLevel, subclass_id: IsNull() },
+      relations: ['level_features', 'level_features.feature'],
+    });
+    if (fallbackData) {
+      this.logger.warn(
+        `[LEVEL_UP_FALLBACK] class=${classEntity.slug} level=${nextLevel} fallback=${fallbackCode}`,
+      );
+      return { levelData: fallbackData, fallbackSource: fallbackCode };
+    }
+    return { levelData: null };
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {

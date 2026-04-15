@@ -508,6 +508,63 @@ describe('LevelUpService', () => {
       expect(wiz!.nextLevel).toBe(1);
     });
 
+    it('GET /level-up-options: PC PHB with missing LevelEntity → fallback to XPHB + featureSourceFallback exposed', async () => {
+      const phbCc = makeCharacterClass('fighter-phb', 1);
+      const phbFighter = phbCc.class;
+      const xphbFighter = makeClass('fighter');
+      // PC loaded with source = PHB carrying featureFallbackSource='XPHB'
+      const character = makeCharacter({
+        source: {
+          code: 'PHB',
+          rules: { featureFallbackSource: 'XPHB' },
+        },
+      });
+      const state = makeCharacterState({ xp: 300 });
+
+      const xphbLevel2Data = {
+        id: 'level-xphb-fighter-2',
+        class_id: xphbFighter.id,
+        level: 2,
+        subclass_id: null,
+        spellcasting: null,
+        ability_score_bonuses: 0,
+        level_features: [
+          { feature: { id: 'f1', slug: 'action-surge', name: 'Action Surge', description: {} } },
+        ],
+      };
+
+      repos.character.findOne!.mockResolvedValue(character);
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([phbCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.find!.mockResolvedValue([phbFighter, xphbFighter]);
+      // PHB LevelEntity missing; XPHB resolution returns data
+      repos.class.findOne!.mockImplementation(
+        async ({ where }: { where: { slug: string } }) => {
+          if (where.slug === 'fighter') {
+            return { ...xphbFighter, source: { code: 'XPHB' } };
+          }
+          return null;
+        },
+      );
+      repos.level.findOne!.mockImplementation(
+        async ({ where }: { where: { class_id: string } }) => {
+          if (where.class_id === xphbFighter.id) return xphbLevel2Data;
+          return null; // PHB misses
+        },
+      );
+      repos.subclass.find!.mockResolvedValue([]);
+      repos.spellClass.find!.mockResolvedValue([]);
+
+      const result = await service.getOptions('user-1', 'char-1');
+      const fighter = result.availableClasses.find((c) => c.slug === 'fighter');
+      expect(fighter).toBeDefined();
+      expect(fighter!.sourceQualifiedSlug).toBe('fighter-phb');
+      expect(fighter!.featureSourceFallback).toBe('XPHB');
+      expect(fighter!.features.map((f) => f.slug)).toContain('action-surge');
+    });
+
     it('GET /level-up-options: missingPrerequisites populated when ability insufficient', async () => {
       const fighterCc = makeCharacterClass('fighter', 1);
       const bardEntity = makeClass('bard', {
