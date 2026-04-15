@@ -7,6 +7,8 @@ export interface ExhaustionModifiers {
   disadvAbility: boolean;
   /** Multiplicador de velocidade (1.0 = sem alteração; 0.5 = metade; 0 = parado). */
   speedMultiplier: number;
+  /** Spec 004 CP9 — XPHB 2024: redução flat de speed em ft (-5×level). Null no 2014. */
+  speedPenaltyFt?: number;
   /** Desvantagem em ataques. */
   disadvAttack: boolean;
   /** Desvantagem em saving throws. */
@@ -15,21 +17,27 @@ export interface ExhaustionModifiers {
   maxHpMultiplier: number;
   /** True se o nível atingido implica morte instantânea. */
   dead: boolean;
+  /** Spec 004 CP9 — XPHB 2024: penalidade flat em TODOS d20 rolls (-2×level). Null no 2014. */
+  d20Penalty?: number;
 }
 
 /**
- * Spec 004 — Exhaustion 2014 (PHB Apêndice A).
+ * Spec 004 — Exhaustion.
  *
- * Níveis cumulativos:
- * 1: desvantagem em ability checks.
- * 2: speed × 0.5.
- * 3: desvantagem em ataques e saves.
- * 4: maxHP × 0.5.
- * 5: speed = 0.
- * 6: morte.
+ * **2014** (PHB Apêndice A, 6 níveis cumulativos):
+ *  1: desvantagem em ability checks.
+ *  2: speed × 0.5.
+ *  3: desvantagem em ataques e saves.
+ *  4: maxHP × 0.5.
+ *  5: speed = 0.
+ *  6: morte.
  *
- * 2024 (10 níveis com -2 cumulativo) NÃO está implementado nesta release;
- * a estrutura comporta extensão futura via `EditionRules.exhaustionVariant`.
+ * **2024** (XPHB p.365, 10 níveis cumulativos — muito mais limpo):
+ *  - -2 × level em TODOS d20 rolls (attacks/checks/saves/death saves).
+ *  - -5 × level ft em speed.
+ *  - Level 10 = morte.
+ *
+ * Variant selection via `EditionRules.exhaustionVariant` no comp_source do PC.
  */
 @Injectable()
 export class ExhaustionService {
@@ -38,9 +46,22 @@ export class ExhaustionService {
     variant: ExhaustionVariant = '2014_six_levels',
   ): ExhaustionModifiers {
     if (variant === '2024_ten_levels') {
-      throw new Error(
-        'Exhaustion 2024 nao implementado nesta release; ative 2014_six_levels.',
-      );
+      const lvl = Math.max(0, Math.min(10, Math.floor(level)));
+      // Usa `|| 0` pra normalizar -0 (JS quirk) em 0.
+      const d20Penalty = (-2 * lvl) || 0;
+      const speedPenaltyFt = (-5 * lvl) || 0;
+      return {
+        // Em 2024 não ha "disadvantage" por exhaustion — e penalidade flat.
+        disadvAbility: false,
+        disadvAttack: false,
+        disadvSave: false,
+        // speedMultiplier=1 por que a redução é flat (em ft), não proporcional.
+        speedMultiplier: 1,
+        speedPenaltyFt,
+        maxHpMultiplier: 1,
+        dead: lvl >= 10,
+        d20Penalty,
+      };
     }
     const lvl = Math.max(0, Math.min(6, Math.floor(level)));
     return {
