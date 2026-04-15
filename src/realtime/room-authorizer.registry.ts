@@ -16,14 +16,23 @@ export class RoomAuthorizerRegistry {
         ? [injected]
         : [];
     for (const authorizer of list) {
-      if (this.byPrefix.has(authorizer.prefix)) {
-        this.logger.warn(
-          `Duplicate RoomAuthorizer for prefix "${authorizer.prefix}" — keeping the first registered.`,
-        );
-        continue;
-      }
-      this.byPrefix.set(authorizer.prefix, authorizer);
+      this.register(authorizer);
     }
+  }
+
+  /**
+   * Register an authorizer imperatively. Used by domain modules in their
+   * `OnModuleInit` hook when NestJS multi-providers can't cross module
+   * boundaries.
+   */
+  register(authorizer: RoomAuthorizer): void {
+    if (this.byPrefix.has(authorizer.prefix)) {
+      this.logger.warn(
+        `Duplicate RoomAuthorizer for prefix "${authorizer.prefix}" — keeping the first registered.`,
+      );
+      return;
+    }
+    this.byPrefix.set(authorizer.prefix, authorizer);
   }
 
   async canJoin(userId: string, roomKey: string): Promise<AuthorizationResult> {

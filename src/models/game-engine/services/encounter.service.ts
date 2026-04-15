@@ -11,6 +11,7 @@ import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { MonsterEntity } from 'src/entities/monster.entity';
 import { CharacterEntity } from 'src/entities/character.entity';
+import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
 import { InventoryService } from 'src/models/characters/services/inventory.service';
@@ -374,7 +375,7 @@ export class EncounterService {
       if (campaign && campaign.dmUserId === callerUserId) {
         const players = await this.campaignService
           .getPlayers(campaignId)
-          .catch(() => []);
+          .catch(() => [] as CampaignPlayerEntity[]);
         const match = players.find(
           (p) => p.userId === character.userId && p.isActive,
         );

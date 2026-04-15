@@ -50,6 +50,8 @@ import { LegendaryActionService } from './services/legendary-action.service';
 import { GrappleEscapeService } from './services/grapple-escape.service';
 import { LairActionService } from './services/lair-action.service';
 import { ConditionLifecycleService } from './services/condition-lifecycle.service';
+// Spec 002 — join-request loop
+import { JoinRequestService } from './services/join-request.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
@@ -92,6 +94,8 @@ export class GameEngineController {
     private readonly grappleEscapeService: GrappleEscapeService,
     private readonly lairActionService: LairActionService,
     private readonly conditionLifecycle: ConditionLifecycleService,
+    // Spec 002
+    private readonly joinRequestService: JoinRequestService,
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
     @InjectRepository(EncounterParticipantEntity)
@@ -242,6 +246,53 @@ export class GameEngineController {
       characterId,
       getUserId(req),
     );
+  }
+
+  // Spec 002 — Join-request loop ------------------------------------------
+
+  @Post('encounters/:id/join-requests')
+  async createJoinRequest(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body('characterId') characterId: string,
+  ) {
+    return this.joinRequestService.createRequest(
+      id,
+      characterId,
+      getUserId(req),
+    );
+  }
+
+  @Get('encounters/:id/join-requests')
+  async listJoinRequests(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Query('status') status?: 'pending' | 'approved' | 'rejected' | 'all',
+  ) {
+    return this.joinRequestService.listByEncounter(
+      id,
+      getUserId(req),
+      status ?? 'pending',
+    );
+  }
+
+  @Post('encounters/:id/join-requests/:reqId/approve')
+  async approveJoinRequest(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('reqId') reqId: string,
+  ) {
+    return this.joinRequestService.approve(id, reqId, getUserId(req));
+  }
+
+  @Post('encounters/:id/join-requests/:reqId/reject')
+  async rejectJoinRequest(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('reqId') reqId: string,
+    @Body('reason') reason?: string,
+  ) {
+    return this.joinRequestService.reject(id, reqId, getUserId(req), reason);
   }
 
   @Post('encounters/:id/late-join/monster')
