@@ -967,6 +967,17 @@ export class CombatService {
       },
     ];
 
+    // Spec 004 — tick de EffectInstance do participant que termina o turno.
+    // Decrementa expiresAt.value em kinds rounds/turns/until_caster_turn;
+    // remove quando chega a 0. Emite effect_expired por cada.
+    const tickParticipant = await this.participantRepo.findOne({
+      where: { id: currentParticipantId },
+    });
+    if (tickParticipant) {
+      const tick = await this.effectInstances.tickAtEndOfTurn(tickParticipant);
+      events.push(...tick.events);
+    }
+
     // Spec 003 T013 + Spec 004 fix: Dodge RAW expira NO INICIO DO PROXIMO TURNO
     // DO ATOR (nao ao terminar seu turno). Legacy clearava aqui o que quebrava
     // RAW (dodge nunca durava). Mantem Help/Ready clear aqui (essas expiram
