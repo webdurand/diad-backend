@@ -107,6 +107,25 @@ export class EncounterParticipantEntity {
   @Column({ name: 'has_disengaged', type: 'boolean', default: false })
   hasDisengaged: boolean;
 
+  // --- Spec 003: Extra Attack counter ---
+  // Ver migration 1776300000000-AddCombatActionRegistryFields.
+
+  /**
+   * Quantos weapon attacks já foram feitos neste turno. Reset em start-turn.
+   * Quando `attacksUsedThisTurn === attacksMaxThisTurn`, `actionUsed` vai a true.
+   */
+  @Column({ name: 'attacks_used_this_turn', type: 'int', default: 0 })
+  attacksUsedThisTurn: number;
+
+  /**
+   * Total de weapon attacks permitidos por action neste turno.
+   * Computado em start-turn: Fighter L5+=2, L11+=3, L20=4; Monk L5+=2;
+   * Paladin/Barb/Ranger L5+=2; default 1. Action Surge reseta `actionUsed` e permite
+   * uma segunda rodada de até `attacksMaxThisTurn` attacks no mesmo turno.
+   */
+  @Column({ name: 'attacks_max_this_turn', type: 'int', default: 1 })
+  attacksMaxThisTurn: number;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;
