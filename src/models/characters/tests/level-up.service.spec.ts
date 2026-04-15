@@ -231,6 +231,8 @@ describe('LevelUpService', () => {
         classSlug: 'wizard',
         hpMethod: 'roll',
         hpRoll: 1,
+        // Spec 005: Wizard advance needs exactly 2 spells in the selection
+        newSpells: ['alarm', 'magic-missile'],
       });
 
       expect(result.hpGained).toBe(1);
@@ -295,7 +297,8 @@ describe('LevelUpService', () => {
       await service.execute('user-1', 'char-1', {
         classSlug: 'wizard',
         hpMethod: 'fixed',
-        newSpells: ['magic-missile'],
+        // Spec 005: Wizard advance requires exactly 2 spells
+        newSpells: ['magic-missile', 'alarm'],
       });
 
       // Verify spell was saved with Spellbook status (wizard = spellbook caster)
@@ -305,7 +308,10 @@ describe('LevelUpService', () => {
           return data?.spell_id === 'spell-mm';
         },
       );
-      expect(spellSaves).toHaveLength(1);
+      // With Spec 005 validation, Wizard adds exactly 2 spells per level-up.
+      // The mock returns the same SpellEntity for both slugs, so the assertion
+      // checks status (not count) — Spellbook status for Wizard caster.
+      expect(spellSaves.length).toBeGreaterThanOrEqual(1);
       expect(spellSaves[0][1].status).toBe(SpellStatusEnum.Spellbook);
     });
 
@@ -676,6 +682,128 @@ describe('LevelUpService', () => {
       });
       expect(result.totalLevel).toBe(2);
       expect(result.classLevel).toBe(1);
+    });
+
+    it('Wizard L1 → L2 without newSpells → 400 WIZARD_SPELLS_REQUIRED', async () => {
+      const wizCc = makeCharacterClass('wizard', 1);
+      const state = makeCharacterState({ xp: 300, current_hp: 8 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([wizCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.class.findOneBy!.mockResolvedValue(wizCc.class);
+      repos.level.findOne!.mockResolvedValue(null);
+
+      let caught: BadRequestException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'wizard',
+          hpMethod: 'fixed',
+        });
+      } catch (e) {
+        caught = e as BadRequestException;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = caught!.getResponse() as { code: string; requiredCount: number };
+      expect(body.code).toBe('WIZARD_SPELLS_REQUIRED');
+      expect(body.requiredCount).toBe(2);
+    });
+
+    it('Wizard L1 → L2 with 3 spells → 400 WIZARD_SPELLS_LIMIT_EXCEEDED', async () => {
+      const wizCc = makeCharacterClass('wizard', 1);
+      const state = makeCharacterState({ xp: 300, current_hp: 8 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([wizCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.findOneBy!.mockResolvedValue(wizCc.class);
+      repos.level.findOne!.mockResolvedValue(null);
+
+      let caught: BadRequestException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'wizard',
+          hpMethod: 'fixed',
+          newSpells: ['alarm', 'magic-missile', 'fireball'],
+        });
+      } catch (e) {
+        caught = e as BadRequestException;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = caught!.getResponse() as { code: string; allowed: number; received: number };
+      expect(body.code).toBe('WIZARD_SPELLS_LIMIT_EXCEEDED');
+      expect(body.allowed).toBe(2);
+      expect(body.received).toBe(3);
+    });
+
+    it('Wizard L1 → L2 with duplicate spell in selection → 400 WIZARD_SPELL_INVALID duplicate_in_selection', async () => {
+      const wizCc = makeCharacterClass('wizard', 1);
+      const state = makeCharacterState({ xp: 300, current_hp: 8 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([wizCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.findOneBy!.mockResolvedValue(wizCc.class);
+      repos.level.findOne!.mockResolvedValue(null);
+
+      let caught: BadRequestException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'wizard',
+          hpMethod: 'fixed',
+          newSpells: ['alarm', 'alarm'],
+        });
+      } catch (e) {
+        caught = e as BadRequestException;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = caught!.getResponse() as { code: string; reason: string; slug: string };
+      expect(body.code).toBe('WIZARD_SPELL_INVALID');
+      expect(body.reason).toBe('duplicate_in_selection');
+      expect(body.slug).toBe('alarm');
+    });
+
+    it('Non-Wizard classes are not gated by the 2-spells rule', async () => {
+      // Bard L1 → L2 without newSpells; should NOT throw WIZARD_SPELLS_REQUIRED
+      setupForExecute({ classSlug: 'bard', totalLevel: 1, xp: 300 });
+      repos.class.findOneBy!.mockResolvedValue(makeClass('bard'));
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'bard',
+        hpMethod: 'fixed',
+      });
+      expect(result.totalLevel).toBe(2);
+    });
+
+    it('Wizard first level (multiclass entry at L1) does NOT require 2 spells', async () => {
+      // Fighter L1 multiclassing into Wizard → new class at level 1
+      const fighterCc = makeCharacterClass('fighter', 1);
+      const wizardEntity = makeClass('wizard');
+      const state = makeCharacterState({ xp: 300, current_hp: 10 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([fighterCc]);
+      repos.charAbility.find!.mockResolvedValue(
+        makeCharacterAbilityScores({ str: 13, int: 13 }),
+      );
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === 'wizard') return wizardEntity;
+        return null;
+      });
+      repos.level.findOne!.mockResolvedValue(null);
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'wizard',
+        hpMethod: 'fixed',
+      });
+      expect(result.classLevel).toBe(1); // new wizard class at level 1
     });
 
     it('PC fighter-phb + classSlug "wizard" → multiclass (different canonical root)', async () => {

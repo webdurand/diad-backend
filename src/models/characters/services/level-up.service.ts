@@ -436,6 +436,13 @@ export class LevelUpService {
     const newClassLevel = isNewClass ? 1 : existingCharClass!.class_level + 1;
     const newTotalLevel = totalLevel + 1;
 
+    // Spec 005 — Wizard advance (level > 1) demands exactly 2 new spellbook
+    // entries per RAW. Applied only when advancing an existing Wizard level,
+    // not when multiclassing into Wizard at L1 (creation flow handles that).
+    if (inputCanonical === 'wizard' && !isNewClass && newClassLevel > 1) {
+      this.validateWizardSpellSelection(dto.newSpells);
+    }
+
     // Spec 005: multiclass prereqs — 403 with structured missingPrerequisites.
     if (isNewClass) {
       const abilityMap = new Map<string, number>();
@@ -1087,6 +1094,57 @@ export class LevelUpService {
       if (score < p.minimumScore) return false;
     }
     return true;
+  }
+
+  /**
+   * Spec 005 — Wizard add-to-spellbook validation.
+   *
+   * Per RAW, a Wizard adds exactly 2 spells to the spellbook per level gained.
+   * The service enforces:
+   *   - newSpells must be present
+   *   - exactly 2 entries
+   *   - no duplicates in the selection
+   *
+   * Uniqueness against existing spellbook + class-list + maxSpellLevel checks
+   * happen downstream in spell materialization (where the SpellEntity is
+   * loaded). This keeps the synchronous pre-validation simple and fast.
+   */
+  private validateWizardSpellSelection(newSpells: string[] | undefined): void {
+    const spells = newSpells ?? [];
+    if (spells.length === 0) {
+      throw new BadRequestException({
+        code: 'WIZARD_SPELLS_REQUIRED',
+        error: 'Wizard ganha 2 spells ao subir de nivel; selecione exatamente 2.',
+        requiredCount: 2,
+      });
+    }
+    if (spells.length > 2) {
+      throw new BadRequestException({
+        code: 'WIZARD_SPELLS_LIMIT_EXCEEDED',
+        error: `Wizard pode adicionar no maximo 2 spells por level-up. Recebido: ${spells.length}.`,
+        allowed: 2,
+        received: spells.length,
+      });
+    }
+    if (spells.length < 2) {
+      throw new BadRequestException({
+        code: 'WIZARD_SPELLS_REQUIRED',
+        error: `Wizard precisa selecionar 2 spells, recebido ${spells.length}.`,
+        requiredCount: 2,
+      });
+    }
+    const seen = new Set<string>();
+    for (const slug of spells) {
+      if (seen.has(slug)) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' selecionada mais de uma vez.`,
+          slug,
+          reason: 'duplicate_in_selection',
+        });
+      }
+      seen.add(slug);
+    }
   }
 
   /** Spec 005: structured list of missing prereqs (empty when all met). */
