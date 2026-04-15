@@ -33,6 +33,8 @@ import { SavingThrowService } from './saving-throw.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { MonsterActionResolver } from './monster-action-resolver.service';
 import { CombatActionRegistry } from './combat-action-registry.service';
+import { ConditionLifecycleService } from './condition-lifecycle.service';
+import type { ConditionSlug } from '../interfaces/combat.interfaces';
 
 // --- DTOs ---
 
@@ -120,6 +122,7 @@ export class CombatService {
     private readonly savingThrowService: SavingThrowService,
     private readonly monsterActionResolver: MonsterActionResolver,
     private readonly combatActionRegistry: CombatActionRegistry,
+    private readonly conditionLifecycle: ConditionLifecycleService,
   ) {}
 
   /**
@@ -1826,6 +1829,12 @@ export class CombatService {
 
   // --- Conditions ---
 
+  /**
+   * Spec 004 — delega a ConditionLifecycleService. Mantém contract legado
+   * (`{ condition, apply }` + resposta `{ conditions: string[] }`) mas
+   * internamente cria/remove ConditionInstance com metadata completa +
+   * dispara cascata de concentração quando aplicável.
+   */
   async applyCondition(
     encounterId: string,
     dto: ConditionDto,
@@ -1839,41 +1848,51 @@ export class CombatService {
       dto.participantId,
     );
 
-    let conditions = [...participant.conditions];
+    const slug = dto.condition as ConditionSlug;
+    const events: GameEventData[] = [];
 
     if (dto.apply) {
-      if (!conditions.includes(dto.condition)) {
-        conditions.push(dto.condition);
+      // Evita duplicata de ConditionInstance quando já existe a mesma slug
+      const alreadyHas = (participant.conditionInstances ?? []).some(
+        (ci) => ci.slug === slug,
+      );
+      if (!alreadyHas) {
+        const res = await this.conditionLifecycle.applyCondition(participant, {
+          slug,
+          appliedBy: null,
+          sourceSpell: null,
+        });
+        events.push(...res.events);
       }
     } else {
-      conditions = conditions.filter((c) => c !== dto.condition);
+      // Remove a instância mais recente com essa slug
+      const match = (participant.conditionInstances ?? [])
+        .filter((ci) => ci.slug === slug)
+        .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
+      if (match) {
+        const res = await this.conditionLifecycle.removeConditionInstance(
+          participant,
+          match.id,
+          'manual_remove',
+        );
+        events.push(...res.events);
+      }
     }
 
-    participant.conditions = conditions;
-    await this.participantRepo.save(participant);
+    // Re-fetch para ter o conditions[] derivado atualizado
+    const refreshed = await this.encounterService.getParticipant(dto.participantId);
+    const conditions = refreshed.conditions;
 
     // Sync to CharacterState for PCs
-    if (participant.type === 'pc' && participant.characterId) {
+    if (refreshed.type === 'pc' && refreshed.characterId) {
       await this.stateService.updateConditions(
         dto.ownerUserId,
-        participant.characterId,
+        refreshed.characterId,
         { conditions },
       );
     }
 
-    const events: GameEventData[] = [
-      {
-        event_type: dto.apply ? 'condition_applied' : 'condition_removed',
-        target_participant_id: participant.id,
-        data: { condition: dto.condition, conditions },
-      },
-    ];
-
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounterId,
-      events,
-    );
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
 
     return success({ conditions }, events);
   }

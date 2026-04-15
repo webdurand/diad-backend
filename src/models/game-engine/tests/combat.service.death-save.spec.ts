@@ -224,6 +224,7 @@ function createHarness() {
     savingThrowService,
     monsterActionResolver,
     { listActions: async () => [], resolveSlug: async () => null, listAvailableSlugs: async () => [] } as any,
+    { applyCondition: async () => ({ events: [], instance: {} as any, concentrationBroken: false }), removeConditionInstance: async () => ({ events: [], removed: false }) } as any,
   );
 
   return {
