@@ -548,6 +548,81 @@ export class CombatService {
     );
   }
 
+  /**
+   * Spec 004 — heuristica para decidir se attack eh melee.
+   * Default: true (maioria dos attacks). Identifica ranged por keywords
+   * comuns nos nomes (Longbow, Shortbow, Crossbow, Javelin, Dart, Sling,
+   * Ray, Bolt com "ranged"). Spec 005 refina via metadata de action.
+   */
+  private isMeleeAttack(actionName?: string, actionSlug?: string): boolean {
+    const s = `${actionName ?? ''} ${actionSlug ?? ''}`.toLowerCase();
+    const rangedKeywords = [
+      'bow', 'crossbow', 'javelin', 'dart', 'sling', 'ray of', 'arrow',
+      'firebolt', 'fire bolt', 'eldritch-blast', 'eldritch blast',
+      'scorching ray', 'ranged',
+    ];
+    for (const kw of rangedKeywords) if (s.includes(kw)) return false;
+    return true;
+  }
+
+  /**
+   * Spec 004 — consulta EffectInstances do attacker e target para decidir
+   * advantage/disadvantage/bonuses e ac_bonus. Nao consome effects one-shot
+   * (Steady Aim, Guiding Bolt) — isso acontece pos-roll em resolveAttack.
+   */
+  private resolveEffectInstanceDecisions(
+    attacker: EncounterParticipantEntity,
+    target: EncounterParticipantEntity,
+    isMelee: boolean,
+  ): {
+    advantage: boolean;
+    disadvantage: boolean;
+    attackBonuses: Array<{ source: string; dice?: string; amount?: number }>;
+    targetAcBonus: number;
+  } {
+    const attackerFx = attacker.effectInstances ?? [];
+    const targetFx = target.effectInstances ?? [];
+    let advantage = false;
+    let disadvantage = false;
+    const attackBonuses: Array<{ source: string; dice?: string; amount?: number }> = [];
+
+    // --- Attacker-side effects ---
+    for (const e of attackerFx) {
+      if (e.kind === 'self_advantage') {
+        // Escopo: 'melee' só vale se isMelee; 'any' sempre; default = any.
+        const scope = e.payload?.scope ?? 'any';
+        if (scope === 'any' || (scope === 'melee' && isMelee)) advantage = true;
+      }
+      if (e.kind === 'self_disadvantage') disadvantage = true;
+      if (e.kind === 'self_advantage_next_attack') advantage = true;
+      if (e.kind === 'attack_bonus') {
+        attackBonuses.push({
+          source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? 'effect',
+          dice: e.payload?.diceExpression,
+          amount: e.payload?.amount,
+        });
+      }
+    }
+
+    // --- Target-side effects ---
+    let targetAcBonus = 0;
+    for (const e of targetFx) {
+      if (e.kind === 'ac_bonus') targetAcBonus += e.payload?.amount ?? 0;
+      if (e.kind === 'grant_advantage_to_attackers') advantage = true;
+      if (e.kind === 'grant_disadvantage_to_attackers') disadvantage = true;
+    }
+
+    // --- Condition special case: prone ---
+    // Prone target: melee attacks have advantage, ranged have disadvantage.
+    // (getDefenseModifiers nao sabe de isMelee; tratar aqui).
+    if ((target.conditions ?? []).includes('prone')) {
+      if (isMelee) advantage = true;
+      else disadvantage = true;
+    }
+
+    return { advantage, disadvantage, attackBonuses, targetAcBonus };
+  }
+
   // --- Turn Management ---
 
   async getCurrentTurn(encounterId: string): Promise<GameResult<TurnInfo>> {
@@ -1220,15 +1295,26 @@ export class CombatService {
       helpingState ? { helpingAgainst: helpingState } : undefined,
     );
 
+    // Spec 004 — consulta effectInstances (Bless, Guiding Bolt, Dodge, Rage, etc)
+    // e casos especiais de conditions (prone melee vs ranged).
+    const isMeleeAttack = this.isMeleeAttack(dto.actionName, dto.actionSlug);
+    const effectDec = this.resolveEffectInstanceDecisions(
+      attacker,
+      target,
+      isMeleeAttack,
+    );
+
     let hasAdvantage =
       attackerMods.hasAdvantage ||
       defenderMods.attacksHaveAdvantage ||
       reactive.advantage ||
+      effectDec.advantage ||
       (dto.forceAdvantage ?? false);
     let hasDisadvantage =
       attackerMods.hasDisadvantage ||
       defenderMods.attacksHaveDisadvantage ||
       reactive.disadvantage ||
+      effectDec.disadvantage ||
       (dto.forceDisadvantage ?? false);
 
     // Advantage and disadvantage cancel out
@@ -1270,6 +1356,8 @@ export class CombatService {
       targetAc =
         (Array.isArray(ac) ? ac[0]?.value : ac?.value) ?? 10;
     }
+    // Spec 004 — somar ac_bonus dos EffectInstance do alvo
+    targetAc += effectDec.targetAcBonus;
 
     const totalAttack = attackRoll + attackBonus;
     const hit =
@@ -1289,6 +1377,9 @@ export class CombatService {
       critical: isCritical || defenderMods.autoCritIfMelee,
       criticalMiss: isCriticalMiss,
       advantage: advantageResult,
+      hasAdvantage,
+      hasDisadvantage,
+      effectBonuses: effectDec.attackBonuses,
     };
 
     events.push({

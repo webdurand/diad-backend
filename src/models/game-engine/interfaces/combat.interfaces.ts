@@ -10,6 +10,11 @@ export interface AttackRollResult {
   critical: boolean;
   criticalMiss: boolean;
   advantage?: AdvantageResult;
+  /** Spec 004 — flag booleano que veio do pipeline (inclui conditions + effectInstances). */
+  hasAdvantage?: boolean;
+  hasDisadvantage?: boolean;
+  /** Spec 004 — bônus somados de EffectInstance (Bless +1d4, etc). */
+  effectBonuses?: Array<{ source: string; dice?: string; amount?: number }>;
 }
 
 export interface DamageRollResult {
