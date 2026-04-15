@@ -86,6 +86,36 @@ export function materializeSpellEffects(
   const slug = spellSlug.toLowerCase();
 
   switch (slug) {
+    case 'bless': {
+      // RAW Bless: escolhe até 3 alvos. Por 1 min (concentration), +1d4 em
+      // attack rolls e saving throws.
+      const out: SpellEffectMaterialization[] = [];
+      for (const tid of ctx.targetParticipantIds.slice(0, 3)) {
+        out.push({
+          targetParticipantId: tid,
+          input: {
+            kind: 'attack_bonus',
+            sourceSpellSlug: 'bless',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { diceExpression: '1d4' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        });
+        out.push({
+          targetParticipantId: tid,
+          input: {
+            kind: 'save_bonus',
+            sourceSpellSlug: 'bless',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { diceExpression: '1d4' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        });
+      }
+      return out;
+    }
     case 'guiding-bolt': {
       // RAW: "Make a ranged spell attack against the creature" — on hit, 4d6 radiant
       // + "until the end of your next turn, the next attack roll made against

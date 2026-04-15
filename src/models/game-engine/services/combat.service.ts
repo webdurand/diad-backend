@@ -35,6 +35,7 @@ import { MonsterActionResolver } from './monster-action-resolver.service';
 import { CombatActionRegistry } from './combat-action-registry.service';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { EffectInstanceService } from './effect-instance.service';
+import { ConcentrationService } from './concentration.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 
 // --- DTOs ---
@@ -125,6 +126,7 @@ export class CombatService {
     private readonly combatActionRegistry: CombatActionRegistry,
     private readonly conditionLifecycle: ConditionLifecycleService,
     private readonly effectInstances: EffectInstanceService,
+    private readonly concentration: ConcentrationService,
   ) {}
 
   /**
@@ -1402,7 +1404,20 @@ export class CombatService {
     // Spec 004 — somar ac_bonus dos EffectInstance do alvo
     targetAc += effectDec.targetAcBonus;
 
-    const totalAttack = attackRoll + attackBonus;
+    // Spec 004 — rolar dice-bonuses dos EffectInstance (Bless +1d4 etc) e somar ao total.
+    const rolledEffectBonuses = effectDec.attackBonuses.map((b) => {
+      if (b.dice) {
+        const r = this.diceService.rollExpression(b.dice);
+        return { source: b.source, dice: b.dice, rolled: r.total };
+      }
+      return { source: b.source, amount: b.amount ?? 0, rolled: b.amount ?? 0 };
+    });
+    const effectBonusSum = rolledEffectBonuses.reduce(
+      (s, b) => s + (b.rolled ?? 0),
+      0,
+    );
+
+    const totalAttack = attackRoll + attackBonus + effectBonusSum;
     const hit =
       !isCriticalMiss &&
       (isCritical ||
@@ -1422,7 +1437,7 @@ export class CombatService {
       advantage: advantageResult,
       hasAdvantage,
       hasDisadvantage,
-      effectBonuses: effectDec.attackBonuses,
+      effectBonuses: rolledEffectBonuses,
     };
 
     events.push({
@@ -1583,11 +1598,11 @@ export class CombatService {
       }
 
       if (targetDefeated) {
-        // Break concentration if defeated
+        // Spec 004 fix: delega a ConcentrationService pra cascatar
+        // appliedEffects/effectInstances em vez de so flipar flag.
         if (target.isConcentrating) {
-          target.isConcentrating = false;
-          target.concentratingOn = undefined;
-          await this.participantRepo.save(target);
+          const breakRes = await this.concentration.breakDueToDeath(target);
+          events.push(...breakRes.events);
         }
       }
     }
@@ -1876,6 +1891,53 @@ export class CombatService {
       target_participant_id: target.id,
       data: { damage: dto.amount, type: dto.damageType, hpAfter, defeated, dyingState },
     });
+
+    // Spec 004 — trigger auto CON save quando target estava concentrando.
+    // RAW PHB p.203: ao receber dano, caster faz CON save DC max(10, floor(damage/2)).
+    // Falha → break + cascade dos appliedEffects/effectInstances.
+    if (target.isConcentrating && dto.amount > 0 && !defeated) {
+      const dc = Math.max(10, Math.floor(dto.amount / 2));
+      // Roll d20 + CON modifier (save proficiency raramente; por ora, simples CON mod).
+      let conMod = 0;
+      if (target.type === 'pc' && target.characterId) {
+        try {
+          const sheet = await this.sheetService.computeSheet(
+            dto.ownerUserId,
+            target.characterId,
+          );
+          const conBlock = (sheet.abilityScores ?? []).find(
+            (a: any) => a.slug === 'con' || a.slug === 'constitution',
+          );
+          conMod = conBlock?.modifier ?? 0;
+        } catch { /* fallback 0 */ }
+      } else if (target.type === 'monster') {
+        const conScore = (target.monster as any)?.stats?.con ?? 10;
+        conMod = Math.floor((conScore - 10) / 2);
+      }
+      const roll = this.diceService.roll(20);
+      const total = roll + conMod;
+      const success = total >= dc;
+      events.push({
+        event_type: 'concentration_check',
+        target_participant_id: target.id,
+        data: {
+          dc,
+          rolled: roll,
+          modifier: conMod,
+          total,
+          success,
+          spellName: target.concentratingOn,
+        },
+      });
+      if (!success) {
+        const breakRes = await this.concentration.break(target, 'damage');
+        events.push(...breakRes.events);
+      }
+    } else if (target.isConcentrating && defeated) {
+      // Death break
+      const breakRes = await this.concentration.breakDueToDeath(target);
+      events.push(...breakRes.events);
+    }
 
     await this.eventService.emit(
       encounter.sessionId,
