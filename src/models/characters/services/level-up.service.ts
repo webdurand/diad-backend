@@ -357,17 +357,29 @@ export class LevelUpService {
       );
     }
 
-    // Resolve class
-    const classEntity = await this.classRepo.findOneBy({ slug: dto.classSlug });
+    // Spec 005: Resolve class by canonical slug (normalizes -phb/-xphb suffixes
+    // and case). PC `fighter-phb` + input `fighter` must advance, not multiclass.
+    const inputCanonical = normalizeClassSlug(dto.classSlug.toLowerCase());
+    const existingCharClass = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === inputCanonical,
+    );
+
+    // When advancing, preserve the PC's ClassEntity (source-qualified). When
+    // multiclassing, look up the ClassEntity by input or canonical slug.
+    let classEntity: ClassEntity | null = null;
+    if (existingCharClass) {
+      classEntity = existingCharClass.class;
+    } else {
+      classEntity =
+        (await this.classRepo.findOneBy({ slug: dto.classSlug.toLowerCase() })) ??
+        (await this.classRepo.findOneBy({ slug: inputCanonical }));
+    }
     if (!classEntity) {
       throw new BadRequestException(
         `Classe '${dto.classSlug}' nao encontrada.`,
       );
     }
 
-    const existingCharClass = charClasses.find(
-      (cc) => cc.class.slug === dto.classSlug,
-    );
     const isNewClass = !existingCharClass;
     const newClassLevel = isNewClass ? 1 : existingCharClass!.class_level + 1;
     const newTotalLevel = totalLevel + 1;

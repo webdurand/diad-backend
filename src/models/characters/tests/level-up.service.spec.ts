@@ -333,4 +333,118 @@ describe('LevelUpService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  // ---- Spec 005: PHB slug normalization ----
+  // Bug: PC criado com classSlug 'fighter-phb' (source PHB) recebendo POST
+  // /level-up { classSlug: 'fighter' } virava multiclass em vez de avançar.
+  // Causa: comparação exata `cc.class.slug === dto.classSlug` (line 369).
+  describe('Spec 005: PHB slug normalization', () => {
+    const setupForPhbExecute = (opts: {
+      classSlug: string;
+      ccSlug: string;
+      totalLevel?: number;
+      xp?: number;
+      con?: number;
+    }) => {
+      const totalLevel = opts.totalLevel ?? 1;
+      const xp = opts.xp ?? XP_THRESHOLDS[totalLevel];
+      const con = opts.con ?? 10;
+
+      const cc = makeCharacterClass(opts.ccSlug, totalLevel);
+      const abilities = makeCharacterAbilityScores({ con });
+      const state = makeCharacterState({ xp, current_hp: 10 });
+      const classEntity = makeClass(opts.ccSlug);
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([cc]);
+      repos.charAbility.find!.mockResolvedValue(abilities);
+      // classRepo should resolve the char's own class when input is 'fighter'
+      // but cc uses 'fighter-phb'. The service must resolve to cc.class.
+      repos.class.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === opts.ccSlug) return classEntity;
+        if (where.slug === opts.classSlug) return classEntity;
+        return null;
+      });
+      repos.level.findOne!.mockResolvedValue(null);
+
+      return { cc, classEntity };
+    };
+
+    it('PC fighter-phb + classSlug "fighter" → advances L2 (NOT multiclass)', async () => {
+      setupForPhbExecute({ ccSlug: 'fighter-phb', classSlug: 'fighter' });
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'fighter',
+        hpMethod: 'fixed',
+      });
+
+      expect(result.totalLevel).toBe(2);
+      expect(result.classLevel).toBe(2);
+      // critical: classLevel reflects advance, not a new multiclass level 1
+    });
+
+    it('PC fighter-phb + classSlug "fighter-phb" → advances L2 (idempotent)', async () => {
+      setupForPhbExecute({ ccSlug: 'fighter-phb', classSlug: 'fighter-phb' });
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'fighter-phb',
+        hpMethod: 'fixed',
+      });
+
+      expect(result.totalLevel).toBe(2);
+      expect(result.classLevel).toBe(2);
+    });
+
+    it('PC fighter-phb + classSlug "FIGHTER" (uppercase) → advances L2', async () => {
+      setupForPhbExecute({ ccSlug: 'fighter-phb', classSlug: 'FIGHTER' });
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'FIGHTER',
+        hpMethod: 'fixed',
+      });
+
+      expect(result.totalLevel).toBe(2);
+      expect(result.classLevel).toBe(2);
+    });
+
+    it('PC fighter (XPHB) + classSlug "fighter-phb" → advances as Fighter (canonical match)', async () => {
+      setupForPhbExecute({ ccSlug: 'fighter', classSlug: 'fighter-phb' });
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'fighter-phb',
+        hpMethod: 'fixed',
+      });
+
+      expect(result.totalLevel).toBe(2);
+      expect(result.classLevel).toBe(2);
+    });
+
+    it('PC fighter-phb + classSlug "wizard" → multiclass (different canonical root)', async () => {
+      const fighterPhbCc = makeCharacterClass('fighter-phb', 1);
+      const wizardEntity = makeClass('wizard');
+      const abilities = makeCharacterAbilityScores({ int: 13 }); // passes wizard INT 13
+      const state = makeCharacterState({ xp: XP_THRESHOLDS[1], current_hp: 10 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([fighterPhbCc]);
+      repos.charAbility.find!.mockResolvedValue(abilities);
+      repos.class.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === 'fighter-phb') return fighterPhbCc.class;
+        if (where.slug === 'wizard') return wizardEntity;
+        return null;
+      });
+      repos.level.findOne!.mockResolvedValue(null);
+
+      const result = await service.execute('user-1', 'char-1', {
+        classSlug: 'wizard',
+        hpMethod: 'fixed',
+      });
+
+      expect(result.totalLevel).toBe(2);
+      expect(result.classLevel).toBe(1); // new class, level 1
+      expect(result.className).toBe('Wizard');
+    });
+  });
 });
