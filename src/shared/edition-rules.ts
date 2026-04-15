@@ -27,6 +27,13 @@ export interface EditionRules {
 
   /** Whether backgrounds grant ability score bonuses */
   backgroundGrantsAbilityBonuses?: boolean;
+
+  /** Spec 004 CP9 — qual sistema de exhaustion aplicar:
+   *  - '2014_six_levels': 6 níveis com efeitos discretos (PHB Apêndice A)
+   *  - '2024_ten_levels': 10 níveis com -2×level em d20s e -5×level em speed (XPHB)
+   *  Default: '2014_six_levels' se não especificado.
+   */
+  exhaustionVariant?: '2014_six_levels' | '2024_ten_levels';
 }
 
 /** Default rules for 2014 (PHB) edition */
@@ -50,6 +57,7 @@ export const PHB_RULES: EditionRules = {
   hasPrimalOrder: false,
   backgroundGrantsFeat: false,
   backgroundGrantsAbilityBonuses: false,
+  exhaustionVariant: '2014_six_levels',
 };
 
 /** Default rules for 2024 (XPHB) edition */
@@ -68,6 +76,7 @@ export const XPHB_RULES: EditionRules = {
   hasPrimalOrder: true,
   backgroundGrantsFeat: true,
   backgroundGrantsAbilityBonuses: true,
+  exhaustionVariant: '2024_ten_levels',
 };
 
 /**

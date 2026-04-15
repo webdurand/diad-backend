@@ -15,6 +15,7 @@ import type {
   TurnExecutionResult,
   ConditionInstance,
   AppliedEffect,
+  EffectInstance,
   RechargeState,
 } from '../models/game-engine/interfaces/combat.interfaces';
 
@@ -249,6 +250,15 @@ export class EncounterParticipantEntity {
   /** O que esta magia de concentração aplicou em alvos/área. Removido em cascata ao quebrar. */
   @Column({ name: 'applied_effects', type: 'jsonb', default: () => `'[]'` })
   appliedEffects: AppliedEffect[];
+
+  /**
+   * Spec 004 — Effect carrier.
+   * Effects mecânicos aplicados a este participant (ac_bonus de Mage Armor,
+   * attack_bonus de Bless, grant_advantage_to_attackers de Guiding Bolt, etc).
+   * Separado de `appliedEffects` por SRP. Ver migration 1776400000000.
+   */
+  @Column({ name: 'effect_instances', type: 'jsonb', default: () => `'[]'` })
+  effectInstances: EffectInstance[];
 
   /** Pontos lendários disponíveis (null para criaturas não-lendárias). */
   @Column({ name: 'legendary_points_available', type: 'int', nullable: true })

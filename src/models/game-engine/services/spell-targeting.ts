@@ -36,6 +36,8 @@ const MULTI_TARGET_CATALOG: Record<
    * within range that are within 5 feet of each other". Até 2 alvos. Não é AoE com shape.
    */
   'acid-splash': () => 2,
+  /** Bless (1st lvl): "up to three creatures of your choice". Spec 4. */
+  'bless': () => 3,
 };
 
 /** Proxy tolerante a sufixos (`-phb`, `-xphb`, etc.) — retorna a mesma função do canônico. */

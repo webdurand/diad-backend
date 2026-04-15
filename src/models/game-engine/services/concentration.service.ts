@@ -141,6 +141,49 @@ export class ConcentrationService {
     }
     if (targets.length) await this.participants.save(targets);
 
+    // Spec 004 — cascade-remove EffectInstances onde o caster perdeu concentracao.
+    // NB: iteramos re-fetched participants, mas o proprio `caster` pode estar no
+    // loop como uma NOVA instancia. Se for, precisamos sincronizar de volta
+    // antes do save final, senao o save do caster overwrite as mudancas.
+    const encounterParticipants = await this.participants.find({
+      where: { encounterId: caster.encounterId },
+    });
+    for (const p of encounterParticipants) {
+      const before = p.effectInstances ?? [];
+      const kept = before.filter(
+        (e) =>
+          !(
+            e.requiresConcentration &&
+            e.sourceCasterParticipantId === caster.id
+          ),
+      );
+      if (kept.length !== before.length) {
+        for (const e of before) {
+          if (
+            e.requiresConcentration &&
+            e.sourceCasterParticipantId === caster.id
+          ) {
+            events.push({
+              event_type: 'effect_expired',
+              target_participant_id: p.id,
+              data: {
+                effectId: e.id,
+                reason: 'concentration_broken',
+                kind: e.kind,
+              },
+            });
+          }
+        }
+        p.effectInstances = kept;
+        if (p.id === caster.id) {
+          // Sincroniza pro save final do caster nao reverter.
+          caster.effectInstances = kept;
+        } else {
+          await this.participants.save(p);
+        }
+      }
+    }
+
     caster.isConcentrating = false;
     caster.concentratingOn = undefined as unknown as string;
     caster.concentrationRoundsRemaining = null;

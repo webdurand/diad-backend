@@ -33,6 +33,11 @@ import { SavingThrowService } from './saving-throw.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { MonsterActionResolver } from './monster-action-resolver.service';
 import { CombatActionRegistry } from './combat-action-registry.service';
+import { ConditionLifecycleService } from './condition-lifecycle.service';
+import { EffectInstanceService } from './effect-instance.service';
+import { ConcentrationService } from './concentration.service';
+import { ClassFeatureResolverService } from './class-feature-resolver.service';
+import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 
 // --- DTOs ---
 
@@ -120,6 +125,10 @@ export class CombatService {
     private readonly savingThrowService: SavingThrowService,
     private readonly monsterActionResolver: MonsterActionResolver,
     private readonly combatActionRegistry: CombatActionRegistry,
+    private readonly conditionLifecycle: ConditionLifecycleService,
+    private readonly effectInstances: EffectInstanceService,
+    private readonly concentration: ConcentrationService,
+    private readonly classFeatureResolver: ClassFeatureResolverService,
   ) {}
 
   /**
@@ -545,6 +554,112 @@ export class CombatService {
     );
   }
 
+  /**
+   * Spec 004 — heuristica para decidir se attack eh melee.
+   * Default: true (maioria dos attacks). Identifica ranged por keywords
+   * comuns nos nomes (Longbow, Shortbow, Crossbow, Javelin, Dart, Sling,
+   * Ray, Bolt com "ranged"). Spec 005 refina via metadata de action.
+   */
+  private isMeleeAttack(actionName?: string, actionSlug?: string): boolean {
+    const s = `${actionName ?? ''} ${actionSlug ?? ''}`.toLowerCase();
+    const rangedKeywords = [
+      'bow', 'crossbow', 'javelin', 'dart', 'sling', 'ray of', 'arrow',
+      'firebolt', 'fire bolt', 'eldritch-blast', 'eldritch blast',
+      'scorching ray', 'ranged',
+    ];
+    for (const kw of rangedKeywords) if (s.includes(kw)) return false;
+    return true;
+  }
+
+  /**
+   * Spec 004 — remove effects one-shot (expiresAt.kind='until_consumed') após
+   * um attack. Itera nos dois participants.
+   */
+  private async consumeOneShotEffects(
+    attacker: EncounterParticipantEntity,
+    target: EncounterParticipantEntity,
+  ): Promise<void> {
+    const isOneShot = (e: EffectInstance, side: 'attacker' | 'target'): boolean => {
+      if (e.expiresAt.kind !== 'until_consumed') return false;
+      if (side === 'attacker') return e.kind === 'self_advantage_next_attack';
+      // target side: only consume advantage/disadvantage-grant kinds
+      return (
+        e.kind === 'grant_advantage_to_attackers' ||
+        e.kind === 'grant_disadvantage_to_attackers'
+      );
+    };
+    const toConsumeAttacker = (attacker.effectInstances ?? []).filter((e) =>
+      isOneShot(e, 'attacker'),
+    );
+    const toConsumeTarget = (target.effectInstances ?? []).filter((e) =>
+      isOneShot(e, 'target'),
+    );
+    for (const e of toConsumeAttacker) {
+      await this.effectInstances.removeEffect(attacker, e.id, 'consumed');
+    }
+    for (const e of toConsumeTarget) {
+      await this.effectInstances.removeEffect(target, e.id, 'consumed');
+    }
+  }
+
+  /**
+   * Spec 004 — consulta EffectInstances do attacker e target para decidir
+   * advantage/disadvantage/bonuses e ac_bonus. Nao consome effects one-shot
+   * (Steady Aim, Guiding Bolt) — isso acontece pos-roll em resolveAttack.
+   */
+  private resolveEffectInstanceDecisions(
+    attacker: EncounterParticipantEntity,
+    target: EncounterParticipantEntity,
+    isMelee: boolean,
+  ): {
+    advantage: boolean;
+    disadvantage: boolean;
+    attackBonuses: Array<{ source: string; dice?: string; amount?: number }>;
+    targetAcBonus: number;
+  } {
+    const attackerFx = attacker.effectInstances ?? [];
+    const targetFx = target.effectInstances ?? [];
+    let advantage = false;
+    let disadvantage = false;
+    const attackBonuses: Array<{ source: string; dice?: string; amount?: number }> = [];
+
+    // --- Attacker-side effects ---
+    for (const e of attackerFx) {
+      if (e.kind === 'self_advantage') {
+        // Escopo: 'melee' só vale se isMelee; 'any' sempre; default = any.
+        const scope = e.payload?.scope ?? 'any';
+        if (scope === 'any' || (scope === 'melee' && isMelee)) advantage = true;
+      }
+      if (e.kind === 'self_disadvantage') disadvantage = true;
+      if (e.kind === 'self_advantage_next_attack') advantage = true;
+      if (e.kind === 'attack_bonus') {
+        attackBonuses.push({
+          source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? 'effect',
+          dice: e.payload?.diceExpression,
+          amount: e.payload?.amount,
+        });
+      }
+    }
+
+    // --- Target-side effects ---
+    let targetAcBonus = 0;
+    for (const e of targetFx) {
+      if (e.kind === 'ac_bonus') targetAcBonus += e.payload?.amount ?? 0;
+      if (e.kind === 'grant_advantage_to_attackers') advantage = true;
+      if (e.kind === 'grant_disadvantage_to_attackers') disadvantage = true;
+    }
+
+    // --- Condition special case: prone ---
+    // Prone target: melee attacks have advantage, ranged have disadvantage.
+    // (getDefenseModifiers nao sabe de isMelee; tratar aqui).
+    if ((target.conditions ?? []).includes('prone')) {
+      if (isMelee) advantage = true;
+      else disadvantage = true;
+    }
+
+    return { advantage, disadvantage, attackBonuses, targetAcBonus };
+  }
+
   // --- Turn Management ---
 
   async getCurrentTurn(encounterId: string): Promise<GameResult<TurnInfo>> {
@@ -852,20 +967,26 @@ export class CombatService {
       },
     ];
 
-    // Spec 003 T013: limpa estados reativos que expiram no início do próximo
-    // turno do próprio ator (Dodge, Help armado, Ready não disparado).
+    // Spec 004 — tick de EffectInstance do participant que termina o turno.
+    // Decrementa expiresAt.value em kinds rounds/turns/until_caster_turn;
+    // remove quando chega a 0. Emite effect_expired por cada.
+    const tickParticipant = await this.participantRepo.findOne({
+      where: { id: currentParticipantId },
+    });
+    if (tickParticipant) {
+      const tick = await this.effectInstances.tickAtEndOfTurn(tickParticipant);
+      events.push(...tick.events);
+    }
+
+    // Spec 003 T013 + Spec 004 fix: Dodge RAW expira NO INICIO DO PROXIMO TURNO
+    // DO ATOR (nao ao terminar seu turno). Legacy clearava aqui o que quebrava
+    // RAW (dodge nunca durava). Mantem Help/Ready clear aqui (essas expiram
+    // quando o ator termina de ajudar/armar).
     const currentParticipant = await this.participantRepo.findOne({
       where: { id: currentParticipantId },
     });
     if (currentParticipant) {
       const expired: string[] = [];
-      if (
-        currentParticipant.dodgingUntilTurnOfParticipantId ===
-        currentParticipant.id
-      ) {
-        currentParticipant.dodgingUntilTurnOfParticipantId = null;
-        expired.push('dodge');
-      }
       if (
         currentParticipant.helpingUntilTurnOfParticipantId ===
         currentParticipant.id
@@ -951,6 +1072,21 @@ export class CombatService {
       where: { id: nextParticipantId },
       relations: ['monster'],
     });
+
+    // Spec 004 — Dodge expira no INICIO do proximo turno do dodger (RAW PHB p.192).
+    // Se o nextParticipant eh o proprio dodger, limpar agora.
+    if (
+      nextParticipant &&
+      nextParticipant.dodgingUntilTurnOfParticipantId === nextParticipant.id
+    ) {
+      nextParticipant.dodgingUntilTurnOfParticipantId = null;
+      await this.participantRepo.save(nextParticipant);
+      events.push({
+        event_type: 'state_expired',
+        actor_participant_id: nextParticipant.id,
+        data: { state: 'dodge', round: newRound },
+      });
+    }
     if (nextParticipant) {
       const ownerId = await this.resolveParticipantOwner(nextParticipant, '');
       await this.movementService.initializeTurn(nextParticipant, ownerId || undefined);
@@ -1112,18 +1248,40 @@ export class CombatService {
           encounterId,
           [event],
         );
+        // Spec 004 — resolver consome o evento imediatamente
+        const resolution = await this.classFeatureResolver.resolveInvocation(
+          attacker.id,
+          {
+            featureSlug: mode,
+            actionCost: 'action',
+            targets: [target.id],
+            saveDc,
+            saveAbility: 'str',
+            options: { mode, outcome: 'pending' },
+            caster: { abilityMods: { str: strMod }, profBonus },
+          },
+        );
+        if (resolution.resolved && resolution.events.length > 0) {
+          await this.eventService.emit(
+            encounter.sessionId,
+            encounterId,
+            resolution.events,
+          );
+        }
         return success(
           {
             attackerParticipantId: attacker.id,
             targetParticipantId: target.id,
             actionSlug: 'unarmed-strike',
             unarmedMode: mode,
-            deferred: true,
+            deferred: !resolution.resolved,
+            resolved: resolution.resolved,
             featureSlug: mode,
             saveDc,
             saveAbility: 'str',
+            resolutionPayload: resolution.resolutionPayload,
           } as unknown as AttackResult,
-          [event],
+          [event, ...resolution.events],
         );
       }
 
@@ -1217,15 +1375,26 @@ export class CombatService {
       helpingState ? { helpingAgainst: helpingState } : undefined,
     );
 
+    // Spec 004 — consulta effectInstances (Bless, Guiding Bolt, Dodge, Rage, etc)
+    // e casos especiais de conditions (prone melee vs ranged).
+    const isMeleeAttack = this.isMeleeAttack(dto.actionName, dto.actionSlug);
+    const effectDec = this.resolveEffectInstanceDecisions(
+      attacker,
+      target,
+      isMeleeAttack,
+    );
+
     let hasAdvantage =
       attackerMods.hasAdvantage ||
       defenderMods.attacksHaveAdvantage ||
       reactive.advantage ||
+      effectDec.advantage ||
       (dto.forceAdvantage ?? false);
     let hasDisadvantage =
       attackerMods.hasDisadvantage ||
       defenderMods.attacksHaveDisadvantage ||
       reactive.disadvantage ||
+      effectDec.disadvantage ||
       (dto.forceDisadvantage ?? false);
 
     // Advantage and disadvantage cancel out
@@ -1267,8 +1436,23 @@ export class CombatService {
       targetAc =
         (Array.isArray(ac) ? ac[0]?.value : ac?.value) ?? 10;
     }
+    // Spec 004 — somar ac_bonus dos EffectInstance do alvo
+    targetAc += effectDec.targetAcBonus;
 
-    const totalAttack = attackRoll + attackBonus;
+    // Spec 004 — rolar dice-bonuses dos EffectInstance (Bless +1d4 etc) e somar ao total.
+    const rolledEffectBonuses = effectDec.attackBonuses.map((b) => {
+      if (b.dice) {
+        const r = this.diceService.rollExpression(b.dice);
+        return { source: b.source, dice: b.dice, rolled: r.total };
+      }
+      return { source: b.source, amount: b.amount ?? 0, rolled: b.amount ?? 0 };
+    });
+    const effectBonusSum = rolledEffectBonuses.reduce(
+      (s, b) => s + (b.rolled ?? 0),
+      0,
+    );
+
+    const totalAttack = attackRoll + attackBonus + effectBonusSum;
     const hit =
       !isCriticalMiss &&
       (isCritical ||
@@ -1286,6 +1470,9 @@ export class CombatService {
       critical: isCritical || defenderMods.autoCritIfMelee,
       criticalMiss: isCriticalMiss,
       advantage: advantageResult,
+      hasAdvantage,
+      hasDisadvantage,
+      effectBonuses: rolledEffectBonuses,
     };
 
     events.push({
@@ -1297,6 +1484,11 @@ export class CombatService {
         ...attackRollResult,
       },
     });
+
+    // Spec 004 — consumir effects one-shot (until_consumed):
+    //  - attacker: self_advantage_next_attack (Steady Aim)
+    //  - target: grant_advantage_to_attackers / grant_disadvantage_to_attackers (Guiding Bolt etc)
+    await this.consumeOneShotEffects(attacker, target);
 
     let damageRollResult;
     let targetHpAfter: number | undefined;
@@ -1441,11 +1633,11 @@ export class CombatService {
       }
 
       if (targetDefeated) {
-        // Break concentration if defeated
+        // Spec 004 fix: delega a ConcentrationService pra cascatar
+        // appliedEffects/effectInstances em vez de so flipar flag.
         if (target.isConcentrating) {
-          target.isConcentrating = false;
-          target.concentratingOn = undefined;
-          await this.participantRepo.save(target);
+          const breakRes = await this.concentration.breakDueToDeath(target);
+          events.push(...breakRes.events);
         }
       }
     }
@@ -1735,6 +1927,53 @@ export class CombatService {
       data: { damage: dto.amount, type: dto.damageType, hpAfter, defeated, dyingState },
     });
 
+    // Spec 004 — trigger auto CON save quando target estava concentrando.
+    // RAW PHB p.203: ao receber dano, caster faz CON save DC max(10, floor(damage/2)).
+    // Falha → break + cascade dos appliedEffects/effectInstances.
+    if (target.isConcentrating && dto.amount > 0 && !defeated) {
+      const dc = Math.max(10, Math.floor(dto.amount / 2));
+      // Roll d20 + CON modifier (save proficiency raramente; por ora, simples CON mod).
+      let conMod = 0;
+      if (target.type === 'pc' && target.characterId) {
+        try {
+          const sheet = await this.sheetService.computeSheet(
+            dto.ownerUserId,
+            target.characterId,
+          );
+          const conBlock = (sheet.abilityScores ?? []).find(
+            (a: any) => a.slug === 'con' || a.slug === 'constitution',
+          );
+          conMod = conBlock?.modifier ?? 0;
+        } catch { /* fallback 0 */ }
+      } else if (target.type === 'monster') {
+        const conScore = (target.monster as any)?.stats?.con ?? 10;
+        conMod = Math.floor((conScore - 10) / 2);
+      }
+      const roll = this.diceService.roll(20);
+      const total = roll + conMod;
+      const success = total >= dc;
+      events.push({
+        event_type: 'concentration_check',
+        target_participant_id: target.id,
+        data: {
+          dc,
+          rolled: roll,
+          modifier: conMod,
+          total,
+          success,
+          spellName: target.concentratingOn,
+        },
+      });
+      if (!success) {
+        const breakRes = await this.concentration.break(target, 'damage');
+        events.push(...breakRes.events);
+      }
+    } else if (target.isConcentrating && defeated) {
+      // Death break
+      const breakRes = await this.concentration.breakDueToDeath(target);
+      events.push(...breakRes.events);
+    }
+
     await this.eventService.emit(
       encounter.sessionId,
       encounterId,
@@ -1826,6 +2065,12 @@ export class CombatService {
 
   // --- Conditions ---
 
+  /**
+   * Spec 004 — delega a ConditionLifecycleService. Mantém contract legado
+   * (`{ condition, apply }` + resposta `{ conditions: string[] }`) mas
+   * internamente cria/remove ConditionInstance com metadata completa +
+   * dispara cascata de concentração quando aplicável.
+   */
   async applyCondition(
     encounterId: string,
     dto: ConditionDto,
@@ -1839,41 +2084,51 @@ export class CombatService {
       dto.participantId,
     );
 
-    let conditions = [...participant.conditions];
+    const slug = dto.condition as ConditionSlug;
+    const events: GameEventData[] = [];
 
     if (dto.apply) {
-      if (!conditions.includes(dto.condition)) {
-        conditions.push(dto.condition);
+      // Evita duplicata de ConditionInstance quando já existe a mesma slug
+      const alreadyHas = (participant.conditionInstances ?? []).some(
+        (ci) => ci.slug === slug,
+      );
+      if (!alreadyHas) {
+        const res = await this.conditionLifecycle.applyCondition(participant, {
+          slug,
+          appliedBy: null,
+          sourceSpell: null,
+        });
+        events.push(...res.events);
       }
     } else {
-      conditions = conditions.filter((c) => c !== dto.condition);
+      // Remove a instância mais recente com essa slug
+      const match = (participant.conditionInstances ?? [])
+        .filter((ci) => ci.slug === slug)
+        .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
+      if (match) {
+        const res = await this.conditionLifecycle.removeConditionInstance(
+          participant,
+          match.id,
+          'manual_remove',
+        );
+        events.push(...res.events);
+      }
     }
 
-    participant.conditions = conditions;
-    await this.participantRepo.save(participant);
+    // Re-fetch para ter o conditions[] derivado atualizado
+    const refreshed = await this.encounterService.getParticipant(dto.participantId);
+    const conditions = refreshed.conditions;
 
     // Sync to CharacterState for PCs
-    if (participant.type === 'pc' && participant.characterId) {
+    if (refreshed.type === 'pc' && refreshed.characterId) {
       await this.stateService.updateConditions(
         dto.ownerUserId,
-        participant.characterId,
+        refreshed.characterId,
         { conditions },
       );
     }
 
-    const events: GameEventData[] = [
-      {
-        event_type: dto.apply ? 'condition_applied' : 'condition_removed',
-        target_participant_id: participant.id,
-        data: { condition: dto.condition, conditions },
-      },
-    ];
-
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounterId,
-      events,
-    );
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
 
     return success({ conditions }, events);
   }

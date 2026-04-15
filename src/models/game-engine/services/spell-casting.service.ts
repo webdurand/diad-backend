@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { SpellEntity } from 'src/entities/spell.entity';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { GameEventEntity } from 'src/entities/game-event.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { SpellService } from 'src/models/characters/services/spell.service';
 import { DiceService } from './dice.service';
@@ -23,6 +24,13 @@ import {
   isMultiTargetNonAoeSpell,
   maxTargetsFor,
 } from './spell-targeting';
+import { EffectInstanceService } from './effect-instance.service';
+import {
+  materializeSpellEffects,
+  checkSpellPreconditions,
+  type TargetMetadata,
+} from './spell-effect-catalog';
+import { getAbilityModifier } from 'src/shared/srd-utils';
 
 // --- Result interfaces ---
 
@@ -100,6 +108,8 @@ export class SpellCastingService {
     private readonly encounterRepo: Repository<EncounterEntity>,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
+    @InjectRepository(GameEventEntity)
+    private readonly gameEventRepo: Repository<GameEventEntity>,
     private readonly sheetService: CharacterSheetService,
     private readonly spellService: SpellService,
     private readonly diceService: DiceService,
@@ -107,6 +117,7 @@ export class SpellCastingService {
     private readonly combatService: CombatService,
     private readonly encounterService: EncounterService,
     private readonly monsterSpellcasting: MonsterSpellcastingService,
+    private readonly effectInstanceService: EffectInstanceService,
   ) {}
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
@@ -342,6 +353,19 @@ export class SpellCastingService {
         return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
     }
 
+    // 4.5 Spec 004 — pre-conditions mecanicas (ex: Mage Armor exige alvo sem armadura).
+    const targetMeta: TargetMetadata[] = [];
+    for (const tid of dto.targetParticipantIds) {
+      const t = await this.encounterService.getParticipant(tid).catch(() => null);
+      if (!t) continue;
+      const isWearingArmor = await this.isTargetWearingArmor(t, dto.ownerUserId);
+      targetMeta.push({ id: t.id, isWearingArmor, participant: t });
+    }
+    const precondFail = checkSpellPreconditions(dto.spellSlug, targetMeta);
+    if (precondFail) {
+      return failure(precondFail.message, precondFail.code as any);
+    }
+
     // 5. Cast the spell (validates slots, components, etc.)
     const castResult = await this.castSpell({
       characterId: participant.characterId,
@@ -441,7 +465,189 @@ export class SpellCastingService {
       targetsHit.push(targetResult);
     }
 
-    return success({ ...spellResult, targetsHit }, events);
+    // 9. Spec 004 — materializar EffectInstance (catalogo de spells conhecidas).
+    const casterDex =
+      spellResult && (spellResult as any).casterDex != null
+        ? (spellResult as any).casterDex
+        : await this.getCasterDexModifier(participant, dto.ownerUserId);
+    const materializations = materializeSpellEffects(dto.spellSlug, {
+      casterParticipantId: participant.id,
+      targetParticipantIds: dto.targetParticipantIds,
+      slotLevel: dto.slotLevel,
+      casterDexModifier: casterDex,
+    });
+    const appliedEffectIds: string[] = [];
+    for (const m of materializations) {
+      const targetP = await this.encounterService
+        .getParticipant(m.targetParticipantId)
+        .catch(() => null);
+      if (!targetP) continue;
+      const { effect, events: effectEvents } =
+        await this.effectInstanceService.addEffect(targetP, m.input);
+      appliedEffectIds.push(effect.id);
+      events.push(...effectEvents);
+    }
+
+    // 10. Spec 004 — Shield retroativa: se cast com triggerEventId, re-avalia
+    // o attack trigger com novo AC efetivo. Se virava miss, reverte damage.
+    let retroactiveReview: any = undefined;
+    if (
+      dto.asReaction &&
+      dto.triggerEventId &&
+      dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, '') === 'shield'
+    ) {
+      retroactiveReview = await this.recomputeShieldTrigger(
+        dto.encounterId,
+        dto.triggerEventId,
+        participant.id,
+        dto.ownerUserId,
+      );
+      if (retroactiveReview?.events) {
+        events.push(...retroactiveReview.events);
+      }
+    }
+
+    return success(
+      { ...spellResult, targetsHit, appliedEffectIds, retroactiveReview } as any,
+      events,
+    );
+  }
+
+  /**
+   * Spec 004 — Shield reaction retroativa. Lê o evento attack_roll original,
+   * soma +5 no targetAc, re-avalia hit. Se passa a miss, reverte o damage
+   * aplicado (via applyHealing no target).
+   */
+  private async recomputeShieldTrigger(
+    encounterId: string,
+    triggerEventId: string,
+    casterParticipantId: string,
+    ownerUserId: string,
+  ): Promise<{ newHit: boolean; previousHit: boolean; damageReverted: number; events: any[] } | null> {
+    const trigger = await this.gameEventRepo.findOne({
+      where: { id: triggerEventId },
+    });
+    if (!trigger || trigger.eventType !== 'attack_roll') return null;
+    const data = trigger.data as any;
+    const prevHit: boolean = data.hit ?? false;
+    const prevTotal: number = data.total ?? 0;
+    const prevAc: number = data.targetAc ?? 10;
+    const newAc = prevAc + 5;
+    const newHit = prevTotal >= newAc && !data.criticalMiss;
+    const events: any[] = [
+      {
+        event_type: 'shield_retroactive_review',
+        actor_participant_id: casterParticipantId,
+        target_participant_id: trigger.targetParticipantId,
+        data: {
+          triggerEventId,
+          previousHit: prevHit,
+          previousAc: prevAc,
+          newAc,
+          newHit,
+          attackRollTotal: prevTotal,
+        },
+      },
+    ];
+
+    let damageReverted = 0;
+    if (prevHit && !newHit) {
+      // Reverte damage: acha o proximo damage_applied/hp_change que seguiu o
+      // attack (mesmo target). Event shape: data.damage.finalDamage ou
+      // data.damage ou data.amount dependendo do emitter.
+      const hpChange = await this.gameEventRepo
+        .createQueryBuilder('e')
+        .where('e.encounterId = :encId', { encId: encounterId })
+        .andWhere("e.eventType IN ('damage_applied', 'hp_change')")
+        .andWhere('e.targetParticipantId = :tid', { tid: trigger.targetParticipantId })
+        .andWhere('e.sequence >= :seq', { seq: trigger.sequence })
+        .orderBy('e.sequence', 'ASC')
+        .limit(1)
+        .getOne();
+      if (hpChange) {
+        const d = hpChange.data as any;
+        const dmg =
+          d?.damage?.finalDamage ??
+          d?.damage?.total ??
+          (typeof d?.damage === 'number' ? d.damage : undefined) ??
+          d?.amount ??
+          0;
+        if (dmg > 0) {
+          // Apply healing equivalente no target (delegando a combat.service)
+          await this.combatService.applyHealing(encounterId, {
+            targetParticipantId: trigger.targetParticipantId!,
+            amount: dmg,
+            ownerUserId,
+          });
+          damageReverted = dmg;
+          events.push({
+            event_type: 'shield_damage_reverted',
+            target_participant_id: trigger.targetParticipantId,
+            data: { amount: dmg, triggerEventId },
+          });
+        }
+      }
+    }
+    return {
+      newHit,
+      previousHit: prevHit,
+      damageReverted,
+      events,
+    };
+  }
+
+  /**
+   * Detecta se o participant tem armor equipada (armor base > 0).
+   * - PC: inspeciona sheet.equipment e busca peca nao-escudo com ac.base > 0.
+   * - Monster: true se AC aparenta vir de natural armor (nao-leather).
+   * Heuristica simples — refinada em spec futura.
+   */
+  private async isTargetWearingArmor(
+    participant: EncounterParticipantEntity,
+    ownerUserId: string,
+  ): Promise<boolean> {
+    if (participant.type === 'pc' && participant.characterId) {
+      try {
+        const sheet = await this.sheetService.computeSheet(
+          ownerUserId,
+          participant.characterId,
+        );
+        const equip = (sheet as any)?.equipment ?? [];
+        for (const eq of equip) {
+          if (!eq.equipped || !eq.armorClass) continue;
+          const slug = (eq.slug ?? '').toLowerCase();
+          const name = (eq.name ?? '').toLowerCase();
+          if (slug === 'shield' || name === 'shield') continue;
+          const base = (eq.armorClass as any)?.base ?? 0;
+          if (base > 0) return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    }
+    // Monsters: quase sempre tem natural armor — Mage Armor RAW nao se aplica.
+    return participant.type === 'monster';
+  }
+
+  /** Retorna DEX modifier do caster (PC via sheet, monster via statblock). */
+  private async getCasterDexModifier(
+    participant: EncounterParticipantEntity,
+    ownerUserId: string,
+  ): Promise<number> {
+    if (participant.type === 'pc' && participant.characterId) {
+      const sheet = await this.sheetService.computeSheet(
+        ownerUserId,
+        participant.characterId,
+      );
+      const dexBlock = (sheet?.abilityScores ?? []).find(
+        (a) => a.slug === 'dex' || a.slug === 'dexterity',
+      );
+      if (dexBlock) return dexBlock.modifier;
+      return 0;
+    }
+    const dex = (participant.monster as any)?.stats?.dex ?? 10;
+    return getAbilityModifier(dex);
   }
 
   /**
