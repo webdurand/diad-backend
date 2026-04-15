@@ -575,5 +575,531 @@ describe('CharactersService', () => {
       const equipSaves = saves.filter((s) => s.entity === 'CharacterEquipmentEntity');
       expect(equipSaves).toHaveLength(0);
     });
+
+    describe('spec 001 — character sheet compute', () => {
+      const captureSaves = (saves: Array<{ entity: string; data: any }>) =>
+        async (entityClass: any, data: any) => {
+          const entityName = typeof entityClass === 'function' ? entityClass.name : entityClass;
+          saves.push({ entity: entityName, data });
+          return { id: data?.id ?? 'rec-auto', ...data };
+        };
+
+      const baseLookups = (fighterClass: any) => (_: any, criteria: any) => {
+        if (criteria?.slug === 'fighter') return fighterClass;
+        if (criteria?.slug === 'human') return { id: 'race-1', slug: 'human', name: 'Human', speed: 30 };
+        if (criteria?.slug === 'soldier') return { id: 'bg-1', slug: 'soldier', name: 'Soldier' };
+        if (criteria?.slug === 'acolyte') return { id: 'bg-1', slug: 'acolyte', name: 'Acolyte' };
+        if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(criteria?.slug)) {
+          return { id: `as-${criteria.slug}`, slug: criteria.slug };
+        }
+        return null;
+      };
+
+      const setupTransaction = (saves: Array<{ entity: string; data: any }>, fighterClass: any) => {
+        dataSource.transaction!.mockImplementation(async (cb: any) => {
+          const mgr = {
+            create: jest.fn((_: any, data: any) => ({ id: 'char-new', ...data })),
+            save: jest.fn(captureSaves(saves)),
+            findOneBy: jest.fn().mockImplementation(baseLookups(fighterClass)),
+            find: jest.fn().mockResolvedValue([]),
+            createQueryBuilder: jest.fn().mockReturnValue({
+              update: jest.fn().mockReturnThis(),
+              set: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({}),
+            }),
+          };
+          return cb(mgr);
+        });
+      };
+
+      it('persists 6 ability scores when client sends short slugs (str/dex/con/int/wis/cha)', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Brom Ironjaw',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+            classEquipmentChoices: ['chain-mail', 'longsword', 'shield'],
+          },
+        });
+
+        const abilitySaves = saves.filter((s) => s.entity === 'CharacterAbilityScoreEntity');
+        expect(abilitySaves).toHaveLength(6);
+        const byAbilityId = Object.fromEntries(
+          abilitySaves.map((s) => [s.data.ability_score_id, s.data.base_score]),
+        );
+        expect(byAbilityId['as-str']).toBe(15);
+        expect(byAbilityId['as-dex']).toBe(14);
+        expect(byAbilityId['as-con']).toBe(13);
+        expect(byAbilityId['as-int']).toBe(10);
+        expect(byAbilityId['as-wis']).toBe(12);
+        expect(byAbilityId['as-cha']).toBe(8);
+      });
+
+      it('persists 6 ability scores when client sends long names (strength/dexterity/...)', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Brom Long',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'soldier',
+            abilityScores: { strength: 15, dexterity: 14, constitution: 13, intelligence: 10, wisdom: 12, charisma: 8 },
+            classEquipmentChoices: ['chain-mail'],
+          },
+        });
+
+        const abilitySaves = saves.filter((s) => s.entity === 'CharacterAbilityScoreEntity');
+        expect(abilitySaves).toHaveLength(6);
+      });
+
+      it('throws BadRequestException with code MISSING_ABILITY_SCORES when abilityScores is absent', async () => {
+        const fighterClass = makeClass('fighter');
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'No Abilities',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'MISSING_ABILITY_SCORES' }),
+        });
+      });
+
+      it('throws BadRequestException with code INCOMPLETE_ABILITY_SCORES when one ability is missing', async () => {
+        const fighterClass = makeClass('fighter');
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Missing CHA',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12 },
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'INCOMPLETE_ABILITY_SCORES',
+            missing: ['cha'],
+          }),
+        });
+      });
+
+      it('auto-equips armor, weapon and shield from starting equipment', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        const chainMail = {
+          id: 'eq-chain-mail',
+          slug: 'chain-mail',
+          name: 'Chain Mail',
+          armor_class: { base: 16, dex_bonus: false },
+        };
+        const longsword = {
+          id: 'eq-longsword',
+          slug: 'longsword',
+          name: 'Longsword',
+          weapon_category: 'martial',
+        };
+        const shield = { id: 'eq-shield', slug: 'shield', name: 'Shield', armor_class: { base: 2 } };
+
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([chainMail, longsword, shield]);
+        repos.level.findOne!.mockResolvedValue(null);
+
+        dataSource.transaction!.mockImplementation(async (cb: any) => {
+          const mgr = {
+            create: jest.fn((_: any, data: any) => ({ id: 'char-new', ...data })),
+            save: jest.fn(async (entityClass: any, data: any) => {
+              const entityName = typeof entityClass === 'function' ? entityClass.name : entityClass;
+              saves.push({ entity: entityName, data });
+              return { id: data?.id ?? 'rec-auto', ...data };
+            }),
+            findOneBy: jest.fn().mockImplementation((_: any, criteria: any) => {
+              if (criteria?.slug === 'fighter') return fighterClass;
+              if (criteria?.slug === 'human') return { id: 'race-1', slug: 'human' };
+              if (criteria?.slug === 'soldier') return { id: 'bg-1', slug: 'soldier' };
+              if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(criteria?.slug)) {
+                return { id: `as-${criteria.slug}`, slug: criteria.slug };
+              }
+              return null;
+            }),
+            find: jest.fn().mockResolvedValue([]),
+            createQueryBuilder: jest.fn().mockReturnValue({
+              update: jest.fn().mockReturnThis(),
+              set: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({}),
+            }),
+          };
+          return cb(mgr);
+        });
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Brom Autoequip',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+            classEquipmentChoices: ['1x Chain Mail', '1x Longsword', '1x Shield'],
+          },
+        });
+
+        const equipSaves = saves.filter((s) => s.entity === 'CharacterEquipmentEntity');
+        const bySlug = Object.fromEntries(
+          equipSaves.map((s) => {
+            const eqId = s.data.equipment_id;
+            const name = [chainMail, longsword, shield].find((e) => e.id === eqId)?.name;
+            return [name, s.data.equipped];
+          }),
+        );
+        expect(bySlug['Chain Mail']).toBe(true);
+        expect(bySlug['Longsword']).toBe(true);
+        expect(bySlug['Shield']).toBe(true);
+      });
+
+      it('throws MISSING_CLASS_EQUIPMENT_CHOICES when class offers options and client sends none', async () => {
+        const fighterClass = {
+          ...makeClass('fighter'),
+          starting_equipment_options: { options: [{ label: 'Chain Mail' }, { label: 'Leather + Longbow' }] },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'No Equipment',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: [],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'MISSING_CLASS_EQUIPMENT_CHOICES' }),
+        });
+      });
+
+      it('accepts empty classEquipmentChoices when class has no starting_equipment_options', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'No Options Class',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: [],
+            },
+          }),
+        ).resolves.toBeDefined();
+      });
+
+      it('auto-applies race ability bonuses when edition does not grant them via background (PHB)', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        const dwarfRace = {
+          id: 'race-1',
+          slug: 'dwarf',
+          ability_bonuses: [
+            { ability_score: { slug: 'con', name: 'CON' }, bonus: 2 },
+          ],
+        };
+        const phbSource = {
+          id: 'src-phb',
+          code: 'PHB',
+          rules: { backgroundGrantsAbilityBonuses: false },
+        };
+
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue(dwarfRace);
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.compSource.findOneBy!.mockResolvedValue(phbSource);
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+
+        dataSource.transaction!.mockImplementation(async (cb: any) => {
+          const mgr = {
+            create: jest.fn((_: any, data: any) => ({ id: 'char-new', ...data })),
+            save: jest.fn(async (entityClass: any, data: any) => {
+              const entityName = typeof entityClass === 'function' ? entityClass.name : entityClass;
+              saves.push({ entity: entityName, data });
+              return { id: data?.id ?? 'rec-auto', ...data };
+            }),
+            findOneBy: jest.fn().mockImplementation((_: any, criteria: any) => {
+              if (criteria?.slug === 'fighter') return fighterClass;
+              if (criteria?.slug === 'dwarf') return dwarfRace;
+              if (criteria?.slug === 'soldier') return { id: 'bg-1', slug: 'soldier' };
+              if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(criteria?.slug)) {
+                return { id: `as-${criteria.slug}`, slug: criteria.slug };
+              }
+              return null;
+            }),
+            find: jest.fn().mockResolvedValue([]),
+            createQueryBuilder: jest.fn().mockReturnValue({
+              update: jest.fn().mockReturnThis(),
+              set: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({}),
+            }),
+          };
+          return cb(mgr);
+        });
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Dwarf Fighter',
+          data: {
+            sourceCode: 'PHB',
+            classSlug: 'fighter',
+            raceSlug: 'dwarf',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 10, con: 13, int: 10, wis: 12, cha: 8 },
+            classEquipmentChoices: ['chain-mail'],
+          },
+        });
+
+        const abilitySaves = saves.filter((s) => s.entity === 'CharacterAbilityScoreEntity');
+        const conSave = abilitySaves.find((s) => s.data.ability_score_id === 'as-con');
+        expect(conSave!.data.base_score).toBe(13);
+        expect(conSave!.data.bonus).toBe(2);
+      });
+
+      it('does NOT auto-apply race ability bonuses when edition grants them via background (XPHB)', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        const dwarfRace = {
+          id: 'race-1',
+          slug: 'dwarf',
+          ability_bonuses: [
+            { ability_score: { slug: 'con', name: 'CON' }, bonus: 2 },
+          ],
+        };
+        const xphbSource = {
+          id: 'src-xphb',
+          code: 'XPHB',
+          rules: { backgroundGrantsAbilityBonuses: true },
+        };
+
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue(dwarfRace);
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.compSource.findOneBy!.mockResolvedValue(xphbSource);
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Dwarf Fighter XPHB',
+          data: {
+            sourceCode: 'XPHB',
+            classSlug: 'fighter',
+            raceSlug: 'dwarf',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 10, con: 13, int: 10, wis: 12, cha: 8 },
+            backgroundAbilityBonuses: [
+              { abilityScoreIndex: 'str', bonus: 1 },
+            ],
+            classEquipmentChoices: ['chain-mail'],
+          },
+        });
+
+        const abilitySaves = saves.filter((s) => s.entity === 'CharacterAbilityScoreEntity');
+        const conSave = abilitySaves.find((s) => s.data.ability_score_id === 'as-con');
+        expect(conSave!.data.bonus).toBe(0);
+        const strSave = abilitySaves.find((s) => s.data.ability_score_id === 'as-str');
+        expect(strSave!.data.bonus).toBe(1);
+      });
+
+      it('throws INVALID_CLASS_EQUIPMENT_CHOICE when choice is not in class starting_equipment_options.default', async () => {
+        const fighterClass = {
+          ...makeClass('fighter'),
+          starting_equipment_options: {
+            default: ['1x Chain Mail', '1x Longsword', '1x Shield', '1x Light Crossbow'],
+            defaultData: null,
+            goldAlternative: null,
+            additionalFromBackground: true,
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Invalid Choice',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: ['1x Goblin Bone Flute'],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'INVALID_CLASS_EQUIPMENT_CHOICE',
+            invalidChoices: ['1x Goblin Bone Flute'],
+          }),
+        });
+      });
+
+      it('throws MISSING_BACKGROUND_EQUIPMENT_CHOICES when background offers options and client sends none', async () => {
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        const bgWithOptions = {
+          id: 'bg-1',
+          slug: 'soldier',
+          equipment_options: { default: ['1x Spear', '1x Playing Card Set'] },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue(bgWithOptions);
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'No BG Equipment',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              backgroundEquipmentChoices: [],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'MISSING_BACKGROUND_EQUIPMENT_CHOICES',
+          }),
+        });
+      });
+
+      it('throws INVALID_BACKGROUND_EQUIPMENT_CHOICE when choice is not in background options', async () => {
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        const bgWithOptions = {
+          id: 'bg-1',
+          slug: 'soldier',
+          equipment_options: { default: ['1x Spear', '1x Playing Card Set'] },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue(bgWithOptions);
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Invalid BG',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              backgroundEquipmentChoices: ['1x Invalid Thing'],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
+            invalidChoices: ['1x Invalid Thing'],
+          }),
+        });
+      });
+
+      it('reads abilityScores from input.choices when both data and choices are present (choices wins)', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = makeClass('fighter');
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier' });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Choices Wins',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 },
+            classEquipmentChoices: ['chain-mail'],
+          },
+          choices: {
+            abilityScores: { str: 18, dex: 14, con: 16, int: 10, wis: 12, cha: 8 },
+            classEquipmentChoices: ['chain-mail'],
+          },
+        } as any);
+
+        const abilitySaves = saves.filter((s) => s.entity === 'CharacterAbilityScoreEntity');
+        const strSave = abilitySaves.find((s) => s.data.ability_score_id === 'as-str');
+        expect(strSave!.data.base_score).toBe(18);
+      });
+    });
   });
 });

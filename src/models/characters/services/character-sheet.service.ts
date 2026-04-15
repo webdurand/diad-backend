@@ -364,18 +364,26 @@ export class CharacterSheetService {
     // AC calculation
     const dexMod = mod('dex');
 
-    // Step 1: Determine armor AC and whether shield is equipped
+    // Step 1: Determine armor AC and whether shield is equipped.
+    // Shield é identificado por slug/name (SRD o marca como armor com base=2),
+    // não por base=0 — senão o shield sobrescreve o armor equipado.
     let armorAc: number | null = null;
     let hasShield = false;
     for (const eq of charEquip) {
       if (!eq.equipped || !eq.equipment?.armor_class) continue;
+      const slug = (eq.equipment.slug ?? '').toLowerCase();
+      const name = (eq.equipment.name ?? '').toLowerCase();
+      const isShield = slug === 'shield' || name === 'shield';
+      if (isShield) {
+        hasShield = true;
+        continue;
+      }
       const ac = eq.equipment.armor_class as unknown as EquipmentArmorClass;
       const base = ac.base ?? 0;
       const dexBonus = ac.dex_bonus;
       const maxBonus = ac.max_bonus;
 
       if (base > 0) {
-        // Armor piece
         if (dexBonus === false) {
           armorAc = base;
         } else if (maxBonus !== undefined) {
@@ -383,9 +391,6 @@ export class CharacterSheetService {
         } else {
           armorAc = base + dexMod;
         }
-      } else {
-        // Shield
-        hasShield = true;
       }
     }
 
