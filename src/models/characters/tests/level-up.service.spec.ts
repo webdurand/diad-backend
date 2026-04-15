@@ -420,6 +420,117 @@ describe('LevelUpService', () => {
       expect(result.classLevel).toBe(2);
     });
 
+    it('GET /level-up-options: PC fighter-phb sees ONE Fighter entry with canonical slug + sourceQualifiedSlug=fighter-phb + isCurrentClass=true', async () => {
+      const phbCc = makeCharacterClass('fighter-phb', 1);
+      const phbFighter = phbCc.class;
+      const xphbFighter = makeClass('fighter'); // same canonical, different source-qualified
+      const state = makeCharacterState({ xp: 300 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([phbCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      // DB has BOTH fighter-phb and fighter (different source rows)
+      repos.class.find!.mockResolvedValue([phbFighter, xphbFighter]);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.subclass.find!.mockResolvedValue([]);
+      repos.spellClass.find!.mockResolvedValue([]);
+
+      const result = await service.getOptions('user-1', 'char-1');
+
+      const fighterEntries = result.availableClasses.filter(
+        (c) => c.slug === 'fighter' || c.slug === 'fighter-phb',
+      );
+      expect(fighterEntries).toHaveLength(1);
+      const entry = fighterEntries[0];
+      expect(entry.slug).toBe('fighter'); // canonical, no suffix
+      expect(entry.sourceQualifiedSlug).toBe('fighter-phb');
+      expect(entry.isCurrentClass).toBe(true);
+      expect(entry.isMulticlass).toBe(false);
+      expect(entry.nextLevel).toBe(2);
+    });
+
+    it('GET /level-up-options: PC fighter (XPHB) sees Fighter entry with sourceQualifiedSlug=fighter + isCurrentClass=true', async () => {
+      const xphbCc = makeCharacterClass('fighter', 1);
+      const phbFighter = makeClass('fighter-phb');
+      const state = makeCharacterState({ xp: 300 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([xphbCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.find!.mockResolvedValue([xphbCc.class, phbFighter]);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.subclass.find!.mockResolvedValue([]);
+      repos.spellClass.find!.mockResolvedValue([]);
+
+      const result = await service.getOptions('user-1', 'char-1');
+      const entry = result.availableClasses.find((c) => c.slug === 'fighter');
+      expect(entry).toBeDefined();
+      expect(entry!.sourceQualifiedSlug).toBe('fighter');
+      expect(entry!.isCurrentClass).toBe(true);
+    });
+
+    it('GET /level-up-options: Fighter PHB + Wizard in DB → Wizard entry is isCurrentClass=false, isMulticlass=true, nextLevel=1', async () => {
+      const fighterPhbCc = makeCharacterClass('fighter-phb', 1);
+      const wizardEntity = makeClass('wizard');
+      const state = makeCharacterState({ xp: 300 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([fighterPhbCc]);
+      repos.charAbility.find!.mockResolvedValue(
+        makeCharacterAbilityScores({ str: 13, int: 13 }),
+      );
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.find!.mockResolvedValue([fighterPhbCc.class, wizardEntity]);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.subclass.find!.mockResolvedValue([]);
+      repos.spellClass.find!.mockResolvedValue([]);
+
+      const result = await service.getOptions('user-1', 'char-1');
+      const wiz = result.availableClasses.find((c) => c.slug === 'wizard');
+      expect(wiz).toBeDefined();
+      expect(wiz!.isCurrentClass).toBe(false);
+      expect(wiz!.isMulticlass).toBe(true);
+      expect(wiz!.nextLevel).toBe(1);
+    });
+
+    it('GET /level-up-options: missingPrerequisites populated when ability insufficient', async () => {
+      const fighterCc = makeCharacterClass('fighter', 1);
+      const bardEntity = makeClass('bard', {
+        multi_classing: {
+          prerequisites: [
+            { ability_score: { index: 'cha' }, minimum_score: 13 },
+          ],
+        },
+      });
+      const state = makeCharacterState({ xp: 300 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([fighterCc]);
+      // Fighter STR 13 (multiclass prereq), CHA 8 (below bard requirement)
+      repos.charAbility.find!.mockResolvedValue(
+        makeCharacterAbilityScores({ str: 13, cha: 8 }),
+      );
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.find!.mockResolvedValue([fighterCc.class, bardEntity]);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.subclass.find!.mockResolvedValue([]);
+      repos.spellClass.find!.mockResolvedValue([]);
+
+      const result = await service.getOptions('user-1', 'char-1');
+      const bard = result.availableClasses.find((c) => c.slug === 'bard');
+      expect(bard).toBeDefined();
+      expect(bard!.meetsPrerequisites).toBe(false);
+      expect(bard!.missingPrerequisites).toEqual([
+        { ability: 'cha', required: 13, current: 8 },
+      ]);
+    });
+
     it('PC fighter-phb + classSlug "wizard" → multiclass (different canonical root)', async () => {
       const fighterPhbCc = makeCharacterClass('fighter-phb', 1);
       const wizardEntity = makeClass('wizard');

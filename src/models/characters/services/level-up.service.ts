@@ -61,12 +61,15 @@ export interface LevelUpOptionsResult {
 }
 
 export interface AvailableClassOption {
-  slug: string;
+  slug: string;                      // canonical: 'fighter' (no suffix)
+  sourceQualifiedSlug: string;       // ClassEntity.slug actually used: 'fighter-phb' or 'fighter'
   name: string;
   isCurrentClass: boolean;
+  isMulticlass: boolean;             // true when picking this class would create a new CharacterClass
   hitDie: number;
   meetsPrerequisites: boolean;
   prerequisites: MulticlassPrereq[];
+  missingPrerequisites: MissingPrerequisite[];
   nextLevel: number;
   hasAsi: boolean;
   hasSubclass: boolean;
@@ -80,6 +83,12 @@ export interface AvailableClassOption {
   spellcasting: Record<string, unknown> | null;
   newProficiencies: Array<{ slug: string; name: string }>;
   spellSelection: SpellSelectionForLevelUp | null;
+}
+
+export interface MissingPrerequisite {
+  ability: string;                   // 'str' | 'dex' | ...
+  required: number;
+  current: number;
 }
 
 export interface SpellSelectionForLevelUp {
@@ -179,37 +188,69 @@ export class LevelUpService {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
     }
 
-    // All classes available
+    // Spec 005: group all ClassEntity rows by canonical slug, then pick one
+    // representative per canonical (prefer the PC's own class when it matches;
+    // else prefer a class from the PC's source; else fall back to canonical).
     const allClasses = await this.classRepo.find();
-    const currentClassSlugs = new Set(charClasses.map((cc) => cc.class.slug));
+    const canonicalGroups = new Map<string, ClassEntity[]>();
+    for (const cls of allClasses) {
+      const canonical = normalizeClassSlug(cls.slug);
+      const group = canonicalGroups.get(canonical) ?? [];
+      group.push(cls);
+      canonicalGroups.set(canonical, group);
+    }
+
+    const currentCanonicalMap = new Map<string, CharacterClassEntity>();
+    for (const cc of charClasses) {
+      currentCanonicalMap.set(normalizeClassSlug(cc.class.slug), cc);
+    }
+
+    const pickRepresentative = (group: ClassEntity[]): ClassEntity => {
+      // 1. PC already has this class (any edition) → use the PC's ClassEntity
+      const canonical = normalizeClassSlug(group[0].slug);
+      const charClass = currentCanonicalMap.get(canonical);
+      if (charClass) return charClass.class;
+      // 2. Same source as the PC
+      if (character.sourceId) {
+        const same = group.find((c) => c.source_id === character.sourceId);
+        if (same) return same;
+      }
+      // 3. Canonical (no suffix) preferred
+      const canonicalEntity = group.find((c) => c.slug === canonical);
+      if (canonicalEntity) return canonicalEntity;
+      // 4. First row
+      return group[0];
+    };
 
     const availableClasses: AvailableClassOption[] = [];
     const hitDie: Record<string, number> = {};
 
-    for (const cls of allClasses) {
-      const isCurrentClass = currentClassSlugs.has(cls.slug);
-      const charClass = charClasses.find((cc) => cc.class.slug === cls.slug);
+    for (const [canonical, group] of canonicalGroups) {
+      const cls = pickRepresentative(group);
+      const charClass = currentCanonicalMap.get(canonical);
+      const isCurrentClass = !!charClass;
+      const isMulticlass = !isCurrentClass;
       const nextClassLevel = isCurrentClass ? charClass!.class_level + 1 : 1;
 
-      // Parse multiclassing prerequisites
+      // Parse multiclassing prerequisites + compute missing
       const prereqs = this.parsePrerequisites(cls.multi_classing);
-      const meetsPrereqs =
-        isCurrentClass ||
-        this.checkPrerequisites(prereqs, abilityMap, charClasses);
+      const missingPrerequisites = isCurrentClass
+        ? []
+        : this.computeMissingPrerequisites(prereqs, abilityMap);
+      const meetsPrereqs = missingPrerequisites.length === 0;
 
-      // For multiclass: also need to meet current class prereqs
+      // For multiclass: also need to meet current class prereqs (RAW)
       if (!isCurrentClass && meetsPrereqs) {
         const currentPrimaryClass = charClasses[0]?.class;
         if (currentPrimaryClass) {
           const currentPrereqs = this.parsePrerequisites(
             currentPrimaryClass.multi_classing,
           );
-          const meetsCurrent = this.checkPrerequisites(
+          const currentMissing = this.computeMissingPrerequisites(
             currentPrereqs,
             abilityMap,
-            charClasses,
           );
-          if (!meetsCurrent) continue;
+          if (currentMissing.length > 0) continue;
         }
       }
 
@@ -294,15 +335,18 @@ export class LevelUpService {
         character.source?.rules,
       );
 
-      hitDie[cls.slug] = cls.hit_die;
+      hitDie[canonical] = cls.hit_die;
 
       availableClasses.push({
-        slug: cls.slug,
+        slug: canonical,
+        sourceQualifiedSlug: cls.slug,
         name: cls.name,
         isCurrentClass,
+        isMulticlass,
         hitDie: cls.hit_die,
         meetsPrerequisites: meetsPrereqs,
         prerequisites: prereqs,
+        missingPrerequisites,
         nextLevel: nextClassLevel,
         hasAsi,
         hasSubclass,
@@ -936,7 +980,11 @@ export class LevelUpService {
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
+    // Spec 005: load source to resolve EditionRules (subclass level,
+    // prepared formula, feature fallback) per the character's edition.
+    return ensureCharacterOwnership(this.characterRepo, userId, characterId, [
+      'source',
+    ]);
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {
@@ -972,6 +1020,25 @@ export class LevelUpService {
       if (score < p.minimumScore) return false;
     }
     return true;
+  }
+
+  /** Spec 005: structured list of missing prereqs (empty when all met). */
+  private computeMissingPrerequisites(
+    prereqs: MulticlassPrereq[],
+    abilityMap: Map<string, number>,
+  ): MissingPrerequisite[] {
+    const missing: MissingPrerequisite[] = [];
+    for (const p of prereqs) {
+      const current = abilityMap.get(p.abilityScoreSlug) ?? 0;
+      if (current < p.minimumScore) {
+        missing.push({
+          ability: p.abilityScoreSlug,
+          required: p.minimumScore,
+          current,
+        });
+      }
+    }
+    return missing;
   }
 
   private getMulticlassProficiencies(

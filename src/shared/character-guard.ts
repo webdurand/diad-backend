@@ -12,9 +12,11 @@ export async function ensureCharacterOwnership(
   characterRepo: Repository<CharacterEntity>,
   userId: string,
   characterId: string,
+  relations: string[] = [],
 ): Promise<CharacterEntity> {
   const character = await characterRepo.findOne({
     where: { id: characterId, userId },
+    relations,
   });
   if (!character) {
     throw new NotFoundException('Personagem nao encontrado.');
