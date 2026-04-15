@@ -1,4 +1,5 @@
 import type { AddEffectInput } from './effect-instance.service';
+import type { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 
 /**
  * Spec 004 — mapeamento de spellSlug → EffectInstance[] a materializar.
@@ -28,6 +29,50 @@ export interface MaterializeContext {
 export interface SpellEffectMaterialization {
   targetParticipantId: string;
   input: AddEffectInput;
+}
+
+/**
+ * Metadata per-target usada pelas pre-conditions (Mage Armor requer alvo sem
+ * armadura, etc). Callers (spell-casting.service) precisam preencher isso
+ * antes de chamar `checkPreconditions` ou `materializeSpellEffects`.
+ */
+export interface TargetMetadata {
+  id: string;
+  /** True se o alvo tem armor equipada (armor base>0). Monstros: true se AC vem de natural armor. */
+  isWearingArmor: boolean;
+  participant?: EncounterParticipantEntity;
+}
+
+export interface PreconditionFailure {
+  code: string;
+  message: string;
+  targetId?: string;
+}
+
+/**
+ * Valida pre-conditions mecanicas da spell. Retorna null se OK, ou um
+ * PreconditionFailure descritivo para retornar 409 ao caller.
+ */
+export function checkSpellPreconditions(
+  spellSlug: string,
+  targets: TargetMetadata[],
+): PreconditionFailure | null {
+  const slug = spellSlug.toLowerCase();
+
+  if (slug === 'mage-armor') {
+    // RAW: "You touch a willing creature who isn't wearing armor."
+    const armored = targets.find((t) => t.isWearingArmor);
+    if (armored) {
+      return {
+        code: 'INVALID_SPELL_TARGET',
+        message:
+          "Mage Armor so pode ser castada em alvo sem armadura (RAW: 'creature who isn't wearing armor').",
+        targetId: armored.id,
+      };
+    }
+  }
+
+  return null;
 }
 
 /**

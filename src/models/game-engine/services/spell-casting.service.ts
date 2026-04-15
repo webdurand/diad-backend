@@ -24,7 +24,11 @@ import {
   maxTargetsFor,
 } from './spell-targeting';
 import { EffectInstanceService } from './effect-instance.service';
-import { materializeSpellEffects } from './spell-effect-catalog';
+import {
+  materializeSpellEffects,
+  checkSpellPreconditions,
+  type TargetMetadata,
+} from './spell-effect-catalog';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 
 // --- Result interfaces ---
@@ -346,6 +350,19 @@ export class SpellCastingService {
         return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
     }
 
+    // 4.5 Spec 004 — pre-conditions mecanicas (ex: Mage Armor exige alvo sem armadura).
+    const targetMeta: TargetMetadata[] = [];
+    for (const tid of dto.targetParticipantIds) {
+      const t = await this.encounterService.getParticipant(tid).catch(() => null);
+      if (!t) continue;
+      const isWearingArmor = await this.isTargetWearingArmor(t, dto.ownerUserId);
+      targetMeta.push({ id: t.id, isWearingArmor, participant: t });
+    }
+    const precondFail = checkSpellPreconditions(dto.spellSlug, targetMeta);
+    if (precondFail) {
+      return failure(precondFail.message, precondFail.code as any);
+    }
+
     // 5. Cast the spell (validates slots, components, etc.)
     const castResult = await this.castSpell({
       characterId: participant.characterId,
@@ -472,6 +489,40 @@ export class SpellCastingService {
       { ...spellResult, targetsHit, appliedEffectIds } as any,
       events,
     );
+  }
+
+  /**
+   * Detecta se o participant tem armor equipada (armor base > 0).
+   * - PC: inspeciona sheet.equipment e busca peca nao-escudo com ac.base > 0.
+   * - Monster: true se AC aparenta vir de natural armor (nao-leather).
+   * Heuristica simples — refinada em spec futura.
+   */
+  private async isTargetWearingArmor(
+    participant: EncounterParticipantEntity,
+    ownerUserId: string,
+  ): Promise<boolean> {
+    if (participant.type === 'pc' && participant.characterId) {
+      try {
+        const sheet = await this.sheetService.computeSheet(
+          ownerUserId,
+          participant.characterId,
+        );
+        const equip = (sheet as any)?.equipment ?? [];
+        for (const eq of equip) {
+          if (!eq.equipped || !eq.armorClass) continue;
+          const slug = (eq.slug ?? '').toLowerCase();
+          const name = (eq.name ?? '').toLowerCase();
+          if (slug === 'shield' || name === 'shield') continue;
+          const base = (eq.armorClass as any)?.base ?? 0;
+          if (base > 0) return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    }
+    // Monsters: quase sempre tem natural armor — Mage Armor RAW nao se aplica.
+    return participant.type === 'monster';
   }
 
   /** Retorna DEX modifier do caster (PC via sheet, monster via statblock). */
