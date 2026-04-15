@@ -815,6 +815,10 @@ export class GameEngineController {
       spellSlug: string;
       slotLevel: number;
       targetParticipantIds: string[];
+      /** Spec 003 Fatia 9 — cast como reaction (Shield, Counterspell, etc.). */
+      asReaction?: boolean;
+      /** Evento que disparou a reaction (ex: attack_rolled). Obrigatorio se asReaction=true. */
+      triggerEventId?: string;
     },
   ) {
     return this.spellCastingService.castSpellInCombat({
@@ -824,6 +828,8 @@ export class GameEngineController {
       slotLevel: body.slotLevel,
       targetParticipantIds: body.targetParticipantIds,
       ownerUserId: getUserId(req),
+      asReaction: body.asReaction,
+      triggerEventId: body.triggerEventId,
     });
   }
 

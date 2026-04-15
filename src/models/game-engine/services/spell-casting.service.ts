@@ -72,6 +72,12 @@ export interface CastSpellInCombatDto {
   slotLevel: number;
   targetParticipantIds: string[];
   ownerUserId: string;
+  /** Spec 003 Fatia 9 — cast como reaction (Shield, Counterspell, etc.).
+   *  Skip validação de turno; consome reactionsUsed em vez de actionUsed;
+   *  exige casting_time da spell contendo 'reaction' + triggerEventId. */
+  asReaction?: boolean;
+  /** Evento que disparou a reaction (ex: attack_rolled pro Shield). Obrigatório se asReaction=true. */
+  triggerEventId?: string;
 }
 
 export interface CombatSpellResult extends SpellCastResult {
@@ -263,10 +269,14 @@ export class SpellCastingService {
     if (!encounter || encounter.status !== 'active')
       return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
 
-    // 2. Validate it's this participant's turn
-    const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
-    if (currentPid !== dto.participantId)
-      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+    // 2. Validate it's this participant's turn — SKIP se asReaction=true (Spec 003 Fatia 9).
+    if (!dto.asReaction) {
+      const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
+      if (currentPid !== dto.participantId)
+        return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+    } else if (!dto.triggerEventId) {
+      return failure("asReaction=true exige 'triggerEventId'.", 'MISSING_TRIGGER_EVENT');
+    }
 
     const participant = await this.encounterService.getParticipant(dto.participantId);
     if (participant.type === 'monster') {
@@ -311,8 +321,20 @@ export class SpellCastingService {
     // 4. Check action economy based on casting time
     const castingTime = (spellData.casting_time ?? 'action').toLowerCase();
     const isBonusAction = castingTime.includes('bonus');
+    const isReactionSpell = castingTime.includes('reaction');
 
-    if (isBonusAction) {
+    // Spec 003 Fatia 9 — asReaction requer spell.casting_time contendo 'reaction'.
+    if (dto.asReaction && !isReactionSpell) {
+      return failure(
+        `A magia '${dto.spellSlug}' nao e castavel como reaction (casting_time='${spellData.casting_time}').`,
+        'SPELL_NOT_REACTION',
+      );
+    }
+
+    if (dto.asReaction) {
+      if (participant.reactionsUsed > 0)
+        return failure('Reacao ja utilizada.', 'REACTION_ALREADY_USED');
+    } else if (isBonusAction) {
       if (participant.bonusActionUsed)
         return failure('Bonus action ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
     } else {
@@ -335,8 +357,10 @@ export class SpellCastingService {
 
     const spellResult = castResult.value;
 
-    // 6. Mark action used
-    if (isBonusAction) {
+    // 6. Mark action used (Spec 003 Fatia 9: asReaction consome reaction em vez).
+    if (dto.asReaction) {
+      participant.reactionsUsed = participant.reactionsUsed + 1;
+    } else if (isBonusAction) {
       participant.bonusActionUsed = true;
     } else {
       participant.actionUsed = true;
