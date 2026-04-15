@@ -1032,7 +1032,13 @@ export class CombatService {
       if (currentPid !== dto.attackerParticipantId)
         return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
 
-      if (attacker.actionUsed)
+      // Spec 003 Fatia 6 — respeita Extra Attack: bloqueia só quando attacker
+      // esgotou attacksMaxThisTurn (ou actionUsed foi setado por feature tipo
+      // Action Surge consumindo o slot inteiro de action).
+      if (
+        attacker.actionUsed &&
+        attacker.attacksUsedThisTurn >= attacker.attacksMaxThisTurn
+      )
         return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
     }
 
@@ -1444,7 +1450,15 @@ export class CombatService {
     }
 
     if (!dto._isSubAttack) {
-      attacker.actionUsed = true;
+      // Spec 003 Fatia 6 — weapon attacks consomem 1 slot de Extra Attack.
+      // `actionUsed` só vai a true quando atingir o limite (attacksMaxThisTurn).
+      attacker.attacksUsedThisTurn = Math.min(
+        attacker.attacksUsedThisTurn + 1,
+        attacker.attacksMaxThisTurn,
+      );
+      if (attacker.attacksUsedThisTurn >= attacker.attacksMaxThisTurn) {
+        attacker.actionUsed = true;
+      }
 
       // Spec 003 T032 — ataque remove Hidden do atacante (RAW PHB cap. 9).
       if (attacker.conditions?.includes('hidden')) {
