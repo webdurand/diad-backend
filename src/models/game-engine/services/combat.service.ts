@@ -926,7 +926,83 @@ export class CombatService {
     let damageType = 'bludgeoning';
     let damageBonus = 0;
 
-    if (attacker.type === 'pc' && attacker.characterId) {
+    // Spec 003 Fatia 4 — Unarmed Strike (XPHB 2024) com 3 modes:
+    //   damage   → attack roll normal (1 + STR mod bludgeoning)
+    //   grapple  → STR save DC 8+prof+STR; falha aplica condition 'grappled' (Spec 4)
+    //   shove    → STR save mesmo DC; falha = push 5ft OU prone (Spec 4)
+    if (
+      dto.actionSlug === 'unarmed-strike' &&
+      attacker.type === 'pc' &&
+      attacker.characterId
+    ) {
+      const pcOwnerId = await this.resolveParticipantOwner(
+        attacker,
+        dto.ownerUserId,
+      );
+      const sheet = await this.sheetService.computeSheet(
+        pcOwnerId,
+        attacker.characterId,
+      );
+      const strScore = sheet.abilityScores.find((a) => a.slug === 'str');
+      const strMod = strScore?.modifier ?? 0;
+      const profBonus = sheet.proficiencyBonus ?? 2;
+      const mode = (dto.options?.mode as string | undefined) ?? 'damage';
+
+      if (mode === 'grapple' || mode === 'shove') {
+        // Short-circuit: sem attack roll; emite evento para a Spec 4 resolver o save.
+        const saveDc = 8 + profBonus + strMod;
+        if (!dto._isSubAttack) {
+          attacker.actionUsed = true;
+          attacker.attacksUsedThisTurn = Math.min(
+            attacker.attacksUsedThisTurn + 1,
+            attacker.attacksMaxThisTurn,
+          );
+          await this.participantRepo.save(attacker);
+        }
+        const event: GameEventData = {
+          event_type: 'class_feature_invoked',
+          actor_participant_id: attacker.id,
+          target_participant_id: target.id,
+          data: {
+            featureSlug: mode, // 'grapple' | 'shove'
+            actionCost: 'action',
+            targets: [target.id],
+            saveDc,
+            saveAbility: 'str',
+            options: { mode, outcome: 'pending' },
+            caster: {
+              abilityMods: { str: strMod },
+              profBonus,
+            },
+            status: 'emitted_pending_resolution',
+          },
+        };
+        await this.eventService.emit(
+          encounter.sessionId,
+          encounterId,
+          [event],
+        );
+        return success(
+          {
+            attackerParticipantId: attacker.id,
+            targetParticipantId: target.id,
+            actionSlug: 'unarmed-strike',
+            unarmedMode: mode,
+            deferred: true,
+            featureSlug: mode,
+            saveDc,
+            saveAbility: 'str',
+          } as unknown as AttackResult,
+          [event],
+        );
+      }
+
+      // mode === 'damage' (default): populamos stats e seguimos o fluxo de attack roll.
+      attackBonus = strMod + profBonus;
+      damageDice = '1';
+      damageType = 'bludgeoning';
+      damageBonus = strMod;
+    } else if (attacker.type === 'pc' && attacker.characterId) {
       const actions = await this.actionsService.getActions(
         dto.ownerUserId,
         attacker.characterId,
