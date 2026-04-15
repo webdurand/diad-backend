@@ -10,6 +10,7 @@ import { GameEngineModule } from './models/game-engine/game-engine.module';
 import { WorldModule } from './models/world/world.module';
 import { SessionModule } from './models/session/session.module';
 import { AiProxyModule } from './models/ai-proxy/ai-proxy.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AiProxyModule } from './models/ai-proxy/ai-proxy.module';
     WorldModule,
     SessionModule,
     AiProxyModule,
+    RealtimeModule,
   ],
   controllers: [],
   providers: [],
