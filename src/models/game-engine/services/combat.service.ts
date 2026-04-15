@@ -32,6 +32,7 @@ import {
 import { SavingThrowService } from './saving-throw.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { MonsterActionResolver } from './monster-action-resolver.service';
+import { CombatActionRegistry } from './combat-action-registry.service';
 
 // --- DTOs ---
 
@@ -41,8 +42,16 @@ export interface AttackDto {
   targetParticipantId: string;
   /** Multiattack only: one entry per sub-attack in sequence order. */
   targetParticipantIds?: string[];
-  /** Action name/id from ActionsService (for PCs) or monster action name */
+  /** Action name/id from ActionsService (for PCs) or monster action name.
+   *  Spec 003: preserved for internal multiattack / legacy flows. Novos
+   *  chamadores externos devem usar `actionSlug`; o service traduz. */
   actionName: string;
+  /** Spec 003: slug canônico vindo do CombatActionRegistry (ex: 'longsword-attack',
+   *  'unarmed-strike', 'bugbear-morningstar'). Quando presente, `actionName`
+   *  é derivado e o slug é usado para log/events. */
+  actionSlug?: string;
+  /** Spec 003: opções específicas da ação (ex: Unarmed Strike mode='damage'|'grapple'|'shove'). */
+  options?: Record<string, unknown>;
   /** Manual override from DM */
   forceAdvantage?: boolean;
   forceDisadvantage?: boolean;
@@ -110,7 +119,84 @@ export class CombatService {
     private readonly sessionService: SessionService,
     private readonly savingThrowService: SavingThrowService,
     private readonly monsterActionResolver: MonsterActionResolver,
+    private readonly combatActionRegistry: CombatActionRegistry,
   ) {}
+
+  /**
+   * Spec 003 — traduz `actionSlug` em `actionName` interno.
+   *
+   * - `unarmed-strike`                → "Unarmed Strike"
+   * - `<equip>-attack`  (PC weapon)   → nome humano do equipment (ex: "Longsword")
+   * - `<monsterSlug>-<rest>` (monster) → nome canônico do monster.action
+   *
+   * Retorna failure INVALID_ACTION_SLUG se nenhum resolver bate.
+   */
+  async translateSlugToActionName(
+    encounterId: string,
+    attackerParticipantId: string,
+    slug: string,
+    ownerUserId: string,
+  ): Promise<GameResult<string>> {
+    const attacker = await this.encounterService
+      .getParticipant(attackerParticipantId)
+      .catch(() => null);
+    if (!attacker) {
+      return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+    }
+
+    if (slug === 'unarmed-strike') {
+      return success('Unarmed Strike' as string, []);
+    }
+
+    // PC weapon-attack: `<equipmentSlug>-attack` → busca nome do equipment equipado.
+    if (attacker.type === 'pc' && attacker.characterId && slug.endsWith('-attack')) {
+      const equipSlug = slug.slice(0, -'-attack'.length);
+      const pcOwnerId = await this.resolveParticipantOwner(attacker, ownerUserId);
+      const sheet = await this.sheetService.computeSheet(
+        pcOwnerId,
+        attacker.characterId,
+      );
+      const eq = sheet.equipment.find(
+        (e) => e.slug === equipSlug && e.equipped && !!e.damage,
+      );
+      if (!eq) {
+        return failure(
+          `Arma '${equipSlug}' nao esta equipada.`,
+          'NOT_EQUIPPED',
+        );
+      }
+      return success(eq.name, []);
+    }
+
+    // Monster: slug prefixado por monster.slug. Match por rest == action name (kebab).
+    if (attacker.type === 'monster' && attacker.monster) {
+      const monsterSlug: string = (attacker.monster as any).slug ?? '';
+      if (monsterSlug && slug.startsWith(monsterSlug + '-')) {
+        const rest = slug.slice(monsterSlug.length + 1);
+        const actions = ((attacker.monster as any).actions ?? []) as Array<{
+          name: string;
+        }>;
+        const match = actions.find(
+          (a) => this.slugifyName(a.name) === rest,
+        );
+        if (match) {
+          return success(match.name, []);
+        }
+      }
+    }
+
+    return failure(
+      `Slug '${slug}' nao reconhecido para este atacante.`,
+      'INVALID_ACTION_SLUG',
+    );
+  }
+
+  private slugifyName(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
 
   async resolveAoeAction(
     encounterId: string,

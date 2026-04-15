@@ -420,17 +420,62 @@ export class GameEngineController {
       attackerParticipantId: string;
       targetParticipantId?: string;
       targetParticipantIds?: string[];
-      actionName: string;
+      /** Spec 003: breaking change — aceita apenas `actionSlug`. `actionName` antigo rejeitado. */
+      actionSlug?: string;
+      /** @deprecated Shape pre-spec-003. Rejected with 400 MISSING_ACTION_SLUG. */
+      actionName?: string;
+      /** Opções específicas da ação (ex: Unarmed Strike { mode: 'damage'|'grapple'|'shove' }). */
+      options?: Record<string, unknown>;
       forceAdvantage?: boolean;
       forceDisadvantage?: boolean;
     },
   ) {
-    const isMultiattack = /multiataque|multiattack/i.test(body.actionName ?? '');
+    // Spec 003 breaking: só aceita actionSlug.
+    if (!body.actionSlug) {
+      return {
+        ok: false,
+        error:
+          "Campo 'actionSlug' e obrigatorio. O shape antigo ('actionName') foi removido em Spec 003.",
+        code: 'MISSING_ACTION_SLUG',
+        hint:
+          'Use actionSlug de GET /characters/:id/combat-actions ou GET /encounters/:id/participants/:pid/actions.',
+      };
+    }
+    // Shove/Grapple standalone foram removidos — viram sub-opções do Unarmed Strike.
+    if (body.actionSlug === 'shove' || body.actionSlug === 'grapple') {
+      return {
+        ok: false,
+        error:
+          'Shove e Grapple sao sub-opcoes de Unarmed Strike (XPHB 2024).',
+        code: 'USE_UNARMED_STRIKE',
+        hint:
+          `Use actionSlug='unarmed-strike' com options.mode='${body.actionSlug}'.`,
+      };
+    }
+
+    const ownerUserId = getUserId(req);
+    // Traduz slug → actionName interno para manter o fluxo de resolveAttack intacto.
+    const translated = await this.combatService.translateSlugToActionName(
+      id,
+      body.attackerParticipantId,
+      body.actionSlug,
+      ownerUserId,
+    );
+    if (!translated.ok) return translated;
+    const actionName = translated.value;
+
+    const isMultiattack = /multiataque|multiattack/i.test(actionName);
     if (isMultiattack) {
       return this.combatService.resolveMultiattack(id, {
-        ...body,
+        attackerParticipantId: body.attackerParticipantId,
         targetParticipantId: body.targetParticipantId ?? '',
-        ownerUserId: getUserId(req),
+        targetParticipantIds: body.targetParticipantIds,
+        actionName,
+        actionSlug: body.actionSlug,
+        options: body.options,
+        forceAdvantage: body.forceAdvantage,
+        forceDisadvantage: body.forceDisadvantage,
+        ownerUserId,
       });
     }
     if (!body.targetParticipantId) {
@@ -443,10 +488,12 @@ export class GameEngineController {
     return this.combatService.resolveAttack(id, {
       attackerParticipantId: body.attackerParticipantId,
       targetParticipantId: body.targetParticipantId,
-      actionName: body.actionName,
+      actionName,
+      actionSlug: body.actionSlug,
+      options: body.options,
       forceAdvantage: body.forceAdvantage,
       forceDisadvantage: body.forceDisadvantage,
-      ownerUserId: getUserId(req),
+      ownerUserId,
     });
   }
 
