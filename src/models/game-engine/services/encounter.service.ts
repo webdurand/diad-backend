@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -11,6 +12,7 @@ import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { MonsterEntity } from 'src/entities/monster.entity';
 import { CharacterEntity } from 'src/entities/character.entity';
+import { EquipmentEntity } from 'src/entities/equipment.entity';
 import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
@@ -27,11 +29,12 @@ export interface CreateEncounterDto {
   name: string;
 }
 
-export interface ResolveEncounterDto {
+/** Spec 007: shape interno normalizado (após normalizeResolvePayload) */
+export interface NormalizedResolveDto {
   outcome: 'victory' | 'retreat' | 'negotiation' | 'defeat';
   xpRewards: Array<{ characterId: string; xp: number }>;
-  goldRewards: Array<{ characterId: string; gp: number }>;
-  itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string }>;
+  goldRewards: Array<{ characterId: string; gp: number; cp?: number; sp?: number; pp?: number }>;
+  itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string; quantity?: number }>;
   ownerUserId: string;
 }
 
@@ -823,15 +826,155 @@ export class EncounterService {
     };
   }
 
+  /**
+   * Spec 007: normaliza o payload raw do resolve para o shape interno.
+   * Aceita shape simplificado (equal-split/per-pc) e legacy (arrays per-character).
+   */
+  async normalizeResolvePayload(
+    rawBody: any,
+    encounter: EncounterEntity,
+    ownerUserId: string,
+  ): Promise<NormalizedResolveDto> {
+    const pcParticipants = (encounter.participants ?? []).filter(
+      (p) => p.type === 'pc' && p.characterId,
+    );
+    const pcCharacterIds = pcParticipants.map((p) => p.characterId!);
+
+    // --- XP ---
+    let xpRewards: NormalizedResolveDto['xpRewards'] = [];
+    if (rawBody.xpRewards != null) {
+      if (Array.isArray(rawBody.xpRewards)) {
+        // Legacy shape
+        for (const r of rawBody.xpRewards) {
+          if (!r.characterId || typeof r.xp !== 'number')
+            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'Each entry must have characterId (string) and xp (number)' });
+          if (r.xp < 0)
+            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'xp must be >= 0' });
+          xpRewards.push({ characterId: r.characterId, xp: r.xp });
+        }
+      } else if (typeof rawBody.xpRewards === 'object' && rawBody.xpRewards.mode) {
+        const { mode, value } = rawBody.xpRewards;
+        if (mode === 'equal-split') {
+          if (typeof value !== 'number' || value < 0)
+            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'equal-split mode requires value as a non-negative number' });
+          if (pcCharacterIds.length === 0)
+            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'No PC participants to split XP among' });
+          const perPc = Math.floor(value / pcCharacterIds.length);
+          const remainder = value - perPc * pcCharacterIds.length;
+          xpRewards = pcCharacterIds.map((id, i) => ({
+            characterId: id,
+            xp: perPc + (i === 0 ? remainder : 0),
+          }));
+        } else if (mode === 'per-pc') {
+          if (typeof value !== 'object' || Array.isArray(value) || value == null)
+            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'per-pc mode requires value as { pcId: xpAmount }' });
+          for (const [pcId, xp] of Object.entries(value)) {
+            if (typeof xp !== 'number' || xp < 0)
+              throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: `Invalid XP value for PC ${pcId}` });
+            xpRewards.push({ characterId: pcId, xp: xp as number });
+          }
+        } else {
+          throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'mode must be "equal-split" or "per-pc"' });
+        }
+      } else {
+        throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'Expected array or { mode, value } object' });
+      }
+    }
+
+    // --- Gold ---
+    let goldRewards: NormalizedResolveDto['goldRewards'] = [];
+    if (rawBody.goldRewards != null) {
+      if (Array.isArray(rawBody.goldRewards)) {
+        // Legacy shape
+        for (const r of rawBody.goldRewards) {
+          if (!r.characterId || typeof r.gp !== 'number')
+            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'goldRewards', error: 'Each entry must have characterId (string) and gp (number)' });
+          goldRewards.push({ characterId: r.characterId, gp: r.gp });
+        }
+      } else if (typeof rawBody.goldRewards === 'object' && !Array.isArray(rawBody.goldRewards)) {
+        // Simplified shape: { cp?, sp?, gp?, pp? } — split equally among PCs
+        const { cp, sp, gp, pp } = rawBody.goldRewards;
+        if (pcCharacterIds.length === 0)
+          throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'goldRewards', error: 'No PC participants to split gold among' });
+        for (const id of pcCharacterIds) {
+          goldRewards.push({
+            characterId: id,
+            gp: gp != null ? Math.floor(gp / pcCharacterIds.length) : 0,
+            cp: cp != null ? Math.floor(cp / pcCharacterIds.length) : undefined,
+            sp: sp != null ? Math.floor(sp / pcCharacterIds.length) : undefined,
+            pp: pp != null ? Math.floor(pp / pcCharacterIds.length) : undefined,
+          });
+        }
+        // Remainder goes to first PC
+        if (gp != null) goldRewards[0].gp += gp - Math.floor(gp / pcCharacterIds.length) * pcCharacterIds.length;
+      } else {
+        throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'goldRewards', error: 'Expected array or { cp?, sp?, gp?, pp? } object' });
+      }
+    }
+
+    // --- Items ---
+    let itemRewards: NormalizedResolveDto['itemRewards'] = [];
+    if (rawBody.itemRewards != null) {
+      if (!Array.isArray(rawBody.itemRewards))
+        throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'itemRewards', error: 'Expected array' });
+      for (const r of rawBody.itemRewards) {
+        if (r.equipmentId || r.magicItemId) {
+          // Legacy shape
+          itemRewards.push({
+            characterId: r.characterId,
+            equipmentId: r.equipmentId,
+            magicItemId: r.magicItemId,
+            quantity: r.quantity ?? 1,
+          });
+        } else if (r.equipmentSlug) {
+          // Simplified shape — resolve slug to ID
+          const equipment = await this.characterRepo.manager.findOne(EquipmentEntity, {
+            where: { slug: r.equipmentSlug },
+            select: ['id', 'name'],
+          });
+          if (!equipment)
+            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'itemRewards', error: `Equipment slug "${r.equipmentSlug}" not found` });
+          itemRewards.push({
+            characterId: r.pcId ?? r.characterId,
+            equipmentId: equipment.id,
+            quantity: r.quantity ?? 1,
+          });
+        } else {
+          throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'itemRewards', error: 'Each item must have equipmentId, magicItemId, or equipmentSlug' });
+        }
+      }
+    }
+
+    return {
+      outcome: rawBody.outcome,
+      xpRewards,
+      goldRewards,
+      itemRewards,
+      ownerUserId,
+    };
+  }
+
+  /**
+   * Spec 007: resolve encounter com payload normalizado e error handling melhorado.
+   */
   async resolveEncounter(
     encounterId: string,
-    dto: ResolveEncounterDto,
+    rawBody: any,
+    ownerUserId: string,
   ): Promise<{
-    xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }>;
-    goldApplied: Array<{ characterId: string; gp: number }>;
-    itemsApplied: Array<{ characterId: string; itemName: string }>;
+    ok: true;
+    value: {
+      outcome: string;
+      xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }>;
+      goldApplied: Array<{ characterId: string; gp: number; cp?: number; sp?: number; pp?: number }>;
+      itemsApplied: Array<{ characterId: string; itemName: string; quantity: number }>;
+      warnings: string[];
+    };
+    events: any[];
   }> {
     const encounter = await this.getById(encounterId);
+    const dto = await this.normalizeResolvePayload(rawBody, encounter, ownerUserId);
+    const warnings: string[] = [];
 
     // Apply XP
     const xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }> = [];
@@ -849,36 +992,46 @@ export class EncounterService {
           newTotal: result.xp,
           levelUpAvailable: result.levelUpAvailable,
         });
-      } catch {}
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'unknown error';
+        warnings.push(`XP for ${reward.characterId}: ${msg}`);
+      }
     }
 
     // Apply Gold
-    const goldApplied: Array<{ characterId: string; gp: number }> = [];
+    const goldApplied: Array<{ characterId: string; gp: number; cp?: number; sp?: number; pp?: number }> = [];
     for (const reward of dto.goldRewards) {
-      if (reward.gp <= 0) continue;
       try {
         await this.inventoryService.updateGold(
           dto.ownerUserId,
           reward.characterId,
-          { gp: reward.gp },
+          { gp: reward.gp, cp: reward.cp, sp: reward.sp, pp: reward.pp },
         );
-        goldApplied.push({ characterId: reward.characterId, gp: reward.gp });
-      } catch {}
+        goldApplied.push(reward);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'unknown error';
+        warnings.push(`Gold for ${reward.characterId}: ${msg}`);
+      }
     }
 
     // Apply Items
-    const itemsApplied: Array<{ characterId: string; itemName: string }> = [];
+    const itemsApplied: Array<{ characterId: string; itemName: string; quantity: number }> = [];
     for (const reward of dto.itemRewards) {
       try {
         if (reward.equipmentId) {
           const result = await this.inventoryService.addItem(
             dto.ownerUserId,
             reward.characterId,
-            { equipmentId: reward.equipmentId, source: EquipmentSourceEnum.Loot },
+            {
+              equipmentId: reward.equipmentId,
+              source: EquipmentSourceEnum.Loot,
+              quantity: reward.quantity ?? 1,
+            },
           );
           itemsApplied.push({
             characterId: reward.characterId,
             itemName: (result as any).equipment?.name ?? 'Item',
+            quantity: reward.quantity ?? 1,
           });
         }
         if (reward.magicItemId) {
@@ -890,9 +1043,13 @@ export class EncounterService {
           itemsApplied.push({
             characterId: reward.characterId,
             itemName: 'Magic Item',
+            quantity: 1,
           });
         }
-      } catch {}
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'unknown error';
+        warnings.push(`Item for ${reward.characterId}: ${msg}`);
+      }
     }
 
     // Mark encounter as completed
@@ -901,20 +1058,23 @@ export class EncounterService {
     await this.sessionService.setActiveEncounter(encounter.sessionId, null);
 
     // Emit event
-    await this.eventService.emit(encounter.sessionId, encounterId, [
-      {
-        event_type: 'encounter_end',
-        data: {
-          name: encounter.name,
-          outcome: dto.outcome,
-          xpApplied,
-          goldApplied,
-          itemsApplied,
-        },
+    const events = [{
+      event_type: 'encounter_resolved',
+      data: {
+        name: encounter.name,
+        outcome: dto.outcome,
+        xpApplied,
+        goldApplied,
+        itemsApplied,
       },
-    ]);
+    }];
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
 
-    return { xpApplied, goldApplied, itemsApplied };
+    return {
+      ok: true,
+      value: { outcome: dto.outcome, xpApplied, goldApplied, itemsApplied, warnings },
+      events,
+    };
   }
 
   async updateMapData(
