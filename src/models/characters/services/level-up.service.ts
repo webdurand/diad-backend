@@ -32,6 +32,7 @@ import {
 import {
   XP_THRESHOLDS,
   CasterClassType,
+  FULL_CASTER_SLOTS,
   getCasterClassType,
   getSpellcastingAbility,
   normalizeClassSlug,
@@ -441,6 +442,12 @@ export class LevelUpService {
     // not when multiclassing into Wizard at L1 (creation flow handles that).
     if (inputCanonical === 'wizard' && !isNewClass && newClassLevel > 1) {
       this.validateWizardSpellSelection(dto.newSpells);
+      await this.validateWizardSpellsDeep(
+        dto.newSpells!,
+        classEntity,
+        newClassLevel,
+        characterId,
+      );
     }
 
     // Spec 005: multiclass prereqs — 403 with structured missingPrerequisites.
@@ -1149,6 +1156,74 @@ export class LevelUpService {
         });
       }
       seen.add(slug);
+    }
+  }
+
+  /**
+   * Spec 005 — Wizard spell deep validation (post classEntity resolution).
+   *
+   * For each slug: exists in DB, is in the Wizard class list, is at or below
+   * the Wizard's new-level maxSpellLevel, and is not already in the spellbook.
+   * Throws a structured BadRequestException with a specific reason on the
+   * first offending slug (fail fast; the front re-calls after user fixes it).
+   */
+  private async validateWizardSpellsDeep(
+    slugs: string[],
+    wizardClass: ClassEntity,
+    newClassLevel: number,
+    characterId: string,
+  ): Promise<void> {
+    // maxSpellLevel derived from the Wizard's new caster level
+    const slots = FULL_CASTER_SLOTS[newClassLevel] ?? [];
+    const maxSpellLevel = slots.length;
+
+    // Load existing spellbook slugs for duplicate check
+    const existing = await this.charSpellRepo.find({
+      where: { character_id: characterId },
+      relations: ['spell'],
+    });
+    const existingSlugs = new Set(existing.map((cs) => cs.spell.slug));
+
+    // Load Wizard class spell list
+    const classLinks = await this.spellClassRepo.find({
+      where: { class_id: wizardClass.id },
+      relations: ['spell'],
+    });
+    const classSpellSlugs = new Set(classLinks.map((sc) => sc.spell.slug));
+
+    for (const slug of slugs) {
+      const spell = await this.spellRepo.findOneBy({ slug });
+      if (!spell) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' nao encontrada.`,
+          slug,
+          reason: 'not_found',
+        });
+      }
+      if (!classSpellSlugs.has(slug)) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' nao faz parte da lista Wizard.`,
+          slug,
+          reason: 'not_in_class_list',
+        });
+      }
+      if (spell.level > maxSpellLevel) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' (nivel ${spell.level}) excede o maximo permitido no Wizard L${newClassLevel} (nivel ${maxSpellLevel}).`,
+          slug,
+          reason: 'above_max_spell_level',
+        });
+      }
+      if (existingSlugs.has(slug)) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_ALREADY_KNOWN',
+          error: `Spell '${slug}' ja esta no spellbook.`,
+          slug,
+        });
+      }
     }
   }
 

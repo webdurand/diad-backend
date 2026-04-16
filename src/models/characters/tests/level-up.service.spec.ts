@@ -227,6 +227,20 @@ describe('LevelUpService', () => {
       setupForExecute({ classSlug: 'wizard', totalLevel: 1, xp: 300, con: 6 });
       repos.class.findOneBy!.mockResolvedValue(makeClass('wizard'));
 
+      // Spec 005 deep validation needs spell + spellClass mocks
+      const alarm = { id: 'sp-al', slug: 'alarm', level: 1 };
+      const mm = { id: 'sp-mm', slug: 'magic-missile', level: 1 };
+      repos.spell.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === 'alarm') return alarm;
+        if (where.slug === 'magic-missile') return mm;
+        return null;
+      });
+      repos.spellClass.find!.mockResolvedValue([
+        { spell: alarm, class_id: 'c-wiz', spell_id: alarm.id },
+        { spell: mm, class_id: 'c-wiz', spell_id: mm.id },
+      ]);
+      repos.charSpell.find!.mockResolvedValue([]);
+
       const result = await service.execute('user-1', 'char-1', {
         classSlug: 'wizard',
         hpMethod: 'roll',
@@ -289,8 +303,18 @@ describe('LevelUpService', () => {
       setupForExecute({ classSlug: 'wizard', totalLevel: 1, xp: 300 });
       repos.class.findOneBy!.mockResolvedValue(makeClass('wizard'));
 
-      const spellEntity = { id: 'spell-mm', slug: 'magic-missile', level: 1 };
-      repos.spell.findOneBy!.mockResolvedValue(spellEntity);
+      const mm = { id: 'spell-mm', slug: 'magic-missile', level: 1 };
+      const alarm = { id: 'spell-al', slug: 'alarm', level: 1 };
+      repos.spell.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === 'magic-missile') return mm;
+        if (where.slug === 'alarm') return alarm;
+        return null;
+      });
+      repos.spellClass.find!.mockResolvedValue([
+        { spell: mm, class_id: 'c-wiz', spell_id: mm.id },
+        { spell: alarm, class_id: 'c-wiz', spell_id: alarm.id },
+      ]);
+      repos.charSpell.find!.mockResolvedValue([]);
       mockManager.findOne!.mockResolvedValue(null); // No existing spell
       mockManager.findOneBy!.mockResolvedValue(null);
 
@@ -765,6 +789,135 @@ describe('LevelUpService', () => {
       const body = caught!.getResponse() as { code: string; reason: string; slug: string };
       expect(body.code).toBe('WIZARD_SPELL_INVALID');
       expect(body.reason).toBe('duplicate_in_selection');
+      expect(body.slug).toBe('alarm');
+    });
+
+    it('Wizard L1 → L2 with Fireball (L3) → 400 WIZARD_SPELL_INVALID above_max_spell_level', async () => {
+      const wizCc = makeCharacterClass('wizard', 1);
+      const state = makeCharacterState({ xp: 300, current_hp: 8 });
+      const fireball = { id: 'spell-fb', slug: 'fireball', level: 3 };
+      const alarm = { id: 'spell-alarm', slug: 'alarm', level: 1 };
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([wizCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.findOneBy!.mockResolvedValue(wizCc.class);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.spell.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === 'fireball') return fireball;
+        if (where.slug === 'alarm') return alarm;
+        return null;
+      });
+      // Wizard has alarm + fireball in class spell list
+      repos.spellClass.find!.mockResolvedValue([
+        { class_id: wizCc.class.id, spell_id: alarm.id, spell: alarm },
+        { class_id: wizCc.class.id, spell_id: fireball.id, spell: fireball },
+      ]);
+
+      let caught: BadRequestException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'wizard',
+          hpMethod: 'fixed',
+          newSpells: ['alarm', 'fireball'],
+        });
+      } catch (e) {
+        caught = e as BadRequestException;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = caught!.getResponse() as { code: string; reason: string; slug: string };
+      expect(body.code).toBe('WIZARD_SPELL_INVALID');
+      expect(body.reason).toBe('above_max_spell_level');
+      expect(body.slug).toBe('fireball');
+    });
+
+    it('Wizard L1 → L2 with spell not in class list → 400 WIZARD_SPELL_INVALID not_in_class_list', async () => {
+      const wizCc = makeCharacterClass('wizard', 1);
+      const state = makeCharacterState({ xp: 300, current_hp: 8 });
+      const cureWounds = { id: 'spell-cw', slug: 'cure-wounds', level: 1 };
+      const alarm = { id: 'spell-alarm', slug: 'alarm', level: 1 };
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([wizCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.findOneBy!.mockResolvedValue(wizCc.class);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.spell.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === 'cure-wounds') return cureWounds;
+        if (where.slug === 'alarm') return alarm;
+        return null;
+      });
+      // Wizard class list contains only alarm — cure-wounds is cleric
+      repos.spellClass.find!.mockResolvedValue([
+        { class_id: wizCc.class.id, spell_id: alarm.id, spell: alarm },
+      ]);
+
+      let caught: BadRequestException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'wizard',
+          hpMethod: 'fixed',
+          newSpells: ['alarm', 'cure-wounds'],
+        });
+      } catch (e) {
+        caught = e as BadRequestException;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = caught!.getResponse() as { code: string; reason: string; slug: string };
+      expect(body.code).toBe('WIZARD_SPELL_INVALID');
+      expect(body.reason).toBe('not_in_class_list');
+      expect(body.slug).toBe('cure-wounds');
+    });
+
+    it('Wizard L1 → L2 with a spell already in spellbook → 400 WIZARD_SPELL_ALREADY_KNOWN', async () => {
+      const wizCc = makeCharacterClass('wizard', 1);
+      const state = makeCharacterState({ xp: 300, current_hp: 8 });
+      const alarm = { id: 'spell-alarm', slug: 'alarm', level: 1 };
+      const magicMissile = { id: 'spell-mm', slug: 'magic-missile', level: 1 };
+      // Existing CharacterSpell: alarm already in spellbook
+      const existingAlarm = {
+        id: 'cs-1',
+        character_id: 'char-1',
+        spell_id: alarm.id,
+        spell: alarm,
+        source: 'class',
+        status: 'spellbook',
+      };
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([wizCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([existingAlarm]);
+      repos.class.findOneBy!.mockResolvedValue(wizCc.class);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.spell.findOneBy!.mockImplementation(async (where: { slug: string }) => {
+        if (where.slug === 'alarm') return alarm;
+        if (where.slug === 'magic-missile') return magicMissile;
+        return null;
+      });
+      repos.spellClass.find!.mockResolvedValue([
+        { class_id: wizCc.class.id, spell_id: alarm.id, spell: alarm },
+        { class_id: wizCc.class.id, spell_id: magicMissile.id, spell: magicMissile },
+      ]);
+
+      let caught: BadRequestException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'wizard',
+          hpMethod: 'fixed',
+          newSpells: ['alarm', 'magic-missile'],
+        });
+      } catch (e) {
+        caught = e as BadRequestException;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = caught!.getResponse() as { code: string; slug: string };
+      expect(body.code).toBe('WIZARD_SPELL_ALREADY_KNOWN');
       expect(body.slug).toBe('alarm');
     });
 
