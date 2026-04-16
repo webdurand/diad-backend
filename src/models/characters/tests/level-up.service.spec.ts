@@ -921,6 +921,104 @@ describe('LevelUpService', () => {
       expect(body.slug).toBe('alarm');
     });
 
+    it('GET /level-up-options: Paladin PHB formula = halfLevel+mod; XPHB = level+mod', async () => {
+      // Paladin L5 → preview L6. CHA 14 (mod +2). newClassLevel = 6.
+      // PHB: halfLevel+mod = floor(6/2)+2 = 5
+      // XPHB: level+mod = 6+2 = 8
+      const paladinCc = makeCharacterClass('paladin', 5, {
+        class: {
+          ...makeClass('paladin'),
+          spellcasting: { level: 5, spellcasting_ability: { slug: 'cha' } },
+        },
+      });
+      const phbCharacter = makeCharacter({
+        source: { code: 'PHB', rules: { preparedFormulas: { paladin: 'halfLevel+mod' } } },
+      });
+      const state = makeCharacterState({ xp: 6500 });
+
+      repos.character.findOne!.mockResolvedValue(phbCharacter);
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([paladinCc]);
+      repos.charAbility.find!.mockResolvedValue(
+        makeCharacterAbilityScores({ cha: 14 }),
+      );
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.find!.mockResolvedValue([paladinCc.class]);
+      repos.level.findOne!.mockResolvedValue({
+        spellcasting: { spell_slots_level_1: 4, spell_slots_level_2: 2 },
+        ability_score_bonuses: 0,
+        level_features: [],
+      });
+      repos.subclass.find!.mockResolvedValue([]);
+      repos.spellClass.find!.mockResolvedValue([]);
+
+      const resultPhb = await service.getOptions('user-1', 'char-1');
+      const paladinPhb = resultPhb.availableClasses.find((c) => c.slug === 'paladin');
+      expect(paladinPhb?.spellSelection?.maxPrepared).toBe(5); // PHB: floor(6/2)+2
+
+      // Swap to XPHB rules → same PC arithmetic should return 7
+      const xphbCharacter = makeCharacter({
+        source: { code: 'XPHB', rules: { preparedFormulas: { paladin: 'level+mod' } } },
+      });
+      repos.character.findOne!.mockResolvedValue(xphbCharacter);
+
+      const resultXphb = await service.getOptions('user-1', 'char-1');
+      const paladinXphb = resultXphb.availableClasses.find((c) => c.slug === 'paladin');
+      expect(paladinXphb?.spellSelection?.maxPrepared).toBe(8); // XPHB: 6+2
+    });
+
+    it('POST /level-up: Fighter STR 12 CHA 8 attempting Paladin → 403 with BOTH missing prereqs', async () => {
+      // Paladin multiclass prereq (RAW): STR 13 AND CHA 13
+      const fighterCc = makeCharacterClass('fighter', 1);
+      const paladinEntity = makeClass('paladin', {
+        multi_classing: {
+          prerequisites: [
+            { ability_score: { index: 'str' }, minimum_score: 13 },
+            { ability_score: { index: 'cha' }, minimum_score: 13 },
+          ],
+        },
+      });
+      const state = makeCharacterState({ xp: 300, current_hp: 10 });
+
+      repos.character.findOne!.mockResolvedValue(makeCharacter());
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([fighterCc]);
+      repos.charAbility.find!.mockResolvedValue(
+        makeCharacterAbilityScores({ str: 12, cha: 8 }),
+      );
+      repos.class.findOneBy!.mockImplementation(
+        async (where: { slug: string }) => {
+          if (where.slug === 'paladin') return paladinEntity;
+          return null;
+        },
+      );
+      repos.level.findOne!.mockResolvedValue(null);
+
+      let caught: ForbiddenException | null = null;
+      try {
+        await service.execute('user-1', 'char-1', {
+          classSlug: 'paladin',
+          hpMethod: 'fixed',
+        });
+      } catch (e) {
+        caught = e as ForbiddenException;
+      }
+      expect(caught).toBeInstanceOf(ForbiddenException);
+      const body = caught!.getResponse() as {
+        code: string;
+        missingPrerequisites: MissingPrereqPayload[];
+      };
+      expect(body.code).toBe('MULTICLASS_PREREQ_NOT_MET');
+      // Both STR and CHA are missing — both surfaced
+      expect(body.missingPrerequisites).toEqual(
+        expect.arrayContaining([
+          { ability: 'str', required: 13, current: 12 },
+          { ability: 'cha', required: 13, current: 8 },
+        ]),
+      );
+      expect(body.missingPrerequisites).toHaveLength(2);
+    });
+
     it('Non-Wizard classes are not gated by the 2-spells rule', async () => {
       // Bard L1 → L2 without newSpells; should NOT throw WIZARD_SPELLS_REQUIRED
       setupForExecute({ classSlug: 'bard', totalLevel: 1, xp: 300 });
