@@ -33,6 +33,8 @@ export interface EnrichedParticipantResponse {
   attacksMaxThisTurn: number;
 
   dodging: boolean;
+  hasDashed: boolean;
+  hasDisengaged: boolean;
   helping: boolean;
   helpingAlly: string | null;
   helpingAgainst: string | null;
@@ -125,6 +127,8 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
 
     // Derived booleans
     dodging: p.dodgingUntilTurnOfParticipantId != null,
+    hasDashed: p.hasDashed ?? false,
+    hasDisengaged: p.hasDisengaged ?? false,
     helping: p.helpingAllyParticipantId != null,
     helpingAlly: p.helpingAllyParticipantId ?? null,
     helpingAgainst: p.helpingTargetParticipantId ?? null,

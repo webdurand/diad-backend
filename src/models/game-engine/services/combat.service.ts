@@ -153,7 +153,7 @@ export class CombatService {
       return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
     }
 
-    if (slug === 'unarmed-strike') {
+    if (slug === 'unarmed-strike' || slug === 'unarmed-grapple' || slug === 'unarmed-shove') {
       return success('Unarmed Strike' as string, []);
     }
 
@@ -182,6 +182,15 @@ export class CombatService {
       const monsterSlug: string = (attacker.monster as any).slug ?? '';
       if (monsterSlug && slug.startsWith(monsterSlug + '-')) {
         const rest = slug.slice(monsterSlug.length + 1);
+
+        // Multiattack é armazenado separado de monster.actions
+        if (rest === 'multiattack' || rest === 'multiataque') {
+          const ma = (attacker.monster as any).multiattack;
+          if (ma) {
+            return success('Multiattack', []);
+          }
+        }
+
         const actions = ((attacker.monster as any).actions ?? []) as Array<{
           name: string;
         }>;
@@ -721,7 +730,7 @@ export class CombatService {
       if (multiattack && Array.isArray(multiattack.sequence) && multiattack.sequence.length > 0) {
         actions = [
           {
-            id: 'monster-multiattack',
+            id: `${(participant.monster as any).slug ?? 'monster'}-multiattack`,
             name: 'Multiataque',
             kind: 'multiattack',
             timing: 'action',
@@ -870,8 +879,9 @@ export class CombatService {
 
   private parseMonsterActions(monster: any): TurnActionBlock[] {
     const monsterActions = (monster.actions as any[]) ?? [];
+    const monsterSlug: string = monster.slug ?? '';
     return monsterActions.map((a: any, i: number) =>
-      this.buildMonsterActionBlock(monster, a, i, 'monster-action'),
+      this.buildMonsterActionBlock(monster, a, i, monsterSlug),
     );
   }
 
@@ -933,12 +943,18 @@ export class CombatService {
 
     const range = resolved.reach ?? resolved.range;
 
+    const actionSlug = idPrefix
+      ? `${idPrefix}-${(a.name ?? 'attack').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+      : `monster-action-${i}`;
+
+    const isAttack = resolved.hasAttack || damage != null;
+
     return {
-      id: `${idPrefix}-${i}`,
+      id: actionSlug,
       name: a.name ?? 'Ataque',
       timing: 'action',
-      source: 'base',
-      sourceLabel: monster.name,
+      source: isAttack ? 'base' : 'special',
+      sourceLabel: isAttack ? monster.name : 'Habilidade Especial',
       description: desc,
       attackBonus,
       damage,

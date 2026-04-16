@@ -8,6 +8,7 @@
 
 export type ActionKind =
   | 'attack'
+  | 'special'
   | 'spell'
   | 'class-feature'
   | 'item'

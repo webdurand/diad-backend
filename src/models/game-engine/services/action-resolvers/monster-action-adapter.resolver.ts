@@ -16,6 +16,7 @@ import type {
  */
 @Injectable()
 export class MonsterActionAdapterResolver implements ActionResolver {
+  // Monster actions can be attacks or special abilities; `list()` returns both.
   readonly kind: ActionKind = 'attack';
 
   async list(ctx: ParticipantContext): Promise<ActionDescriptor[]> {
@@ -63,22 +64,29 @@ export class MonsterActionAdapterResolver implements ActionResolver {
       }
     }
 
+    // Habilidades sem attackBonus nem damageDice são especiais (summon, aura, etc.)
+    const isAttack = action.attackBonus != null || action.damageDice != null;
+
     return {
       slug: `${ctx.monsterSlug}-${this.slugifyName(action.name)}`,
       displayName: action.name,
-      kind: 'attack',
+      kind: isAttack ? 'attack' : 'special',
       actionCost: 'action',
       available,
       disabledReason,
-      targetShape: 'single-creature',
-      targetRange: 5,
+      targetShape: isAttack ? 'single-creature' : 'none',
+      targetRange: isAttack ? 5 : undefined,
       metadata: {
         damageDice: action.damageDice,
         damageType: action.damageType,
         sourceMonsterSlug: ctx.monsterSlug,
-        attacksRemainingThisTurn: economy
-          ? Math.max(0, economy.attacksMaxThisTurn - economy.attacksUsedThisTurn)
-          : undefined,
+        ...(isAttack
+          ? {
+              attacksRemainingThisTurn: economy
+                ? Math.max(0, economy.attacksMaxThisTurn - economy.attacksUsedThisTurn)
+                : undefined,
+            }
+          : {}),
       },
     };
   }
