@@ -557,8 +557,245 @@ async function rogueL17(cookie) {
   assert(sm === true, 'Slippery Mind feature present at L17');
 }
 
+// Wizard spell pool — 2 picks per level-up from L2 (32 total, all distinct,
+// each at or below maxSpellLevel for the level being reached). Picks taken
+// from SRD Wizard list, widely-seeded slugs.
+const WIZARD_PICKS = {
+  2: ['alarm', 'mage-armor'],
+  3: ['magic-missile', 'shield'],
+  4: ['misty-step', 'scorching-ray'],
+  5: ['invisibility', 'web'],
+  6: ['hold-person', 'blur'],
+  7: ['counterspell', 'fireball'],
+  8: ['haste', 'fly'],
+  9: ['greater-invisibility', 'polymorph'],
+  10: ['wall-of-fire', 'fire-shield'],
+  11: ['cone-of-cold', 'wall-of-force'],
+  12: ['animate-objects', 'cloudkill'],
+  13: ['chain-lightning', 'disintegrate'],
+  14: ['globe-of-invulnerability', 'true-seeing'],
+  15: ['teleport', 'finger-of-death'],
+  16: ['delayed-blast-fireball', 'reverse-gravity'],
+  17: ['dominate-monster', 'maze'],
+};
+
+async function wizardEvokerL17(cookie) {
+  log('--- Wizard Evoker elf XPHB L1→L17 ---');
+  const createRes = await call('POST', '/characters', {
+    name: `FixWizard17-${Date.now()}`,
+    data: {
+      sourceCode: 'XPHB',
+      classSlug: 'wizard',
+      raceSlug: 'elf',
+      backgroundSlug: 'sage',
+      abilityScores: { str: 8, dex: 14, con: 13, int: 15, wis: 12, cha: 10 },
+      backgroundAbilityBonuses: [
+        { ability: 'int', amount: 2 },
+        { ability: 'wis', amount: 1 },
+      ],
+      classEquipmentChoices: ['A'],
+      backgroundEquipmentChoices: ['A'],
+    },
+  }, cookie);
+  if (createRes.status !== 201) {
+    log(`  CREATE failed: ${createRes.status} ${JSON.stringify(createRes.body).slice(0, 400)}`);
+    return;
+  }
+  const pcId = createRes.body.id;
+  log(`  created L1 pc=${pcId}`);
+
+  for (let lvl = 2; lvl <= 17; lvl++) {
+    const payload = {
+      classSlug: 'wizard',
+      hpMethod: 'fixed',
+      newSpells: WIZARD_PICKS[lvl],
+    };
+    if (lvl === 3) payload.subclassSlug = 'wizard-evoker';
+    if ([4, 8, 12, 16].includes(lvl)) {
+      payload.abilityScoreIncreases = [{ abilitySlug: 'int', increase: 2 }];
+    }
+    const r = await levelUpTo(pcId, lvl, cookie, payload);
+    if (!r) {
+      log(`  [STOP] Wizard failed at L${lvl}`);
+      return;
+    }
+  }
+  const sheet = await getSheet(pcId, cookie);
+  if (!sheet) return;
+  log(`  L17 totalLevel=${sheet.totalLevel} profBonus=${sheet.proficiencyBonus}`);
+  log(`  L17 INT=${sheet.abilityScores?.find((a) => a.slug === 'int')?.score}`);
+  const slotByLevel = Object.fromEntries((sheet.spellSlots ?? []).map((s) => [s.level, s.total]));
+  log(`  L17 spellSlots: ${JSON.stringify(slotByLevel)}`);
+  const bookCount = (sheet.spells ?? []).filter((s) => s.level > 0).length;
+  log(`  L17 class spells count (level>0): ${bookCount}`);
+  assert(sheet.totalLevel === 17, 'totalLevel=17');
+  assert(sheet.proficiencyBonus === 6, 'profBonus=6');
+  // RAW Wizard L17: slots [4,3,3,3,2,1,1,1,1]
+  assert(slotByLevel[1] === 4, 'L1 slots=4');
+  assert(slotByLevel[9] === 1, 'L9 slot available');
+  // 16 level-ups × 2 added = 32 new spells in spellbook (plus initial)
+  assert(bookCount >= 32, `spellbook has >=32 class spells (got ${bookCount}) — 16 level-ups × 2`);
+}
+
+async function clericLifeL17(cookie) {
+  log('--- Cleric Life dwarf XPHB L1→L17 ---');
+  const createRes = await call('POST', '/characters', {
+    name: `FixCleric17-${Date.now()}`,
+    data: {
+      sourceCode: 'XPHB',
+      classSlug: 'cleric',
+      raceSlug: 'dwarf',
+      backgroundSlug: 'acolyte',
+      abilityScores: { str: 10, dex: 10, con: 14, int: 10, wis: 15, cha: 12 },
+      backgroundAbilityBonuses: [
+        { ability: 'wis', amount: 2 },
+        { ability: 'con', amount: 1 },
+      ],
+      classEquipmentChoices: ['A'],
+      backgroundEquipmentChoices: ['A'],
+      divineOrder: 'protector',
+    },
+  }, cookie);
+  if (createRes.status !== 201) {
+    log(`  CREATE failed: ${createRes.status} ${JSON.stringify(createRes.body).slice(0, 400)}`);
+    return;
+  }
+  const pcId = createRes.body.id;
+
+  for (let lvl = 2; lvl <= 17; lvl++) {
+    const payload = { classSlug: 'cleric', hpMethod: 'fixed' };
+    if (lvl === 3) payload.subclassSlug = 'cleric-life';
+    if ([4, 8, 12, 16].includes(lvl)) {
+      payload.abilityScoreIncreases = [{ abilitySlug: 'wis', increase: 2 }];
+    }
+    const r = await levelUpTo(pcId, lvl, cookie, payload);
+    if (!r) {
+      log(`  [STOP] Cleric failed at L${lvl}`);
+      return;
+    }
+  }
+  const sheet = await getSheet(pcId, cookie);
+  if (!sheet) return;
+  log(`  L17 totalLevel=${sheet.totalLevel} profBonus=${sheet.proficiencyBonus}`);
+  log(`  L17 WIS=${sheet.abilityScores?.find((a) => a.slug === 'wis')?.score}`);
+  const slotByLevel = Object.fromEntries((sheet.spellSlots ?? []).map((s) => [s.level, s.total]));
+  log(`  L17 spellSlots: ${JSON.stringify(slotByLevel)}`);
+  assert(sheet.totalLevel === 17, 'totalLevel=17');
+  assert(sheet.proficiencyBonus === 6, 'profBonus=6');
+  assert(slotByLevel[9] === 1, 'L9 slot available for full caster Cleric');
+  // Cleric Destroy Undead improves with level
+  const du = sheet.features?.some((f) => /destroy.undead/i.test(f.name ?? f.slug ?? ''));
+  assert(du === true, 'Destroy Undead feature present');
+}
+
+// --- PHB espelho ---
+
+async function fighterPhbL5(cookie) {
+  log('--- Fighter Champion human PHB L1→L5 (espelho) ---');
+  const createRes = await call('POST', '/characters', {
+    name: `FixFighterPhb-${Date.now()}`,
+    data: {
+      sourceCode: 'PHB',
+      classSlug: 'fighter-phb',
+      raceSlug: 'human',
+      backgroundSlug: 'folk-hero-phb',
+      abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+      classEquipmentChoices: [
+        '(a) chain mail or (b) leather armor, longbow, and arrows (20)',
+        '(a) a martial weapon and a shield or (b) two martial weapons',
+        '(a) a light crossbow and crossbow bolts (20) or (b) two handaxe',
+        "(a) a dungeoneer's pack or (b) an explorer's pack",
+      ],
+      backgroundEquipmentChoices: ['A'],
+    },
+  }, cookie);
+  if (createRes.status !== 201) {
+    log(`  CREATE failed: ${createRes.status} ${JSON.stringify(createRes.body).slice(0, 400)}`);
+    return;
+  }
+  const pcId = createRes.body.id;
+  log(`  created L1 pc=${pcId}`);
+
+  for (let lvl = 2; lvl <= 5; lvl++) {
+    const payload = { classSlug: 'fighter-phb', hpMethod: 'fixed' };
+    // PHB Fighter subclass at L3 (same as XPHB)
+    if (lvl === 3) payload.subclassSlug = 'fighter-champion-phb';
+    if (lvl === 4) payload.abilityScoreIncreases = [{ abilitySlug: 'str', increase: 2 }];
+    const r = await levelUpTo(pcId, lvl, cookie, payload);
+    if (!r) {
+      log(`  [STOP] Fighter PHB failed at L${lvl}`);
+      return;
+    }
+    // Log fallback flag if present
+    if (r.featureSourceFallback) {
+      log(`  L${lvl} featureSourceFallback=${r.featureSourceFallback} (PHB seed gap → XPHB)`);
+    }
+  }
+  const sheet = await getSheet(pcId, cookie);
+  if (!sheet) return;
+  log(`  L5 totalLevel=${sheet.totalLevel} profBonus=${sheet.proficiencyBonus} STR=${sheet.abilityScores?.find((a) => a.slug === 'str')?.score}`);
+  log(`  L5 features: ${(sheet.features ?? []).map((f) => f.slug ?? f.name).slice(0, 12).join(', ')}`);
+  assert(sheet.totalLevel === 5, 'totalLevel=5');
+  assert(sheet.proficiencyBonus === 3, 'profBonus=3');
+  // Classes preserved with source-qualified slug
+  const mainCls = sheet.classes?.[0];
+  assert(mainCls?.slug === 'fighter-phb', `class slug preserved fighter-phb (got ${mainCls?.slug})`);
+  assert(mainCls?.level === 5, `class level=5`);
+  // Action Surge should appear via fallback to XPHB if PHB seed empty
+  const as = sheet.features?.some((f) => /action.surge/i.test(f.name ?? f.slug ?? ''));
+  assert(as === true, 'Action Surge feature present (native or via XPHB fallback)');
+}
+
+async function roguePhbL5(cookie) {
+  log('--- Rogue Thief halfling PHB L1→L5 (espelho) ---');
+  const createRes = await call('POST', '/characters', {
+    name: `FixRoguePhb-${Date.now()}`,
+    data: {
+      sourceCode: 'PHB',
+      classSlug: 'rogue-phb',
+      raceSlug: 'halfling',
+      backgroundSlug: 'urchin-phb',
+      abilityScores: { str: 8, dex: 15, con: 13, int: 14, wis: 10, cha: 12 },
+      classEquipmentChoices: [
+        '(a) a rapier or (b) a shortsword',
+        '(a) a shortbow and quiver of arrows (20) or (b) a shortsword',
+        "(a) a burglar's pack, (b) a dungeoneer's pack, or (c) an explorer's pack",
+        "Leather armor, two dagger, and thieves' tools",
+      ],
+      backgroundEquipmentChoices: ['A'],
+    },
+  }, cookie);
+  if (createRes.status !== 201) {
+    log(`  CREATE failed: ${createRes.status} ${JSON.stringify(createRes.body).slice(0, 400)}`);
+    return;
+  }
+  const pcId = createRes.body.id;
+
+  for (let lvl = 2; lvl <= 5; lvl++) {
+    const payload = { classSlug: 'rogue-phb', hpMethod: 'fixed' };
+    if (lvl === 3) payload.subclassSlug = 'rogue-thief-phb';
+    if (lvl === 4) payload.abilityScoreIncreases = [{ abilitySlug: 'dex', increase: 2 }];
+    const r = await levelUpTo(pcId, lvl, cookie, payload);
+    if (!r) {
+      log(`  [STOP] Rogue PHB failed at L${lvl}`);
+      return;
+    }
+    if (r.featureSourceFallback) {
+      log(`  L${lvl} featureSourceFallback=${r.featureSourceFallback}`);
+    }
+  }
+  const sheet = await getSheet(pcId, cookie);
+  if (!sheet) return;
+  log(`  L5 totalLevel=${sheet.totalLevel} DEX=${sheet.abilityScores?.find((a) => a.slug === 'dex')?.score}`);
+  assert(sheet.totalLevel === 5, 'totalLevel=5');
+  assert(sheet.classes?.[0]?.slug === 'rogue-phb', 'class slug preserved rogue-phb');
+  // Uncanny Dodge (L5) via fallback
+  const ud = sheet.features?.some((f) => /uncanny.dodge/i.test(f.name ?? f.slug ?? ''));
+  assert(ud === true, 'Uncanny Dodge feature present (native or via XPHB fallback)');
+}
+
 async function main() {
-  log('=== Spec 005 fixture L5/L11/L17 start ===');
+  log('=== Spec 005 fixture XPHB full + PHB mirror start ===');
   const cookie = await login();
   log(`login ok`);
 
@@ -570,8 +807,13 @@ async function main() {
   await rogueL11(cookie);
   await fighterL17(cookie);
   await rogueL17(cookie);
+  await wizardEvokerL17(cookie);
+  await clericLifeL17(cookie);
+  // PHB mirror
+  await fighterPhbL5(cookie);
+  await roguePhbL5(cookie);
 
-  log('=== Spec 005 fixture L5/L11/L17 end ===\n');
+  log('=== Spec 005 fixture XPHB full + PHB mirror end ===\n');
 }
 
 main().catch((e) => {
