@@ -14,7 +14,16 @@ import {
   DeleteResult,
   QueryFailedError,
   ObjectLiteral,
+  SelectQueryBuilder,
 } from 'typeorm';
+import { LibraryQueryDto } from './dto/library-query.dto';
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
 
 @Injectable()
 export class LibraryService {
@@ -37,6 +46,132 @@ export class LibraryService {
       return await this.entityManager.find(entityClass, options);
     } catch (error) {
       this.handleErrors(error);
+    }
+  }
+
+  /**
+   * Spec 007: paginated query with strict source filter and entity-specific filters.
+   */
+  async findPaginated<T extends ObjectLiteral>(
+    entityClass: EntityTarget<T>,
+    entityName: string,
+    relations: string[],
+    query: LibraryQueryDto,
+  ): Promise<PaginatedResult<T>> {
+    this.validateEntity(entityClass);
+
+    const limit = query.limit ?? 50;
+    const offset = query.offset ?? 0;
+
+    try {
+      const qb = this.entityManager.createQueryBuilder(entityClass, 'entity');
+
+      // Load relations via leftJoinAndSelect
+      for (const rel of relations) {
+        const parts = rel.split('.');
+        if (parts.length === 1) {
+          qb.leftJoinAndSelect(`entity.${parts[0]}`, parts[0]);
+        } else {
+          // Nested relation: e.g. 'spell_classes.class' → join spell_classes on entity, then class on spell_classes
+          const parentAlias = parts[0];
+          const childField = parts[1];
+          const childAlias = `${parentAlias}_${childField}`;
+          // Only add the parent join if not already added
+          if (!relations.includes(parentAlias)) {
+            qb.leftJoinAndSelect(`entity.${parentAlias}`, parentAlias);
+          }
+          qb.leftJoinAndSelect(`${parentAlias}.${childField}`, childAlias);
+        }
+      }
+      // Also add standalone parent joins for dotted relations
+      const standaloneParents = new Set<string>();
+      for (const rel of relations) {
+        const parts = rel.split('.');
+        if (parts.length > 1 && !relations.includes(parts[0])) {
+          standaloneParents.add(parts[0]);
+        }
+      }
+      for (const parent of standaloneParents) {
+        // Already handled in the loop above, but ensure no duplicate
+      }
+
+      // Strict source filter via INNER JOIN
+      if (query.source) {
+        if (entityName === 'comp_sources') {
+          qb.andWhere('entity.code = :sourceCode', { sourceCode: query.source });
+        } else {
+          // Use innerJoin to ensure strict filtering — only entries matching the source
+          qb.innerJoin('entity.source', 'source_filter')
+            .andWhere('source_filter.code = :sourceCode', { sourceCode: query.source });
+        }
+      }
+
+      // Name filter (ILIKE) — available for all entities
+      if (query.name) {
+        qb.andWhere('entity.name ILIKE :name', { name: `%${query.name}%` });
+      }
+
+      // Entity-specific filters
+      this.applyEntityFilters(qb, entityName, query);
+
+      qb.orderBy('entity.name', 'ASC')
+        .skip(offset)
+        .take(limit);
+
+      const [data, total] = await qb.getManyAndCount();
+      return { data, total, limit, offset };
+    } catch (error) {
+      this.handleErrors(error);
+    }
+  }
+
+  private applyEntityFilters<T extends ObjectLiteral>(
+    qb: SelectQueryBuilder<T>,
+    entityName: string,
+    query: LibraryQueryDto,
+  ): void {
+    if (entityName === 'monsters') {
+      if (query.cr != null) {
+        const crStr = String(query.cr);
+        if (crStr.includes('-')) {
+          const [minStr, maxStr] = crStr.split('-');
+          const minCr = parseFloat(minStr);
+          const maxCr = parseFloat(maxStr);
+          if (!isNaN(minCr) && !isNaN(maxCr)) {
+            qb.andWhere('entity.challenge_rating >= :minCr', { minCr });
+            qb.andWhere('entity.challenge_rating <= :maxCr', { maxCr });
+          }
+        } else {
+          const exactCr = parseFloat(crStr);
+          if (!isNaN(exactCr)) {
+            qb.andWhere('entity.challenge_rating = :cr', { cr: exactCr });
+          }
+        }
+      }
+      if (query.type) {
+        qb.andWhere('entity.type ILIKE :monsterType', { monsterType: `%${query.type}%` });
+      }
+    }
+
+    if (entityName === 'spells') {
+      if (query.level != null) {
+        qb.andWhere('entity.level = :level', { level: query.level });
+      }
+      if (query.school) {
+        // school is a relation already joined via relations config
+        qb.andWhere('school.name ILIKE :school', { school: `%${query.school}%` });
+      }
+      if (query.class) {
+        // spell_classes.class already joined via relations config
+        qb.andWhere('spell_classes_class.name ILIKE :className', { className: `%${query.class}%` });
+      }
+    }
+
+    if (entityName === 'equipments') {
+      if (query.category) {
+        // category_items.category already joined via relations config
+        qb.andWhere('category_items_category.name ILIKE :category', { category: `%${query.category}%` });
+      }
     }
   }
 
