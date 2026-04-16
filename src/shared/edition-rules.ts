@@ -34,6 +34,21 @@ export interface EditionRules {
    *  Default: '2014_six_levels' se não especificado.
    */
   exhaustionVariant?: '2014_six_levels' | '2024_ten_levels';
+
+  /**
+   * Spec 005 — Source code (CompSourceEntity.code) a consultar quando
+   * LevelEntity(class_id, level) da edição atual não existe. Ex: PHB.rules =
+   * 'XPHB' permite Fighter PHB subir L2 mesmo com gap de seed. Omitido na
+   * fonte default (XPHB).
+   */
+  featureFallbackSource?: string;
+
+  /**
+   * Spec 005 — Source consultada quando um classSlug pedido para multiclass
+   * não tem ClassEntity nativa na edição do PC. Ex: PC PHB tentando multiclass
+   * em artificer (só XPHB). Omitido se desabilitado.
+   */
+  classFallbackSource?: string;
 }
 
 /** Default rules for 2014 (PHB) edition */
@@ -58,6 +73,11 @@ export const PHB_RULES: EditionRules = {
   backgroundGrantsFeat: false,
   backgroundGrantsAbilityBonuses: false,
   exhaustionVariant: '2014_six_levels',
+  // Spec 005 — while PHB seed doesn't cover all (class, level) rows, resolve
+  // missing features/classes through XPHB. Delivers correct level-up for PHB
+  // PCs out of the box; spec 006 closes the seed gap later.
+  featureFallbackSource: 'XPHB',
+  classFallbackSource: 'XPHB',
 };
 
 /** Default rules for 2024 (XPHB) edition */

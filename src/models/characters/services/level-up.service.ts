@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -31,6 +32,7 @@ import {
 import {
   XP_THRESHOLDS,
   CasterClassType,
+  FULL_CASTER_SLOTS,
   getCasterClassType,
   getSpellcastingAbility,
   normalizeClassSlug,
@@ -38,6 +40,7 @@ import {
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
 import { type EditionRules, getSubclassLevel as getSubclassLevelFromRules, getPreparedFormula } from 'src/shared/edition-rules';
+import { Logger } from '@nestjs/common';
 
 type CasterType = CasterClassType;
 
@@ -61,12 +64,16 @@ export interface LevelUpOptionsResult {
 }
 
 export interface AvailableClassOption {
-  slug: string;
+  slug: string;                      // canonical: 'fighter' (no suffix)
+  sourceQualifiedSlug: string;       // ClassEntity.slug actually used: 'fighter-phb' or 'fighter'
+  featureSourceFallback?: string;    // Spec 005: 'XPHB' when PHB LevelEntity was missing
   name: string;
   isCurrentClass: boolean;
+  isMulticlass: boolean;             // true when picking this class would create a new CharacterClass
   hitDie: number;
   meetsPrerequisites: boolean;
   prerequisites: MulticlassPrereq[];
+  missingPrerequisites: MissingPrerequisite[];
   nextLevel: number;
   hasAsi: boolean;
   hasSubclass: boolean;
@@ -80,6 +87,12 @@ export interface AvailableClassOption {
   spellcasting: Record<string, unknown> | null;
   newProficiencies: Array<{ slug: string; name: string }>;
   spellSelection: SpellSelectionForLevelUp | null;
+}
+
+export interface MissingPrerequisite {
+  ability: string;                   // 'str' | 'dex' | ...
+  required: number;
+  current: number;
 }
 
 export interface SpellSelectionForLevelUp {
@@ -116,10 +129,18 @@ export interface LevelUpResult {
   hpGained: number;
   newFeatures: string[];
   message: string;
+  /**
+   * Spec 005 — presente quando o LevelEntity da edição do PC não existia e o
+   * service caiu no fallback via EditionRules.featureFallbackSource. Valor =
+   * CompSourceEntity.code da fonte usada (ex: 'XPHB').
+   */
+  featureSourceFallback?: string;
 }
 
 @Injectable()
 export class LevelUpService {
+  private readonly logger = new Logger(LevelUpService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(CharacterEntity)
@@ -179,49 +200,79 @@ export class LevelUpService {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
     }
 
-    // All classes available
+    // Spec 005: group all ClassEntity rows by canonical slug, then pick one
+    // representative per canonical (prefer the PC's own class when it matches;
+    // else prefer a class from the PC's source; else fall back to canonical).
     const allClasses = await this.classRepo.find();
-    const currentClassSlugs = new Set(charClasses.map((cc) => cc.class.slug));
+    const canonicalGroups = new Map<string, ClassEntity[]>();
+    for (const cls of allClasses) {
+      const canonical = normalizeClassSlug(cls.slug);
+      const group = canonicalGroups.get(canonical) ?? [];
+      group.push(cls);
+      canonicalGroups.set(canonical, group);
+    }
+
+    const currentCanonicalMap = new Map<string, CharacterClassEntity>();
+    for (const cc of charClasses) {
+      currentCanonicalMap.set(normalizeClassSlug(cc.class.slug), cc);
+    }
+
+    const pickRepresentative = (group: ClassEntity[]): ClassEntity => {
+      // 1. PC already has this class (any edition) → use the PC's ClassEntity
+      const canonical = normalizeClassSlug(group[0].slug);
+      const charClass = currentCanonicalMap.get(canonical);
+      if (charClass) return charClass.class;
+      // 2. Same source as the PC
+      if (character.sourceId) {
+        const same = group.find((c) => c.source_id === character.sourceId);
+        if (same) return same;
+      }
+      // 3. Canonical (no suffix) preferred
+      const canonicalEntity = group.find((c) => c.slug === canonical);
+      if (canonicalEntity) return canonicalEntity;
+      // 4. First row
+      return group[0];
+    };
 
     const availableClasses: AvailableClassOption[] = [];
     const hitDie: Record<string, number> = {};
 
-    for (const cls of allClasses) {
-      const isCurrentClass = currentClassSlugs.has(cls.slug);
-      const charClass = charClasses.find((cc) => cc.class.slug === cls.slug);
+    for (const [canonical, group] of canonicalGroups) {
+      const cls = pickRepresentative(group);
+      const charClass = currentCanonicalMap.get(canonical);
+      const isCurrentClass = !!charClass;
+      const isMulticlass = !isCurrentClass;
       const nextClassLevel = isCurrentClass ? charClass!.class_level + 1 : 1;
 
-      // Parse multiclassing prerequisites
+      // Parse multiclassing prerequisites + compute missing
       const prereqs = this.parsePrerequisites(cls.multi_classing);
-      const meetsPrereqs =
-        isCurrentClass ||
-        this.checkPrerequisites(prereqs, abilityMap, charClasses);
+      const missingPrerequisites = isCurrentClass
+        ? []
+        : this.computeMissingPrerequisites(prereqs, abilityMap);
+      const meetsPrereqs = missingPrerequisites.length === 0;
 
-      // For multiclass: also need to meet current class prereqs
+      // For multiclass: also need to meet current class prereqs (RAW)
       if (!isCurrentClass && meetsPrereqs) {
         const currentPrimaryClass = charClasses[0]?.class;
         if (currentPrimaryClass) {
           const currentPrereqs = this.parsePrerequisites(
             currentPrimaryClass.multi_classing,
           );
-          const meetsCurrent = this.checkPrerequisites(
+          const currentMissing = this.computeMissingPrerequisites(
             currentPrereqs,
             abilityMap,
-            charClasses,
           );
-          if (!meetsCurrent) continue;
+          if (currentMissing.length > 0) continue;
         }
       }
 
-      // Load level data for the next class level
-      const levelData = await this.levelRepo.findOne({
-        where: {
-          class_id: cls.id,
-          level: nextClassLevel,
-          subclass_id: IsNull(),
-        },
-        relations: ['level_features', 'level_features.feature'],
-      });
+      // Spec 005 — load level data with PHB→XPHB fallback when seeded gaps exist
+      const { levelData, fallbackSource } = await this.resolveLevelData(
+        cls,
+        nextClassLevel,
+        character.source?.rules,
+        null,
+      );
 
       // Also load subclass level data if character has a subclass for this class
       let subclassFeatures: Array<{
@@ -232,14 +283,12 @@ export class LevelUpService {
       }> = [];
 
       if (charClass?.subclass_id) {
-        const subLevelData = await this.levelRepo.findOne({
-          where: {
-            class_id: cls.id,
-            level: nextClassLevel,
-            subclass_id: charClass.subclass_id,
-          },
-          relations: ['level_features', 'level_features.feature'],
-        });
+        const { levelData: subLevelData } = await this.resolveLevelData(
+          cls,
+          nextClassLevel,
+          character.source?.rules,
+          charClass.subclass_id,
+        );
         if (subLevelData?.level_features) {
           subclassFeatures = subLevelData.level_features.map((lf) => ({
             slug: lf.feature.slug,
@@ -294,15 +343,19 @@ export class LevelUpService {
         character.source?.rules,
       );
 
-      hitDie[cls.slug] = cls.hit_die;
+      hitDie[canonical] = cls.hit_die;
 
       availableClasses.push({
-        slug: cls.slug,
+        slug: canonical,
+        sourceQualifiedSlug: cls.slug,
+        ...(fallbackSource ? { featureSourceFallback: fallbackSource } : {}),
         name: cls.name,
         isCurrentClass,
+        isMulticlass,
         hitDie: cls.hit_die,
         meetsPrerequisites: meetsPrereqs,
         prerequisites: prereqs,
+        missingPrerequisites,
         nextLevel: nextClassLevel,
         hasAsi,
         hasSubclass,
@@ -357,46 +410,78 @@ export class LevelUpService {
       );
     }
 
-    // Resolve class
-    const classEntity = await this.classRepo.findOneBy({ slug: dto.classSlug });
+    // Spec 005: Resolve class by canonical slug (normalizes -phb/-xphb suffixes
+    // and case). PC `fighter-phb` + input `fighter` must advance, not multiclass.
+    const inputCanonical = normalizeClassSlug(dto.classSlug.toLowerCase());
+    const existingCharClass = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === inputCanonical,
+    );
+
+    // When advancing, preserve the PC's ClassEntity (source-qualified). When
+    // multiclassing, look up the ClassEntity by input or canonical slug.
+    let classEntity: ClassEntity | null = null;
+    if (existingCharClass) {
+      classEntity = existingCharClass.class;
+    } else {
+      classEntity =
+        (await this.classRepo.findOneBy({ slug: dto.classSlug.toLowerCase() })) ??
+        (await this.classRepo.findOneBy({ slug: inputCanonical }));
+    }
     if (!classEntity) {
       throw new BadRequestException(
         `Classe '${dto.classSlug}' nao encontrada.`,
       );
     }
 
-    const existingCharClass = charClasses.find(
-      (cc) => cc.class.slug === dto.classSlug,
-    );
     const isNewClass = !existingCharClass;
     const newClassLevel = isNewClass ? 1 : existingCharClass!.class_level + 1;
     const newTotalLevel = totalLevel + 1;
 
-    // Validate multiclass prerequisites
+    // Spec 005 — Wizard advance (level > 1) demands exactly 2 new spellbook
+    // entries per RAW. Applied only when advancing an existing Wizard level,
+    // not when multiclassing into Wizard at L1 (creation flow handles that).
+    if (inputCanonical === 'wizard' && !isNewClass && newClassLevel > 1) {
+      this.validateWizardSpellSelection(dto.newSpells);
+      await this.validateWizardSpellsDeep(
+        dto.newSpells!,
+        classEntity,
+        newClassLevel,
+        characterId,
+      );
+    }
+
+    // Spec 005: multiclass prereqs — 403 with structured missingPrerequisites.
     if (isNewClass) {
       const abilityMap = new Map<string, number>();
       for (const ca of charAbilities) {
         abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
       }
 
-      // Must meet new class prereqs
       const newPrereqs = this.parsePrerequisites(classEntity.multi_classing);
-      if (!this.checkPrerequisites(newPrereqs, abilityMap, charClasses)) {
-        throw new BadRequestException(
-          `Pre-requisitos de multiclasse para ${classEntity.name} nao atendidos.`,
-        );
+      const missingNew = this.computeMissingPrerequisites(newPrereqs, abilityMap);
+      if (missingNew.length > 0) {
+        throw new ForbiddenException({
+          code: 'MULTICLASS_PREREQ_NOT_MET',
+          error: `Pre-requisitos de multiclasse para ${classEntity.name} nao atendidos.`,
+          missingPrerequisites: missingNew,
+        });
       }
 
-      // Must meet current class prereqs
       const primaryClass = charClasses[0]?.class;
       if (primaryClass) {
         const currentPrereqs = this.parsePrerequisites(
           primaryClass.multi_classing,
         );
-        if (!this.checkPrerequisites(currentPrereqs, abilityMap, charClasses)) {
-          throw new BadRequestException(
-            'Pre-requisitos de multiclasse da classe atual nao atendidos.',
-          );
+        const missingCurrent = this.computeMissingPrerequisites(
+          currentPrereqs,
+          abilityMap,
+        );
+        if (missingCurrent.length > 0) {
+          throw new ForbiddenException({
+            code: 'MULTICLASS_PREREQ_NOT_MET',
+            error: `Pre-requisitos de multiclasse da classe atual (${primaryClass.name}) nao atendidos.`,
+            missingPrerequisites: missingCurrent,
+          });
         }
       }
     }
@@ -480,15 +565,14 @@ export class LevelUpService {
       state.current_hp += hpGained;
       await manager.save(CharacterStateEntity, state);
 
-      // 4. Add features from the level
-      const levelData = await this.levelRepo.findOne({
-        where: {
-          class_id: classEntity.id,
-          level: newClassLevel,
-          subclass_id: IsNull(),
-        },
-        relations: ['level_features', 'level_features.feature'],
-      });
+      // Spec 005 — load features with PHB→XPHB fallback (tracks source used)
+      const character = await this.ensureOwnership(userId, characterId);
+      const { levelData, fallbackSource } = await this.resolveLevelData(
+        classEntity,
+        newClassLevel,
+        character.source?.rules,
+        null,
+      );
 
       if (levelData?.level_features) {
         for (const lf of levelData.level_features) {
@@ -511,14 +595,12 @@ export class LevelUpService {
         : existingCharClass;
 
       if (charClass?.subclass_id) {
-        const subLevelData = await this.levelRepo.findOne({
-          where: {
-            class_id: classEntity.id,
-            level: newClassLevel,
-            subclass_id: charClass.subclass_id,
-          },
-          relations: ['level_features', 'level_features.feature'],
-        });
+        const { levelData: subLevelData } = await this.resolveLevelData(
+          classEntity,
+          newClassLevel,
+          character.source?.rules,
+          charClass.subclass_id,
+        );
         if (subLevelData?.level_features) {
           for (const lf of subLevelData.level_features) {
             await manager.save(CharacterFeatureEntity, {
@@ -717,6 +799,7 @@ export class LevelUpService {
         hpGained,
         newFeatures,
         message: `${classEntity.name} nivel ${newClassLevel}! (Nivel total: ${newTotalLevel})`,
+        ...(fallbackSource ? { featureSourceFallback: fallbackSource } : {}),
       };
     });
   }
@@ -924,7 +1007,70 @@ export class LevelUpService {
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
+    // Spec 005: load source to resolve EditionRules (subclass level,
+    // prepared formula, feature fallback) per the character's edition.
+    return ensureCharacterOwnership(this.characterRepo, userId, characterId, [
+      'source',
+    ]);
+  }
+
+  /**
+   * Spec 005 — Resolve LevelEntity for (classEntity, nextLevel). When the
+   * native row is missing and the rules declare a `featureFallbackSource`,
+   * look up the same canonical class in that source and return it, tagged
+   * with the fallback source code. Emits a warning log so seed gaps are
+   * visible in production.
+   */
+  private async resolveLevelData(
+    classEntity: ClassEntity,
+    nextLevel: number,
+    rules: EditionRules | undefined,
+    subclassId: string | null,
+  ): Promise<{
+    levelData: LevelEntity | null;
+    fallbackSource?: string;
+  }> {
+    const whereClause = subclassId
+      ? { class_id: classEntity.id, level: nextLevel, subclass_id: subclassId }
+      : { class_id: classEntity.id, level: nextLevel, subclass_id: IsNull() };
+    const nativeData = await this.levelRepo.findOne({
+      where: whereClause,
+      relations: ['level_features', 'level_features.feature'],
+    });
+    // Accept native row only when it carries features. Empty level_features
+    // counts as a miss — triggers fallback so users don't get silently
+    // shortchanged on level-ups against an incomplete PHB seed.
+    const nativeHasFeatures =
+      nativeData?.level_features && nativeData.level_features.length > 0;
+    if (nativeHasFeatures) return { levelData: nativeData };
+
+    // Native missing or feature-less — try fallback source if configured
+    const fallbackCode = rules?.featureFallbackSource;
+    if (!fallbackCode || subclassId) {
+      // Don't fall back subclass data — subclasses are edition-specific by design
+      return { levelData: null };
+    }
+
+    const canonical = normalizeClassSlug(classEntity.slug);
+    const fallbackClass = await this.classRepo.findOne({
+      where: { slug: canonical },
+      relations: ['source'],
+    });
+    if (!fallbackClass || fallbackClass.source?.code !== fallbackCode) {
+      return { levelData: null };
+    }
+
+    const fallbackData = await this.levelRepo.findOne({
+      where: { class_id: fallbackClass.id, level: nextLevel, subclass_id: IsNull() },
+      relations: ['level_features', 'level_features.feature'],
+    });
+    if (fallbackData) {
+      this.logger.warn(
+        `[LEVEL_UP_FALLBACK] class=${classEntity.slug} level=${nextLevel} fallback=${fallbackCode}`,
+      );
+      return { levelData: fallbackData, fallbackSource: fallbackCode };
+    }
+    return { levelData: null };
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {
@@ -960,6 +1106,144 @@ export class LevelUpService {
       if (score < p.minimumScore) return false;
     }
     return true;
+  }
+
+  /**
+   * Spec 005 — Wizard add-to-spellbook validation.
+   *
+   * Per RAW, a Wizard adds exactly 2 spells to the spellbook per level gained.
+   * The service enforces:
+   *   - newSpells must be present
+   *   - exactly 2 entries
+   *   - no duplicates in the selection
+   *
+   * Uniqueness against existing spellbook + class-list + maxSpellLevel checks
+   * happen downstream in spell materialization (where the SpellEntity is
+   * loaded). This keeps the synchronous pre-validation simple and fast.
+   */
+  private validateWizardSpellSelection(newSpells: string[] | undefined): void {
+    const spells = newSpells ?? [];
+    if (spells.length === 0) {
+      throw new BadRequestException({
+        code: 'WIZARD_SPELLS_REQUIRED',
+        error: 'Wizard ganha 2 spells ao subir de nivel; selecione exatamente 2.',
+        requiredCount: 2,
+      });
+    }
+    if (spells.length > 2) {
+      throw new BadRequestException({
+        code: 'WIZARD_SPELLS_LIMIT_EXCEEDED',
+        error: `Wizard pode adicionar no maximo 2 spells por level-up. Recebido: ${spells.length}.`,
+        allowed: 2,
+        received: spells.length,
+      });
+    }
+    if (spells.length < 2) {
+      throw new BadRequestException({
+        code: 'WIZARD_SPELLS_REQUIRED',
+        error: `Wizard precisa selecionar 2 spells, recebido ${spells.length}.`,
+        requiredCount: 2,
+      });
+    }
+    const seen = new Set<string>();
+    for (const slug of spells) {
+      if (seen.has(slug)) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' selecionada mais de uma vez.`,
+          slug,
+          reason: 'duplicate_in_selection',
+        });
+      }
+      seen.add(slug);
+    }
+  }
+
+  /**
+   * Spec 005 — Wizard spell deep validation (post classEntity resolution).
+   *
+   * For each slug: exists in DB, is in the Wizard class list, is at or below
+   * the Wizard's new-level maxSpellLevel, and is not already in the spellbook.
+   * Throws a structured BadRequestException with a specific reason on the
+   * first offending slug (fail fast; the front re-calls after user fixes it).
+   */
+  private async validateWizardSpellsDeep(
+    slugs: string[],
+    wizardClass: ClassEntity,
+    newClassLevel: number,
+    characterId: string,
+  ): Promise<void> {
+    // maxSpellLevel derived from the Wizard's new caster level
+    const slots = FULL_CASTER_SLOTS[newClassLevel] ?? [];
+    const maxSpellLevel = slots.length;
+
+    // Load existing spellbook slugs for duplicate check
+    const existing = await this.charSpellRepo.find({
+      where: { character_id: characterId },
+      relations: ['spell'],
+    });
+    const existingSlugs = new Set(existing.map((cs) => cs.spell.slug));
+
+    // Load Wizard class spell list
+    const classLinks = await this.spellClassRepo.find({
+      where: { class_id: wizardClass.id },
+      relations: ['spell'],
+    });
+    const classSpellSlugs = new Set(classLinks.map((sc) => sc.spell.slug));
+
+    for (const slug of slugs) {
+      const spell = await this.spellRepo.findOneBy({ slug });
+      if (!spell) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' nao encontrada.`,
+          slug,
+          reason: 'not_found',
+        });
+      }
+      if (!classSpellSlugs.has(slug)) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' nao faz parte da lista Wizard.`,
+          slug,
+          reason: 'not_in_class_list',
+        });
+      }
+      if (spell.level > maxSpellLevel) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_INVALID',
+          error: `Spell '${slug}' (nivel ${spell.level}) excede o maximo permitido no Wizard L${newClassLevel} (nivel ${maxSpellLevel}).`,
+          slug,
+          reason: 'above_max_spell_level',
+        });
+      }
+      if (existingSlugs.has(slug)) {
+        throw new BadRequestException({
+          code: 'WIZARD_SPELL_ALREADY_KNOWN',
+          error: `Spell '${slug}' ja esta no spellbook.`,
+          slug,
+        });
+      }
+    }
+  }
+
+  /** Spec 005: structured list of missing prereqs (empty when all met). */
+  private computeMissingPrerequisites(
+    prereqs: MulticlassPrereq[],
+    abilityMap: Map<string, number>,
+  ): MissingPrerequisite[] {
+    const missing: MissingPrerequisite[] = [];
+    for (const p of prereqs) {
+      const current = abilityMap.get(p.abilityScoreSlug) ?? 0;
+      if (current < p.minimumScore) {
+        missing.push({
+          ability: p.abilityScoreSlug,
+          required: p.minimumScore,
+          current,
+        });
+      }
+    }
+    return missing;
   }
 
   private getMulticlassProficiencies(
