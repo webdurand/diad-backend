@@ -343,6 +343,25 @@ function expandItems(items: unknown[], results: ResolvedItem[]): void {
       continue;
     }
 
+    // 5etools class shape: { item: "chain mail|xphb", quantity?: N }
+    if (typeof obj.item === 'string') {
+      const raw = obj.item as string;
+      const name = raw.includes('|') ? raw.split('|')[0] : raw;
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      results.push({
+        slug,
+        name,
+        quantity: typeof obj.quantity === 'number' ? obj.quantity : 1,
+      });
+      continue;
+    }
+
+    // 5etools class shape: { value: N } — gold in copper pieces
+    if (typeof obj.value === 'number' && !obj.item && !obj.name) {
+      results.push({ gold: obj.value / 100, unit: 'gp' });
+      continue;
+    }
+
     // Background shape: { gold: N }
     if (typeof obj.gold === 'number') {
       results.push({ gold: obj.gold, unit: 'gp' });
@@ -997,7 +1016,8 @@ export class CharactersService {
         else if (unit === 'cp') extraGold += item.gold / 100;
         else if (unit === 'pp') extraGold += item.gold * 10;
       } else {
-        parsedItems.push({ name: item.slug, quantity: item.quantity });
+        // Push both slug and name for lookup flexibility
+        parsedItems.push({ name: item.name, quantity: item.quantity });
       }
     }
 
