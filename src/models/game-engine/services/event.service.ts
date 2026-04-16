@@ -56,6 +56,40 @@ export class EventService {
     });
   }
 
+  /**
+   * Spec 006 — timeline com filtros, paginação e count.
+   */
+  async getEncounterTimelineFiltered(
+    encounterId: string,
+    options: {
+      since?: string;
+      eventTypes?: string[];
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<{ events: GameEventEntity[]; total: number }> {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+
+    const qb = this.eventRepo
+      .createQueryBuilder('e')
+      .where('e.encounter_id = :encounterId', { encounterId })
+      .orderBy('e.sequence', 'ASC');
+
+    if (options.since) {
+      qb.andWhere('e.created_at > :since', { since: new Date(options.since) });
+    }
+
+    if (options.eventTypes && options.eventTypes.length > 0) {
+      qb.andWhere('e.event_type IN (:...types)', { types: options.eventTypes });
+    }
+
+    const total = await qb.getCount();
+    const events = await qb.skip(offset).take(limit).getMany();
+
+    return { events, total };
+  }
+
   private async getNextSequence(sessionId: string): Promise<number> {
     const result = await this.eventRepo
       .createQueryBuilder('e')
