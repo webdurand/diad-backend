@@ -1030,9 +1030,14 @@ export class LevelUpService {
       where: whereClause,
       relations: ['level_features', 'level_features.feature'],
     });
-    if (nativeData) return { levelData: nativeData };
+    // Accept native row only when it carries features. Empty level_features
+    // counts as a miss — triggers fallback so users don't get silently
+    // shortchanged on level-ups against an incomplete PHB seed.
+    const nativeHasFeatures =
+      nativeData?.level_features && nativeData.level_features.length > 0;
+    if (nativeHasFeatures) return { levelData: nativeData };
 
-    // Native row missing — try fallback source if configured
+    // Native missing or feature-less — try fallback source if configured
     const fallbackCode = rules?.featureFallbackSource;
     if (!fallbackCode || subclassId) {
       // Don't fall back subclass data — subclasses are edition-specific by design
