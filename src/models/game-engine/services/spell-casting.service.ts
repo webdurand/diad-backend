@@ -31,6 +31,9 @@ import {
   type TargetMetadata,
 } from './spell-effect-catalog';
 import { getAbilityModifier } from 'src/shared/srd-utils';
+import { getSpellDamage } from './spell-damage-catalog';
+import { getSpellCondition } from './spell-condition-catalog';
+import { ConditionLifecycleService } from './condition-lifecycle.service';
 
 // --- Result interfaces ---
 
@@ -118,6 +121,7 @@ export class SpellCastingService {
     private readonly encounterService: EncounterService,
     private readonly monsterSpellcasting: MonsterSpellcastingService,
     private readonly effectInstanceService: EffectInstanceService,
+    private readonly conditionLifecycle: ConditionLifecycleService,
   ) {}
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
@@ -186,12 +190,31 @@ export class SpellCastingService {
       previousConcentration,
     };
 
-    // 9. Resolve damage if applicable
-    if (spell.damage) {
+    // 9. Resolve damage if applicable.
+    // Spec 005 Addendum: spell-damage-catalog como fonte primária (seed não tem
+    // damage_at_slot_level). Fallback para DB spell.damage quando catálogo miss.
+    const catalogDmg = getSpellDamage(spell.slug, dto.slotLevel, sheet.totalLevel);
+    if (catalogDmg) {
+      const rollResult = this.diceService.rollExpression(catalogDmg.expression);
+      result.damage = {
+        expression: catalogDmg.expression,
+        total: rollResult.total,
+        type: catalogDmg.type,
+      };
+      events.push({
+        event_type: 'spell_damage',
+        data: {
+          spell: spell.name,
+          expression: catalogDmg.expression,
+          total: rollResult.total,
+          type: catalogDmg.type,
+          slot_level: dto.slotLevel,
+          source: 'catalog',
+        },
+      });
+    } else if (spell.damage) {
       const damageInfo = spell.damage as Record<string, any>;
       const slotKey = String(dto.slotLevel);
-      // Cantrip scaling RAW: damage_at_character_level tem chaves só em 1/5/11/17;
-      // escolher a maior chave <= totalLevel (se char nivel 3, usa chave "1" = 1d6).
       const cantripScalingExpr = (() => {
         const map = damageInfo?.damage_at_character_level;
         if (!map || typeof map !== 'object') return null;
@@ -211,13 +234,11 @@ export class SpellCastingService {
       if (expression) {
         const rollResult = this.diceService.rollExpression(expression);
         const damageType = damageInfo?.damage_type?.name ?? 'magical';
-
         result.damage = {
           expression,
           total: rollResult.total,
           type: damageType,
         };
-
         events.push({
           event_type: 'spell_damage',
           data: {
@@ -416,26 +437,24 @@ export class SpellCastingService {
       if (spellResult.damage && spellResult.damage.total > 0) {
         let finalDamage = spellResult.damage.total;
 
-        // Saving throw for half damage
+        // Saving throw for half damage (PC + monster)
         if (spellData.dc) {
           const dcInfo = spellData.dc as Record<string, any>;
-          const saveAbility = dcInfo.dc_type?.name ?? 'dexterity';
-          const sheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
-          const casterClass = sheet.classes?.find((c: any) => c.spellSaveDc != null);
+          const rawAbility = Array.isArray(dcInfo.dc_type) ? dcInfo.dc_type[0] : (dcInfo.dc_type?.name ?? dcInfo.dc_type ?? 'dexterity');
+          const saveAbility = String(rawAbility).toLowerCase().substring(0, 3);
+          const casterSheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
+          const casterClass = casterSheet.classes?.find((c: any) => c.spellSaveDc != null);
           const spellSaveDc = casterClass?.spellSaveDc ?? 13;
 
-          // Roll saving throw for target
-          if (target.type === 'pc' && target.characterId) {
-            const saveResult = await this.savingThrowService.rollSavingThrow({
-              characterId: target.characterId,
-              ability: saveAbility,
-              dc: spellSaveDc,
-              userId: dto.ownerUserId,
-            });
-            if (saveResult.ok && saveResult.value?.success) {
+          const saveResult = await this.rollMonsterOrPcSave(target, saveAbility, spellSaveDc, dto.ownerUserId);
+          if (saveResult.success) {
+            const dcSuccess = dcInfo.dc_success ?? 'half';
+            if (dcSuccess === 'half') {
               finalDamage = Math.floor(finalDamage / 2);
-              targetResult.savedSuccessfully = true;
+            } else if (dcSuccess === 'none') {
+              finalDamage = 0;
             }
+            targetResult.savedSuccessfully = true;
           }
         }
 
@@ -460,6 +479,42 @@ export class SpellCastingService {
           ownerUserId: dto.ownerUserId,
         });
         targetResult.healingApplied = spellResult.healing.total;
+      }
+
+      // Spec 005 Addendum — apply condition from spell-condition-catalog
+      const condEntry = getSpellCondition(dto.spellSlug);
+      if (condEntry && target.id !== participant.id) {
+        const sheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
+        const casterClass = (sheet as any).classes?.find((c: any) => c.spellSaveDc != null);
+        const spellSaveDc: number = casterClass?.spellSaveDc ?? 13;
+
+        const saveRoll = this.rollMonsterOrPcSave(
+          target,
+          condEntry.saveAbility,
+          spellSaveDc,
+          dto.ownerUserId,
+        );
+        const saveResult = await saveRoll;
+        if (!saveResult.success) {
+          const condResult = await this.conditionLifecycle.applyCondition(target, {
+            slug: condEntry.conditionSlug,
+            appliedBy: participant.id,
+            sourceSpell: dto.spellSlug,
+            sourceConcentration: condEntry.requiresConcentration,
+            saveAbility: condEntry.saveAbility,
+            saveDc: spellSaveDc,
+            repeatSaveTiming: condEntry.repeatSaveTiming,
+            durationRoundsRemaining: condEntry.durationRounds,
+          });
+          events.push(...condResult.events);
+          (targetResult as any).conditionApplied = {
+            instanceId: condResult.instance.id,
+            slug: condResult.instance.slug,
+            durationRoundsRemaining: condEntry.durationRounds,
+          };
+        } else {
+          targetResult.savedSuccessfully = true;
+        }
       }
 
       targetsHit.push(targetResult);
@@ -797,5 +852,67 @@ export class SpellCastingService {
     const ability = dc.dc_type?.name ?? dc.dc_type ?? null;
     if (typeof ability !== 'string') return null;
     return ability.toLowerCase().substring(0, 3);
+  }
+
+  /**
+   * Spec 005 Addendum — Roll saving throw for target (monster or PC).
+   * For PCs delegates to SavingThrowService; for monsters computes inline
+   * from ability score + proficiency (if present in proficiencies).
+   */
+  private async rollMonsterOrPcSave(
+    target: EncounterParticipantEntity,
+    ability: string,
+    dc: number,
+    ownerUserId: string,
+  ): Promise<{ success: boolean; roll: number; total: number; dc: number }> {
+    if (target.type === 'pc' && target.characterId) {
+      const saveResult = await this.savingThrowService.rollSavingThrow({
+        characterId: target.characterId,
+        ability,
+        dc,
+        userId: ownerUserId,
+      });
+      if (saveResult.ok && saveResult.value) {
+        return {
+          success: saveResult.value.success,
+          roll: saveResult.value.roll,
+          total: saveResult.value.total,
+          dc,
+        };
+      }
+    }
+
+    // Monster: compute from entity abilities
+    const monster = target.monster ??
+      (target.monsterId
+        ? await this.encounterService.getParticipant(target.id).then((p) => p.monster)
+        : null);
+
+    if (!monster) {
+      const roll = this.diceService.roll(20);
+      return { success: roll >= dc, roll, total: roll, dc };
+    }
+
+    const abilityMap: Record<string, number> = {
+      str: monster.strength,
+      dex: monster.dexterity,
+      con: monster.constitution,
+      int: monster.intelligence,
+      wis: monster.wisdom,
+      cha: monster.charisma,
+    };
+    const score = abilityMap[ability.toLowerCase().substring(0, 3)] ?? 10;
+    const mod = Math.floor((score - 10) / 2);
+
+    const profs = Array.isArray(monster.proficiencies) ? monster.proficiencies : [];
+    const hasSaveProf = profs.some(
+      (p: any) =>
+        p.type === 'saving-throw' &&
+        (p.name ?? '').toLowerCase().includes(ability.toLowerCase().substring(0, 3)),
+    );
+    const bonus = mod + (hasSaveProf ? (monster.proficiency_bonus ?? 0) : 0);
+
+    const roll = this.diceService.roll(20);
+    return { success: roll + bonus >= dc, roll, total: roll + bonus, dc };
   }
 }

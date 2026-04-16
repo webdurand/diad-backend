@@ -179,6 +179,195 @@ export function materializeSpellEffects(
         },
       ];
     }
+    // ── Spec 005 Addendum — Concentration buffs ────────────────────
+
+    case 'blur': {
+      // RAW: Attackers have disadvantage on attack rolls vs you. Concentration, 1 min.
+      return [
+        {
+          targetParticipantId: ctx.casterParticipantId,
+          input: {
+            kind: 'grant_disadvantage_to_attackers',
+            sourceSpellSlug: 'blur',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: {},
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+
+    case 'invisibility': {
+      // RAW: Target invisible. Attacks against have disadvantage, attacks by have advantage.
+      // Concentration, 1 hour. Breaking on attack/spell not tracked mechanically in MVP.
+      const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'grant_disadvantage_to_attackers',
+            sourceSpellSlug: 'invisibility',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: {},
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'self_advantage',
+            sourceSpellSlug: 'invisibility',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { scope: 'melee' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+
+    case 'greater-invisibility': {
+      // RAW: Same as invisibility but doesn't end on attack/spell.
+      const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'grant_disadvantage_to_attackers',
+            sourceSpellSlug: 'greater-invisibility',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: {},
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'self_advantage',
+            sourceSpellSlug: 'greater-invisibility',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { scope: 'any' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+
+    case 'haste': {
+      // RAW: +2 AC, doubled speed, extra action (limited). Concentration, 1 min.
+      const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'ac_bonus',
+            sourceSpellSlug: 'haste',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { amount: 2 },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'speed_multiplier',
+            sourceSpellSlug: 'haste',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { amount: 2 },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'extra_action',
+            sourceSpellSlug: 'haste',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { amount: 1 },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+
+    case 'fly': {
+      // RAW: Target gains 60 ft flying speed. Concentration, 10 min.
+      const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'flight_speed',
+            sourceSpellSlug: 'fly',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { amount: 60 },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+
+    case 'fire-shield': {
+      // RAW: Resistance fire or cold (caster choice), retaliatory damage.
+      // No concentration. Duration 10 min = 100 rounds.
+      return [
+        {
+          targetParticipantId: ctx.casterParticipantId,
+          input: {
+            kind: 'damage_resistance',
+            sourceSpellSlug: 'fire-shield',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { damageTypes: ['fire', 'cold'] },
+            expiresAt: { kind: 'rounds', value: 100 },
+            requiresConcentration: false,
+          },
+        },
+      ];
+    }
+
+    case 'globe-of-invulnerability': {
+      // RAW: Immune to spells of 5th level or lower. Concentration, 1 min.
+      return [
+        {
+          targetParticipantId: ctx.casterParticipantId,
+          input: {
+            kind: 'damage_immunity_threshold',
+            sourceSpellSlug: 'globe-of-invulnerability',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { amount: 5 },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+
+    case 'true-seeing': {
+      // RAW: Truesight 120 ft. No concentration. Duration 1 hour = 600 rounds.
+      const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'true_sight',
+            sourceSpellSlug: 'true-seeing',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { amount: 120 },
+            expiresAt: { kind: 'rounds', value: 600 },
+            requiresConcentration: false,
+          },
+        },
+      ];
+    }
+
     default:
       return [];
   }
