@@ -62,6 +62,7 @@ import { failure, GameErrorCode } from './interfaces/result.type';
 import { toEnrichedEncounterResponse } from './dto/encounter-response.dto';
 import { toEventResponseDto, buildParticipantsMap, camelToSnakeCase } from './dto/event-response.dto';
 import { GetEventsQueryDto, VALID_EVENT_TYPES } from './dto/get-events-query.dto';
+import { ResolveEncounterDto } from './dto/resolve-encounter.dto';
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -377,17 +378,9 @@ export class GameEngineController {
   async resolveEncounter(
     @Req() req: AuthRequest,
     @Param('id') id: string,
-    @Body() body: {
-      outcome: 'victory' | 'retreat' | 'negotiation' | 'defeat';
-      xpRewards: Array<{ characterId: string; xp: number }>;
-      goldRewards: Array<{ characterId: string; gp: number }>;
-      itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string }>;
-    },
+    @Body() body: ResolveEncounterDto,
   ) {
-    return this.encounterService.resolveEncounter(id, {
-      ...body,
-      ownerUserId: getUserId(req),
-    });
+    return this.encounterService.resolveEncounter(id, body, getUserId(req));
   }
 
   @Post('encounters/:id/difficulty')
