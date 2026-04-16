@@ -58,6 +58,10 @@ import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { failure, GameErrorCode } from './interfaces/result.type';
+// Spec 006 — response DTOs
+import { toEnrichedEncounterResponse } from './dto/encounter-response.dto';
+import { toEventResponseDto, buildParticipantsMap, camelToSnakeCase } from './dto/event-response.dto';
+import { GetEventsQueryDto, VALID_EVENT_TYPES } from './dto/get-events-query.dto';
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -202,7 +206,12 @@ export class GameEngineController {
 
   @Get('encounters/:id')
   async getEncounter(@Param('id') id: string) {
-    return this.encounterService.getById(id);
+    const encounter = await this.encounterService.getById(id);
+    return {
+      ok: true as const,
+      value: toEnrichedEncounterResponse(encounter),
+      events: [],
+    };
   }
 
   @Get('campaigns/:campaignId/encounters')
@@ -974,8 +983,53 @@ export class GameEngineController {
   }
 
   @Get('encounters/:id/events')
-  async getEncounterEvents(@Param('id') id: string) {
-    return this.eventService.getEncounterTimeline(id);
+  async getEncounterEvents(
+    @Param('id') id: string,
+    @Query() query: GetEventsQueryDto,
+  ) {
+    // Validar tipos de evento se fornecidos
+    let eventTypes: string[] | undefined;
+    if (query.type) {
+      const requestedTypes = query.type.split(',').map((t) => t.trim());
+      const invalidTypes = requestedTypes.filter(
+        (t) => !(VALID_EVENT_TYPES as readonly string[]).includes(t),
+      );
+      if (invalidTypes.length > 0) {
+        return failure(
+          `Tipo de evento invalido: '${invalidTypes.join("', '")}'. Tipos validos: ${VALID_EVENT_TYPES.slice(0, 10).join(', ')}, ...`,
+          'INVALID_PAYLOAD' as GameErrorCode,
+        );
+      }
+      // Converter camelCase → snake_case para filtrar no DB
+      eventTypes = requestedTypes.map(camelToSnakeCase);
+    }
+
+    const { events, total } = await this.eventService.getEncounterTimelineFiltered(
+      id,
+      {
+        since: query.since,
+        eventTypes,
+        limit: query.limit ?? 50,
+        offset: query.offset ?? 0,
+      },
+    );
+
+    // Buscar participants para popular actorName/targetName
+    const encounter = await this.encounterService.getById(id);
+    const participantsMap = buildParticipantsMap(encounter.participants ?? []);
+
+    const limit = query.limit ?? 50;
+    const offset = query.offset ?? 0;
+
+    return {
+      ok: true as const,
+      value: {
+        events: events.map((e) => toEventResponseDto(e, participantsMap)),
+        total,
+        hasMore: total > offset + limit,
+      },
+      events: [],
+    };
   }
 
   // ==================== QUEST REWARDS ====================

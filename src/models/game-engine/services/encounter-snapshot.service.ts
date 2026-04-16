@@ -77,7 +77,7 @@ export class EncounterSnapshotService {
           type: p.type as 'pc' | 'monster' | 'npc',
           faction: p.faction,
           displayName: p.displayName,
-          controlledBy: p.controlledBy ?? 'human',
+          controlledBy: p.controlledBy ?? 'pc',
           position: {
             x: p.positionX ?? 0,
             y: p.positionY ?? 0,

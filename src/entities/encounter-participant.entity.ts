@@ -173,17 +173,18 @@ export class EncounterParticipantEntity {
   @Column({ type: 'varchar', default: 'enemy' })
   faction: 'ally' | 'enemy' | 'neutral';
 
-  // --- Spec 003: controle (human/ai/dm) + estados de ações genéricas ---
+  // --- Spec 003/006: controle (pc/ai/dm) + estados de ações genéricas ---
   // Ver migration 1775000000000-AddControlAndReactionsToParticipant.
+  // Spec 006: 'human' renomeado para 'pc' via migration 1776600000000.
 
-  /** Quem executa o turno deste participante: dono do PC (human), IA externa, ou DM. */
+  /** Quem executa o turno deste participante: dono do PC (pc), IA externa, ou DM. */
   @Column({
     name: 'controlled_by',
     type: 'varchar',
     length: 8,
-    default: 'human',
+    default: 'pc',
   })
-  controlledBy: 'human' | 'ai' | 'dm';
+  controlledBy: 'pc' | 'ai' | 'dm';
 
   /** Dodge — id do próprio ator; expira no início do seu próximo turno. */
   @Column({

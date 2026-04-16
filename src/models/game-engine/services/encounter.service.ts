@@ -182,36 +182,71 @@ export class EncounterService {
     });
     if (!encounter)
       throw new NotFoundException('Encontro nao encontrado.');
-    await this.enrichPcHp(encounter);
+    await this.enrichPcParticipants(encounter);
     return encounter;
   }
 
-  private async enrichPcHp(encounter: EncounterEntity): Promise<void> {
+  /**
+   * Spec 006: enriquece PC participants com dados do sheet (HP, AC, speed, init).
+   * Resolve ownerId em batch para evitar N queries.
+   */
+  private async enrichPcParticipants(encounter: EncounterEntity): Promise<void> {
+    const pcParticipants = (encounter.participants ?? []).filter(
+      (p) => p.type === 'pc' && p.characterId,
+    );
+    if (pcParticipants.length === 0) return;
+
+    // Batch: buscar owners dos characterIds
+    const charIds = pcParticipants.map((p) => p.characterId!);
+    const characters = await this.characterRepo
+      .createQueryBuilder('c')
+      .select(['c.id', 'c.userId'])
+      .where('c.id IN (:...ids)', { ids: charIds })
+      .getMany();
+    const ownerMap = new Map<string, string>();
+    for (const c of characters) {
+      if (c.userId) ownerMap.set(c.id, c.userId);
+    }
+
+    // Se tem campanha, complementar com CampaignPlayer
     const session = await this.sessionService.getById(encounter.sessionId).catch(() => null);
-    const campaignId = session?.campaignId ?? undefined;
-    for (const p of encounter.participants ?? []) {
-      if (p.type !== 'pc' || !p.characterId) continue;
-      const ownerId = await this.resolveCharacterOwner(p.characterId, '', campaignId);
-      if (!ownerId) continue;
+    if (session?.campaignId) {
       try {
-        const sheet = await this.sheetService.computeSheet(ownerId, p.characterId);
-        (p as any).currentHp = sheet.currentHp;
-        (p as any).maxHp = sheet.maxHp;
-        (p as any).armorClass = sheet.armorClass;
-        // initiativeModifier may already be persisted but keep it in sync with
-        // the computed sheet (e.g. after ASI/feat changes).
-        if (p.initiativeModifier == null || p.initiativeModifier !== sheet.initiative) {
-          (p as any).initiativeModifier = sheet.initiative;
+        const players = await this.campaignService.getPlayers(session.campaignId);
+        for (const pl of players) {
+          if (pl.characterId && pl.userId && !ownerMap.has(pl.characterId)) {
+            ownerMap.set(pl.characterId, pl.userId);
+          }
         }
-        (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
-        (p as any).deathSaveFailures = sheet.deathSaves?.failures ?? 0;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.debug(
-          `enrichPcHp skipped characterId=${p.characterId}: ${msg}`,
-        );
+      } catch {
+        // fall through — direct lookup já cobriu
       }
     }
+
+    // Enriquecer em paralelo
+    await Promise.all(
+      pcParticipants.map(async (p) => {
+        const ownerId = ownerMap.get(p.characterId!);
+        if (!ownerId) return;
+        try {
+          const sheet = await this.sheetService.computeSheet(ownerId, p.characterId!);
+          (p as any).currentHp = sheet.currentHp;
+          (p as any).maxHp = sheet.maxHp;
+          (p as any).armorClass = sheet.armorClass;
+          (p as any).speed = sheet.speed ?? 30;
+          if (p.initiativeModifier == null || p.initiativeModifier !== sheet.initiative) {
+            (p as any).initiativeModifier = sheet.initiative;
+          }
+          (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
+          (p as any).deathSaveFailures = sheet.deathSaves?.failures ?? 0;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.debug(
+            `enrichPcParticipants skipped characterId=${p.characterId}: ${msg}`,
+          );
+        }
+      }),
+    );
   }
 
   async listBySession(sessionId: string): Promise<EncounterEntity[]> {
@@ -1031,14 +1066,16 @@ export class EncounterService {
   async updateControlMode(
     encounterId: string,
     participantId: string,
-    mode: 'human' | 'ai' | 'dm',
+    rawMode: 'pc' | 'ai' | 'dm' | 'human',
     authUserId: string,
   ): Promise<{
     participantId: string;
-    previousMode: 'human' | 'ai' | 'dm';
-    newMode: 'human' | 'ai' | 'dm';
+    previousMode: 'pc' | 'ai' | 'dm';
+    newMode: 'pc' | 'ai' | 'dm';
     effectiveFrom: 'immediate' | 'next_turn_of_participant';
   }> {
+    // Spec 006: normalizar 'human' → 'pc'
+    const mode: 'pc' | 'ai' | 'dm' = rawMode === 'human' ? 'pc' : rawMode;
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
@@ -1054,7 +1091,8 @@ export class EncounterService {
     }
 
     const participant = await this.getParticipant(participantId);
-    const previousMode = participant.controlledBy ?? 'human';
+    const prev = participant.controlledBy ?? 'pc';
+    const previousMode: 'pc' | 'ai' | 'dm' = prev === ('human' as string) ? 'pc' : prev as 'pc' | 'ai' | 'dm';
 
     if (previousMode === mode) {
       return {
