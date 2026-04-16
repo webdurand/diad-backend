@@ -22,7 +22,7 @@ export interface SnapshotParticipant {
   type: 'pc' | 'monster' | 'npc';
   faction: 'ally' | 'enemy' | 'neutral';
   displayName: string;
-  controlledBy: 'human' | 'ai' | 'dm';
+  controlledBy: 'pc' | 'ai' | 'dm';
   position: { x: number; y: number };
   hp: { current: number; max: number; tempHp?: number };
   dyingState: 'none' | 'dying' | 'stable' | 'dead';

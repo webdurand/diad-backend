@@ -1031,14 +1031,16 @@ export class EncounterService {
   async updateControlMode(
     encounterId: string,
     participantId: string,
-    mode: 'human' | 'ai' | 'dm',
+    rawMode: 'pc' | 'ai' | 'dm' | 'human',
     authUserId: string,
   ): Promise<{
     participantId: string;
-    previousMode: 'human' | 'ai' | 'dm';
-    newMode: 'human' | 'ai' | 'dm';
+    previousMode: 'pc' | 'ai' | 'dm';
+    newMode: 'pc' | 'ai' | 'dm';
     effectiveFrom: 'immediate' | 'next_turn_of_participant';
   }> {
+    // Spec 006: normalizar 'human' → 'pc'
+    const mode: 'pc' | 'ai' | 'dm' = rawMode === 'human' ? 'pc' : rawMode;
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
@@ -1054,7 +1056,8 @@ export class EncounterService {
     }
 
     const participant = await this.getParticipant(participantId);
-    const previousMode = participant.controlledBy ?? 'human';
+    const prev = participant.controlledBy ?? 'pc';
+    const previousMode: 'pc' | 'ai' | 'dm' = prev === ('human' as string) ? 'pc' : prev as 'pc' | 'ai' | 'dm';
 
     if (previousMode === mode) {
       return {
