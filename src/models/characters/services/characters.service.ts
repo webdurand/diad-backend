@@ -178,6 +178,191 @@ function validateEquipmentChoices(
   );
 }
 
+// ─── Spec 008: XPHB letter-based equipment packages ───
+
+const IGNORED_OPTION_KEYS = new Set([
+  'additionalFromBackground',
+  'goldAlternative',
+  'default',
+  'defaultData',
+]);
+
+type LetterGroup = { letters: string[]; items: Record<string, unknown[]> };
+type LetterOptions =
+  | { type: 'letters'; groups: LetterGroup[] }
+  | { type: 'labels'; labels: string[] }
+  | { type: 'none' };
+
+function extractLetterOptions(
+  raw: Record<string, unknown> | null | undefined,
+): LetterOptions {
+  if (!raw) return { type: 'none' };
+
+  // Shape XPHB classe: { defaultData: [{ A: [...], B: [...] }, ...] }
+  const defaultData = (raw as { defaultData?: unknown }).defaultData;
+  if (Array.isArray(defaultData) && defaultData.length > 0) {
+    const groups: LetterGroup[] = [];
+    for (const group of defaultData) {
+      if (group && typeof group === 'object' && !Array.isArray(group)) {
+        const letters = Object.keys(group).filter((k) => /^[A-Z]$/.test(k));
+        if (letters.length > 0) {
+          groups.push({
+            letters: letters.sort(),
+            items: group as Record<string, unknown[]>,
+          });
+        }
+      }
+    }
+    if (groups.length > 0) return { type: 'letters', groups };
+  }
+
+  // Shape XPHB background: top-level keys são letras { A: [...], B: [...] }
+  const topKeys = Object.keys(raw).filter((k) => !IGNORED_OPTION_KEYS.has(k));
+  const letterKeys = topKeys.filter((k) => /^[A-Z]$/.test(k));
+  if (letterKeys.length > 0 && letterKeys.length === topKeys.length) {
+    const items: Record<string, unknown[]> = {};
+    for (const k of letterKeys) {
+      items[k] = Array.isArray(raw[k]) ? (raw[k] as unknown[]) : [];
+    }
+    return {
+      type: 'letters',
+      groups: [{ letters: letterKeys.sort(), items }],
+    };
+  }
+
+  // Fallback: labels textuais
+  const labels = extractEquipmentOptionLabels(raw);
+  if (labels.length > 0) return { type: 'labels', labels };
+
+  return { type: 'none' };
+}
+
+function isLetterChoice(s: string): boolean {
+  return /^[A-Z]$/.test(s);
+}
+
+function validateLetterChoicesOrThrow(
+  providedChoices: string[] | undefined,
+  optionInfo: LetterOptions,
+  errorCode: string,
+  slug: string,
+): void {
+  if (optionInfo.type !== 'letters') return;
+  const { groups } = optionInfo;
+
+  if (!providedChoices || providedChoices.length === 0) return;
+
+  // Filtrar apenas as letras (ignorar labels legacy misturadas)
+  const letters = providedChoices.filter(isLetterChoice);
+  if (letters.length === 0) return;
+
+  // Verificar contagem: uma letra por grupo
+  if (letters.length !== groups.length) {
+    const missingCode = errorCode
+      .replace('INVALID_', 'MISSING_')
+      .replace(/_CHOICE$/, '_CHOICES');
+    throw new BadRequestException({
+      ok: false,
+      code: missingCode,
+      error: `${slug} requer ${groups.length} escolha(s) de equipamento (uma por grupo), recebido ${letters.length}.`,
+      validOptions: groups.map((g) => g.letters),
+    });
+  }
+
+  // Verificar cada letra contra o grupo correspondente
+  for (let i = 0; i < letters.length; i++) {
+    const letter = letters[i];
+    const group = groups[i];
+    if (!group.letters.includes(letter)) {
+      throw new BadRequestException({
+        ok: false,
+        code: errorCode,
+        error: `Escolha '${letter}' não é válida para o grupo ${i + 1} de ${slug}.`,
+        invalidChoices: [letter],
+        validOptions: group.letters,
+      });
+    }
+  }
+}
+
+type ResolvedItem =
+  | { slug: string; name: string; quantity: number }
+  | { gold: number; unit: string };
+
+function resolveLetterPackageItems(
+  raw: Record<string, unknown> | null | undefined,
+  letters: string[],
+): ResolvedItem[] {
+  if (!raw || letters.length === 0) return [];
+  const optionInfo = extractLetterOptions(raw);
+  if (optionInfo.type !== 'letters') return [];
+
+  const results: ResolvedItem[] = [];
+  const { groups } = optionInfo;
+
+  for (let i = 0; i < letters.length && i < groups.length; i++) {
+    const group = groups[i];
+    const items = group.items[letters[i]];
+    if (!Array.isArray(items)) continue;
+    expandItems(items, results);
+  }
+
+  return results;
+}
+
+function expandItems(items: unknown[], results: ResolvedItem[]): void {
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown>;
+
+    // SRD class shape: { option_type: 'counted_reference', count, of: { index, name } }
+    if (obj.option_type === 'counted_reference' && obj.of) {
+      const of = obj.of as { index?: string; name?: string };
+      if (of.index || of.name) {
+        results.push({
+          slug: String(of.index ?? of.name).toLowerCase(),
+          name: String(of.name ?? of.index),
+          quantity: typeof obj.count === 'number' ? obj.count : 1,
+        });
+      }
+      continue;
+    }
+
+    // SRD class shape: { option_type: 'money', count, unit }
+    if (obj.option_type === 'money' && typeof obj.count === 'number') {
+      results.push({
+        gold: obj.count,
+        unit: typeof obj.unit === 'string' ? obj.unit : 'gp',
+      });
+      continue;
+    }
+
+    // SRD class shape: { option_type: 'multiple', items: [...] }
+    if (obj.option_type === 'multiple' && Array.isArray(obj.items)) {
+      expandItems(obj.items as unknown[], results);
+      continue;
+    }
+
+    // Background shape: { gold: N }
+    if (typeof obj.gold === 'number') {
+      results.push({ gold: obj.gold, unit: 'gp' });
+      continue;
+    }
+
+    // Background shape: { name, quantity }
+    if (typeof obj.name === 'string') {
+      const name = obj.name;
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      results.push({
+        slug,
+        name,
+        quantity: typeof obj.quantity === 'number' ? obj.quantity : 1,
+      });
+      continue;
+    }
+  }
+}
+
 type EquipmentLite = {
   id: string;
   slug: string;
@@ -320,14 +505,18 @@ export class CharactersService {
     }
 
     // Validação: equipment choices contra as opções do SRD (classe + background).
+    // Spec 008: detecta shape (letters vs labels) e valida de acordo.
+    let classRawOptions: Record<string, unknown> | null | undefined;
+    let bgRawOptions: Record<string, unknown> | null | undefined;
+
     const classSlugForOptions = choices.classSlug;
     if (classSlugForOptions) {
       const classForOptions = await this.classRepository.findOneBy({
         slug: classSlugForOptions,
       });
-      const classRaw = classForOptions?.starting_equipment_options;
-      const classOptionLabels = extractEquipmentOptionLabels(classRaw);
-      const classHasOptions = hasStartingEquipmentOptions(classRaw);
+      classRawOptions = classForOptions?.starting_equipment_options;
+      const classOptionInfo = extractLetterOptions(classRawOptions);
+      const classHasOptions = hasStartingEquipmentOptions(classRawOptions);
       const providedClassChoices = choices.classEquipmentChoices;
       const noClassChoicesProvided =
         !providedClassChoices ||
@@ -338,27 +527,45 @@ export class CharactersService {
         noClassChoicesProvided &&
         !choices.classStartingGold
       ) {
+        const validOptions =
+          classOptionInfo.type === 'letters'
+            ? classOptionInfo.groups.flatMap((g) => g.letters)
+            : classOptionInfo.type === 'labels'
+              ? classOptionInfo.labels
+              : [];
         throw new BadRequestException({
           ok: false,
           code: 'MISSING_CLASS_EQUIPMENT_CHOICES',
           error:
             'Esta classe oferece opções de equipamento inicial. Selecione uma ou envie classStartingGold.',
           classSlug: classSlugForOptions,
-          validOptions: classOptionLabels,
+          validOptions,
         });
       }
-      const invalidClassChoices = validateEquipmentChoices(
-        providedClassChoices,
-        classOptionLabels,
-      );
-      if (invalidClassChoices.length > 0) {
-        throw new BadRequestException({
-          ok: false,
-          code: 'INVALID_CLASS_EQUIPMENT_CHOICE',
-          error: `Opções inválidas para ${classSlugForOptions}: ${invalidClassChoices.join(', ')}.`,
-          invalidChoices: invalidClassChoices,
-          validOptions: classOptionLabels,
-        });
+
+      if (classOptionInfo.type === 'letters') {
+        validateLetterChoicesOrThrow(
+          providedClassChoices,
+          classOptionInfo,
+          'INVALID_CLASS_EQUIPMENT_CHOICE',
+          classSlugForOptions,
+        );
+      } else {
+        const classOptionLabels =
+          classOptionInfo.type === 'labels' ? classOptionInfo.labels : [];
+        const invalidClassChoices = validateEquipmentChoices(
+          providedClassChoices,
+          classOptionLabels,
+        );
+        if (invalidClassChoices.length > 0) {
+          throw new BadRequestException({
+            ok: false,
+            code: 'INVALID_CLASS_EQUIPMENT_CHOICE',
+            error: `Opções inválidas para ${classSlugForOptions}: ${invalidClassChoices.join(', ')}.`,
+            invalidChoices: invalidClassChoices,
+            validOptions: classOptionLabels,
+          });
+        }
       }
     }
 
@@ -367,35 +574,53 @@ export class CharactersService {
       const bgForOptions = await this.backgroundRepository.findOneBy({
         slug: bgSlugForOptions,
       });
-      const bgRaw = bgForOptions?.equipment_options;
-      const bgOptionLabels = extractEquipmentOptionLabels(bgRaw);
-      const bgHasOptions = hasStartingEquipmentOptions(bgRaw);
+      bgRawOptions = bgForOptions?.equipment_options;
+      const bgOptionInfo = extractLetterOptions(bgRawOptions);
+      const bgHasOptions = hasStartingEquipmentOptions(bgRawOptions);
       const providedBgChoices = choices.backgroundEquipmentChoices;
       const noBgChoicesProvided =
         !providedBgChoices ||
         (Array.isArray(providedBgChoices) && providedBgChoices.length === 0);
       if (bgHasOptions && noBgChoicesProvided) {
+        const validOptions =
+          bgOptionInfo.type === 'letters'
+            ? bgOptionInfo.groups.flatMap((g) => g.letters)
+            : bgOptionInfo.type === 'labels'
+              ? bgOptionInfo.labels
+              : [];
         throw new BadRequestException({
           ok: false,
           code: 'MISSING_BACKGROUND_EQUIPMENT_CHOICES',
           error:
             'Este background oferece opções de equipamento inicial. Selecione uma.',
           backgroundSlug: bgSlugForOptions,
-          validOptions: bgOptionLabels,
+          validOptions,
         });
       }
-      const invalidBgChoices = validateEquipmentChoices(
-        providedBgChoices,
-        bgOptionLabels,
-      );
-      if (invalidBgChoices.length > 0) {
-        throw new BadRequestException({
-          ok: false,
-          code: 'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
-          error: `Opções inválidas para background ${bgSlugForOptions}: ${invalidBgChoices.join(', ')}.`,
-          invalidChoices: invalidBgChoices,
-          validOptions: bgOptionLabels,
-        });
+
+      if (bgOptionInfo.type === 'letters') {
+        validateLetterChoicesOrThrow(
+          providedBgChoices,
+          bgOptionInfo,
+          'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
+          bgSlugForOptions,
+        );
+      } else {
+        const bgOptionLabels =
+          bgOptionInfo.type === 'labels' ? bgOptionInfo.labels : [];
+        const invalidBgChoices = validateEquipmentChoices(
+          providedBgChoices,
+          bgOptionLabels,
+        );
+        if (invalidBgChoices.length > 0) {
+          throw new BadRequestException({
+            ok: false,
+            code: 'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
+            error: `Opções inválidas para background ${bgSlugForOptions}: ${invalidBgChoices.join(', ')}.`,
+            invalidChoices: invalidBgChoices,
+            validOptions: bgOptionLabels,
+          });
+        }
       }
     }
 
@@ -629,6 +854,8 @@ export class CharactersService {
           classEntity.id,
           choices.classEquipmentChoices ?? [],
           choices.backgroundEquipmentChoices ?? [],
+          classRawOptions,
+          bgRawOptions,
         );
       }
 
@@ -706,8 +933,9 @@ export class CharactersService {
   }
 
   /**
-   * Parse formatted equipment label strings (e.g. "1x Longsword", "8 gp")
-   * and create CharacterEquipmentEntity records + apply gold from equipment choices.
+   * Parse formatted equipment label strings (e.g. "1x Longsword", "8 gp") or resolve
+   * XPHB letter-based packages (e.g. "A", "B") into CharacterEquipmentEntity records.
+   * Spec 008: letter choices resolve against defaultData/equipment_options JSONB.
    */
   private async materializeEquipment(
     manager: import('typeorm').EntityManager,
@@ -715,6 +943,8 @@ export class CharactersService {
     classId: string,
     classChoiceLabels: string[],
     backgroundChoiceLabels: string[],
+    classRawOptions?: Record<string, unknown> | null,
+    bgRawOptions?: Record<string, unknown> | null,
   ): Promise<void> {
     // 1. Class fixed starting equipment
     const classStarting = await this.classStartingEquipRepo.find({
@@ -722,8 +952,6 @@ export class CharactersService {
     });
 
     const seenEquipIds = new Set<string>();
-    // Auto-equip o primeiro item de cada slot (armor, shield, weapon) que chegar.
-    // Resolve o critério de aceite do spec 001: Fighter L1 com chain mail + longsword + shield → AC 18.
     const equippedSlots = new Set<'armor' | 'shield' | 'weapon'>();
     const shouldEquip = (eq: EquipmentLite | undefined): boolean => {
       if (!eq) return false;
@@ -747,21 +975,40 @@ export class CharactersService {
       });
     }
 
-    // 2. Parse choice labels into { name, quantity } pairs + gold
-    const allLabels = [...classChoiceLabels, ...backgroundChoiceLabels];
+    // 2. Separate letter choices from legacy label choices
+    const classLetters = classChoiceLabels.filter(isLetterChoice);
+    const classLegacy = classChoiceLabels.filter((s) => !isLetterChoice(s));
+    const bgLetters = backgroundChoiceLabels.filter(isLetterChoice);
+    const bgLegacy = backgroundChoiceLabels.filter((s) => !isLetterChoice(s));
 
     let extraGold = 0;
     const parsedItems: Array<{ name: string; quantity: number }> = [];
 
+    // 2a. Resolve letter-based packages (Spec 008)
+    const letterResolved = [
+      ...resolveLetterPackageItems(classRawOptions, classLetters),
+      ...resolveLetterPackageItems(bgRawOptions, bgLetters),
+    ];
+    for (const item of letterResolved) {
+      if ('gold' in item) {
+        const unit = item.unit.toLowerCase();
+        if (unit === 'gp') extraGold += item.gold;
+        else if (unit === 'sp') extraGold += item.gold / 10;
+        else if (unit === 'cp') extraGold += item.gold / 100;
+        else if (unit === 'pp') extraGold += item.gold * 10;
+      } else {
+        parsedItems.push({ name: item.slug, quantity: item.quantity });
+      }
+    }
+
+    // 2b. Parse legacy label strings
+    const allLabels = [...classLegacy, ...bgLegacy];
     for (const label of allLabels) {
-      // Each label may contain multiple items separated by ", "
-      // e.g. "1x Calligrapher's Supplies, 1x Book, 10x Parchment, 8 gp"
       const parts = label.split(/,\s*/);
       for (const part of parts) {
         const trimmed = part.trim();
         if (!trimmed) continue;
 
-        // Match gold: "8 gp", "10 sp", etc.
         const goldMatch = trimmed.match(/^(\d+)\s*(gp|sp|cp|pp)$/i);
         if (goldMatch) {
           const amount = parseInt(goldMatch[1], 10);
@@ -773,7 +1020,6 @@ export class CharactersService {
           continue;
         }
 
-        // Match item: "1x Longsword", "10x Parchment"
         const itemMatch = trimmed.match(/^(\d+)x\s+(.+)$/i);
         if (itemMatch) {
           parsedItems.push({
@@ -783,15 +1029,13 @@ export class CharactersService {
           continue;
         }
 
-        // Match category choice: "2x (Simple Weapons)" — skip, can't resolve a category to one item
         if (trimmed.match(/^\d+x\s+\(.+\)$/)) continue;
 
-        // Fallback: treat the whole string as an item name
         parsedItems.push({ quantity: 1, name: trimmed });
       }
     }
 
-    // 3. Resolve names to equipment entities and create records
+    // 3. Resolve names/slugs to equipment entities and create records
     if (parsedItems.length > 0) {
       const allEquipment = await this.equipmentRepository.find();
       const nameMap = new Map<string, (typeof allEquipment)[0]>();
@@ -804,7 +1048,6 @@ export class CharactersService {
         const eq = nameMap.get(name.toLowerCase());
         if (!eq) continue;
         if (seenEquipIds.has(eq.id)) {
-          // Already added as fixed starting equipment — increase quantity
           await manager
             .createQueryBuilder()
             .update(CharacterEquipmentEntity)

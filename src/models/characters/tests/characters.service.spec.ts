@@ -1069,6 +1069,245 @@ describe('CharactersService', () => {
         });
       });
 
+      // ─── spec 008 — equipment choices refactor (XPHB letter-based packages) ───
+
+      it('validates XPHB class letter choice "A" against defaultData groups', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const chainMail = { id: 'eq-chain', slug: 'chain-mail', name: 'Chain Mail', armor_class: { base: 16 }, weapon_category: null };
+        const greatsword = { id: 'eq-great', slug: 'greatsword', name: 'Greatsword', armor_class: null, weapon_category: 'Martial' };
+
+        const fighterClass = {
+          ...makeClass('fighter'),
+          starting_equipment_options: {
+            defaultData: [{
+              A: [
+                { option_type: 'counted_reference', count: 1, of: { index: 'chain-mail', name: 'Chain Mail' } },
+                { option_type: 'counted_reference', count: 1, of: { index: 'greatsword', name: 'Greatsword' } },
+              ],
+              B: [
+                { option_type: 'counted_reference', count: 1, of: { index: 'leather-armor', name: 'Leather Armor' } },
+              ],
+            }],
+            additionalFromBackground: true,
+            default: null,
+            goldAlternative: '75 gp',
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier', equipment_options: null });
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([chainMail, greatsword]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Fighter XPHB Letter',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'soldier',
+            abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+            classEquipmentChoices: ['A'],
+          },
+        });
+
+        const equipSaves = saves.filter((s) => s.entity === 'CharacterEquipmentEntity');
+        expect(equipSaves.length).toBeGreaterThanOrEqual(2);
+        const equipIds = equipSaves.map((s) => s.data.equipment_id);
+        expect(equipIds).toContain('eq-chain');
+        expect(equipIds).toContain('eq-great');
+      });
+
+      it('rejects invalid XPHB class letter "X" with INVALID_CLASS_EQUIPMENT_CHOICE and validOptions', async () => {
+        const fighterClass = {
+          ...makeClass('fighter'),
+          starting_equipment_options: {
+            defaultData: [{
+              A: [{ option_type: 'counted_reference', count: 1, of: { index: 'chain-mail', name: 'Chain Mail' } }],
+              B: [{ option_type: 'counted_reference', count: 1, of: { index: 'leather-armor', name: 'Leather Armor' } }],
+              C: [{ option_type: 'counted_reference', count: 1, of: { index: 'scale-mail', name: 'Scale Mail' } }],
+            }],
+            additionalFromBackground: true,
+            default: null,
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier', equipment_options: null });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Invalid Letter',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: ['X'],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'INVALID_CLASS_EQUIPMENT_CHOICE',
+            invalidChoices: ['X'],
+            validOptions: expect.arrayContaining(['A', 'B', 'C']),
+          }),
+        });
+      });
+
+      it('resolves XPHB background letter "A" with gold entry — creates equipment + applies gold', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const book = { id: 'eq-book', slug: 'book', name: 'Book', armor_class: null, weapon_category: null };
+
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        const bgWithLetters = {
+          id: 'bg-1',
+          slug: 'acolyte',
+          name: 'Acolyte',
+          equipment_options: {
+            A: [{ name: 'Book', source: 'XPHB', quantity: 1 }, { gold: 8 }],
+            B: [{ gold: 50 }],
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue(bgWithLetters);
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([book]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Acolyte BG Letter',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'acolyte',
+            abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+            backgroundEquipmentChoices: ['A'],
+          },
+        });
+
+        const equipSaves = saves.filter((s) => s.entity === 'CharacterEquipmentEntity');
+        expect(equipSaves.some((s) => s.data.equipment_id === 'eq-book')).toBe(true);
+        // Gold applied via queryBuilder update (extraGold = 8)
+      });
+
+      it('resolves XPHB background letter "B" gold-only — no equipment, gold applied', async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        const bgWithLetters = {
+          id: 'bg-1',
+          slug: 'acolyte',
+          name: 'Acolyte',
+          equipment_options: {
+            A: [{ name: 'Book', source: 'XPHB', quantity: 1 }, { gold: 8 }],
+            B: [{ gold: 50 }],
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue(bgWithLetters);
+        repos.abilityScore.findOneBy!.mockImplementation(async ({ slug }: any) => ({ id: `as-${slug}`, slug }));
+        repos.classStartingEquip.find!.mockResolvedValue([]);
+        repos.equipment.find!.mockResolvedValue([]);
+        repos.level.findOne!.mockResolvedValue(null);
+        setupTransaction(saves, fighterClass);
+
+        await service.create({
+          userId: 'user-1',
+          name: 'Acolyte Gold Only',
+          data: {
+            classSlug: 'fighter',
+            raceSlug: 'human',
+            backgroundSlug: 'acolyte',
+            abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+            backgroundEquipmentChoices: ['B'],
+          },
+        });
+
+        const equipSaves = saves.filter((s) => s.entity === 'CharacterEquipmentEntity');
+        expect(equipSaves).toHaveLength(0);
+        // Gold of 50 gp applied via queryBuilder update
+      });
+
+      it('rejects wrong number of letters for multi-group defaultData', async () => {
+        const fighterClass = {
+          ...makeClass('fighter'),
+          starting_equipment_options: {
+            defaultData: [
+              { A: [{ option_type: 'counted_reference', count: 1, of: { index: 'chain-mail', name: 'Chain Mail' } }], B: [] },
+              { C: [{ option_type: 'counted_reference', count: 1, of: { index: 'shield', name: 'Shield' } }], D: [] },
+            ],
+            additionalFromBackground: true,
+            default: null,
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue({ id: 'bg-1', slug: 'soldier', equipment_options: null });
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Multi Group Wrong Count',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'soldier',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              classEquipmentChoices: ['A'],  // Only 1 letter for 2 groups
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'MISSING_CLASS_EQUIPMENT_CHOICES',
+          }),
+        });
+      });
+
+      it('rejects invalid XPHB background letter with INVALID_BACKGROUND_EQUIPMENT_CHOICE', async () => {
+        const fighterClass = { ...makeClass('fighter'), starting_equipment_options: null };
+        const bgWithLetters = {
+          id: 'bg-1',
+          slug: 'acolyte',
+          name: 'Acolyte',
+          equipment_options: {
+            A: [{ name: 'Book', source: 'XPHB', quantity: 1 }],
+            B: [{ gold: 50 }],
+          },
+        };
+        repos.class.findOneBy!.mockResolvedValue(fighterClass);
+        repos.race.findOneBy!.mockResolvedValue({ id: 'race-1', slug: 'human' });
+        repos.background.findOneBy!.mockResolvedValue(bgWithLetters);
+
+        await expect(
+          service.create({
+            userId: 'user-1',
+            name: 'Invalid BG Letter',
+            data: {
+              classSlug: 'fighter',
+              raceSlug: 'human',
+              backgroundSlug: 'acolyte',
+              abilityScores: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 },
+              backgroundEquipmentChoices: ['Z'],
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
+            invalidChoices: ['Z'],
+            validOptions: expect.arrayContaining(['A', 'B']),
+          }),
+        });
+      });
+
       it('reads abilityScores from input.choices when both data and choices are present (choices wins)', async () => {
         const saves: Array<{ entity: string; data: any }> = [];
         const fighterClass = makeClass('fighter');
