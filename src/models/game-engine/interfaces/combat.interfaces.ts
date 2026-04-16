@@ -331,19 +331,24 @@ export interface AppliedEffect {
 // ============================================================================
 
 export type EffectInstanceKind =
-  | 'ac_bonus'                          // Mage Armor, Shield
+  | 'ac_bonus'                          // Mage Armor, Shield, Haste
   | 'attack_bonus'                      // Bless (attack portion), Divine Favor
   | 'save_bonus'                        // Bless (save portion)
   | 'damage_bonus'                      // Rage, Divine Favor
-  | 'damage_resistance'                 // Rage, Protection from Energy
+  | 'damage_resistance'                 // Rage, Protection from Energy, Fire Shield
   | 'grant_advantage_to_attackers'      // Guiding Bolt, Reckless Attack target
-  | 'grant_disadvantage_to_attackers'   // Dodge, Sanctuary
-  | 'self_advantage'                    // Rage STR checks
+  | 'grant_disadvantage_to_attackers'   // Dodge, Sanctuary, Blur, Invisibility
+  | 'self_advantage'                    // Rage STR checks, Invisibility (attack)
   | 'self_disadvantage'
   | 'self_advantage_next_attack'        // Steady Aim (one-shot flag)
   | 'hp_shield'                         // False Life, Heroism absorption
   | 'statblock_swap'                    // Wild Shape
-  | 'inspiration_die';                  // Bardic Inspiration (consumível)
+  | 'inspiration_die'                   // Bardic Inspiration (consumível)
+  | 'flight_speed'                      // Fly
+  | 'speed_multiplier'                  // Haste (×2 speed)
+  | 'extra_action'                      // Haste (1 extra action)
+  | 'true_sight'                        // True Seeing
+  | 'damage_immunity_threshold';        // Globe of Invulnerability (immune ≤ L5)
 
 export type EffectExpirationKind =
   | 'rounds'
