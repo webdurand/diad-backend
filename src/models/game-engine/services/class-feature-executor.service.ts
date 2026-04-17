@@ -155,7 +155,12 @@ export class ClassFeatureExecutorService {
     // Dispatch — FULL resolution ou STUB emission.
     switch (spec.slug) {
       case 'second-wind':
-        return this.handleSecondWind(participant, classLevel, encounter);
+        return this.handleSecondWind(
+          participant,
+          classLevel,
+          encounter,
+          pcOwnerId,
+        );
       case 'action-surge':
         return this.handleActionSurge(participant, encounter);
       case 'reckless-attack':
@@ -193,19 +198,24 @@ export class ClassFeatureExecutorService {
     participant: EncounterParticipantEntity,
     fighterLevel: number,
     encounter: EncounterEntity,
+    pcOwnerId: string,
   ): Promise<GameResult<unknown>> {
     // RAW: heal = 1d10 + fighterLevel.
     const roll = this.diceService.rollExpression('1d10');
     const healAmount = roll.total + fighterLevel;
     const prevHp = participant.currentHp ?? 0;
-    // Cap por maxHp; consulta via state (PC) ou currentHp direto.
-    const maxHp = participant.maxHp ?? prevHp + healAmount;
-    const newHp = Math.min(prevHp + healAmount, maxHp);
 
-    if (participant.type === 'pc' && participant.characterId) {
-      // Para PC, HP vive em character_state. Usamos updateHp via state service
-      // seria o certo; simplificação: persistimos no participant snapshot também.
-    }
+    // Spec 011 princípio X — HP de PC vive em character_state.
+    // updateHp aplica o cap em maxHp computado a partir da ficha.
+    const hpResult = await this.stateService.updateHp(
+      pcOwnerId,
+      participant.characterId!,
+      { healing: healAmount },
+    );
+    const newHp = hpResult.currentHp;
+
+    // Mantém snapshot no participant para consumidores síncronos que ainda
+    // leem `participant.currentHp` (enrichment re-sincroniza no próximo GET).
     participant.currentHp = newHp;
     participant.bonusActionUsed = true;
     await this.participantRepo.save(participant);

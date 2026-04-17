@@ -31,6 +31,7 @@ import {
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
 import { type EditionRules, getCasterTypeOverride, getPreparedFormula } from 'src/shared/edition-rules';
+import { CLASS_FEATURE_CATALOG } from 'src/models/game-engine/services/action-resolvers/class-feature-catalog';
 
 type CasterType = CasterClassType;
 
@@ -932,6 +933,39 @@ export class SpellService {
     };
   }
 
+  /**
+   * Spec 011 Phase 1 — zera entries de `feature_uses_used` cujo
+   * `FeatureSpec.rechargeOn` bate com `restType` (ou qualquer entry se
+   * `restType === 'long'`). Retorna os slugs afetados para compor o summary.
+   * Mutação in-place em `state.feature_uses_used`.
+   */
+  private resetFeatureUses(
+    state: CharacterStateEntity,
+    restType: 'short' | 'long',
+  ): string[] {
+    const used: Record<string, number> = { ...(state.feature_uses_used ?? {}) };
+    const reset: string[] = [];
+
+    for (const slug of Object.keys(used)) {
+      if (used[slug] <= 0) continue;
+      if (restType === 'long') {
+        used[slug] = 0;
+        reset.push(slug);
+        continue;
+      }
+      const spec = CLASS_FEATURE_CATALOG.find((s) => s.slug === slug);
+      // Só zera entries cuja feature recarrega em short rest. Entries
+      // desconhecidas ou de recarga long persistem.
+      if (spec?.rechargeOn === 'short') {
+        used[slug] = 0;
+        reset.push(slug);
+      }
+    }
+
+    state.feature_uses_used = used;
+    return reset;
+  }
+
   // ---- POST /characters/:id/rest ----
 
   async rest(
@@ -1017,6 +1051,14 @@ export class SpellService {
         summary.push('Pontos de Ki restaurados.');
       }
 
+      // Spec 011 Phase 1 — reset class-feature uses that recharge on a short rest.
+      const resetShort = this.resetFeatureUses(state, 'short');
+      if (resetShort.length > 0) {
+        summary.push(
+          `Features recuperadas: ${resetShort.join(', ')}.`,
+        );
+      }
+
       await this.stateRepo.save(state);
     } else {
       // Long rest
@@ -1078,6 +1120,14 @@ export class SpellService {
       if (state.ki_points_used > 0) {
         state.ki_points_used = 0;
         summary.push('Pontos de Ki restaurados.');
+      }
+
+      // Spec 011 Phase 1 — long rest recovers every class-feature use.
+      const resetAll = this.resetFeatureUses(state, 'long');
+      if (resetAll.length > 0) {
+        summary.push(
+          `Features recuperadas: ${resetAll.join(', ')}.`,
+        );
       }
 
       await this.stateRepo.save(state);

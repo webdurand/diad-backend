@@ -573,7 +573,15 @@ export class EncounterService {
     }
 
     encounter.turnOrder.splice(insertIndex, 0, participant.id);
-    await this.encounterRepo.save(encounter);
+    // Spec 011 — ver comentário em lateJoinMonster; save com relations stale
+    // disparava cascade que orfanava o participant recém criado.
+    await this.encounterRepo.update(
+      { id: encounterId },
+      {
+        turnOrder: encounter.turnOrder,
+        currentTurnIndex: encounter.currentTurnIndex,
+      },
+    );
 
     return participant;
   }
@@ -618,7 +626,18 @@ export class EncounterService {
       encounter.turnOrder.splice(insertIndex, 0, participant.id);
     }
 
-    await this.encounterRepo.save(encounter);
+    // Spec 011 — `encounter` foi carregado com `relations: ['participants']`
+    // (stale em relação aos novos criados via addMonster acima). Usar `save`
+    // aqui disparava cascade: TypeORM tentava orfanar os novos participants
+    // com UPDATE encounter_id = NULL (FK violation). `update` atualiza
+    // apenas as colunas que mudaram sem tocar no grafo de relations.
+    await this.encounterRepo.update(
+      { id: encounterId },
+      {
+        turnOrder: encounter.turnOrder,
+        currentTurnIndex: encounter.currentTurnIndex,
+      },
+    );
     return newParticipants;
   }
 

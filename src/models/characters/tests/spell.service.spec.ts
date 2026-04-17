@@ -416,5 +416,79 @@ describe('SpellService', () => {
         expect(result.deathSavesReset).toBe(true);
       });
     });
+
+    describe('feature uses reset (Spec 011 Phase 1)', () => {
+      it('short rest resets features with rechargeOn: short', async () => {
+        const cc = makeCharacterClass('fighter', 5);
+        const state = makeCharacterState({
+          current_hp: 30,
+          // All these are rechargeOn: 'short' features in the catalog.
+          feature_uses_used: {
+            'second-wind': 1,
+            'action-surge': 1,
+          },
+        });
+
+        repos.character.findOne!.mockResolvedValue(makeCharacter());
+        repos.charClass.find!.mockResolvedValue([cc]);
+        repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+        repos.state.findOne!.mockResolvedValue(state);
+        repos.state.save!.mockResolvedValue(state);
+
+        await service.rest('user-1', 'char-1', { type: 'short' });
+
+        // Both short-rest features should be zeroed (or removed).
+        expect(state.feature_uses_used['second-wind'] ?? 0).toBe(0);
+        expect(state.feature_uses_used['action-surge'] ?? 0).toBe(0);
+      });
+
+      it('short rest does NOT reset features with rechargeOn: long', async () => {
+        const cc = makeCharacterClass('paladin', 3);
+        const state = makeCharacterState({
+          current_hp: 30,
+          // lay-on-hands has rechargeOn: 'long' — must survive short rest.
+          feature_uses_used: {
+            'lay-on-hands': 10,
+            'divine-sense': 2,
+          },
+        });
+
+        repos.character.findOne!.mockResolvedValue(makeCharacter());
+        repos.charClass.find!.mockResolvedValue([cc]);
+        repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+        repos.state.findOne!.mockResolvedValue(state);
+        repos.state.save!.mockResolvedValue(state);
+
+        await service.rest('user-1', 'char-1', { type: 'short' });
+
+        expect(state.feature_uses_used['lay-on-hands']).toBe(10);
+        expect(state.feature_uses_used['divine-sense']).toBe(2);
+      });
+
+      it('long rest resets all feature uses regardless of recharge', async () => {
+        const cc = makeCharacterClass('paladin', 5);
+        const state = makeCharacterState({
+          current_hp: 30,
+          feature_uses_used: {
+            'second-wind': 1,
+            'action-surge': 1,
+            'lay-on-hands': 25,
+            'divine-sense': 3,
+          },
+        });
+
+        repos.character.findOne!.mockResolvedValue(makeCharacter());
+        repos.charClass.find!.mockResolvedValue([cc]);
+        repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+        repos.state.findOne!.mockResolvedValue(state);
+        repos.charLevelUp.find!.mockResolvedValue([]);
+        repos.state.save!.mockResolvedValue(state);
+
+        await service.rest('user-1', 'char-1', { type: 'long' });
+
+        expect(Object.values(state.feature_uses_used).every((v) => v === 0))
+          .toBe(true);
+      });
+    });
   });
 });
