@@ -333,20 +333,44 @@ describe('ActionsService', () => {
     });
   });
 
-  describe('Base actions', () => {
-    it('should include Dash, Dodge, Disengage, and other base actions', async () => {
+  describe('Unarmed Strike', () => {
+    it('should expose unarmed-strike as a single action (grapple/shove are sub-modes via runtime)', async () => {
       setupActions();
 
       const result = await service.getActions('user-1', 'char-1');
-      const allActionNames = [
+      const allActionIds = [
         ...result.actions.map((a) => a.id),
         ...result.bonusActions.map((a) => a.id),
         ...result.reactions.map((a) => a.id),
       ];
 
-      expect(allActionNames).toContain('unarmed-strike');
-      expect(allActionNames).toContain('unarmed-grapple');
-      expect(allActionNames).toContain('unarmed-shove');
+      expect(allActionIds).toContain('unarmed-strike');
+      expect(allActionIds).not.toContain('unarmed-grapple');
+      expect(allActionIds).not.toContain('unarmed-shove');
+    });
+
+    it('should not leak generic base actions (Dash, Dodge, etc) into the character actions list', async () => {
+      setupActions();
+
+      const result = await service.getActions('user-1', 'char-1');
+      const allActionIds = [
+        ...result.actions.map((a) => a.id),
+        ...result.bonusActions.map((a) => a.id),
+        ...result.reactions.map((a) => a.id),
+      ];
+
+      // generic actions belong to the combat-turn layer, not to the character sheet
+      expect(allActionIds).not.toContain('base-dash');
+      expect(allActionIds).not.toContain('base-dodge');
+      expect(allActionIds).not.toContain('base-disengage');
+      expect(allActionIds).not.toContain('base-help');
+      expect(allActionIds).not.toContain('base-hide');
+      expect(allActionIds).not.toContain('base-search');
+      expect(allActionIds).not.toContain('base-study');
+      expect(allActionIds).not.toContain('base-utilize');
+      expect(allActionIds).not.toContain('base-ready');
+      expect(allActionIds).not.toContain('base-influence');
+      expect(allActionIds).not.toContain('base-opportunity-attack');
     });
   });
 

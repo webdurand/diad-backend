@@ -144,20 +144,23 @@ function hasStartingEquipmentOptions(
   // Textuais
   if (extractEquipmentOptionLabels(raw).length > 0) return true;
   // Shape XPHB { defaultData: [{ A: [...], B: [...] }, ...] }
+  // Groups containing only '_' (fixed lists) don't require a choice.
   const defaultData = (raw as { defaultData?: unknown }).defaultData;
   if (Array.isArray(defaultData)) {
     for (const group of defaultData) {
-      if (group && typeof group === 'object' && Object.keys(group).length > 0) {
-        return true;
+      if (group && typeof group === 'object' && !Array.isArray(group)) {
+        const choiceKeys = Object.keys(group).filter((k) =>
+          /^[A-Za-z]$/.test(k),
+        );
+        if (choiceKeys.length > 0) return true;
       }
     }
   }
   // Objeto não-vazio em top-level (shape background { A: [...], B: [...] })
+  // '_' key = fixed list without choice; 'gold' = scalar gold amount — both skipped.
   if (!Array.isArray(raw) && Object.keys(raw).length > 0) {
-    const keys = Object.keys(raw).filter(
-      (k) => !['additionalFromBackground', 'goldAlternative'].includes(k),
-    );
-    for (const k of keys) {
+    const choiceKeys = Object.keys(raw).filter((k) => /^[A-Za-z]$/.test(k));
+    for (const k of choiceKeys) {
       const v = (raw as Record<string, unknown>)[k];
       if (v && (Array.isArray(v) || typeof v === 'object')) return true;
     }
@@ -199,16 +202,21 @@ function extractLetterOptions(
   if (!raw) return { type: 'none' };
 
   // Shape XPHB classe: { defaultData: [{ A: [...], B: [...] }, ...] }
+  // PHB 2014 classes use lowercase { a: [...], b: [...] } — normalize to uppercase.
   const defaultData = (raw as { defaultData?: unknown }).defaultData;
   if (Array.isArray(defaultData) && defaultData.length > 0) {
     const groups: LetterGroup[] = [];
     for (const group of defaultData) {
       if (group && typeof group === 'object' && !Array.isArray(group)) {
-        const letters = Object.keys(group).filter((k) => /^[A-Z]$/.test(k));
+        const letters = Object.keys(group).filter((k) => /^[A-Za-z]$/.test(k));
         if (letters.length > 0) {
+          const items: Record<string, unknown[]> = {};
+          for (const k of letters) {
+            items[k.toUpperCase()] = (group as Record<string, unknown[]>)[k];
+          }
           groups.push({
-            letters: letters.sort(),
-            items: group as Record<string, unknown[]>,
+            letters: letters.map((k) => k.toUpperCase()).sort(),
+            items,
           });
         }
       }
@@ -218,15 +226,19 @@ function extractLetterOptions(
 
   // Shape XPHB background: top-level keys são letras { A: [...], B: [...] }
   const topKeys = Object.keys(raw).filter((k) => !IGNORED_OPTION_KEYS.has(k));
-  const letterKeys = topKeys.filter((k) => /^[A-Z]$/.test(k));
+  const letterKeys = topKeys.filter((k) => /^[A-Za-z]$/.test(k));
   if (letterKeys.length > 0 && letterKeys.length === topKeys.length) {
     const items: Record<string, unknown[]> = {};
     for (const k of letterKeys) {
-      items[k] = Array.isArray(raw[k]) ? (raw[k] as unknown[]) : [];
+      items[k.toUpperCase()] = Array.isArray(raw[k])
+        ? (raw[k] as unknown[])
+        : [];
     }
     return {
       type: 'letters',
-      groups: [{ letters: letterKeys.sort(), items }],
+      groups: [
+        { letters: letterKeys.map((k) => k.toUpperCase()).sort(), items },
+      ],
     };
   }
 

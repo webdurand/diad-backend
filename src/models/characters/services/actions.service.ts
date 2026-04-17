@@ -44,6 +44,11 @@ export interface ActionBlock {
   versatileDamage?: DamageBlock;
   saveDc?: number;
   saveAbility?: string;
+  /** Spec 011 Phase 2 — `dc_success` do SRD ('half' | 'none' | 'negates'). */
+  saveSuccess?: 'half' | 'none' | 'negates';
+  /** Spec 011 Phase 3 — slug canônico da feature/spell (sem prefixo `feature-{uuid}-`).
+   *  Usado pelo front pra resolver `POST /class-feature` e `POST /cast-spell`. */
+  featureSlug?: string;
   range?: string;
   properties?: string[];
   uses?: number;
@@ -233,9 +238,6 @@ export class ActionsService {
     // 6. Race trait actions (e.g. Breath Weapon)
     this.buildRaceTraitActions(character, totalLevel, profBonus, mod, allActions);
 
-    // 7. Base actions (always available)
-    this.buildBaseActions(allActions, speed);
-
     // Split by timing
     const actions = allActions.filter((a) => a.timing === 'action');
     const bonusActions = allActions.filter((a) => a.timing === 'bonus_action');
@@ -409,32 +411,6 @@ export class ActionsService {
       },
       range: '5 ft',
     });
-
-    // Grapple option
-    out.push({
-      id: 'unarmed-grapple',
-      name: 'Agarrar (Grapple)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Ataque Desarmado',
-      description: 'Alvo faz teste de resistencia de FOR ou DES. Falha: condicao Agarrado. Alvo deve ser no maximo 1 tamanho maior e voce precisa de uma mao livre.',
-      saveDc: 8 + strMod + profBonus,
-      saveAbility: 'str/dex',
-      range: '5 ft',
-    });
-
-    // Shove option
-    out.push({
-      id: 'unarmed-shove',
-      name: 'Empurrar (Shove)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Ataque Desarmado',
-      description: 'Alvo faz teste de resistencia de FOR ou DES. Falha: empurrado 5 ft ou cai Prono. Alvo deve ser no maximo 1 tamanho maior.',
-      saveDc: 8 + strMod + profBonus,
-      saveAbility: 'str/dex',
-      range: '5 ft',
-    });
   }
 
   // ---- Spell actions ----
@@ -469,16 +445,30 @@ export class ActionsService {
       if (castingTime.includes('bonus')) timing = 'bonus_action';
       else if (castingTime.includes('reaction')) timing = 'reaction';
 
+      // Normalização — a seed do 5eAPI pode armazenar `damage_type` como
+      // objeto `{ name, index }` (shape antigo) OU como array `['fire']` (shape
+      // novo que veio na re-seed). Spec 011 Phase 2 aceita ambos.
       const dmg = spell.damage as {
-        damage_type?: { name?: string };
+        damage_type?: { name?: string; index?: string } | string[] | string;
         damage_at_character_level?: Record<string, string>;
         damage_at_slot_level?: Record<string, string>;
       } | null;
 
       const dc = spell.dc as {
-        dc_type?: { name?: string; index?: string };
+        dc_type?: { name?: string; index?: string } | string[];
         dc_success?: string;
       } | null;
+
+      const extractDamageType = (
+        raw: typeof dmg extends null ? never : typeof dmg,
+      ): string => {
+        if (!raw) return 'Unknown';
+        const t = raw.damage_type;
+        if (!t) return 'Unknown';
+        if (Array.isArray(t)) return t[0] ?? 'Unknown';
+        if (typeof t === 'string') return t;
+        return t.name ?? t.index ?? 'Unknown';
+      };
 
       let damage: DamageBlock | undefined;
       if (dmg) {
@@ -490,11 +480,21 @@ export class ActionsService {
           // Take the base slot level damage
           const levels = Object.keys(dmg.damage_at_slot_level).sort((a, b) => +a - +b);
           dice = levels.length > 0 ? dmg.damage_at_slot_level[levels[0]] : '';
+        } else {
+          // Spec 011 Phase 2 — fallback pra seed incompleta: regex '3d6' na
+          // descrição. Cobre magias cujo `damage_at_slot_level` veio vazio.
+          const rawDesc = Array.isArray(spell.description)
+            ? (spell.description as unknown[]).join(' ')
+            : typeof spell.description === 'string'
+              ? spell.description
+              : '';
+          const match = rawDesc.match(/(\d+d\d+)\s+(?:\w+\s+)?damage/i);
+          if (match) dice = match[1];
         }
         if (dice) {
           damage = {
             dice,
-            type: dmg.damage_type?.name ?? 'Unknown',
+            type: extractDamageType(dmg),
           };
         }
       }
@@ -557,7 +557,17 @@ export class ActionsService {
 
       if (dc) {
         action.saveDc = defaultDc;
-        action.saveAbility = dc.dc_type?.index ?? dc.dc_type?.name ?? '';
+        const rawDcType = dc.dc_type;
+        if (Array.isArray(rawDcType)) {
+          action.saveAbility = rawDcType[0] ?? '';
+        } else if (rawDcType && typeof rawDcType === 'object') {
+          action.saveAbility = rawDcType.index ?? rawDcType.name ?? '';
+        } else {
+          action.saveAbility = '';
+        }
+        if (dc.dc_success === 'half' || dc.dc_success === 'none' || dc.dc_success === 'negates') {
+          action.saveSuccess = dc.dc_success;
+        }
       }
 
       out.push(action);
@@ -644,6 +654,8 @@ export class ActionsService {
           out.push({
             ...actionDef,
             id: `feature-${cf.id}-${actionDef.id}`,
+            // Spec 011 Phase 3 — preserva slug canônico pro dispatcher.
+            featureSlug: actionDef.id,
           });
         }
         continue;
@@ -673,6 +685,8 @@ export class ActionsService {
           source: 'feature',
           sourceLabel: (cf.source_class_id ? classMap.get(cf.source_class_id)?.class.name : undefined) ?? 'Classe',
           description: shortDesc,
+          // Unknown feature — slug vem direto do catálogo SRD.
+          featureSlug: slug,
         });
       }
     }
@@ -723,110 +737,6 @@ export class ActionsService {
       uses,
       usesMax: uses,
       usesRecharge: 'long_rest',
-    });
-  }
-
-  // ---- Base actions ----
-
-  private buildBaseActions(out: ActionBlock[], speed: number) {
-    out.push({
-      id: 'base-dash',
-      name: 'Disparada (Dash)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: `Ganha movimento extra igual a sua velocidade (${speed} ft) neste turno.`,
-    });
-
-    out.push({
-      id: 'base-dodge',
-      name: 'Esquivar (Dodge)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Ate o inicio do seu proximo turno: ataques contra voce tem Desvantagem (se voce ve o atacante), e testes de DES com Vantagem.',
-    });
-
-    out.push({
-      id: 'base-disengage',
-      name: 'Retirada (Disengage)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Seu movimento nao provoca Ataques de Oportunidade pelo resto do turno.',
-    });
-
-    out.push({
-      id: 'base-help',
-      name: 'Ajuda (Help)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Aliado ganha Vantagem no proximo teste de habilidade ou rolagem de ataque (se voce estiver a 5 ft do alvo).',
-    });
-
-    out.push({
-      id: 'base-hide',
-      name: 'Esconder (Hide)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'CD 15 teste de DES (Furtividade) enquanto Bastante Obscurecido ou com Cobertura 3/4 ou Total. Sucesso: condicao Invisivel.',
-    });
-
-    out.push({
-      id: 'base-search',
-      name: 'Procurar (Search)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Teste de SAB (Intuicao, Medicina, Percepcao, ou Sobrevivencia).',
-    });
-
-    out.push({
-      id: 'base-study',
-      name: 'Estudar (Study)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Teste de INT (Arcanismo, Historia, Investigacao, Natureza, Religiao).',
-    });
-
-    out.push({
-      id: 'base-utilize',
-      name: 'Utilizar (Utilize)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Usa um objeto nao-magico que requer uma acao.',
-    });
-
-    out.push({
-      id: 'base-ready',
-      name: 'Preparar (Ready)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Define um gatilho e uma acao (ou movimento) como Reacao antes do inicio do seu proximo turno. Magias preparadas requerem Concentracao.',
-    });
-
-    out.push({
-      id: 'base-influence',
-      name: 'Influenciar (Influence)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Instiga um monstro a agir. Teste de CAR ou SAB CD 15 ou INT do monstro.',
-    });
-
-    // Reactions available to everyone
-    out.push({
-      id: 'base-opportunity-attack',
-      name: 'Ataque de Oportunidade',
-      timing: 'reaction',
-      source: 'base',
-      sourceLabel: 'Reacao Base',
-      description: 'Quando um inimigo que voce pode ver sai do seu alcance, voce pode usar sua reacao para fazer um ataque corpo a corpo contra ele.',
     });
   }
 

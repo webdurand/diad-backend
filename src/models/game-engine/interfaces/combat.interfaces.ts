@@ -145,6 +145,9 @@ export interface TurnActionBlock {
   sequence?: Array<{ actionName: string; count: number }>;
   /** Multiattack recharge gate (e.g. '5-6' on a breath weapon). null when always available. */
   rechargeRequired?: '5-6' | '6' | null;
+  /** Spec 011 Phase 3 — slug canônico (ex: 'arcane-recovery', 'second-wind') sem prefixo `feature-{uuid}-`.
+   *  Necessário pro front chamar /class-feature com o featureSlug certo do catálogo. */
+  featureSlug?: string;
 }
 
 export interface AoEResolveResult {

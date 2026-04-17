@@ -133,6 +133,10 @@ export function makeCharacterState(overrides: Record<string, unknown> = {}) {
     conditions: [],
     spell_slots_used: {},
     hit_dice_used: {},
+    feature_uses_used: {},
+    ki_points_used: 0,
+    exhaustion_level: 0,
+    inspiration: false,
     ...overrides,
   };
 }

@@ -861,6 +861,18 @@ export class CombatService {
   }
 
   private toTurnActionBlock(a: any): TurnActionBlock {
+    // Spec 011 Phase 2 — `ActionBlock` da actions.service expõe `saveDc` +
+    // `saveAbility` flat; `TurnActionBlock` espera `save: {ability, dc, ...}`.
+    // Deriva o objeto quando o handler a montante não fez.
+    const save = a.save
+      ?? (typeof a.saveDc === 'number' && a.saveAbility
+        ? {
+            ability: String(a.saveAbility).toLowerCase().slice(0, 3),
+            dc: a.saveDc,
+            halfOnSuccess: a.saveSuccess === 'half' || a.halfOnSuccess === true,
+          }
+        : undefined);
+
     return {
       id: a.id,
       name: a.name,
@@ -868,13 +880,19 @@ export class CombatService {
       source: a.source,
       sourceLabel: a.sourceLabel,
       description: a.description,
+      kind: a.kind,
       attackBonus: a.attackBonus,
       damage: a.damage,
       range: a.range,
       spellLevel: a.spellLevel,
       requiresConcentration: a.requiresConcentration,
       aoe: a.aoe,
-    };
+      save,
+      sequence: a.sequence,
+      rechargeRequired: a.rechargeRequired,
+      // Spec 011 Phase 3 — slug canônico pra dispatch no frontend.
+      featureSlug: a.featureSlug,
+    } as TurnActionBlock;
   }
 
   private parseMonsterActions(monster: any): TurnActionBlock[] {
