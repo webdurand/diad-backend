@@ -21,6 +21,9 @@ import { CharacterStateService } from '../characters/services/character-state.se
 import { InventoryService } from '../characters/services/inventory.service';
 import { EquipmentSourceEnum } from 'src/entities/enums';
 import { AuthGuard } from '../auth/auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
+import { NonProductionGuard } from '../auth/non-production.guard';
+import { DiceSeedDto } from './dto/dice-seed.dto';
 import { SessionService } from './services/session.service';
 import type { CreateSessionDto, UpdateSessionDto } from './services/session.service';
 import { EncounterService } from './services/encounter.service';
@@ -1102,6 +1105,27 @@ export class GameEngineController {
   @Post('dice/roll')
   async rollDice(@Body('expression') expression: string) {
     return this.diceService.rollExpression(expression);
+  }
+
+  /**
+   * Ativa seed determinístico no DiceService (spec 012).
+   * Admin-only, bloqueado em produção (exceto com ALLOW_TEST_ENDPOINTS=true).
+   */
+  @Post('dice/seed')
+  @UseGuards(AdminGuard, NonProductionGuard)
+  async setDiceSeed(@Body() dto: DiceSeedDto) {
+    this.diceService.setSeed(dto.value);
+    return { seedActive: true, value: dto.value };
+  }
+
+  /**
+   * Desativa seed, volta a Math.random (spec 012).
+   */
+  @Post('dice/seed/clear')
+  @UseGuards(AdminGuard, NonProductionGuard)
+  async clearDiceSeed() {
+    this.diceService.clearSeed();
+    return { seedActive: false };
   }
 
   // ==================== SKILL CHECKS ====================
