@@ -47,6 +47,13 @@ export interface EnrichedParticipantResponse {
 
   grappledBy: string | null;
 
+  /**
+   * Spec 012 — slots de magia expostos no snapshot do encounter (PCs apenas).
+   * Shape: `[{ level, total, used }]`. Monsters usam `spellSlotsUsed` internamente.
+   * Necessário pro harness validar slot-consumed invariants sem round-trip ao /sheet.
+   */
+  spellSlots: Array<{ level: number; total: number; used: number }>;
+
   effectInstances: unknown[];
   appliedEffects: unknown[];
   conditionInstances: unknown[];
@@ -143,6 +150,9 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
       : null,
 
     grappledBy: p.grappledByParticipantId ?? null,
+
+    // Spec 012: `spellSlots` injetado por enrichPcParticipants a partir do sheet.
+    spellSlots: pAny.spellSlots ?? [],
 
     effectInstances: p.effectInstances ?? [],
     appliedEffects: p.appliedEffects ?? [],

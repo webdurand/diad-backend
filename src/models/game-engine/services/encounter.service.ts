@@ -242,6 +242,9 @@ export class EncounterService {
           }
           (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
           (p as any).deathSaveFailures = sheet.deathSaves?.failures ?? 0;
+          // Spec 012: expor spellSlots do sheet pro harness e pra UI validar
+          // slot-consumed invariants sem precisar GET /sheet em paralelo.
+          (p as any).spellSlots = sheet.spellSlots ?? [];
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.debug(
