@@ -55,6 +55,59 @@ const PRIMARY_ABILITY_INDEX: Record<SupportedClassSlug, number> = {
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 const E2E_DEFAULT_USER_EMAIL = 'e2e-harness@diad.local';
 
+/**
+ * Spell defaults por classe pro harness poder castar cantrips/spells icônicos.
+ *
+ * Cantrips: repertório conhecido (Wizard/Sorc/Bard/Warlock preparam do
+ * próprio repertório; Cleric/Druid preparam da full list mas cantrips são
+ * known). Spells preparadas: subset representativo pra L1.
+ *
+ * Classes não-caster (Barb/Fighter/Monk/Rogue) ficam com arrays vazios.
+ */
+interface ClassSpellDefaults {
+  cantrips?: string[];
+  preparedSpells?: string[];
+  spellbook?: string[]; // Wizard only
+}
+
+const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
+  barbarian: {},
+  bard: {
+    cantrips: ['vicious-mockery', 'light'],
+    preparedSpells: ['healing-word', 'faerie-fire', 'charm-person', 'sleep'],
+  },
+  cleric: {
+    cantrips: ['sacred-flame', 'guidance', 'light'],
+    preparedSpells: ['cure-wounds', 'bless', 'healing-word', 'guiding-bolt'],
+  },
+  druid: {
+    cantrips: ['druidcraft', 'produce-flame'],
+    preparedSpells: ['cure-wounds', 'entangle', 'healing-word', 'thunderwave'],
+  },
+  fighter: {},
+  monk: {},
+  paladin: {
+    preparedSpells: ['bless', 'cure-wounds'], // Paladin L1 tem spells só a partir de L2 mas seed não quebra
+  },
+  ranger: {
+    preparedSpells: ['hunters-mark', 'cure-wounds'], // idem Paladin
+  },
+  rogue: {},
+  sorcerer: {
+    cantrips: ['fire-bolt', 'light', 'prestidigitation', 'mage-hand'],
+    preparedSpells: ['magic-missile', 'shield'],
+  },
+  warlock: {
+    cantrips: ['eldritch-blast', 'mage-hand'],
+    preparedSpells: ['hex', 'armor-of-agathys'],
+  },
+  wizard: {
+    cantrips: ['fire-bolt', 'mage-hand', 'prestidigitation'],
+    spellbook: ['mage-armor', 'magic-missile', 'shield', 'sleep', 'detect-magic', 'feather-fall'],
+    preparedSpells: ['mage-armor', 'magic-missile'],
+  },
+};
+
 @Injectable()
 export class SeedCharacterService {
   private readonly logger = new Logger(SeedCharacterService.name);
@@ -237,6 +290,7 @@ export class SeedCharacterService {
     // - abilityScores obrigatório
     // - classSlug + raceSlug + backgroundSlug resolvidos via slug
     // - classStartingGold bypassa a validação de classEquipmentChoices (gold em vez de escolha de item)
+    const spellDefaults = CLASS_SPELL_DEFAULTS[params.classSlug];
     const data: Record<string, unknown> = {
       sourceCode: 'XPHB',
       classSlug: params.classSlug,
@@ -247,6 +301,15 @@ export class SeedCharacterService {
       skills: [],
       classStartingGold: { gp: 100 },
       backgroundEquipmentChoices: ['A'],
+      // Spells por classe (spec 012) — sem isso, cast-spell falha com
+      // "magia não encontrada no repertório".
+      ...(spellDefaults.cantrips ? { classCantrips: spellDefaults.cantrips } : {}),
+      ...(spellDefaults.preparedSpells
+        ? { classPreparedSpells: spellDefaults.preparedSpells }
+        : {}),
+      ...(spellDefaults.spellbook
+        ? { classSpellbook: spellDefaults.spellbook }
+        : {}),
     };
 
     return this.charactersService.create({
