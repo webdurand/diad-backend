@@ -233,9 +233,6 @@ export class ActionsService {
     // 6. Race trait actions (e.g. Breath Weapon)
     this.buildRaceTraitActions(character, totalLevel, profBonus, mod, allActions);
 
-    // 7. Base actions (always available)
-    this.buildBaseActions(allActions, speed);
-
     // Split by timing
     const actions = allActions.filter((a) => a.timing === 'action');
     const bonusActions = allActions.filter((a) => a.timing === 'bonus_action');
@@ -407,32 +404,6 @@ export class ActionsService {
         type: 'Bludgeoning',
         bonus: damageBonus,
       },
-      range: '5 ft',
-    });
-
-    // Grapple option
-    out.push({
-      id: 'unarmed-grapple',
-      name: 'Agarrar (Grapple)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Ataque Desarmado',
-      description: 'Alvo faz teste de resistencia de FOR ou DES. Falha: condicao Agarrado. Alvo deve ser no maximo 1 tamanho maior e voce precisa de uma mao livre.',
-      saveDc: 8 + strMod + profBonus,
-      saveAbility: 'str/dex',
-      range: '5 ft',
-    });
-
-    // Shove option
-    out.push({
-      id: 'unarmed-shove',
-      name: 'Empurrar (Shove)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Ataque Desarmado',
-      description: 'Alvo faz teste de resistencia de FOR ou DES. Falha: empurrado 5 ft ou cai Prono. Alvo deve ser no maximo 1 tamanho maior.',
-      saveDc: 8 + strMod + profBonus,
-      saveAbility: 'str/dex',
       range: '5 ft',
     });
   }
@@ -723,110 +694,6 @@ export class ActionsService {
       uses,
       usesMax: uses,
       usesRecharge: 'long_rest',
-    });
-  }
-
-  // ---- Base actions ----
-
-  private buildBaseActions(out: ActionBlock[], speed: number) {
-    out.push({
-      id: 'base-dash',
-      name: 'Disparada (Dash)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: `Ganha movimento extra igual a sua velocidade (${speed} ft) neste turno.`,
-    });
-
-    out.push({
-      id: 'base-dodge',
-      name: 'Esquivar (Dodge)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Ate o inicio do seu proximo turno: ataques contra voce tem Desvantagem (se voce ve o atacante), e testes de DES com Vantagem.',
-    });
-
-    out.push({
-      id: 'base-disengage',
-      name: 'Retirada (Disengage)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Seu movimento nao provoca Ataques de Oportunidade pelo resto do turno.',
-    });
-
-    out.push({
-      id: 'base-help',
-      name: 'Ajuda (Help)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Aliado ganha Vantagem no proximo teste de habilidade ou rolagem de ataque (se voce estiver a 5 ft do alvo).',
-    });
-
-    out.push({
-      id: 'base-hide',
-      name: 'Esconder (Hide)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'CD 15 teste de DES (Furtividade) enquanto Bastante Obscurecido ou com Cobertura 3/4 ou Total. Sucesso: condicao Invisivel.',
-    });
-
-    out.push({
-      id: 'base-search',
-      name: 'Procurar (Search)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Teste de SAB (Intuicao, Medicina, Percepcao, ou Sobrevivencia).',
-    });
-
-    out.push({
-      id: 'base-study',
-      name: 'Estudar (Study)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Teste de INT (Arcanismo, Historia, Investigacao, Natureza, Religiao).',
-    });
-
-    out.push({
-      id: 'base-utilize',
-      name: 'Utilizar (Utilize)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Usa um objeto nao-magico que requer uma acao.',
-    });
-
-    out.push({
-      id: 'base-ready',
-      name: 'Preparar (Ready)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Define um gatilho e uma acao (ou movimento) como Reacao antes do inicio do seu proximo turno. Magias preparadas requerem Concentracao.',
-    });
-
-    out.push({
-      id: 'base-influence',
-      name: 'Influenciar (Influence)',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: 'Acao Base',
-      description: 'Instiga um monstro a agir. Teste de CAR ou SAB CD 15 ou INT do monstro.',
-    });
-
-    // Reactions available to everyone
-    out.push({
-      id: 'base-opportunity-attack',
-      name: 'Ataque de Oportunidade',
-      timing: 'reaction',
-      source: 'base',
-      sourceLabel: 'Reacao Base',
-      description: 'Quando um inimigo que voce pode ver sai do seu alcance, voce pode usar sua reacao para fazer um ataque corpo a corpo contra ele.',
     });
   }
 

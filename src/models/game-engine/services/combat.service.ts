@@ -868,12 +868,16 @@ export class CombatService {
       source: a.source,
       sourceLabel: a.sourceLabel,
       description: a.description,
+      kind: a.kind,
       attackBonus: a.attackBonus,
       damage: a.damage,
       range: a.range,
       spellLevel: a.spellLevel,
       requiresConcentration: a.requiresConcentration,
       aoe: a.aoe,
+      save: a.save,
+      sequence: a.sequence,
+      rechargeRequired: a.rechargeRequired,
     };
   }
 
