@@ -246,6 +246,7 @@ export class SeedCharacterService {
       abilityScoreMethod: 'standard-array',
       skills: [],
       classStartingGold: { gp: 100 },
+      backgroundEquipmentChoices: ['A'],
     };
 
     return this.charactersService.create({
@@ -259,25 +260,21 @@ export class SeedCharacterService {
     userId: string,
     characterId: string,
   ): Promise<SeedCharacterResult['sheetSummary']> {
-    const sheet = await this.characterSheetService.computeSheet(
+    const sheet = (await this.characterSheetService.computeSheet(
       userId,
       characterId,
-    );
-    // Sheet shape pode variar entre releases; extraímos defensivamente.
-    const level = (sheet as { level?: number }).level ?? 1;
-    const hpMax = (sheet as { hpMax?: number; hp?: { max?: number } }).hpMax
-      ?? (sheet as { hp?: { max?: number } }).hp?.max
-      ?? 0;
-    const armorClass =
-      (sheet as { armorClass?: number }).armorClass
-      ?? (sheet as { ac?: number }).ac
-      ?? 0;
-    const proficiencyBonus =
-      (sheet as { proficiencyBonus?: number }).proficiencyBonus
-      ?? (sheet as { profBonus?: number }).profBonus
-      ?? 2;
-    const spellSlots = (sheet as { spellSlots?: unknown }).spellSlots;
-    const slotsArray = this.normalizeSpellSlots(spellSlots);
+    )) as {
+      totalLevel?: number;
+      maxHp?: number;
+      armorClass?: number;
+      proficiencyBonus?: number;
+      spellSlots?: unknown;
+    };
+    const level = sheet.totalLevel ?? 1;
+    const hpMax = sheet.maxHp ?? 0;
+    const armorClass = sheet.armorClass ?? 0;
+    const proficiencyBonus = sheet.proficiencyBonus ?? 2;
+    const slotsArray = this.normalizeSpellSlots(sheet.spellSlots);
 
     return {
       level,
@@ -289,23 +286,37 @@ export class SeedCharacterService {
   }
 
   private normalizeSpellSlots(raw: unknown): number[] | undefined {
-    let slots: number[] | undefined;
+    const slots = new Array(9).fill(0) as number[];
 
     if (Array.isArray(raw)) {
-      slots = raw.filter((v) => typeof v === 'number') as number[];
+      // Shape preferido do sheet atual: [{ level, total, used }]
+      for (const entry of raw) {
+        if (typeof entry === 'number') {
+          // Fallback: array plano [2, 3, 0, ...]
+          const idx = raw.indexOf(entry);
+          if (idx >= 0 && idx < 9) slots[idx] = entry;
+        } else if (entry && typeof entry === 'object') {
+          const level = (entry as { level?: number }).level;
+          const total = (entry as { total?: number }).total;
+          if (
+            typeof level === 'number'
+            && level >= 1
+            && level <= 9
+            && typeof total === 'number'
+          ) {
+            slots[level - 1] = total;
+          }
+        }
+      }
     } else if (raw && typeof raw === 'object') {
       const obj = raw as Record<string, unknown>;
-      slots = [];
       for (let i = 1; i <= 9; i++) {
         const val = obj[i] ?? obj[String(i)] ?? obj[`level${i}`];
-        slots.push(typeof val === 'number' ? val : 0);
+        if (typeof val === 'number') slots[i - 1] = val;
       }
     }
 
-    // Se tudo zero (ou array vazio), não é caster — omite do summary.
-    if (!slots || slots.length === 0 || !slots.some((v) => v > 0)) {
-      return undefined;
-    }
-    return slots;
+    // Se tudo zero, não é caster — omite do summary.
+    return slots.some((v) => v > 0) ? slots : undefined;
   }
 }

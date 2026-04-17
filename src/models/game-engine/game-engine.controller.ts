@@ -12,6 +12,8 @@ import {
   UnauthorizedException,
   UseInterceptors,
   UploadedFile,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -1112,6 +1114,7 @@ export class GameEngineController {
    * Admin-only, bloqueado em produção (exceto com ALLOW_TEST_ENDPOINTS=true).
    */
   @Post('dice/seed')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(AdminGuard, NonProductionGuard)
   async setDiceSeed(@Body() dto: DiceSeedDto) {
     this.diceService.setSeed(dto.value);
@@ -1122,6 +1125,7 @@ export class GameEngineController {
    * Desativa seed, volta a Math.random (spec 012).
    */
   @Post('dice/seed/clear')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(AdminGuard, NonProductionGuard)
   async clearDiceSeed() {
     this.diceService.clearSeed();

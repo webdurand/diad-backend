@@ -33,11 +33,13 @@ describe('SeedCharacterService', () => {
   const mockUser = { id: 'user-e2e', email: 'e2e-harness@diad.local' };
   const mockCharacter = { id: 'char-1', name: 'wizard-L1-e2e' };
   const mockSheet = {
-    level: 1,
-    hpMax: 8,
+    totalLevel: 1,
+    maxHp: 8,
     armorClass: 12,
     proficiencyBonus: 2,
-    spellSlots: [2, 0, 0, 0, 0, 0, 0, 0, 0],
+    spellSlots: [
+      { level: 1, total: 2, used: 0 },
+    ],
   };
 
   beforeEach(() => {
@@ -213,10 +215,23 @@ describe('SeedCharacterService', () => {
   });
 
   describe('normalizeSpellSlots', () => {
-    it('omite spellSlots pra classes n\u00e3o-caster', async () => {
+    it('aceita shape real do sheet [{ level, total, used }]', async () => {
       characterSheetService.computeSheet = jest.fn().mockResolvedValue({
         ...mockSheet,
-        spellSlots: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        spellSlots: [
+          { level: 1, total: 4, used: 0 },
+          { level: 2, total: 3, used: 1 },
+          { level: 3, total: 2, used: 0 },
+        ],
+      });
+      const result = await service.seed(validDto);
+      expect(result.sheetSummary.spellSlots).toEqual([4, 3, 2, 0, 0, 0, 0, 0, 0]);
+    });
+
+    it('omite spellSlots pra classes n\u00e3o-caster (array vazio)', async () => {
+      characterSheetService.computeSheet = jest.fn().mockResolvedValue({
+        ...mockSheet,
+        spellSlots: [],
       });
       const result = await service.seed(validDto);
       expect(result.sheetSummary.spellSlots).toBeUndefined();
