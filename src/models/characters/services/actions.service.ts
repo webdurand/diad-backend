@@ -44,6 +44,11 @@ export interface ActionBlock {
   versatileDamage?: DamageBlock;
   saveDc?: number;
   saveAbility?: string;
+  /** Spec 011 Phase 2 — `dc_success` do SRD ('half' | 'none' | 'negates'). */
+  saveSuccess?: 'half' | 'none' | 'negates';
+  /** Spec 011 Phase 3 — slug canônico da feature/spell (sem prefixo `feature-{uuid}-`).
+   *  Usado pelo front pra resolver `POST /class-feature` e `POST /cast-spell`. */
+  featureSlug?: string;
   range?: string;
   properties?: string[];
   uses?: number;
@@ -440,16 +445,30 @@ export class ActionsService {
       if (castingTime.includes('bonus')) timing = 'bonus_action';
       else if (castingTime.includes('reaction')) timing = 'reaction';
 
+      // Normalização — a seed do 5eAPI pode armazenar `damage_type` como
+      // objeto `{ name, index }` (shape antigo) OU como array `['fire']` (shape
+      // novo que veio na re-seed). Spec 011 Phase 2 aceita ambos.
       const dmg = spell.damage as {
-        damage_type?: { name?: string };
+        damage_type?: { name?: string; index?: string } | string[] | string;
         damage_at_character_level?: Record<string, string>;
         damage_at_slot_level?: Record<string, string>;
       } | null;
 
       const dc = spell.dc as {
-        dc_type?: { name?: string; index?: string };
+        dc_type?: { name?: string; index?: string } | string[];
         dc_success?: string;
       } | null;
+
+      const extractDamageType = (
+        raw: typeof dmg extends null ? never : typeof dmg,
+      ): string => {
+        if (!raw) return 'Unknown';
+        const t = raw.damage_type;
+        if (!t) return 'Unknown';
+        if (Array.isArray(t)) return t[0] ?? 'Unknown';
+        if (typeof t === 'string') return t;
+        return t.name ?? t.index ?? 'Unknown';
+      };
 
       let damage: DamageBlock | undefined;
       if (dmg) {
@@ -461,11 +480,21 @@ export class ActionsService {
           // Take the base slot level damage
           const levels = Object.keys(dmg.damage_at_slot_level).sort((a, b) => +a - +b);
           dice = levels.length > 0 ? dmg.damage_at_slot_level[levels[0]] : '';
+        } else {
+          // Spec 011 Phase 2 — fallback pra seed incompleta: regex '3d6' na
+          // descrição. Cobre magias cujo `damage_at_slot_level` veio vazio.
+          const rawDesc = Array.isArray(spell.description)
+            ? (spell.description as unknown[]).join(' ')
+            : typeof spell.description === 'string'
+              ? spell.description
+              : '';
+          const match = rawDesc.match(/(\d+d\d+)\s+(?:\w+\s+)?damage/i);
+          if (match) dice = match[1];
         }
         if (dice) {
           damage = {
             dice,
-            type: dmg.damage_type?.name ?? 'Unknown',
+            type: extractDamageType(dmg),
           };
         }
       }
@@ -528,7 +557,17 @@ export class ActionsService {
 
       if (dc) {
         action.saveDc = defaultDc;
-        action.saveAbility = dc.dc_type?.index ?? dc.dc_type?.name ?? '';
+        const rawDcType = dc.dc_type;
+        if (Array.isArray(rawDcType)) {
+          action.saveAbility = rawDcType[0] ?? '';
+        } else if (rawDcType && typeof rawDcType === 'object') {
+          action.saveAbility = rawDcType.index ?? rawDcType.name ?? '';
+        } else {
+          action.saveAbility = '';
+        }
+        if (dc.dc_success === 'half' || dc.dc_success === 'none' || dc.dc_success === 'negates') {
+          action.saveSuccess = dc.dc_success;
+        }
       }
 
       out.push(action);
@@ -615,6 +654,8 @@ export class ActionsService {
           out.push({
             ...actionDef,
             id: `feature-${cf.id}-${actionDef.id}`,
+            // Spec 011 Phase 3 — preserva slug canônico pro dispatcher.
+            featureSlug: actionDef.id,
           });
         }
         continue;
@@ -644,6 +685,8 @@ export class ActionsService {
           source: 'feature',
           sourceLabel: (cf.source_class_id ? classMap.get(cf.source_class_id)?.class.name : undefined) ?? 'Classe',
           description: shortDesc,
+          // Unknown feature — slug vem direto do catálogo SRD.
+          featureSlug: slug,
         });
       }
     }

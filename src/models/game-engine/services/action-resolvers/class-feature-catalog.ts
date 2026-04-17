@@ -151,6 +151,33 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: (lv) => (lv >= 18 ? 3 : lv >= 6 ? 2 : 1),
     rechargeOn: 'short',
   },
+  {
+    // Expiração separada pra aparecer listável sem passar por wrapper de Channel.
+    slug: 'turn-undead',
+    displayName: 'Expulsar Mortos-Vivos',
+    classSlug: 'cleric',
+    requiredLevel: 2,
+    actionCost: 'action',
+    targetShape: 'multiple-creatures',
+    targetRange: 30,
+    resolution: 'stub',
+    maxUsesByLevel: (lv) => (lv >= 18 ? 3 : lv >= 6 ? 2 : 1),
+    rechargeOn: 'short',
+  },
+  // ---- Wizard ----
+  {
+    // Spec 011 Phase 3 — 1/dia, recupera slots após short rest.
+    // Resolução STUB por ora: Spec 4 pode elevar a FULL conectando ao state.spell_slots_used.
+    slug: 'arcane-recovery',
+    displayName: 'Recuperação Arcana',
+    classSlug: 'wizard',
+    requiredLevel: 1,
+    actionCost: 'free',
+    targetShape: 'self',
+    resolution: 'stub',
+    maxUsesByLevel: () => 1,
+    rechargeOn: 'long',
+  },
   // ---- Druid ----
   {
     slug: 'wild-shape',
