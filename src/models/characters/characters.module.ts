@@ -95,6 +95,7 @@ import { ActionsService } from './services/actions.service';
     ActionsService,
   ],
   exports: [
+    CharactersService,
     CharacterSheetService,
     CharacterStateService,
     ActionsService,

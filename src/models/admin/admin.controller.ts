@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Post,
   HttpCode,
@@ -7,15 +8,39 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminService, SeedResult } from './admin.service';
+import { SeedCharacterService, SeedCharacterResult } from './services/seed-character.service';
+import { SeedCharacterDto } from './dto/seed-character.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
+import { NonProductionGuard } from '../auth/non-production.guard';
 
 @Controller('admin')
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminController {
   private readonly logger = new Logger(AdminController.name);
 
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly seedCharacterService: SeedCharacterService,
+  ) {}
+
+  // ────── Spec 012 — Game Validation Harness ──────
+
+  /**
+   * Materializa um PC canônico (classe/subclasse/nível) pro harness 012.
+   * Non-prod only. L10/L20 retorna 501 na iteração atual (ver spec).
+   */
+  @Post('seed-character')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(NonProductionGuard)
+  async seedCharacter(
+    @Body() dto: SeedCharacterDto,
+  ): Promise<SeedCharacterResult> {
+    this.logger.log(
+      `▶ Seed character: ${dto.classSlug}/${dto.subclassSlug} L${dto.level}`,
+    );
+    return this.seedCharacterService.seed(dto);
+  }
 
   // ────── Fase 0 ──────
 
