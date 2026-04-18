@@ -32,6 +32,8 @@ import {
 } from './spell-effect-catalog';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { getSpellDamage } from './spell-damage-catalog';
+import { getSpellHealing } from './spell-healing-catalog';
+import { substituteSpellcastingMod } from './spellcasting-mod';
 import { getSpellCondition } from './spell-condition-catalog';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
 
@@ -253,10 +255,18 @@ export class SpellCastingService {
     }
 
     // 10. Resolve healing if applicable
-    if (spell.heal_at_slot_level) {
-      const healInfo = spell.heal_at_slot_level as Record<string, string>;
-      const slotKey = String(dto.slotLevel);
-      const expression = healInfo[slotKey] ?? null;
+    // Spec 012: transform-spells.ts hardcoda heal_at_slot_level=null no seed,
+    // então toda heal spell quebrava silenciosamente (consumia slot, cura=0).
+    // Primária agora é o catálogo spell-healing-catalog.ts (mesmo padrão do
+    // damage-catalog). Fallback legado pro DB se catálogo miss.
+    const catalogHeal = getSpellHealing(dto.spellSlug, dto.slotLevel);
+    const healTemplate =
+      catalogHeal?.expression ??
+      ((spell.heal_at_slot_level as Record<string, string> | null)?.[
+        String(dto.slotLevel)
+      ] ?? null);
+    if (healTemplate) {
+      const expression = substituteSpellcastingMod(healTemplate, sheet);
 
       if (expression) {
         const rollResult = this.diceService.rollExpression(expression);
