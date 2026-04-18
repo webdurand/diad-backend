@@ -182,6 +182,28 @@ export class CombatService {
       return success(eq.name, []);
     }
 
+    // Spec 012 — PC weapon via ActionBar: `weapon-<characterEquipmentId>` ou
+    // `weapon-thrown-<characterEquipmentId>`. Shape populado por
+    // actions.service.buildWeaponActions — bate com sheet.equipment[i].id.
+    if (attacker.type === 'pc' && attacker.characterId && slug.startsWith('weapon-')) {
+      const rest = slug.startsWith('weapon-thrown-')
+        ? slug.slice('weapon-thrown-'.length)
+        : slug.slice('weapon-'.length);
+      const pcOwnerId = await this.resolveParticipantOwner(attacker, ownerUserId);
+      const sheet = await this.sheetService.computeSheet(
+        pcOwnerId,
+        attacker.characterId,
+      );
+      const eq = sheet.equipment.find((e) => e.id === rest && !!e.damage);
+      if (!eq) {
+        return failure(
+          `Arma '${slug}' nao encontrada no inventário.`,
+          'INVALID_ACTION_SLUG',
+        );
+      }
+      return success(eq.name, []);
+    }
+
     // Monster: slug prefixado por monster.slug. Match por rest == action name (kebab).
     if (attacker.type === 'monster' && attacker.monster) {
       const monsterSlug: string = (attacker.monster as any).slug ?? '';
