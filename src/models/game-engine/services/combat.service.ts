@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
+import { InspirationService } from './inspiration.service';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { ActionsService } from 'src/models/characters/services/actions.service';
 import { DiceService } from './dice.service';
@@ -134,6 +135,7 @@ export class CombatService {
     private readonly effectInstances: EffectInstanceService,
     private readonly concentration: ConcentrationService,
     private readonly classFeatureResolver: ClassFeatureResolverService,
+    private readonly inspirationService: InspirationService,
   ) {}
 
   /**
@@ -1794,20 +1796,19 @@ export class CombatService {
         });
       }
 
-      // Spec 012 — consome Heroic Inspiration se estava armada pra este d20 test.
-      // Reseta ambos: flag encounter + boolean persistente na ficha.
+      // Spec 012 — consome Heroic Inspiration via service compartilhado
+      // (mesma lógica de save/skill-check).
       if (consumeInspiration) {
-        attacker.inspirationArmed = false;
-        if (attacker.type === 'pc' && attacker.characterId) {
-          await this.stateService
-            .setInspiration(attacker.characterId, false)
-            .catch(() => null);
+        const inspResult = await this.inspirationService.consumeIfArmed(
+          attacker.id,
+          'attack_roll',
+        );
+        if (inspResult.consumed && inspResult.eventData) {
+          // InspirationService já persistiu; apenas refletimos no local
+          // attacker object pra evitar re-fetch + emite evento.
+          attacker.inspirationArmed = false;
+          events.push(inspResult.eventData);
         }
-        events.push({
-          event_type: 'inspiration_used',
-          actor_participant_id: attacker.id,
-          data: { context: 'attack_roll' },
-        });
       }
 
       await this.participantRepo.save(attacker);

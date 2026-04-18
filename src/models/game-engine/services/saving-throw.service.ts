@@ -3,6 +3,7 @@ import { CharacterSheetService } from 'src/models/characters/services/character-
 import { DiceService } from './dice.service';
 import { ConditionEffectsService } from './condition-effects.service';
 import { EventService } from './event.service';
+import { InspirationService } from './inspiration.service';
 import {
   GameResult,
   GameEventData,
@@ -23,6 +24,12 @@ export interface SavingThrowDto {
   disadvantage?: boolean;
   sessionId?: string;
   encounterId?: string;
+  /**
+   * Spec 012 — se informado, leitura+consumo de `inspirationArmed` do
+   * participant adiciona advantage + zera flag encounter e ficha. Only
+   * applies quando caller conhece o participant (caminho combate/encounter).
+   */
+  participantId?: string;
 }
 
 @Injectable()
@@ -32,6 +39,7 @@ export class SavingThrowService {
     private readonly diceService: DiceService,
     private readonly conditionEffects: ConditionEffectsService,
     private readonly eventService: EventService,
+    private readonly inspirationService: InspirationService,
   ) {}
 
   async rollSavingThrow(dto: SavingThrowDto): Promise<GameResult<SavingThrowResult>> {
@@ -73,6 +81,19 @@ export class SavingThrowService {
     if (condMods.hasAdvantage) hasAdvantage = true;
     if (condMods.hasDisadvantage) hasDisadvantage = true;
 
+    // Spec 012 — Heroic Inspiration: se armed, consome e aplica advantage.
+    let inspirationEvent: GameEventData | null = null;
+    if (dto.participantId) {
+      const inspResult = await this.inspirationService.consumeIfArmed(
+        dto.participantId,
+        'saving_throw',
+      );
+      if (inspResult.consumed && inspResult.eventData) {
+        hasAdvantage = true;
+        inspirationEvent = inspResult.eventData;
+      }
+    }
+
     // Roll the d20
     let roll: number;
     let advantageResult: AdvantageResult | undefined;
@@ -102,7 +123,9 @@ export class SavingThrowService {
       advantage: advantageResult,
     };
 
-    return success(result, this.buildEvents(dto, roll, modifier, total, passed));
+    const events = this.buildEvents(dto, roll, modifier, total, passed);
+    if (inspirationEvent) events.unshift(inspirationEvent);
+    return success(result, events);
   }
 
   private buildEvents(

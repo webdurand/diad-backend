@@ -27,6 +27,7 @@ import { EncounterService } from './services/encounter.service';
 import { CombatService } from './services/combat.service';
 import { SkillCheckService } from './services/skill-check.service';
 import { SavingThrowService } from './services/saving-throw.service';
+import { InspirationService } from './services/inspiration.service';
 import { SpellCastingService } from './services/spell-casting.service';
 import { MovementService } from './services/movement.service';
 import { LootService } from './services/loot.service';
@@ -98,6 +99,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     CombatService,
     SkillCheckService,
     SavingThrowService,
+    InspirationService,
     SpellCastingService,
     MovementService,
     LootService,

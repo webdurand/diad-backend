@@ -34,6 +34,7 @@ describe('SavingThrowService', () => {
       diceService,
       new ConditionEffectsService(),
       mockEventService as any,
+      { consumeIfArmed: async () => ({ consumed: false }) } as any,
     );
     mockSheetService.computeSheet.mockResolvedValue({ ...mockSheet, conditions: [] });
   });

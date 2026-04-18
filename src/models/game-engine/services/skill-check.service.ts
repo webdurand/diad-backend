@@ -3,6 +3,7 @@ import { CharacterSheetService } from 'src/models/characters/services/character-
 import { DiceService } from './dice.service';
 import { ConditionEffectsService } from './condition-effects.service';
 import { EventService } from './event.service';
+import { InspirationService } from './inspiration.service';
 import {
   GameResult,
   GameEventData,
@@ -37,6 +38,8 @@ export interface SkillCheckDto {
   disadvantage?: boolean;
   sessionId?: string;
   encounterId?: string;
+  /** Spec 012 — quando informado, `inspirationArmed` do participant dá advantage + consome. */
+  participantId?: string;
 }
 
 @Injectable()
@@ -46,6 +49,7 @@ export class SkillCheckService {
     private readonly diceService: DiceService,
     private readonly conditionEffects: ConditionEffectsService,
     private readonly eventService: EventService,
+    private readonly inspirationService: InspirationService,
   ) {}
 
   async rollAbilityCheck(dto: SkillCheckDto): Promise<GameResult<SkillCheckResult>> {
@@ -87,6 +91,19 @@ export class SkillCheckService {
     let hasDisadvantage = dto.disadvantage ?? false;
 
     if (condMods.hasDisadvantage) hasDisadvantage = true;
+
+    // Spec 012 — Heroic Inspiration
+    let inspirationEvent: GameEventData | null = null;
+    if (dto.participantId) {
+      const inspResult = await this.inspirationService.consumeIfArmed(
+        dto.participantId,
+        'ability_check',
+      );
+      if (inspResult.consumed && inspResult.eventData) {
+        hasAdvantage = true;
+        inspirationEvent = inspResult.eventData;
+      }
+    }
     if (condMods.autoFail) {
       return success(
         {
@@ -136,7 +153,9 @@ export class SkillCheckService {
       advantage: advantageResult,
     };
 
-    return success(result, this.buildEvents(dto, roll, modifier, total, passed));
+    const events = this.buildEvents(dto, roll, modifier, total, passed);
+    if (inspirationEvent) events.unshift(inspirationEvent);
+    return success(result, events);
   }
 
   private getAbilityCheckModifiers(conditions: string[]) {

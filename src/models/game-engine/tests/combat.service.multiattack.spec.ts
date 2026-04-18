@@ -121,6 +121,7 @@ function createHarness() {
     { addEffect: async () => ({ effect: {} as any, events: [] }), removeEffect: async () => ({ removed: false, events: [] }), removeAllByConcentrationBreak: async () => ({ events: [] }), tickAtEndOfTurn: async () => ({ events: [], ticked: [], expired: [] }) } as any,
     { startNew: async () => ({ events: [], broken: false }), break: async () => ({ events: [] }), breakDueToDeath: async () => ({ events: [] }), trackAppliedEffect: async () => {}, checkBreakOnCondition: async () => ({ events: [], broken: false }), decrementDurationFor: async () => ({ events: [] }) } as any,
     { resolveInvocation: async () => ({ resolved: false, events: [] }) } as any,
+    { consumeIfArmed: async () => ({ consumed: false }) } as any,
   );
 
   return { combat, participants, encounter, hpByChar, diceService };
