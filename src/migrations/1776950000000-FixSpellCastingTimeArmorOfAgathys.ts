@@ -22,7 +22,7 @@ export class FixSpellCastingTimeArmorOfAgathys1776950000000
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `UPDATE spell SET casting_time = '1 action' WHERE slug = 'armor-of-agathys' AND casting_time <> '1 action'`,
+      `UPDATE spells SET casting_time = '1 action' WHERE slug = 'armor-of-agathys' AND casting_time <> '1 action'`,
     );
   }
 
