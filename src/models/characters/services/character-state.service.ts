@@ -385,6 +385,27 @@ export class CharacterStateService {
     return { inspiration: state.inspiration };
   }
 
+  /**
+   * Spec 012 — Heroic Inspiration: set inspiration sem owner-check. Usado
+   * pelo DM via encounter-service (DM já teve permissão validada na rota
+   * de encounter). Retorna `{ inspiration }` atualizado.
+   */
+  async setInspiration(
+    characterId: string,
+    value: boolean,
+  ): Promise<{ inspiration: boolean }> {
+    const state = await this.getState(characterId);
+    state.inspiration = value;
+    await this.stateRepo.save(state);
+    return { inspiration: state.inspiration };
+  }
+
+  /** Spec 012 — leitura pública (read-only, sem owner check). */
+  async getInspiration(characterId: string): Promise<boolean> {
+    const state = await this.getState(characterId);
+    return state.inspiration;
+  }
+
   /** Returns XP threshold info for a given total level */
   static getXpInfo(
     xp: number,

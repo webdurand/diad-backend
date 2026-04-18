@@ -108,6 +108,19 @@ export class EncounterParticipantEntity {
   @Column({ name: 'has_disengaged', type: 'boolean', default: false })
   hasDisengaged: boolean;
 
+  /**
+   * Spec 012 — Heroic Inspiration "armed" pro próximo d20 test.
+   * Player com `character_state.inspiration = true` pode setar isto via
+   * `/arm-inspiration` pra que o próximo attack/save/check tenha advantage.
+   * Consumido automaticamente no primeiro d20 test do participant (zera
+   * aqui + zera `character_state.inspiration`).
+   *
+   * Persiste só dentro do encounter: se terminar sem usar, volta a
+   * depender só do boolean da ficha.
+   */
+  @Column({ name: 'inspiration_armed', type: 'boolean', default: false })
+  inspirationArmed: boolean;
+
   // --- Spec 003: Extra Attack counter ---
   // Ver migration 1776300000000-AddCombatActionRegistryFields.
 

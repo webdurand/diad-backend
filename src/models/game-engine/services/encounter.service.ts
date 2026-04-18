@@ -245,6 +245,10 @@ export class EncounterService {
           // Spec 012: expor spellSlots do sheet pro harness e pra UI validar
           // slot-consumed invariants sem precisar GET /sheet em paralelo.
           (p as any).spellSlots = sheet.spellSlots ?? [];
+          // Spec 012 — Heroic Inspiration (persistente na ficha).
+          (p as any).hasInspiration = await this.stateService
+            .getInspiration(p.characterId!)
+            .catch(() => false);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.debug(
@@ -1226,6 +1230,80 @@ export class EncounterService {
     const p = await this.getParticipant(participantId);
     p.isVisible = visible;
     return this.participantRepo.save(p);
+  }
+
+  /**
+   * Spec 012 — Heroic Inspiration: player "arma" pra próximo d20 test ter
+   * advantage. Requer que `character_state.inspiration=true` esteja ativo
+   * (DM já concedeu). Consumo ocorre no próximo attack/save/check do
+   * participant (combat.service).
+   *
+   * Retorna {ok, inspirationArmed, hasInspiration} pro cliente refletir.
+   */
+  async armInspiration(
+    participantId: string,
+    arm: boolean,
+  ): Promise<{
+    ok: boolean;
+    inspirationArmed: boolean;
+    hasInspiration: boolean;
+    error?: string;
+    code?: string;
+  }> {
+    const p = await this.getParticipant(participantId);
+    if (p.type !== 'pc' || !p.characterId) {
+      return {
+        ok: false,
+        inspirationArmed: p.inspirationArmed,
+        hasInspiration: false,
+        error: 'Inspiração só se aplica a PCs.',
+        code: 'INVALID_PARTICIPANT',
+      };
+    }
+    const hasInspiration = await this.stateService.getInspiration(p.characterId);
+    if (arm && !hasInspiration) {
+      return {
+        ok: false,
+        inspirationArmed: false,
+        hasInspiration: false,
+        error: 'Personagem não possui Inspiração disponível — peça ao DM.',
+        code: 'NO_INSPIRATION',
+      };
+    }
+    p.inspirationArmed = arm;
+    await this.participantRepo.save(p);
+    return { ok: true, inspirationArmed: arm, hasInspiration };
+  }
+
+  /**
+   * Spec 012 — DM concede/remove Inspiração pra um PC. Caller (controller)
+   * deve validar que authUser é DM da sessão. Retorna estado atualizado.
+   */
+  async grantInspiration(
+    participantId: string,
+    grant: boolean,
+  ): Promise<{
+    ok: boolean;
+    hasInspiration: boolean;
+    error?: string;
+    code?: string;
+  }> {
+    const p = await this.getParticipant(participantId);
+    if (p.type !== 'pc' || !p.characterId) {
+      return {
+        ok: false,
+        hasInspiration: false,
+        error: 'Inspiração só se aplica a PCs.',
+        code: 'INVALID_PARTICIPANT',
+      };
+    }
+    const result = await this.stateService.setInspiration(p.characterId, grant);
+    // Se DM remove, desarma automaticamente no encounter também.
+    if (!grant && p.inspirationArmed) {
+      p.inspirationArmed = false;
+      await this.participantRepo.save(p);
+    }
+    return { ok: true, hasInspiration: result.inspiration };
   }
 
   async getParticipant(

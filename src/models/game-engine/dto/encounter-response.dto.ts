@@ -35,6 +35,15 @@ export interface EnrichedParticipantResponse {
   dodging: boolean;
   hasDashed: boolean;
   hasDisengaged: boolean;
+
+  /**
+   * Spec 012 — Heroic Inspiration flags.
+   * `hasInspiration`: persistente na ficha (DM concede via /grant-inspiration).
+   * `inspirationArmed`: encounter-scoped; player setou via /arm-inspiration
+   * que o próximo d20 test terá advantage. Consumido no primeiro roll.
+   */
+  hasInspiration?: boolean;
+  inspirationArmed: boolean;
   helping: boolean;
   helpingAlly: string | null;
   helpingAgainst: string | null;
@@ -136,6 +145,11 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
     dodging: p.dodgingUntilTurnOfParticipantId != null,
     hasDashed: p.hasDashed ?? false,
     hasDisengaged: p.hasDisengaged ?? false,
+
+    // Spec 012 — Inspiration; hasInspiration vem do sheet enrichment, armed
+    // vem direto do participant.
+    hasInspiration: pAny.hasInspiration,
+    inspirationArmed: p.inspirationArmed ?? false,
     helping: p.helpingAllyParticipantId != null,
     helpingAlly: p.helpingAllyParticipantId ?? null,
     helpingAgainst: p.helpingTargetParticipantId ?? null,

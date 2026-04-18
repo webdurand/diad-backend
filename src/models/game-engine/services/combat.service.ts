@@ -1490,11 +1490,16 @@ export class CombatService {
       isMeleeAttack,
     );
 
+    // Spec 012 — Heroic Inspiration: se armed, dá advantage e marca pra consumo
+    // after the attack resolves successfully (ver logo após rolls).
+    const consumeInspiration = attacker.inspirationArmed === true;
+
     let hasAdvantage =
       attackerMods.hasAdvantage ||
       defenderMods.attacksHaveAdvantage ||
       reactive.advantage ||
       effectDec.advantage ||
+      consumeInspiration ||
       (dto.forceAdvantage ?? false);
     let hasDisadvantage =
       attackerMods.hasDisadvantage ||
@@ -1786,6 +1791,22 @@ export class CombatService {
             allyParticipantId: attacker.id,
             targetParticipantId: target.id,
           },
+        });
+      }
+
+      // Spec 012 — consome Heroic Inspiration se estava armada pra este d20 test.
+      // Reseta ambos: flag encounter + boolean persistente na ficha.
+      if (consumeInspiration) {
+        attacker.inspirationArmed = false;
+        if (attacker.type === 'pc' && attacker.characterId) {
+          await this.stateService
+            .setInspiration(attacker.characterId, false)
+            .catch(() => null);
+        }
+        events.push({
+          event_type: 'inspiration_used',
+          actor_participant_id: attacker.id,
+          data: { context: 'attack_roll' },
         });
       }
 

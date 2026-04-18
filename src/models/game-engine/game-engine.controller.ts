@@ -965,6 +965,31 @@ export class GameEngineController {
     );
   }
 
+  /**
+   * Spec 012 — Heroic Inspiration.
+   *  - `POST /arm-inspiration { arm: bool }`: player "arma" pra próximo d20 test.
+   *  - `POST /grant-inspiration { grant: bool }`: DM concede/remove inspiração.
+   *
+   * Autorização: owner-check happens dentro do service. DM flow usa same
+   * endpoint diferenciado pelo guard (futuro TODO — por enquanto qualquer
+   * authenticated user pode chamar grant, mas combat session é privado).
+   */
+  @Post('encounters/:id/participants/:participantId/arm-inspiration')
+  async armInspiration(
+    @Param('participantId') participantId: string,
+    @Body() body: { arm: boolean },
+  ) {
+    return this.encounterService.armInspiration(participantId, body.arm);
+  }
+
+  @Post('encounters/:id/participants/:participantId/grant-inspiration')
+  async grantInspiration(
+    @Param('participantId') participantId: string,
+    @Body() body: { grant: boolean },
+  ) {
+    return this.encounterService.grantInspiration(participantId, body.grant);
+  }
+
   // ==================== EVENTS ====================
 
   @Get('sessions/:id/events')
