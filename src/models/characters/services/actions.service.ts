@@ -273,10 +273,25 @@ export class ActionsService {
 
     for (const ce of charEquip) {
       const eq = ce.equipment;
-      if (!eq.damage || !ce.equipped) continue;
+      // Spec 012: PC deve poder usar QUALQUER arma que carrega (RAW 2024:
+      // sacar arma é free object interaction por turno). Antes o filtro
+      // `!ce.equipped` escondia arco do ranger (só scimitar ficava equipped
+      // por causa de `shouldEquip` limitar 1 weapon slot). Mantemos o dano
+      // como válido, só checamos se é mesmo uma arma (tem damage).
+      if (!eq.damage) continue;
 
-      const dmg = eq.damage as { damage_dice?: string; damage_type?: { name?: string; index?: string } };
-      if (!dmg.damage_dice) continue;
+      // Spec 012 fix: equipment.damage é persistida com shape `{dice, type}`
+      // (formato direto do transformer), não `{damage_dice, damage_type}` do
+      // SRD 5e legado. buildWeaponActions lia o shape errado → continue silencioso
+      // sempre → ActionBar só mostrava Ataque Desarmado. Aceita ambos shapes.
+      const dmg = eq.damage as {
+        damage_dice?: string;
+        damage_type?: { name?: string; index?: string };
+        dice?: string;
+        type?: string;
+      };
+      const damageDice = dmg.damage_dice ?? dmg.dice;
+      if (!damageDice) continue;
 
       const props = (eq.properties ?? []) as Array<{ name?: string; index?: string }>;
       const propSlugs = props.map((p) => p.index ?? '');
@@ -302,8 +317,7 @@ export class ActionsService {
       const isProficient = isEquipmentProficient(eq.slug, cats, profSlugs) === true;
 
       const attackBonus = abilityMod + (isProficient ? profBonus : 0);
-      const damageDice = dmg.damage_dice;
-      const damageType = dmg.damage_type?.name ?? 'Unknown';
+      const damageType = dmg.damage_type?.name ?? dmg.type ?? 'Unknown';
       const damageBonus = abilityMod;
 
       const range = eq.range as { normal?: number; long?: number } | null;
