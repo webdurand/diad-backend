@@ -38,6 +38,11 @@ import { EffectInstanceService } from './effect-instance.service';
 import { ConcentrationService } from './concentration.service';
 import { ClassFeatureResolverService } from './class-feature-resolver.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
+import {
+  parseRangeString,
+  checkAttackRange,
+  type Position as GridPosition,
+} from './combat-range';
 
 // --- DTOs ---
 
@@ -214,6 +219,12 @@ export class CombatService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+  }
+
+  /** Spec 012 #1 — extrai posição de grid de um participant (null se ausente). */
+  private positionOf(p: EncounterParticipantEntity): GridPosition | null {
+    if (p.positionX == null || p.positionY == null) return null;
+    return { x: p.positionX, y: p.positionY };
   }
 
   /**
@@ -1225,6 +1236,9 @@ export class CombatService {
     let damageDice = '1d4';
     let damageType = 'bludgeoning';
     let damageBonus = 0;
+    // Spec 012 #1 — range da ação, populado em cada branch (unarmed/pc/monster)
+    // e consumido logo antes dos rolls.
+    let actionRangeStr: string | null = null;
 
     // Spec 003 Fatia 4 — Unarmed Strike (XPHB 2024) com 3 modes:
     //   damage   → attack roll normal (1 + STR mod bludgeoning)
@@ -1247,6 +1261,23 @@ export class CombatService {
       const strMod = strScore?.modifier ?? 0;
       const profBonus = sheet.proficiencyBonus ?? 2;
       const mode = (dto.options?.mode as string | undefined) ?? 'damage';
+      actionRangeStr = '5 ft';
+
+      // Spec 012 #1 — Unarmed Strike (damage/grapple/shove) é sempre melee 5ft.
+      // Valida aqui porque grapple/shove retornam antes do check unificado abaixo.
+      {
+        const rangeCheck = checkAttackRange(
+          this.positionOf(attacker),
+          this.positionOf(target),
+          parseRangeString(actionRangeStr),
+        );
+        if (!rangeCheck.ok) {
+          return failure(
+            `Alvo a ${rangeCheck.distanceFt}ft, Ataque Desarmado alcança ${rangeCheck.maxFt}ft.`,
+            'OUT_OF_RANGE',
+          );
+        }
+      }
 
       if (mode === 'grapple' || mode === 'shove') {
         // Short-circuit: sem attack roll; emite evento para a Spec 4 resolver o save.
@@ -1349,6 +1380,7 @@ export class CombatService {
         damageType = action.damage.type;
         damageBonus = action.damage.bonus ?? 0;
       }
+      actionRangeStr = action.range ?? null;
     } else if (attacker.type === 'monster' && attacker.monster) {
       const resolved = this.monsterActionResolver.resolveByName(
         attacker.monster,
@@ -1364,6 +1396,24 @@ export class CombatService {
       if (resolved.damageDice) damageDice = resolved.damageDice;
       if (resolved.damageType) damageType = resolved.damageType;
       damageBonus = resolved.damageBonus;
+      actionRangeStr = resolved.range ?? resolved.reach ?? null;
+    }
+
+    // Spec 012 #1 — range check unificado (PC weapon + monster). Ficou depois
+    // do unarmed check porque unarmed returns early em grapple/shove. Se
+    // ranged entre normal e long, disadvantage flag é lida mais abaixo.
+    const parsedRange = parseRangeString(actionRangeStr);
+    const rangeCheck = checkAttackRange(
+      this.positionOf(attacker),
+      this.positionOf(target),
+      parsedRange,
+    );
+    if (!rangeCheck.ok) {
+      const actionLabel = dto.actionName || 'Ataque';
+      return failure(
+        `Alvo a ${rangeCheck.distanceFt}ft, ${actionLabel} alcança ${rangeCheck.maxFt}ft.`,
+        'OUT_OF_RANGE',
+      );
     }
 
     // Determine advantage/disadvantage
@@ -1429,6 +1479,7 @@ export class CombatService {
       defenderMods.attacksHaveDisadvantage ||
       reactive.disadvantage ||
       effectDec.disadvantage ||
+      rangeCheck.disadvantage ||
       (dto.forceDisadvantage ?? false);
 
     // Advantage and disadvantage cancel out
