@@ -412,12 +412,15 @@ export class SpellCastingService {
     }
 
     // 7. Handle concentration
+    // Spec 012: concentratingOn é exposto como `spellSlug` no API response
+    // (encounter-response.dto.ts). Persistimos o slug canônico — era spell.name
+    // (i18n-sensitive, quebra comparação invariant-driven).
     if (spellResult.concentration) {
       if (participant.isConcentrating) {
         spellResult.previousConcentration = participant.concentratingOn ?? undefined;
       }
       participant.isConcentrating = true;
-      participant.concentratingOn = spellResult.spellName;
+      participant.concentratingOn = dto.spellSlug;
     }
 
     await this.participantRepo.save(participant);
@@ -822,8 +825,9 @@ export class SpellCastingService {
     else participant.actionUsed = true;
 
     if (concentration) {
+      // Spec 012: persistir slug (consistência com encounter-response.spellSlug).
       participant.isConcentrating = true;
-      participant.concentratingOn = spell.name;
+      participant.concentratingOn = spell.slug;
     }
 
     await this.participantRepo.save(participant);
