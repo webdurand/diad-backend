@@ -289,7 +289,10 @@ export class SeedCharacterService {
     // Data mínima válida pro CharactersService.create (spec 001):
     // - abilityScores obrigatório
     // - classSlug + raceSlug + backgroundSlug resolvidos via slug
-    // - classStartingGold bypassa a validação de classEquipmentChoices (gold em vez de escolha de item)
+    // - classEquipmentChoices: ['A'] materializa o equipamento inicial da classe
+    //   (armas + armadura RAW por classe). Antes usávamos classStartingGold (gold
+    //   puro) mas isso deixava fighter/ranger sem armas na grid — usuário reportou
+    //   e bug validado via harness spec 012.
     const spellDefaults = CLASS_SPELL_DEFAULTS[params.classSlug];
     const data: Record<string, unknown> = {
       sourceCode: 'XPHB',
@@ -299,7 +302,7 @@ export class SeedCharacterService {
       abilityScores: params.abilityScores,
       abilityScoreMethod: 'standard-array',
       skills: [],
-      classStartingGold: { gp: 100 },
+      classEquipmentChoices: ['A'],
       backgroundEquipmentChoices: ['A'],
       // Spells por classe (spec 012) — sem isso, cast-spell falha com
       // "magia não encontrada no repertório".
