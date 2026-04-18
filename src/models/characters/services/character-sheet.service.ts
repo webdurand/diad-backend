@@ -82,6 +82,14 @@ export interface SpellSlotBlock {
   level: number;
   total: number;
   used: number;
+  /**
+   * Spec 012 #3 — distingue slot Pact Magic (Warlock) de slot padrão.
+   * Pact slot é chaveado por 'pact' em charState.spell_slots_used,
+   * enquanto standard slot é chaveado pelo nível numérico. Consumidores
+   * (spell-casting.service) precisam dessa info pra invocar
+   * updateSpellSlots com level=-1 convention.
+   */
+  kind?: 'standard' | 'pact';
 }
 
 interface ProficiencyBlock {
@@ -825,6 +833,7 @@ export class CharacterSheetService {
             level: i + 1,
             total: slotTable[i],
             used: slotsUsed[String(i + 1)] ?? 0,
+            kind: 'standard',
           });
         }
       }
@@ -838,6 +847,7 @@ export class CharacterSheetService {
           level: pact.level,
           total: pact.slots,
           used: slotsUsed['pact'] ?? 0,
+          kind: 'pact',
         });
       }
     }

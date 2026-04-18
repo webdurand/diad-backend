@@ -159,7 +159,13 @@ export class SpellCastingService {
         );
       }
 
-      const slotBlock = sheet.spellSlots.find((s) => s.level === dto.slotLevel);
+      // Spec 012 #3 — prefer standard slot match; fallback pra pact se warlock
+      // só tem pact slot naquele nível. Pact slots têm kind='pact' e são
+      // chaveados por 'pact' (level=-1 convention) em updateSpellSlots.
+      const slotBlock =
+        sheet.spellSlots.find((s) => s.level === dto.slotLevel && s.kind !== 'pact' && s.used < s.total)
+        ?? sheet.spellSlots.find((s) => s.level >= dto.slotLevel && s.kind === 'pact' && s.used < s.total)
+        ?? sheet.spellSlots.find((s) => s.level === dto.slotLevel);
       if (!slotBlock || slotBlock.used >= slotBlock.total) {
         return failure(
           `Sem slots de nivel ${dto.slotLevel} disponiveis.`,
@@ -167,9 +173,9 @@ export class SpellCastingService {
         );
       }
 
-      // 6. Consume the slot
+      // 6. Consume the slot — pact usa level=-1 convention no updateSpellSlots.
       await this.spellService.updateSpellSlots(dto.userId, dto.characterId, {
-        level: dto.slotLevel,
+        level: slotBlock.kind === 'pact' ? -1 : dto.slotLevel,
         used: slotBlock.used + 1,
       });
     }
