@@ -181,6 +181,14 @@ export class EncounterParticipantEntity {
   @Column({ name: 'nick_used_this_turn', type: 'boolean', default: false })
   nickUsedThisTurn: boolean;
 
+  /**
+   * Fighter L9 Tactical Master (RAW 2024) — mastery alternativa armada
+   * (push/sap/slow). Consumido no próximo attack (combat.service aplica
+   * mastery alternativa em vez da original e limpa o override).
+   */
+  @Column({ name: 'tactical_master_override', type: 'varchar', length: 16, nullable: true })
+  tacticalMasterOverride: string | null;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;

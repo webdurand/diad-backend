@@ -1540,6 +1540,13 @@ export class CombatService {
         masteryAbilityMod = action.damage?.bonus ?? 0;
       }
 
+      // Fighter L9 Tactical Master (RAW 2024) — se attacker armou override,
+      // substitui mastery original por push/sap/slow. Override é consumido
+      // (limpo) após o attack resolver.
+      if (action.source === 'weapon' && attacker.tacticalMasterOverride && masterySlug) {
+        masterySlug = attacker.tacticalMasterOverride;
+      }
+
       // Spec 012 Fase 0 — Fighting Style (PC weapon attacks).
       // Busca slug do Fighting Style via sheet.originDetails, aplica bonus conforme contexto.
       if (action.source === 'weapon') {
@@ -2180,6 +2187,11 @@ export class CombatService {
       );
       if (attacker.attacksUsedThisTurn >= attacker.attacksMaxThisTurn) {
         attacker.actionUsed = true;
+      }
+
+      // Fighter L9 Tactical Master — consome override após o attack.
+      if (attacker.tacticalMasterOverride) {
+        attacker.tacticalMasterOverride = null;
       }
 
       // Spec 003 T032 — ataque remove Hidden do atacante (RAW PHB cap. 9).

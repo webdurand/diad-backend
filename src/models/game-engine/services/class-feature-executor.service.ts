@@ -216,6 +216,25 @@ export class ClassFeatureExecutorService {
     );
     const newHp = hpResult.currentHp;
 
+    // Tactical Shift L5 (RAW 2024): ao usar Second Wind, move ½ speed sem OA.
+    // Implementação minimal: adiciona movementRemaining extra + emite evento.
+    // O "sem OA" é handled separately via movement system.
+    let tacticalShiftMoveFt = 0;
+    if (fighterLevel >= 5) {
+      const sheet = await this.sheetService.computeSheet(
+        pcOwnerId,
+        participant.characterId!,
+      );
+      const hasShift = ((sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [])
+        .filter((f) => f.active !== false)
+        .some((f) => f.slug.startsWith('tactical-shift'));
+      if (hasShift) {
+        tacticalShiftMoveFt = Math.floor((sheet.speed ?? 30) / 2);
+        // Some um bônus de movement pro turno atual (não persistente fora do turno).
+        participant.movementRemaining = (participant.movementRemaining ?? 0) + tacticalShiftMoveFt;
+      }
+    }
+
     // Mantém snapshot no participant para consumidores síncronos que ainda
     // leem `participant.currentHp` (enrichment re-sincroniza no próximo GET).
     participant.currentHp = newHp;
@@ -237,6 +256,7 @@ export class ClassFeatureExecutorService {
         healAmount,
         hpBefore: prevHp,
         hpAfter: newHp,
+        tacticalShiftMoveFt,
       },
     };
     await this.eventService.emit(
@@ -252,6 +272,7 @@ export class ClassFeatureExecutorService {
         healAmount,
         hpBefore: prevHp,
         hpAfter: newHp,
+        tacticalShiftMoveFt,
       },
       [event],
     );

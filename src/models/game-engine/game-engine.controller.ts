@@ -46,6 +46,7 @@ import { GenericActionDto } from './dto/generic-action.dto';
 import { GenericActionsService } from './services/generic-actions.service';
 import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
 import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
+import { TacticalFeaturesService } from './services/tactical-features.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -101,6 +102,7 @@ export class GameEngineController {
     private readonly genericActionsService: GenericActionsService,
     private readonly classFeatureExecutor: ClassFeatureExecutorService,
     private readonly fsReactions: FightingStyleReactionsService,
+    private readonly tacticalFeatures: TacticalFeaturesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -1032,6 +1034,52 @@ export class GameEngineController {
       encounterId,
       fighterParticipantId,
       body.allyParticipantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Fighter L2 Tactical Mind (RAW 2024) — endpoint dedicado pra reroll de
+   * failed ability check. Input: total original + DC. Rola 1d10 + soma.
+   * Consome Second Wind use só se passou.
+   */
+  @Post('encounters/:id/participants/:participantId/tactical-mind')
+  async tacticalMind(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { originalCheckTotal: number; dc: number },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.tacticalFeatures.tacticalMind(
+      userId,
+      encounterId,
+      participantId,
+      body.originalCheckTotal,
+      body.dc,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Fighter L9 Tactical Master (RAW 2024) — arma mastery alternativa
+   * (push/sap/slow) pro próximo attack. Combat.service consome o override.
+   */
+  @Post('encounters/:id/participants/:participantId/tactical-master/arm')
+  async tacticalMasterArm(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { masteryOverride: 'push' | 'sap' | 'slow' },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.tacticalFeatures.tacticalMasterArm(
+      userId,
+      encounterId,
+      participantId,
+      body.masteryOverride,
     );
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };

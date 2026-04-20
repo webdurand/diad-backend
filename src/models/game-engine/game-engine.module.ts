@@ -58,6 +58,8 @@ import { WeaponMasteryService } from './services/weapon-mastery.service';
 import { FightingStyleService } from './services/fighting-style.service';
 // Spec 012 Fighter 100% — Fighting Style Tier B reactions (Interception/Protection)
 import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
+// Spec 012 Fighter 100% — Tactical trio (Mind L2, Master L9; Shift L5 em handleSecondWind)
+import { TacticalFeaturesService } from './services/tactical-features.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -145,6 +147,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     FightingStyleService,
     // Spec 012 Fighter 100% — FS Tier B reactions (Interception, Protection)
     FightingStyleReactionsService,
+    // Spec 012 Fighter 100% — Tactical trio
+    TacticalFeaturesService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -186,6 +190,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     FightingStyleService,
     // Spec 012 Fighter 100% — FS Tier B reactions
     FightingStyleReactionsService,
+    // Spec 012 Fighter 100% — Tactical trio
+    TacticalFeaturesService,
     // Spec 002
     JoinRequestService,
   ],

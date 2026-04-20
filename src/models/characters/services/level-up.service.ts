@@ -1037,16 +1037,30 @@ export class LevelUpService {
     const whereClause = subclassId
       ? { class_id: classEntity.id, level: nextLevel, subclass_id: subclassId }
       : { class_id: classEntity.id, level: nextLevel, subclass_id: IsNull() };
-    const nativeData = await this.levelRepo.findOne({
+    // DB pode ter múltiplas rows de `levels` para a mesma tupla (class_id, level,
+    // subclass_id) quando features vem de seed-sources distintos (SRD legacy +
+    // XPHB oficial). findOne perderia features da 2ª+ row. find + union garante
+    // que todas level_features daquele level sejam atribuídas ao char.
+    const nativeRows = await this.levelRepo.find({
       where: whereClause,
       relations: ['level_features', 'level_features.feature'],
     });
-    // Accept native row only when it carries features. Empty level_features
-    // counts as a miss — triggers fallback so users don't get silently
-    // shortchanged on level-ups against an incomplete PHB seed.
-    const nativeHasFeatures =
-      nativeData?.level_features && nativeData.level_features.length > 0;
-    if (nativeHasFeatures) return { levelData: nativeData };
+    if (nativeRows.length > 0) {
+      const seen = new Set<string>();
+      const merged = [] as NonNullable<LevelEntity['level_features']>;
+      for (const row of nativeRows) {
+        for (const lf of row.level_features ?? []) {
+          if (lf.feature?.id && !seen.has(lf.feature.id)) {
+            seen.add(lf.feature.id);
+            merged.push(lf);
+          }
+        }
+      }
+      if (merged.length > 0) {
+        const aggregated: LevelEntity = { ...nativeRows[0], level_features: merged };
+        return { levelData: aggregated };
+      }
+    }
 
     // Native missing or feature-less — try fallback source if configured
     const fallbackCode = rules?.featureFallbackSource;
