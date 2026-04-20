@@ -30,7 +30,7 @@ export const SUPPORTED_CLASS_SLUGS = [
 
 export type SupportedClassSlug = (typeof SUPPORTED_CLASS_SLUGS)[number];
 
-export const SUPPORTED_LEVELS = [1, 3, 10, 13, 20] as const;
+export const SUPPORTED_LEVELS = [1, 3, 10, 11, 13, 15, 20] as const;
 export type SupportedLevel = (typeof SUPPORTED_LEVELS)[number];
 
 /**
