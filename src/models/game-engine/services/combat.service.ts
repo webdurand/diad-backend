@@ -1620,6 +1620,48 @@ export class CombatService {
         totalDamage += critExtra.total;
       }
 
+      // Spec 012 — consumir damage_bonus effects do attacker (Rage +2 melee,
+      // Hunter's Mark +1d6, etc). Filtra por scope: 'melee' só em melee,
+      // 'ranged' só em ranged, 'any' sempre. Flat amount vai direto; dice é
+      // rolado pra cada attack. Empilhável com damageBonus (ability mod +
+      // weapon bonus) que já está no totalDamage.
+      const damageBonusEffects = (attacker.effectInstances ?? []).filter(
+        (e) => e.kind === 'damage_bonus',
+      );
+      const extraDamageBonuses: Array<{
+        source: string;
+        amount: number;
+        dice?: string;
+      }> = [];
+      for (const eff of damageBonusEffects) {
+        const payload = (eff.payload ?? {}) as {
+          amount?: number;
+          dice?: string;
+          scope?: 'melee' | 'ranged' | 'any';
+        };
+        const scope = payload.scope ?? 'any';
+        const applies =
+          scope === 'any' ||
+          (scope === 'melee' && isMeleeAttack) ||
+          (scope === 'ranged' && !isMeleeAttack);
+        if (!applies) continue;
+        if (payload.dice) {
+          const r = this.diceService.rollExpression(payload.dice);
+          totalDamage += r.total;
+          extraDamageBonuses.push({
+            source: eff.sourceFeatureSlug ?? eff.sourceSpellSlug ?? eff.kind,
+            amount: r.total,
+            dice: payload.dice,
+          });
+        } else if (typeof payload.amount === 'number') {
+          totalDamage += payload.amount;
+          extraDamageBonuses.push({
+            source: eff.sourceFeatureSlug ?? eff.sourceSpellSlug ?? eff.kind,
+            amount: payload.amount,
+          });
+        }
+      }
+
       // Check monster immunities/resistances/vulnerabilities
       let resisted = false;
       let immune = false;
@@ -1660,6 +1702,7 @@ export class CombatService {
         immune,
         vulnerable,
         finalDamage,
+        extraDamageBonuses,
       };
 
       events.push({

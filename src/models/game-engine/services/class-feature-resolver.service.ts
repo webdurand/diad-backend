@@ -167,6 +167,15 @@ export class ClassFeatureResolverService {
     });
     events.push(...r3.events);
 
+    // Spec 012 — expor 'raging' como condition pro DTO de participant/UI
+    // renderizar badge visível no token. RAW 2024 não trata "raging" como
+    // condition canônica, mas é feature-flag útil pro jogador saber.
+    // Persistência e remoção ficam linkadas aos effects (quando expirarem).
+    if (!(source.conditions ?? []).includes('raging')) {
+      source.conditions = [...(source.conditions ?? []), 'raging'];
+      await this.participants.save(source);
+    }
+
     return {
       resolved: true,
       events,
