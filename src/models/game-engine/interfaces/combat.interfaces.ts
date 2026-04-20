@@ -153,6 +153,10 @@ export interface TurnActionBlock {
   /** Spec 012 Fase 0 — mastery property (Cleave/Graze/Nick/Push/Sap/Slow/Topple/Vex).
    *  Populado só quando o PC escolheu essa arma em weapon_mastery_choices. */
   masterySlug?: string;
+  /** Premissa weapons-in-hand — char é proficient com a arma/escudo. */
+  proficient?: boolean;
+  /** Premissa weapons-in-hand — slot (main | off | null). Unarmed é null (intrínseco). */
+  handSlot?: 'main' | 'off' | null;
 }
 
 export interface AoEResolveResult {

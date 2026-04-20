@@ -994,6 +994,9 @@ export class CombatService {
       // Spec 012 Fase 0 — weapon mastery surface (frontend ActionBar chip)
       weaponSlug: a.weaponSlug,
       masterySlug: a.masterySlug,
+      // Premissa weapons-in-hand — proficiency + hand slot surface
+      proficient: a.proficient,
+      handSlot: a.handSlot,
     } as TurnActionBlock;
   }
 

@@ -668,6 +668,8 @@ export class CharacterSheetService {
         weight: parseFloat(ce.equipment.weight) || 0,
         quantity: ce.quantity,
         equipped: ce.equipped,
+        mainHand: ce.mainHand,
+        offHand: ce.offHand,
         source: ce.source,
         proficient,
         damage: ce.equipment.damage ?? undefined,
