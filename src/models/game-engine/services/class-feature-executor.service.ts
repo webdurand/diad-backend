@@ -163,6 +163,8 @@ export class ClassFeatureExecutorService {
         );
       case 'action-surge':
         return this.handleActionSurge(participant, encounter);
+      case 'indomitable':
+        return this.handleIndomitable(participant, classLevel, encounter);
       case 'reckless-attack':
         return this.handleRecklessAttack(participant, encounter);
       case 'lay-on-hands':
@@ -290,6 +292,48 @@ export class ClassFeatureExecutorService {
         featureSlug: 'action-surge',
         actionReset: true,
         attacksAvailableAgain: participant.attacksMaxThisTurn,
+      },
+      [event],
+    );
+  }
+
+  /**
+   * Fighter L9 Indomitable (RAW 2024) — arma preventivamente + consome 1 use.
+   * O consumo ocorre no ato de armar (não no use real) pra simplificar UI:
+   * se o player arma e nunca falha save, o use "se perde" até short rest.
+   * Saving-throw.service intercepta failed saves e rerola com +fighter_level
+   * se `indomitable_armed=true`, depois desarma.
+   */
+  private async handleIndomitable(
+    participant: EncounterParticipantEntity,
+    fighterLevel: number,
+    encounter: EncounterEntity,
+  ): Promise<GameResult<unknown>> {
+    participant.indomitableArmed = true;
+    await this.participantRepo.save(participant);
+
+    await this.stateService.incrementFeatureUses(
+      participant.characterId!,
+      'indomitable',
+      1,
+    );
+
+    const event: GameEventData = {
+      event_type: 'class_feature_used',
+      actor_participant_id: participant.id,
+      data: {
+        featureSlug: 'indomitable',
+        armed: true,
+        fighterLevelBonus: fighterLevel,
+      },
+    };
+    await this.eventService.emit(encounter.sessionId, encounter.id, [event]);
+
+    return success(
+      {
+        featureSlug: 'indomitable',
+        armed: true,
+        fighterLevelBonus: fighterLevel,
       },
       [event],
     );

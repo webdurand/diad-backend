@@ -44,6 +44,17 @@ export interface SavingThrowResult {
   total: number;
   success: boolean;
   advantage?: AdvantageResult;
+  /**
+   * Fighter L9 Indomitable (RAW 2024) — se o participant armou Indomitable
+   * e o save inicial falhou, backend rerola automaticamente. Campos descrevem
+   * o reroll: original d20, novo d20, +fighter level bonus. `roll`/`total`/
+   * `success` acima já refletem o RESULTADO FINAL (pós-reroll).
+   */
+  indomitableReroll?: {
+    originalRoll: number;
+    newRoll: number;
+    fighterLevel: number;
+  };
 }
 
 export interface ConcentrationCheckResult {

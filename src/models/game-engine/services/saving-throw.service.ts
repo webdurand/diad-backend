@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { DiceService } from './dice.service';
 import { ConditionEffectsService } from './condition-effects.service';
@@ -40,6 +43,8 @@ export class SavingThrowService {
     private readonly conditionEffects: ConditionEffectsService,
     private readonly eventService: EventService,
     private readonly inspirationService: InspirationService,
+    @InjectRepository(EncounterParticipantEntity)
+    private readonly participantRepo: Repository<EncounterParticipantEntity>,
   ) {}
 
   async rollSavingThrow(dto: SavingThrowDto): Promise<GameResult<SavingThrowResult>> {
@@ -110,8 +115,45 @@ export class SavingThrowService {
       roll = this.diceService.roll(20);
     }
 
-    const total = roll + modifier;
-    const passed = total >= dto.dc;
+    let total = roll + modifier;
+    let passed = total >= dto.dc;
+
+    // Fighter L9 Indomitable (RAW 2024) — se save falhou e o participant armou
+    // Indomitable, rerola d20 + bonus fighter level. Novo resultado substitui.
+    let indomitableEvent: GameEventData | null = null;
+    let indomitableReroll: { originalRoll: number; newRoll: number; fighterLevel: number } | undefined;
+    if (!passed && dto.participantId) {
+      const indomitable = await this.consumeIndomitableIfArmed(
+        dto.participantId,
+        sheet,
+      );
+      if (indomitable) {
+        const newRoll = this.diceService.roll(20);
+        const newTotal = newRoll + modifier + indomitable.fighterLevel;
+        const newPassed = newTotal >= dto.dc;
+        indomitableReroll = {
+          originalRoll: roll,
+          newRoll,
+          fighterLevel: indomitable.fighterLevel,
+        };
+        roll = newRoll;
+        total = newTotal;
+        passed = newPassed;
+        indomitableEvent = {
+          event_type: 'class_feature_triggered',
+          actor_participant_id: dto.participantId,
+          data: {
+            featureSlug: 'indomitable',
+            trigger: 'saving_throw_failed',
+            originalRoll: indomitableReroll.originalRoll,
+            newRoll: indomitableReroll.newRoll,
+            fighterLevelBonus: indomitable.fighterLevel,
+            finalTotal: newTotal,
+            finalSuccess: newPassed,
+          },
+        };
+      }
+    }
 
     const result: SavingThrowResult = {
       ability: dto.ability,
@@ -121,11 +163,40 @@ export class SavingThrowService {
       total,
       success: passed,
       advantage: advantageResult,
+      indomitableReroll,
     };
 
     const events = this.buildEvents(dto, roll, modifier, total, passed);
     if (inspirationEvent) events.unshift(inspirationEvent);
+    if (indomitableEvent) events.push(indomitableEvent);
     return success(result, events);
+  }
+
+  /**
+   * Fighter L9 Indomitable — se `indomitable_armed`, consome flag + retorna
+   * fighterLevel (pra somar ao novo d20). Callers chamam DEPOIS de saber que
+   * save falhou. Use/consumo já foi feito em `handleIndomitable` (arm).
+   */
+  private async consumeIndomitableIfArmed(
+    participantId: string,
+    sheet: { classes?: Array<{ slug: string; level: number }> },
+  ): Promise<{ fighterLevel: number } | null> {
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId },
+    });
+    if (!participant || !participant.indomitableArmed) return null;
+
+    const fighterClass = (sheet.classes ?? []).find((c) => c.slug === 'fighter');
+    const fighterLevel = fighterClass?.level ?? 0;
+    if (fighterLevel < 9) {
+      // Feature requer L9+; se não tem, não-op (não reroll, mantém flag — mas
+      // na prática nunca chega aqui porque o arm exige L9).
+      return null;
+    }
+
+    participant.indomitableArmed = false;
+    await this.participantRepo.save(participant);
+    return { fighterLevel };
   }
 
   private buildEvents(

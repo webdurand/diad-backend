@@ -158,6 +158,15 @@ export class EncounterParticipantEntity {
   @Column({ name: 'free_object_interactions_used', type: 'int', default: 0 })
   freeObjectInteractionsUsed: number;
 
+  /**
+   * Fighter L9 Indomitable (RAW 2024) — quando armado, próximo save failed
+   * do PC é automaticamente rerolled com +fighter_level de bônus. Consome
+   * `feature_uses_used['indomitable']`. Resetado após consumo, desarmar
+   * manual, ou saída do encontro.
+   */
+  @Column({ name: 'indomitable_armed', type: 'boolean', default: false })
+  indomitableArmed: boolean;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;

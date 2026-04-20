@@ -82,6 +82,23 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: (lv) => (lv >= 17 ? 2 : 1),
     rechargeOn: 'short',
   },
+  {
+    /**
+     * Fighter L9 Indomitable (RAW 2024 XPHB) — resolução FULL:
+     * consome use + arma flag `indomitable_armed` no participant. Próximo
+     * save failed do PC é automaticamente rerolled com +fighter_level de
+     * bônus (saving-throw.service intercepta via IndomitableService).
+     */
+    slug: 'indomitable',
+    displayName: 'Indomável',
+    classSlug: 'fighter',
+    requiredLevel: 9,
+    actionCost: 'free',
+    targetShape: 'self',
+    resolution: 'full',
+    maxUsesByLevel: (lv) => (lv >= 17 ? 3 : lv >= 13 ? 2 : 1),
+    rechargeOn: 'short',
+  },
   // ---- Barbarian ----
   {
     slug: 'rage',

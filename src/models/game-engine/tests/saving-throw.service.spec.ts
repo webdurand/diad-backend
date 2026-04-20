@@ -35,6 +35,10 @@ describe('SavingThrowService', () => {
       new ConditionEffectsService(),
       mockEventService as any,
       { consumeIfArmed: async () => ({ consumed: false }) } as any,
+      {
+        findOne: async () => null,
+        save: async () => undefined,
+      } as any,
     );
     mockSheetService.computeSheet.mockResolvedValue({ ...mockSheet, conditions: [] });
   });
