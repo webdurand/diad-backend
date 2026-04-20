@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { ActionsService } from 'src/models/characters/services/actions.service';
+import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
+import { CharacterStateService } from 'src/models/characters/services/character-state.service';
 import { EncounterService } from './encounter.service';
 import {
   GameResult,
@@ -45,6 +47,8 @@ export class MovementService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     private readonly encounterService: EncounterService,
     private readonly actionsService: ActionsService,
+    private readonly sheetService: CharacterSheetService,
+    private readonly stateService: CharacterStateService,
   ) {}
 
   /**
@@ -388,7 +392,49 @@ export class MovementService {
     participant.cleaveUsedThisTurn = false;
     participant.nickUsedThisTurn = false;
 
+    // Champion L10 Heroic Warrior (RAW 2024) + L18 Survivor — triggers start-turn.
+    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+      await this.applyChampionStartTurnTriggers(participant, ownerUserId);
+    }
+
     await this.participantRepo.save(participant);
+  }
+
+  /**
+   * Champion (RAW 2024):
+   *  - Heroic Warrior L10: no start-turn, se não tem Heroic Inspiration, ganha 1.
+   *  - Survivor L18: no start-turn, se Bloodied (HP ≤ max/2) + HP > 0, regen 5+CON.
+   */
+  private async applyChampionStartTurnTriggers(
+    participant: EncounterParticipantEntity,
+    ownerUserId: string,
+  ): Promise<void> {
+    try {
+      const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId!);
+      const features = ((sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [])
+        .filter((f) => f.active !== false);
+      const hasHeroicWarrior = features.some((f) => f.slug.startsWith('heroic-warrior'));
+      const hasSurvivor = features.some((f) => f.slug.startsWith('survivor'));
+
+      // Heroic Warrior: se não tem inspiration, ganha.
+      if (hasHeroicWarrior) {
+        const stateResp = await this.stateService.setInspiration(participant.characterId!, true).catch(() => null);
+        if (stateResp?.inspiration === true) {
+          // inspiration armed disponível pro player
+        }
+      }
+
+      // Survivor: regen 5 + CON se Bloodied com > 0 HP.
+      if (hasSurvivor && sheet.currentHp > 0 && sheet.currentHp <= Math.floor(sheet.maxHp / 2)) {
+        const conAbility = sheet.abilityScores.find((a) => a.slug === 'con');
+        const conMod = conAbility?.modifier ?? 0;
+        const regen = 5 + conMod;
+        const hpRes = await this.stateService.updateHp(ownerUserId, participant.characterId!, { healing: regen });
+        participant.currentHp = hpRes.currentHp;
+      }
+    } catch {
+      // Silently swallow — triggers são best-effort, não podem quebrar start-turn.
+    }
   }
 
   /**

@@ -69,7 +69,10 @@ describe('SeedCharacterService', () => {
       classRepo as never,
       subclassRepo as never,
       { findOne: jest.fn().mockResolvedValue(null) } as never,
-      { save: jest.fn().mockResolvedValue({}) } as never,
+      {
+        save: jest.fn().mockResolvedValue({}),
+        find: jest.fn().mockResolvedValue([]),
+      } as never,
     );
   });
 

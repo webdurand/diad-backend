@@ -203,6 +203,20 @@ export interface CharacterSheet {
   inspiration: boolean;
   /** Fighting Style Blind Fighting (RAW 2024) — blindsight 10ft passiva. */
   hasBlindsight10ft?: boolean;
+  /**
+   * Champion L3 Remarkable Athlete (RAW 2024) — advantage em STR (Athletics).
+   * Pós-crit: move ½ speed sem OA (rider).
+   */
+  hasRemarkableAthlete?: boolean;
+  /**
+   * Champion L10 Heroic Warrior (RAW 2024) — start-turn sem inspiration ganha 1.
+   */
+  hasHeroicWarrior?: boolean;
+  /**
+   * Champion L18 Survivor (RAW 2024) — death save advantage (18-20 auto success)
+   * + regen 5+CON se Bloodied com > 0 HP no start-turn.
+   */
+  hasSurvivor?: boolean;
 
   // Equipment & Inventory
   equipment: EquipmentBlock[];
@@ -775,6 +789,15 @@ export class CharacterSheetService {
       exhaustionLevel: charState?.exhaustion_level ?? 0,
       inspiration: charState?.inspiration ?? false,
       hasBlindsight10ft: charOrigin.fighting_style_index === 'blind-fighting',
+      hasRemarkableAthlete: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('remarkable-athlete'),
+      ),
+      hasHeroicWarrior: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('heroic-warrior'),
+      ),
+      hasSurvivor: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('survivor'),
+      ),
 
       equipment,
       magicItems,
