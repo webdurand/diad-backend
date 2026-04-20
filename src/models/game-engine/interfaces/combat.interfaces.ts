@@ -343,7 +343,9 @@ export type EffectInstanceKind =
   | 'grant_disadvantage_to_attackers'   // Dodge, Sanctuary, Blur, Invisibility
   | 'self_advantage'                    // Rage STR checks, Invisibility (attack)
   | 'self_disadvantage'
-  | 'self_advantage_next_attack'        // Steady Aim (one-shot flag)
+  | 'self_advantage_next_attack'        // Steady Aim (one-shot flag); Vex (vs target)
+  | 'self_disadvantage_next_attack'     // Sap mastery (one-shot flag no target)
+  | 'speed_reduction'                   // Slow mastery: payload.amount = ft subtraidos
   | 'hp_shield'                         // False Life, Heroism absorption
   | 'statblock_swap'                    // Wild Shape
   | 'inspiration_die'                   // Bardic Inspiration (consumível)
@@ -369,6 +371,11 @@ export interface EffectInstancePayload {
   absorptionHp?: number;
   triggerEventId?: string;
   scope?: 'any' | 'melee' | 'ranged' | 'str-check' | 'str-save' | 'dex-save';
+  /** Vex mastery: attacker-side self_advantage_next_attack só aplica se alvo bater.
+   *  Se undefined → advantage em qualquer alvo (Steady Aim). */
+  requiredTargetId?: string;
+  /** Mastery source descriptor pra events/logs — ex: "weapon-mastery:vex". */
+  masterySlug?: string;
 }
 
 /**

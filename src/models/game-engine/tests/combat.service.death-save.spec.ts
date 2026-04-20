@@ -229,6 +229,7 @@ function createHarness() {
     { startNew: async () => ({ events: [], broken: false }), break: async () => ({ events: [] }), breakDueToDeath: async () => ({ events: [] }), trackAppliedEffect: async () => {}, checkBreakOnCondition: async () => ({ events: [], broken: false }), decrementDurationFor: async () => ({ events: [] }) } as any,
     { resolveInvocation: async () => ({ resolved: false, events: [] }) } as any,
     { consumeIfArmed: async () => ({ consumed: false }) } as any,
+    { resolveOnHit: async () => ({ applied: [], extraDamage: 0, events: [] }), resolveOnMiss: () => ({ events: [] }) } as any,
   );
 
   return {

@@ -51,6 +51,11 @@ export interface ActionBlock {
   featureSlug?: string;
   range?: string;
   properties?: string[];
+  /** Spec 012 — weapon slug (for weapon actions) pra lookup de mastery/Fighting Style. */
+  weaponSlug?: string;
+  /** Spec 012 — mastery slug (Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex). Only present if
+   *  (a) arma tem a propriedade E (b) dono da arma escolheu este weapon slug em weapon_mastery_choices. */
+  masterySlug?: string;
   uses?: number;
   usesMax?: number;
   usesRecharge?: string;
@@ -218,10 +223,17 @@ export class ActionsService {
 
     const speed = character.character_origin?.race?.speed ?? 30;
 
+    // Spec 012 — weapon mastery choices: armas (slugs) que o personagem "dominou".
+    // Usado em buildWeaponActions pra expor masterySlug só quando o jogador tiver
+    // escolhido essa arma (XPHB 2024: N masteries por level, subiu conforme classe).
+    const masteryChoices = new Set<string>(
+      character.character_origin?.weapon_mastery_choices ?? [],
+    );
+
     const allActions: ActionBlock[] = [];
 
     // 1. Weapon attacks
-    this.buildWeaponActions(charEquip, equipCatMap, profSlugs, mod, profBonus, totalLevel, allActions);
+    this.buildWeaponActions(charEquip, equipCatMap, profSlugs, mod, profBonus, totalLevel, masteryChoices, allActions);
 
     // 2. Unarmed Strike
     this.buildUnarmedStrike(mod, profBonus, charClasses, charFeatures, allActions);
@@ -266,6 +278,7 @@ export class ActionsService {
     mod: (s: string) => number,
     profBonus: number,
     _totalLevel: number,
+    masteryChoices: Set<string>,
     out: ActionBlock[],
   ) {
     const strMod = mod('str');
@@ -330,6 +343,13 @@ export class ActionsService {
         }
       }
 
+      // Spec 012 — masterySlug: só expõe se (a) arma tem mastery na DB E (b) o personagem
+      // escolheu essa arma em weapon_mastery_choices. Sem isso o combat.service ignora.
+      const weaponMastery = eq.mastery as { slug?: string; name?: string } | undefined;
+      const masterySlug = weaponMastery?.slug && masteryChoices.has(eq.slug)
+        ? weaponMastery.slug
+        : undefined;
+
       const action: ActionBlock = {
         id: `weapon-${ce.id}`,
         name: eq.name,
@@ -345,6 +365,8 @@ export class ActionsService {
         },
         range: rangeStr,
         properties: propNames,
+        weaponSlug: eq.slug,
+        masterySlug,
       };
 
       if (isVersatile) {

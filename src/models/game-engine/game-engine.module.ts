@@ -52,6 +52,8 @@ import { GrappleEscapeService } from './services/grapple-escape.service';
 import { StartTurnOrchestratorService } from './services/start-turn-orchestrator.service';
 import { EffectInstanceService } from './services/effect-instance.service';
 import { ClassFeatureResolverService } from './services/class-feature-resolver.service';
+// Spec 012 Fase 0 — Weapon Mastery (XPHB 2024)
+import { WeaponMasteryService } from './services/weapon-mastery.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -133,6 +135,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     StartTurnOrchestratorService,
     EffectInstanceService,
     ClassFeatureResolverService,
+    // Spec 012 Fase 0 — Weapon Mastery
+    WeaponMasteryService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -169,6 +173,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     StartTurnOrchestratorService,
     EffectInstanceService,
     ClassFeatureResolverService,
+    // Spec 012 Fase 0
+    WeaponMasteryService,
     // Spec 002
     JoinRequestService,
   ],

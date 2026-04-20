@@ -55,26 +55,29 @@ export class MovementService {
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
   ): Promise<number> {
+    let baseSpeed = 30;
     if (participant.type === 'pc' && participant.characterId && ownerUserId) {
       try {
         const actions = await this.actionsService.getActions(
           ownerUserId,
           participant.characterId,
         );
-        return actions.movement?.speed ?? 30;
+        baseSpeed = actions.movement?.speed ?? 30;
       } catch {
-        return 30;
+        baseSpeed = 30;
       }
-    }
-
-    if (
+    } else if (
       (participant.type === 'monster' || participant.type === 'npc') &&
       participant.monster
     ) {
-      return this.parseMonsterSpeed(participant.monster.speed);
+      baseSpeed = this.parseMonsterSpeed(participant.monster.speed);
     }
 
-    return 30;
+    // Spec 012 Fase 0 — subtrai speed_reduction de effect instances (Slow mastery).
+    const reductionTotal = (participant.effectInstances ?? [])
+      .filter((e) => e.kind === 'speed_reduction')
+      .reduce((sum, e) => sum + ((e.payload as { amount?: number })?.amount ?? 0), 0);
+    return Math.max(0, baseSpeed - reductionTotal);
   }
 
   /**

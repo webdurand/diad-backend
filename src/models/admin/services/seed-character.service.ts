@@ -137,6 +137,7 @@ export class SeedCharacterService {
     const character = await this.createLevel1Character({
       ownerUserId,
       name,
+      weaponMasteryChoices: dto.weaponMasteryChoices,
       classSlug: dto.classSlug,
       abilityScores,
     });
@@ -285,6 +286,7 @@ export class SeedCharacterService {
     name: string;
     classSlug: SupportedClassSlug;
     abilityScores: Record<string, number>;
+    weaponMasteryChoices?: string[];
   }): Promise<CharacterEntity> {
     // Data mínima válida pro CharactersService.create (spec 001):
     // - abilityScores obrigatório
@@ -312,6 +314,10 @@ export class SeedCharacterService {
         : {}),
       ...(spellDefaults.spellbook
         ? { classSpellbook: spellDefaults.spellbook }
+        : {}),
+      // Spec 012 Fase 0 — Weapon Mastery (opcional; só classes marciais usam).
+      ...(params.weaponMasteryChoices?.length
+        ? { weaponMasteryChoices: params.weaponMasteryChoices }
         : {}),
     };
 

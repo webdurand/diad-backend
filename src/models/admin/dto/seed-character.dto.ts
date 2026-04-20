@@ -75,4 +75,14 @@ export class SeedCharacterDto {
   @IsOptional()
   @IsUUID()
   ownerUserId?: string;
+
+  /**
+   * Spec 012 Fase 0 — armas (slugs) que o personagem domina (weapon_mastery_choices).
+   * Só tem efeito em classes com weapon_mastery_count > 0 (Barbarian, Fighter, Monk,
+   * Paladin, Ranger, Rogue). Undefined/empty → sem mastery disponível.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  weaponMasteryChoices?: string[];
 }

@@ -38,6 +38,7 @@ import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { EffectInstanceService } from './effect-instance.service';
 import { ConcentrationService } from './concentration.service';
 import { ClassFeatureResolverService } from './class-feature-resolver.service';
+import { WeaponMasteryService } from './weapon-mastery.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 import {
   parseRangeString,
@@ -136,6 +137,7 @@ export class CombatService {
     private readonly concentration: ConcentrationService,
     private readonly classFeatureResolver: ClassFeatureResolverService,
     private readonly inspirationService: InspirationService,
+    private readonly weaponMastery: WeaponMasteryService,
   ) {}
 
   /**
@@ -599,6 +601,23 @@ export class CombatService {
   }
 
   /**
+   * Spec 012 Fase 0 — prof bonus do attacker pra Topple save DC.
+   * PC: lê da sheet computada. Monster: usa `monster.proficiency_bonus`.
+   */
+  private async getAttackerProfBonus(
+    attacker: EncounterParticipantEntity,
+    requesterUserId: string,
+  ): Promise<number> {
+    if (attacker.type === 'pc' && attacker.characterId) {
+      const ownerId = await this.resolveParticipantOwner(attacker, requesterUserId);
+      const sheet = await this.sheetService.computeSheet(ownerId, attacker.characterId);
+      return sheet?.proficiencyBonus ?? 2;
+    }
+    const m = attacker.monster as { proficiency_bonus?: number } | undefined;
+    return m?.proficiency_bonus ?? 2;
+  }
+
+  /**
    * Spec 004 — heuristica para decidir se attack eh melee.
    * Default: true (maioria dos attacks). Identifica ranged por keywords
    * comuns nos nomes (Longbow, Shortbow, Crossbow, Javelin, Dart, Sling,
@@ -625,7 +644,17 @@ export class CombatService {
   ): Promise<void> {
     const isOneShot = (e: EffectInstance, side: 'attacker' | 'target'): boolean => {
       if (e.expiresAt.kind !== 'until_consumed') return false;
-      if (side === 'attacker') return e.kind === 'self_advantage_next_attack';
+      if (side === 'attacker') {
+        if (e.kind === 'self_advantage_next_attack') {
+          // Vex: só consome se target match (Steady Aim não tem constraint).
+          const requiredTargetId = (e.payload as { requiredTargetId?: string } | undefined)
+            ?.requiredTargetId;
+          return !requiredTargetId || requiredTargetId === target.id;
+        }
+        // Sap: consome em qualquer attack do participant afetado
+        if (e.kind === 'self_disadvantage_next_attack') return true;
+        return false;
+      }
       // target side: only consume advantage/disadvantage-grant kinds
       return (
         e.kind === 'grant_advantage_to_attackers' ||
@@ -675,7 +704,13 @@ export class CombatService {
         if (scope === 'any' || (scope === 'melee' && isMelee)) advantage = true;
       }
       if (e.kind === 'self_disadvantage') disadvantage = true;
-      if (e.kind === 'self_advantage_next_attack') advantage = true;
+      if (e.kind === 'self_advantage_next_attack') {
+        // Spec 012 — Vex: requiredTargetId filtra pra mesmo alvo.
+        // Sem o campo → qualquer alvo (Steady Aim default).
+        const requiredTargetId = e.payload?.requiredTargetId;
+        if (!requiredTargetId || requiredTargetId === target.id) advantage = true;
+      }
+      if (e.kind === 'self_disadvantage_next_attack') disadvantage = true;
       if (e.kind === 'attack_bonus') {
         attackBonuses.push({
           source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? 'effect',
@@ -1263,6 +1298,11 @@ export class CombatService {
     // Spec 012 #1 — range da ação, populado em cada branch (unarmed/pc/monster)
     // e consumido logo antes dos rolls.
     let actionRangeStr: string | null = null;
+    // Spec 012 Fase 0 — Weapon Mastery (só PC + weapon action). masterySlug
+    // só fica populado quando `buildWeaponActions` confirmou que (a) arma tem
+    // mastery E (b) o char escolheu essa arma em weapon_mastery_choices.
+    let masterySlug: string | undefined;
+    let masteryAbilityMod = 0; // abilityMod usado no attack; = damageBonus pra weapon
 
     // Spec 003 Fatia 4 — Unarmed Strike (XPHB 2024) com 3 modes:
     //   damage   → attack roll normal (1 + STR mod bludgeoning)
@@ -1405,6 +1445,11 @@ export class CombatService {
         damageBonus = action.damage.bonus ?? 0;
       }
       actionRangeStr = action.range ?? null;
+      // Spec 012 Fase 0 — weapon mastery (só armas PC, nunca unarmed/spell)
+      if (action.source === 'weapon' && action.masterySlug) {
+        masterySlug = action.masterySlug;
+        masteryAbilityMod = action.damage?.bonus ?? 0;
+      }
     } else if (attacker.type === 'monster' && attacker.monster) {
       const resolved = this.monsterActionResolver.resolveByName(
         attacker.monster,
@@ -1795,6 +1840,92 @@ export class CombatService {
         if (target.isConcentrating) {
           const breakRes = await this.concentration.breakDueToDeath(target);
           events.push(...breakRes.events);
+        }
+      }
+
+      // Spec 012 Fase 0 — Weapon Mastery on-hit (Sap/Slow/Topple/Vex/Push).
+      // Ignora se target já defeated (Prone/Slow em morto não faz sentido).
+      if (masterySlug && !targetDefeated) {
+        const mRes = await this.weaponMastery.resolveOnHit({
+          masterySlug,
+          attacker,
+          target,
+          abilityMod: masteryAbilityMod,
+          profBonus: await this.getAttackerProfBonus(attacker, dto.ownerUserId),
+          damageType,
+        });
+        events.push(...mRes.events);
+      }
+    } else {
+      // Spec 012 Fase 0 — Weapon Mastery on-miss (Graze). Damage = abilityMod.
+      if (masterySlug === 'graze') {
+        const profBonus = await this.getAttackerProfBonus(attacker, dto.ownerUserId);
+        const mRes = this.weaponMastery.resolveOnMiss({
+          masterySlug,
+          attacker,
+          target,
+          abilityMod: masteryAbilityMod,
+          profBonus,
+          damageType,
+        });
+        events.push(...mRes.events);
+        if (mRes.grazeDamage && mRes.grazeDamage.amount > 0) {
+          // Aplicar damage direto (sem resistências — é dano físico do mesmo tipo
+          // da arma, já coberto pela immunity logic ao reprocessar seria overkill
+          // pra miss. Fase 1 simplifica: aplica literal).
+          const dmg = mRes.grazeDamage.amount;
+          if (target.type === 'pc' && target.characterId) {
+            const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+            const hpResult = await this.stateService.updateHp(
+              targetOwnerId,
+              target.characterId,
+              { damage: dmg },
+            );
+            targetHpAfter = hpResult.currentHp;
+            targetDefeated = hpResult.isDown;
+            if (hpResult.instantDeath) {
+              target.dyingState = 'dead';
+              target.isDefeated = true;
+              await this.participantRepo.save(target);
+            } else if (targetDefeated) {
+              target.dyingState = 'dying';
+              target.isDefeated = false;
+              await this.participantRepo.save(target);
+            }
+          } else {
+            const result = this.applyDamageToMonster(target, dmg);
+            targetHpAfter = result.hpAfter;
+            targetDefeated = result.defeated;
+            await this.participantRepo.save(target);
+          }
+          events.push({
+            event_type: 'damage_applied',
+            actor_participant_id: attacker.id,
+            target_participant_id: target.id,
+            data: {
+              rolls: [],
+              bonus: 0,
+              total: dmg,
+              type: mRes.grazeDamage.damageType,
+              resisted: false,
+              immune: false,
+              vulnerable: false,
+              finalDamage: dmg,
+              source: 'weapon-mastery:graze',
+            },
+          });
+          // damageRollResult para o return payload
+          damageRollResult = {
+            rolls: [],
+            bonus: 0,
+            total: dmg,
+            type: mRes.grazeDamage.damageType,
+            resisted: false,
+            immune: false,
+            vulnerable: false,
+            finalDamage: dmg,
+            extraDamageBonuses: [],
+          } as any;
         }
       }
     }
