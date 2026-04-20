@@ -39,6 +39,7 @@ import { EffectInstanceService } from './effect-instance.service';
 import { ConcentrationService } from './concentration.service';
 import { ClassFeatureResolverService } from './class-feature-resolver.service';
 import { WeaponMasteryService } from './weapon-mastery.service';
+import { FightingStyleService } from './fighting-style.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 import {
   parseRangeString,
@@ -138,6 +139,7 @@ export class CombatService {
     private readonly classFeatureResolver: ClassFeatureResolverService,
     private readonly inspirationService: InspirationService,
     private readonly weaponMastery: WeaponMasteryService,
+    private readonly fightingStyle: FightingStyleService,
   ) {}
 
   /**
@@ -1307,6 +1309,11 @@ export class CombatService {
     let masterySlug: string | undefined;
     let masteryAbilityMod = 0; // abilityMod usado no attack; = damageBonus pra weapon
 
+    // Spec 012 Fase 0 — Fighting Style (só PC). rerollLowDamage usado pelo
+    // GWF pra rerolar 1s/2s no dano. appliedFightingStyle loggado no evento.
+    let rerollLowDamage = false;
+    let appliedFightingStyle: string | undefined;
+
     // Spec 003 Fatia 4 — Unarmed Strike (XPHB 2024) com 3 modes:
     //   damage   → attack roll normal (1 + STR mod bludgeoning)
     //   grapple  → STR save DC 8+prof+STR; falha aplica condition 'grappled' (Spec 4)
@@ -1422,6 +1429,18 @@ export class CombatService {
       damageDice = '1';
       damageType = 'bludgeoning';
       damageBonus = strMod;
+
+      // Spec 012 Fase 0 — Fighting Style: Unarmed Fighting upgrade do damage die
+      // (d6, d8 se 2 mãos livres). Sheet já foi buscada acima via sheetService.
+      const unarmedFsSlug = (sheet as unknown as { fightingStyleIndex?: string })
+        .fightingStyleIndex;
+      if (unarmedFsSlug === 'unarmed-fighting') {
+        // "2 mãos livres" = sem arma equipada. Simplificação: consulta equip equipada.
+        const hasBothHandsFree = !((sheet as unknown as { equipment?: Array<{ equipped?: boolean; damage?: unknown }> })
+          .equipment ?? []).some((e) => e.equipped && !!e.damage);
+        damageDice = hasBothHandsFree ? '1d8' : '1d6';
+        appliedFightingStyle = 'unarmed-fighting';
+      }
     } else if (attacker.type === 'pc' && attacker.characterId) {
       const actions = await this.actionsService.getActions(
         dto.ownerUserId,
@@ -1459,6 +1478,45 @@ export class CombatService {
       if (action.source === 'weapon' && action.masterySlug) {
         masterySlug = action.masterySlug;
         masteryAbilityMod = action.damage?.bonus ?? 0;
+      }
+
+      // Spec 012 Fase 0 — Fighting Style (PC weapon attacks).
+      // Busca slug do Fighting Style via sheet, aplica bonus conforme contexto.
+      if (action.source === 'weapon') {
+        const pcOwnerId = await this.resolveParticipantOwner(attacker, dto.ownerUserId);
+        const sheet = await this.sheetService.computeSheet(
+          pcOwnerId,
+          attacker.characterId,
+        );
+        const fsSlug = (sheet as unknown as { fightingStyleIndex?: string })
+          .fightingStyleIndex;
+        if (fsSlug) {
+          const props = (action.properties ?? []).map((p) => p.toLowerCase());
+          const isTwoHanded = props.includes('two-handed');
+          const isThrown = (dto.actionSlug ?? '').startsWith('weapon-thrown-')
+            || props.includes('thrown');
+          const isMeleeCtx = this.isMeleeAttack(action.name, dto.actionSlug);
+          // Offhand: simplificação — se actionSlug contém 'thrown' não é offhand;
+          // TWF real exige light + offhand equipado (futuro). Por ora Offhand=false.
+          const isOffhand = false;
+          // 1h sem offhand: não two-handed E ação é melee (escudo permitido)
+          const isOneHandNoOffhand = isMeleeCtx && !isTwoHanded;
+          const fsRes = this.fightingStyle.resolveAttackModifiers({
+            fightingStyleSlug: fsSlug,
+            isMelee: isMeleeCtx,
+            isTwoHanded,
+            isThrown,
+            isOneHandNoOffhand,
+            isOffhandAttack: isOffhand,
+            abilityMod: action.damage?.bonus ?? 0,
+            isUnarmed: false,
+            hasBothHandsFree: false,
+          });
+          attackBonus += fsRes.attackBonus;
+          damageBonus += fsRes.damageBonus;
+          if (fsRes.rerollLowDamage) rerollLowDamage = true;
+          if (fsRes.appliedStyle) appliedFightingStyle = fsRes.appliedStyle;
+        }
       }
     } else if (attacker.type === 'monster' && attacker.monster) {
       const resolved = this.monsterActionResolver.resolveByName(
@@ -1669,10 +1727,32 @@ export class CombatService {
       const dmgResult = this.diceService.rollExpression(damageDice);
       let totalDamage = dmgResult.total + damageBonus;
 
+      // Spec 012 Fase 0 — Great Weapon Fighting: rerola 1s e 2s uma vez
+      // (aceita o segundo resultado). Aplica em damageDice base E no crit extra.
+      if (rerollLowDamage) {
+        const rollsArr = (dmgResult.rolls ?? []) as number[];
+        const dieSize = parseInt(damageDice.split('d')[1] ?? '0', 10);
+        if (rollsArr.length > 0 && dieSize > 0) {
+          const rerollRes = this.fightingStyle.applyRerollLowDamage(rollsArr, dieSize);
+          if (rerollRes.rerolled) {
+            totalDamage = rerollRes.total + damageBonus;
+          }
+        }
+      }
+
       // Critical: double the dice (roll again), keep flat bonus once
       if (isCritical || defenderMods.autoCritIfMelee) {
         const critExtra = this.diceService.rollExpression(damageDice);
-        totalDamage += critExtra.total;
+        let critTotal = critExtra.total;
+        if (rerollLowDamage) {
+          const rollsArr = (critExtra.rolls ?? []) as number[];
+          const dieSize = parseInt(damageDice.split('d')[1] ?? '0', 10);
+          if (rollsArr.length > 0 && dieSize > 0) {
+            const rerollRes = this.fightingStyle.applyRerollLowDamage(rollsArr, dieSize);
+            if (rerollRes.rerolled) critTotal = rerollRes.total;
+          }
+        }
+        totalDamage += critTotal;
       }
 
       // Spec 012 — consumir damage_bonus effects do attacker (Rage +2 melee,

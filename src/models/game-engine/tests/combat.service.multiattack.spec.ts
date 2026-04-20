@@ -123,6 +123,7 @@ function createHarness() {
     { resolveInvocation: async () => ({ resolved: false, events: [] }) } as any,
     { consumeIfArmed: async () => ({ consumed: false }) } as any,
     { resolveOnHit: async () => ({ applied: [], extraDamage: 0, events: [] }), resolveOnMiss: () => ({ events: [] }) } as any,
+    { resolveAttackModifiers: () => ({ attackBonus: 0, damageBonus: 0, rerollLowDamage: false }), resolveAcBonus: () => 0, applyRerollLowDamage: (r: number[]) => ({ rolls: r, total: r.reduce((s, v) => s + v, 0), rerolled: false }) } as any,
   );
 
   return { combat, participants, encounter, hpByChar, diceService };

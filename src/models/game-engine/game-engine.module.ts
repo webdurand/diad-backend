@@ -54,6 +54,8 @@ import { EffectInstanceService } from './services/effect-instance.service';
 import { ClassFeatureResolverService } from './services/class-feature-resolver.service';
 // Spec 012 Fase 0 — Weapon Mastery (XPHB 2024)
 import { WeaponMasteryService } from './services/weapon-mastery.service';
+// Spec 012 Fase 0 — Fighting Style (XPHB 2024)
+import { FightingStyleService } from './services/fighting-style.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -137,6 +139,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     ClassFeatureResolverService,
     // Spec 012 Fase 0 — Weapon Mastery
     WeaponMasteryService,
+    // Spec 012 Fase 0 — Fighting Style
+    FightingStyleService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -175,6 +179,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     ClassFeatureResolverService,
     // Spec 012 Fase 0
     WeaponMasteryService,
+    FightingStyleService,
     // Spec 002
     JoinRequestService,
   ],

@@ -435,6 +435,12 @@ export class CharacterSheetService {
       armorClass += 2;
     }
 
+    // Spec 012 Fase 0 — Fighting Style: Defense dá +1 AC se usando armadura
+    // (qualquer armor; RAW só exige "armor", inclui light/medium/heavy).
+    if (charOrigin.fighting_style_index === 'defense' && armorAc !== null) {
+      armorClass += 1;
+    }
+
     // Initiative
     const initiative = dexMod;
 
