@@ -990,6 +990,28 @@ export class GameEngineController {
     return this.encounterService.grantInspiration(participantId, body.grant);
   }
 
+  /**
+   * Premissa weapons-in-hand — Sacar/Guardar arma em combate.
+   * Consome 1× free object interaction por turno (RAW 2024). Delega pro
+   * inventory.service pra aplicar o swap + valida limite no participant.
+   */
+  @Post('encounters/:id/participants/:participantId/swap-hand')
+  async swapHand(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { equipmentId: string; hand: 'main' | 'off' | null },
+  ) {
+    const userId = getUserId(req);
+    return this.encounterService.swapHand(
+      userId,
+      encounterId,
+      participantId,
+      body.equipmentId,
+      body.hand,
+    );
+  }
+
   // ==================== EVENTS ====================
 
   @Get('sessions/:id/events')

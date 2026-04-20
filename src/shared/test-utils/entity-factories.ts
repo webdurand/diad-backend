@@ -212,12 +212,27 @@ export function makeCharacterEquipment(
 ) {
   const equipment = makeEquipment(equipSlug, overrides.equipmentOverrides as Record<string, unknown>);
   const { equipmentOverrides: _, ...rest } = overrides;
+  // Premissa weapons-in-hand — por default testes assumem que weapons
+  // equipadas estão "em main hand" pra aparecer na ActionBar. Quando
+  // `equipped: true` é passado, populamos `mainHand: true` automaticamente
+  // (a menos que o teste sobrescreva explicitamente). Shields/armors seguem
+  // ignorando hand slots (vão pelo `equipped` tradicional).
+  const isWeapon = !!(equipment as { damage?: unknown }).damage;
+  const isShield = equipSlug.includes('shield');
+  const shouldAutoMainHand =
+    isWeapon &&
+    !isShield &&
+    (rest as { equipped?: boolean }).equipped === true &&
+    !('mainHand' in rest) &&
+    !('offHand' in rest);
   return {
     id: uid(),
     character_id: 'char-1',
     equipment_id: equipment.id,
     quantity: 1,
     equipped: false,
+    mainHand: shouldAutoMainHand,
+    offHand: false,
     source: EquipmentSourceEnum.Starting,
     equipment,
     ...rest,

@@ -381,6 +381,9 @@ export class MovementService {
     // Spec 003 B-lite — Reckless Attack (Barbarian) expira no próprio turno.
     participant.recklessAttackActive = false;
 
+    // Premissa weapons-in-hand — free object interaction recarrega no início do turno.
+    participant.freeObjectInteractionsUsed = 0;
+
     await this.participantRepo.save(participant);
   }
 

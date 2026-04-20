@@ -1318,6 +1318,58 @@ export class EncounterService {
   }
 
   /**
+   * Premissa weapons-in-hand — Sacar/Guardar arma em combate com consumo
+   * de free object interaction (RAW 2024: 1× por turno). Fora do turno do
+   * participant, rejeita (ação exigiria reaction/ready — não suportado aqui).
+   * Se free já foi usada, rejeita com código `FREE_INTERACTION_EXHAUSTED`
+   * (cliente pode oferecer consumir action em V2).
+   */
+  async swapHand(
+    userId: string,
+    encounterId: string,
+    participantId: string,
+    equipmentId: string,
+    hand: 'main' | 'off' | null,
+  ): Promise<{
+    ok: boolean;
+    freeObjectInteractionsUsed?: number;
+    error?: string;
+    code?: string;
+  }> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter) {
+      return { ok: false, error: 'Encontro nao encontrado.', code: 'ENCOUNTER_NOT_FOUND' };
+    }
+    const p = await this.getParticipant(participantId);
+    if (p.type !== 'pc' || !p.characterId) {
+      return { ok: false, error: 'Apenas PCs podem sacar/guardar.', code: 'INVALID_PARTICIPANT' };
+    }
+    const currentPid = encounter.turnOrder?.[encounter.currentTurnIndex];
+    if (currentPid !== participantId) {
+      return {
+        ok: false,
+        error: 'Você só pode sacar/guardar no seu turno.',
+        code: 'NOT_YOUR_TURN',
+      };
+    }
+    if ((p.freeObjectInteractionsUsed ?? 0) >= 1) {
+      return {
+        ok: false,
+        error: 'Free object interaction já usada neste turno.',
+        code: 'FREE_INTERACTION_EXHAUSTED',
+      };
+    }
+
+    // Delega pro inventory service (aplica validações 2H+shield, dual-wield light, etc.)
+    await this.inventoryService.setHand(userId, p.characterId, equipmentId, { hand });
+    p.freeObjectInteractionsUsed = (p.freeObjectInteractionsUsed ?? 0) + 1;
+    await this.participantRepo.save(p);
+    return { ok: true, freeObjectInteractionsUsed: p.freeObjectInteractionsUsed };
+  }
+
+  /**
    * Spec 003 T062 — DM altera `controlledBy` do participante.
    * Apenas DM da sessão tem permissão (CONTROL_CHANGE_FORBIDDEN).
    * Retorna {previousMode, newMode, effectiveFrom} para o frontend decidir

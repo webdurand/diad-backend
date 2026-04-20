@@ -56,6 +56,10 @@ export interface ActionBlock {
   /** Spec 012 — mastery slug (Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex). Only present if
    *  (a) arma tem a propriedade E (b) dono da arma escolheu este weapon slug em weapon_mastery_choices. */
   masterySlug?: string;
+  /** Premissa weapons-in-hand — true se o char é proficient com a arma/categoria. Frontend usa pra chip visual. */
+  proficient?: boolean;
+  /** Premissa weapons-in-hand — 'main' | 'off' | null (intrínseco). Unarmed é null. */
+  handSlot?: 'main' | 'off' | null;
   uses?: number;
   usesMax?: number;
   usesRecharge?: string;
@@ -235,6 +239,13 @@ export class ActionsService {
     // 1. Weapon attacks
     this.buildWeaponActions(charEquip, equipCatMap, profSlugs, mod, profBonus, totalLevel, masteryChoices, allActions);
 
+    // 1b. Draw / Stow weapon (premissa weapons-in-hand).
+    //   - "Sacar X": disponível se weapon está no inventário (handSlot null)
+    //   - "Guardar X": disponível se weapon está em main/off
+    //   RAW 2024: 1 free object interaction por turno. Backend/frontend aplicam
+    //   o limite em runtime (gasta action se já usou free).
+    this.buildDrawStowActions(charEquip, allActions);
+
     // 2. Unarmed Strike
     this.buildUnarmedStrike(mod, profBonus, charClasses, charFeatures, allActions);
 
@@ -286,11 +297,13 @@ export class ActionsService {
 
     for (const ce of charEquip) {
       const eq = ce.equipment;
-      // Spec 012: PC deve poder usar QUALQUER arma que carrega (RAW 2024:
-      // sacar arma é free object interaction por turno). Antes o filtro
-      // `!ce.equipped` escondia arco do ranger (só scimitar ficava equipped
-      // por causa de `shouldEquip` limitar 1 weapon slot). Mantemos o dano
-      // como válido, só checamos se é mesmo uma arma (tem damage).
+      // Premissa RAW 2024 — weapons-in-hand. ActionBar só expõe armas empunhadas
+      // (main_hand ou off_hand). Armas no inventário exigem "Sacar" (free object
+      // interaction) antes de atacar — gerado separadamente como generic action.
+      // Antes: mostrava TUDO com damage, traindo a ficha (Fighter carregando
+      // 8 armas aparecia com 8 ataques). Unarmed Strike segue exposto em
+      // buildUnarmedAction (intrínseco, não precisa handSlot).
+      if (!ce.mainHand && !ce.offHand) continue;
       if (!eq.damage) continue;
 
       // Spec 012 fix: equipment.damage é persistida com shape `{dice, type}`
@@ -353,6 +366,12 @@ export class ActionsService {
         ? weaponMastery.slug
         : undefined;
 
+      const handSlot: 'main' | 'off' | null = ce.mainHand
+        ? 'main'
+        : ce.offHand
+          ? 'off'
+          : null;
+
       const action: ActionBlock = {
         id: `weapon-${ce.id}`,
         name: eq.name,
@@ -370,6 +389,8 @@ export class ActionsService {
         properties: propNames,
         weaponSlug: eq.slug,
         masterySlug,
+        proficient: isProficient,
+        handSlot,
       };
 
       if (isVersatile) {
@@ -400,6 +421,42 @@ export class ActionsService {
             bonus: abilityMod,
           },
           versatileDamage: undefined,
+        });
+      }
+    }
+  }
+
+  // ---- Draw / Stow (weapons-in-hand, RAW 2024 free object interaction) ----
+
+  private buildDrawStowActions(
+    charEquip: CharacterEquipmentEntity[],
+    out: ActionBlock[],
+  ) {
+    for (const ce of charEquip) {
+      const eq = ce.equipment;
+      const isShield =
+        eq.slug?.includes('shield') || eq.name?.toLowerCase().includes('shield');
+      // Só weapons (damage) ou shields podem ser empunhados.
+      if (!eq.damage && !isShield) continue;
+
+      const label = eq.name;
+      if (ce.mainHand || ce.offHand) {
+        out.push({
+          id: `stow-${ce.id}`,
+          name: `Guardar ${label}`,
+          timing: 'free',
+          source: 'base',
+          sourceLabel: 'Interação com objeto (1×/turno)',
+          description: `Guarda ${label}. Libera a(s) mão(s) empunhando. RAW 2024: 1 free object interaction por turno.`,
+        });
+      } else {
+        out.push({
+          id: `draw-${ce.id}`,
+          name: `Sacar ${label}`,
+          timing: 'free',
+          source: 'base',
+          sourceLabel: 'Interação com objeto (1×/turno)',
+          description: `Saca ${label} do inventário. RAW 2024: 1 free object interaction por turno.`,
         });
       }
     }

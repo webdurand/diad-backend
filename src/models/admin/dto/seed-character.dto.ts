@@ -30,7 +30,7 @@ export const SUPPORTED_CLASS_SLUGS = [
 
 export type SupportedClassSlug = (typeof SUPPORTED_CLASS_SLUGS)[number];
 
-export const SUPPORTED_LEVELS = [1, 10, 20] as const;
+export const SUPPORTED_LEVELS = [1, 3, 10, 20] as const;
 export type SupportedLevel = (typeof SUPPORTED_LEVELS)[number];
 
 /**
@@ -105,4 +105,21 @@ export class SeedCharacterDto {
   @IsOptional()
   @IsString()
   fightingStyleSlug?: string;
+
+  /**
+   * Premissa weapons-in-hand — slugs de armas/escudo a empunhar via main/off hand
+   * imediatamente após seed. ActionBar filtra só items in-hand. Weapon deve
+   * existir no starter pack OU em `additionalEquipmentSlugs`.
+   *
+   *  - `mainHandSlug`: arma na mão principal
+   *  - `offHandSlug`: arma light (dual-wield) ou escudo na mão secundária
+   *  - 2H weapon em mainHandSlug ocupa ambas — offHandSlug deve ficar undefined
+   */
+  @IsOptional()
+  @IsString()
+  mainHandSlug?: string;
+
+  @IsOptional()
+  @IsString()
+  offHandSlug?: string;
 }

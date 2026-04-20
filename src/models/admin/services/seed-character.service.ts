@@ -158,6 +158,102 @@ export class SeedCharacterService {
     }
   }
 
+  /**
+   * Premissa weapons-in-hand — marca main_hand/off_hand em um CharEquipment
+   * pelo slug do equipment. Se 2H em main, ocupa ambas. Libera o slot alvo de
+   * outros items antes. Usado no seed — sem validação RAW completa (confia no
+   * caller). Pra enforcing RAW use `inventoryService.setHand`.
+   */
+  private async equipHandBySlug(
+    characterId: string,
+    equipmentSlug: string,
+    hand: 'main' | 'off',
+  ): Promise<void> {
+    const eq = await this.equipmentRepo.findOne({ where: { slug: equipmentSlug } });
+    if (!eq) {
+      this.logger.warn(
+        `equipHandBySlug: slug "${equipmentSlug}" não existe em equipments. Pulando.`,
+      );
+      return;
+    }
+    const ce = await this.characterEquipRepo.findOne({
+      where: { character_id: characterId, equipment_id: eq.id },
+    });
+    if (!ce) {
+      this.logger.warn(
+        `equipHandBySlug: char ${characterId} não tem equipment ${equipmentSlug} no inventário (adicionar via starter pack ou additionalEquipmentSlugs primeiro).`,
+      );
+      return;
+    }
+
+    // Libera o slot alvo de QUALQUER outro item (exclusivo por mão).
+    const targetCol = hand === 'main' ? 'mainHand' : 'offHand';
+    const others = await this.characterEquipRepo.find({ where: { character_id: characterId } });
+    for (const other of others) {
+      if (other.id === ce.id) continue;
+      if (other[targetCol]) {
+        other[targetCol] = false;
+        await this.characterEquipRepo.save(other);
+      }
+    }
+
+    // 2H weapon em main ocupa ambas as mãos.
+    const props = (eq.properties ?? []) as Array<{ slug?: string; index?: string; name?: string }>;
+    const isTwoHanded = Array.isArray(props) && props.some(
+      (p) => (p.slug ?? p.index ?? '').toLowerCase() === 'two-handed',
+    );
+
+    ce.mainHand = hand === 'main';
+    ce.offHand = hand === 'off' || (hand === 'main' && isTwoHanded);
+    await this.characterEquipRepo.save(ce);
+  }
+
+  /**
+   * Premissa weapons-in-hand — default: empunha a primeira weapon do inventário
+   * na main hand. Se weapon é 2H, ocupa ambas. Fallback quando fixture não
+   * especifica `mainHandSlug`. Evita ActionBar vazio (sem ataques disponíveis).
+   *
+   * Heurística de prioridade:
+   *  1. Simple melee (longsword > shortsword > mace > club)
+   *  2. Primeira weapon com damage no inventário
+   *  3. Nada (Unarmed Strike intrínseco já resolve)
+   */
+  private async defaultEquipFirstWeapon(
+    characterId: string,
+    weaponMasteryChoices?: string[],
+  ): Promise<void> {
+    const items = await this.characterEquipRepo.find({
+      where: { character_id: characterId },
+    });
+    const weapons = items.filter((i) => !!i.equipment.damage);
+    if (weapons.length === 0) return;
+
+    // Prioridade 1: weapon que o char escolheu pra mastery (reflete intenção
+    // do player — "eu quero esse domínio, então empunho essa arma").
+    // Prioridade 2: simple common weapons.
+    // Prioridade 3: primeira weapon do inventário.
+    const masterySet = new Set(weaponMasteryChoices ?? []);
+    let pick = weapons.find((w) => masterySet.has(w.equipment.slug));
+    if (!pick) {
+      const priority = ['longsword', 'shortsword', 'mace', 'club', 'dagger'];
+      pick = weapons.find((w) => priority.includes(w.equipment.slug));
+    }
+    if (!pick) pick = weapons[0];
+
+    const props = (pick.equipment.properties ?? []) as Array<{
+      slug?: string;
+      index?: string;
+      name?: string;
+    }>;
+    const isTwoHanded = Array.isArray(props) && props.some(
+      (p) => (p.slug ?? p.index ?? '').toLowerCase() === 'two-handed',
+    );
+
+    pick.mainHand = true;
+    pick.offHand = isTwoHanded;
+    await this.characterEquipRepo.save(pick);
+  }
+
   async seed(dto: SeedCharacterDto): Promise<SeedCharacterResult> {
     const classEntity = await this.resolveClass(dto.classSlug);
     await this.resolveSubclass(dto.subclassSlug, classEntity.id);
@@ -179,6 +275,25 @@ export class SeedCharacterService {
     // Spec 012 Fase 0 — adiciona equipments extras (opcional) após starter pack.
     if (dto.additionalEquipmentSlugs?.length) {
       await this.addExtraEquipment(character.id, dto.additionalEquipmentSlugs);
+    }
+
+    // Premissa weapons-in-hand — default: prioriza uma weapon que o char escolheu
+    // no weapon_mastery_choices (se houver); senão, primeira weapon simples do
+    // starter pack. Garante que todo char tem pelo menos uma arma empunhada
+    // (ActionBar não fica vazio). Se fixture passa mainHandSlug explícito,
+    // sobrescreve abaixo.
+    if (!dto.mainHandSlug) {
+      await this.defaultEquipFirstWeapon(character.id, dto.weaponMasteryChoices);
+    }
+
+    // Premissa weapons-in-hand — empunha arma(s)/escudo nos slots indicados.
+    // Deve rodar APÓS o starter pack + additionalEquipmentSlugs (slugs precisam
+    // estar no inventário). 2H weapon em main ocupa ambas automaticamente.
+    if (dto.mainHandSlug) {
+      await this.equipHandBySlug(character.id, dto.mainHandSlug, 'main');
+    }
+    if (dto.offHandSlug) {
+      await this.equipHandBySlug(character.id, dto.offHandSlug, 'off');
     }
 
     if (dto.level > 1) {

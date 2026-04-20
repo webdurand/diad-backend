@@ -38,6 +38,7 @@ import {
   type EquipToggleDto,
   type AttuneToggleDto,
   type AddMagicItemDto,
+  type SetHandDto,
 } from './services/inventory.service';
 import { ActionsService } from './services/actions.service';
 import { CombatActionRegistry } from '../game-engine/services/combat-action-registry.service';
@@ -406,6 +407,26 @@ export class CharactersController {
   ) {
     const userId = getUserId(req);
     return this.inventoryService.toggleEquip(userId, id, itemId, body);
+  }
+
+  /**
+   * RAW 2024 — empunhar/guardar arma ou escudo. `body.hand`:
+   *  - 'main': mão principal
+   *  - 'off': mão secundária (light OU shield)
+   *  - null: guarda (stow)
+   * Sheet-level (fora de combate é livre). Dentro do encontro a UI deve
+   * disparar esta rota + a `draw-weapon`/`stow-weapon` do encounter pra
+   * consumir free object interaction.
+   */
+  @Patch(':id/equipment/:itemId/hand')
+  async setHand(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: SetHandDto,
+  ) {
+    const userId = getUserId(req);
+    return this.inventoryService.setHand(userId, id, itemId, body);
   }
 
   // ---- Magic Items ----

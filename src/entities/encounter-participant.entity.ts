@@ -150,6 +150,14 @@ export class EncounterParticipantEntity {
   @Column({ name: 'reckless_attack_active', type: 'boolean', default: false })
   recklessAttackActive: boolean;
 
+  /**
+   * RAW 2024 — free object interactions gastas no turno atual. Limite = 1
+   * (draw OR stow weapon). Reset em start-turn. Se > 0, tentativas subsequentes
+   * de draw/stow exigem uma action genuína (ou são rejeitadas até próximo turno).
+   */
+  @Column({ name: 'free_object_interactions_used', type: 'int', default: 0 })
+  freeObjectInteractionsUsed: number;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;

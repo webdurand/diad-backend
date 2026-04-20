@@ -41,6 +41,13 @@ export interface EquipToggleDto {
   equipped: boolean;
 }
 
+export type HandSlot = 'main' | 'off' | null;
+
+export interface SetHandDto {
+  /** 'main' = empunha em main hand; 'off' = em off-hand; null = guarda (stow) */
+  hand: HandSlot;
+}
+
 export interface AttuneToggleDto {
   attuned: boolean;
 }
@@ -79,6 +86,8 @@ export interface InventoryItemResponse {
   };
   quantity: number;
   equipped: boolean;
+  mainHand: boolean;
+  offHand: boolean;
   source: string;
 }
 
@@ -112,6 +121,26 @@ export interface GoldResponse {
 }
 
 const MAX_ATTUNEMENTS = 3;
+
+/**
+ * RAW 2024 — weapon tem property `two-handed` (ocupa ambas mãos) ou
+ * `versatile` (pode usar 1 ou 2 mãos — ao empunhar em 'main' é tratado como 1H).
+ * Admin seeder grava properties como `{ name, slug }` ou `{ index }` — aceitar ambos.
+ */
+function isTwoHanded(equipment: EquipmentEntity | undefined | null): boolean {
+  if (!equipment) return false;
+  const props = (equipment.properties ?? []) as Array<{
+    slug?: string;
+    index?: string;
+    name?: string;
+  }>;
+  if (!Array.isArray(props)) return false;
+  return props.some(
+    (p) =>
+      (p.slug ?? p.index ?? '').toLowerCase() === 'two-handed' ||
+      (p.name ?? '').toLowerCase() === 'two-handed',
+  );
+}
 
 @Injectable()
 export class InventoryService {
@@ -168,6 +197,8 @@ export class InventoryService {
       },
       quantity: ce.quantity,
       equipped: ce.equipped,
+      mainHand: ce.mainHand,
+      offHand: ce.offHand,
       source: ce.source,
     };
   }
@@ -433,6 +464,133 @@ export class InventoryService {
           );
         }
       }
+    }
+  }
+
+  // ---- Weapons in hand (RAW 2024) ----
+
+  /**
+   * Empunha ou guarda um item. Regras RAW 2024:
+   * - `hand='main'`: ocupa main. Se item tem property `two-handed`, também
+   *   limpa off_hand (2H weapon ocupa ambas — escudo em off deve ser guardado antes).
+   * - `hand='off'`: ocupa off. Exige property `light` (dual-wielding) OU
+   *   shield. Proibido se main atual é 2H.
+   * - `hand=null`: guarda (stow). Limpa ambos main_hand e off_hand.
+   *
+   * Não altera `equipped` (pra armadura/shield AC isso é separado).
+   */
+  async setHand(
+    userId: string,
+    characterId: string,
+    itemId: string,
+    dto: SetHandDto,
+  ): Promise<InventoryItemResponse> {
+    await this.ensureOwnership(userId, characterId);
+
+    const item = await this.charEquipRepo.findOne({
+      where: { id: itemId, character_id: characterId },
+    });
+    if (!item) {
+      throw new NotFoundException('Item nao encontrado no inventario.');
+    }
+
+    if (dto.hand === null) {
+      item.mainHand = false;
+      item.offHand = false;
+      const saved = await this.charEquipRepo.save(item);
+      return this.mapEquipItem(saved);
+    }
+
+    await this.validateSetHand(characterId, item, dto.hand);
+
+    // Libera a mão alvo em QUALQUER outro item (a mão é exclusiva).
+    // Também libera 2H conflicts: ao equipar em 'main' um 1H, se havia 2H
+    // antes, ela sai de off automaticamente (porque era o mesmo item, main+off).
+    const allInHand = await this.charEquipRepo.find({
+      where: { character_id: characterId },
+    });
+    const targetCol = dto.hand === 'main' ? 'mainHand' : 'offHand';
+    for (const other of allInHand) {
+      if (other.id === item.id) continue;
+      if (other[targetCol]) {
+        other[targetCol] = false;
+        await this.charEquipRepo.save(other);
+      }
+      // Se o NOVO item é 2H e vai em main, também zera o off_hand dos outros
+      if (dto.hand === 'main' && isTwoHanded(item.equipment) && other.offHand) {
+        other.offHand = false;
+        await this.charEquipRepo.save(other);
+      }
+    }
+
+    item.mainHand = dto.hand === 'main';
+    item.offHand = dto.hand === 'off';
+    // Se é 2H em main, também marca off (ocupa ambas)
+    if (dto.hand === 'main' && isTwoHanded(item.equipment)) {
+      item.offHand = true;
+    }
+    const saved = await this.charEquipRepo.save(item);
+    return this.mapEquipItem(saved);
+  }
+
+  private async validateSetHand(
+    characterId: string,
+    item: CharacterEquipmentEntity,
+    hand: 'main' | 'off',
+  ): Promise<void> {
+    const eq = item.equipment;
+    const props = (eq.properties ?? []) as Array<{ slug?: string; index?: string; name?: string }>;
+    const propSlugs = new Set(
+      (Array.isArray(props) ? props : [])
+        .map((p) => (p.slug ?? p.index ?? '').toLowerCase())
+        .filter(Boolean),
+    );
+    const isWeapon = !!eq.damage;
+    const isShield =
+      eq.slug?.includes('shield') || eq.name?.toLowerCase().includes('shield');
+    const isArmor = (() => {
+      const ac = eq.armor_class as Record<string, unknown> | null;
+      return ac && typeof ac.base === 'number' && (ac.base as number) > 0;
+    })();
+
+    if (!isWeapon && !isShield) {
+      throw new BadRequestException(
+        'Apenas armas e escudos podem ser empunhados.',
+      );
+    }
+
+    if (isArmor && !isShield) {
+      throw new BadRequestException(
+        'Armaduras nao sao empunhadas (use o toggle de equipar).',
+      );
+    }
+
+    if (hand === 'off') {
+      // Off hand: light weapon (dual-wielding) OU shield
+      const isLight = propSlugs.has('light');
+      if (!isShield && !isLight) {
+        throw new BadRequestException(
+          'Mao secundaria exige arma com propriedade "Light" ou escudo.',
+        );
+      }
+
+      // Main hand atual não pode ser 2H (pois 2H ocupa ambas)
+      const mainHandItem = await this.charEquipRepo.findOne({
+        where: { character_id: characterId, mainHand: true },
+      });
+      if (mainHandItem && mainHandItem.id !== item.id) {
+        if (isTwoHanded(mainHandItem.equipment)) {
+          throw new BadRequestException(
+            'Mao principal empunha arma de duas maos. Guarde-a antes de usar a secundaria.',
+          );
+        }
+      }
+    }
+
+    if (hand === 'main' && isShield) {
+      throw new BadRequestException(
+        'Escudo nao pode ser empunhado na mao principal. Use a secundaria.',
+      );
     }
   }
 
