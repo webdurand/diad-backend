@@ -47,6 +47,7 @@ import { GenericActionsService } from './services/generic-actions.service';
 import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
 import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
 import { TacticalFeaturesService } from './services/tactical-features.service';
+import { BattleMasterService } from './services/battle-master.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -103,6 +104,7 @@ export class GameEngineController {
     private readonly classFeatureExecutor: ClassFeatureExecutorService,
     private readonly fsReactions: FightingStyleReactionsService,
     private readonly tacticalFeatures: TacticalFeaturesService,
+    private readonly battleMaster: BattleMasterService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -1058,6 +1060,50 @@ export class GameEngineController {
       participantId,
       body.originalCheckTotal,
       body.dc,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Battle Master Trip Attack (RAW 2024) — hit → spend superiority die,
+   * target STR save, falha = Prone.
+   */
+  @Post('encounters/:id/participants/:participantId/maneuver/trip-attack')
+  async maneuverTripAttack(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantId: string },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.battleMaster.tripAttack(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Battle Master Precision Attack (RAW 2024) — adiciona superiority die ao
+   * attack roll total. Chamado após attack falhar; backend retorna newTotal.
+   */
+  @Post('encounters/:id/participants/:participantId/maneuver/precision-attack')
+  async maneuverPrecisionAttack(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { originalAttackTotal: number },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.battleMaster.precisionAttack(
+      userId,
+      encounterId,
+      participantId,
+      body.originalAttackTotal,
     );
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };

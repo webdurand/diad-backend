@@ -189,6 +189,14 @@ export class EncounterParticipantEntity {
   @Column({ name: 'tactical_master_override', type: 'varchar', length: 16, nullable: true })
   tacticalMasterOverride: string | null;
 
+  /**
+   * Battle Master (Fighter L3+ RAW 2024) — pool de Superiority Dice gastos.
+   * Max: 4 (L3), 5 (L7), 6 (L15). Die: d8/d10/d12 (L3/10/18). Reset: 1 em
+   * short rest, todos em long rest. BattleMasterService lê/escreve.
+   */
+  @Column({ name: 'superiority_dice_used', type: 'int', default: 0 })
+  superiorityDiceUsed: number;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;

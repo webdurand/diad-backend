@@ -60,6 +60,8 @@ import { FightingStyleService } from './services/fighting-style.service';
 import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
 // Spec 012 Fighter 100% — Tactical trio (Mind L2, Master L9; Shift L5 em handleSecondWind)
 import { TacticalFeaturesService } from './services/tactical-features.service';
+// Spec 012 Fighter 100% — Battle Master (Combat Superiority + maneuvers)
+import { BattleMasterService } from './services/battle-master.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -149,6 +151,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     FightingStyleReactionsService,
     // Spec 012 Fighter 100% — Tactical trio
     TacticalFeaturesService,
+    // Spec 012 Fighter 100% — Battle Master
+    BattleMasterService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -192,6 +196,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     FightingStyleReactionsService,
     // Spec 012 Fighter 100% — Tactical trio
     TacticalFeaturesService,
+    // Spec 012 Fighter 100% — Battle Master
+    BattleMasterService,
     // Spec 002
     JoinRequestService,
   ],
