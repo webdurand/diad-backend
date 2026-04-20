@@ -56,6 +56,8 @@ import { ClassFeatureResolverService } from './services/class-feature-resolver.s
 import { WeaponMasteryService } from './services/weapon-mastery.service';
 // Spec 012 Fase 0 — Fighting Style (XPHB 2024)
 import { FightingStyleService } from './services/fighting-style.service';
+// Spec 012 Fighter 100% — Fighting Style Tier B reactions (Interception/Protection)
+import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -141,6 +143,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     WeaponMasteryService,
     // Spec 012 Fase 0 — Fighting Style
     FightingStyleService,
+    // Spec 012 Fighter 100% — FS Tier B reactions (Interception, Protection)
+    FightingStyleReactionsService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -180,6 +184,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     // Spec 012 Fase 0
     WeaponMasteryService,
     FightingStyleService,
+    // Spec 012 Fighter 100% — FS Tier B reactions
+    FightingStyleReactionsService,
     // Spec 002
     JoinRequestService,
   ],

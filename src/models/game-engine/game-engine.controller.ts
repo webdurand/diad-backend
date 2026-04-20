@@ -45,6 +45,7 @@ import { DeathSaveDto } from './dto/death-save.dto';
 import { GenericActionDto } from './dto/generic-action.dto';
 import { GenericActionsService } from './services/generic-actions.service';
 import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
+import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -99,6 +100,7 @@ export class GameEngineController {
     private readonly permissionResolver: PermissionResolver,
     private readonly genericActionsService: GenericActionsService,
     private readonly classFeatureExecutor: ClassFeatureExecutorService,
+    private readonly fsReactions: FightingStyleReactionsService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -988,6 +990,51 @@ export class GameEngineController {
     @Body() body: { grant: boolean },
   ) {
     return this.encounterService.grantInspiration(participantId, body.grant);
+  }
+
+  /**
+   * Fighting Style Interception (RAW 2024) — reação reduz dano de aliado
+   * adjacente em 1d10+PB. Consome reaction.
+   */
+  @Post('encounters/:id/participants/:participantId/fighting-style/interception')
+  async fsInterception(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') fighterParticipantId: string,
+    @Body() body: { allyParticipantId: string; damageAmount: number },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.fsReactions.interception(
+      userId,
+      encounterId,
+      fighterParticipantId,
+      body.allyParticipantId,
+      body.damageAmount,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Fighting Style Protection (RAW 2024) — reação impõe disadvantage no
+   * próximo attack contra aliado adjacente. Requer shield. Consome reaction.
+   */
+  @Post('encounters/:id/participants/:participantId/fighting-style/protection')
+  async fsProtection(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') fighterParticipantId: string,
+    @Body() body: { allyParticipantId: string },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.fsReactions.protection(
+      userId,
+      encounterId,
+      fighterParticipantId,
+      body.allyParticipantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
   }
 
   /**

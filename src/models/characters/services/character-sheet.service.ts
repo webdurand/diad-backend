@@ -201,6 +201,8 @@ export interface CharacterSheet {
   conditions: string[];
   exhaustionLevel: number;
   inspiration: boolean;
+  /** Fighting Style Blind Fighting (RAW 2024) — blindsight 10ft passiva. */
+  hasBlindsight10ft?: boolean;
 
   // Equipment & Inventory
   equipment: EquipmentBlock[];
@@ -772,6 +774,7 @@ export class CharacterSheetService {
       conditions: charState?.conditions ?? [],
       exhaustionLevel: charState?.exhaustion_level ?? 0,
       inspiration: charState?.inspiration ?? false,
+      hasBlindsight10ft: charOrigin.fighting_style_index === 'blind-fighting',
 
       equipment,
       magicItems,
