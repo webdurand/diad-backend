@@ -171,6 +171,7 @@ export class SeedCharacterService {
       ownerUserId,
       name,
       weaponMasteryChoices: dto.weaponMasteryChoices,
+      fightingStyleSlug: dto.fightingStyleSlug,
       classSlug: dto.classSlug,
       abilityScores,
     });
@@ -325,6 +326,7 @@ export class SeedCharacterService {
     classSlug: SupportedClassSlug;
     abilityScores: Record<string, number>;
     weaponMasteryChoices?: string[];
+    fightingStyleSlug?: string;
   }): Promise<CharacterEntity> {
     // Data mínima válida pro CharactersService.create (spec 001):
     // - abilityScores obrigatório
@@ -356,6 +358,10 @@ export class SeedCharacterService {
       // Spec 012 Fase 0 — Weapon Mastery (opcional; só classes marciais usam).
       ...(params.weaponMasteryChoices?.length
         ? { weaponMasteryChoices: params.weaponMasteryChoices }
+        : {}),
+      // Spec 012 Fase 0 — Fighting Style (opcional; Fighter L1 / Paladin L2 / Ranger L2).
+      ...(params.fightingStyleSlug
+        ? { fightingStyleSlug: params.fightingStyleSlug }
         : {}),
     };
 

@@ -96,4 +96,13 @@ export class SeedCharacterDto {
   @IsArray()
   @IsString({ each: true })
   additionalEquipmentSlugs?: string[];
+
+  /**
+   * Spec 012 Fase 0 — Fighting Style slug (archery, defense, dueling, etc.).
+   * Salvo em character_origin.fighting_style_index. Afeta classes com feat
+   * de Fighting Style (Fighter L1, Paladin L2, Ranger L2).
+   */
+  @IsOptional()
+  @IsString()
+  fightingStyleSlug?: string;
 }

@@ -306,8 +306,11 @@ export class ActionsService {
       const damageDice = dmg.damage_dice ?? dmg.dice;
       if (!damageDice) continue;
 
-      const props = (eq.properties ?? []) as Array<{ name?: string; index?: string }>;
-      const propSlugs = props.map((p) => p.index ?? '');
+      const props = (eq.properties ?? []) as Array<{ name?: string; index?: string; slug?: string }>;
+      // Spec 012 Fase 0 fix: admin seeder popula `{name, slug}` (não `{index}`),
+      // então propSlugs ficava vazio e thrown/finesse/heavy nunca disparavam.
+      // Aceita ambos shapes pra compat.
+      const propSlugs = props.map((p) => p.index ?? p.slug ?? '');
       const isFinesse = propSlugs.includes('finesse');
       const isRanged = propSlugs.includes('ammunition') || propSlugs.includes('thrown');
       const isTwoHanded = propSlugs.includes('two-handed');

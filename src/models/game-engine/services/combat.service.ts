@@ -1432,8 +1432,9 @@ export class CombatService {
 
       // Spec 012 Fase 0 — Fighting Style: Unarmed Fighting upgrade do damage die
       // (d6, d8 se 2 mãos livres). Sheet já foi buscada acima via sheetService.
-      const unarmedFsSlug = (sheet as unknown as { fightingStyleIndex?: string })
-        .fightingStyleIndex;
+      const unarmedOrigin = (sheet as unknown as { originDetails?: { fightingStyleIndex?: string } })
+        .originDetails;
+      const unarmedFsSlug = unarmedOrigin?.fightingStyleIndex;
       if (unarmedFsSlug === 'unarmed-fighting') {
         // "2 mãos livres" = sem arma equipada. Simplificação: consulta equip equipada.
         const hasBothHandsFree = !((sheet as unknown as { equipment?: Array<{ equipped?: boolean; damage?: unknown }> })
@@ -1481,15 +1482,16 @@ export class CombatService {
       }
 
       // Spec 012 Fase 0 — Fighting Style (PC weapon attacks).
-      // Busca slug do Fighting Style via sheet, aplica bonus conforme contexto.
+      // Busca slug do Fighting Style via sheet.originDetails, aplica bonus conforme contexto.
       if (action.source === 'weapon') {
         const pcOwnerId = await this.resolveParticipantOwner(attacker, dto.ownerUserId);
         const sheet = await this.sheetService.computeSheet(
           pcOwnerId,
           attacker.characterId,
         );
-        const fsSlug = (sheet as unknown as { fightingStyleIndex?: string })
-          .fightingStyleIndex;
+        const originDetails = (sheet as unknown as { originDetails?: { fightingStyleIndex?: string } })
+          .originDetails;
+        const fsSlug = originDetails?.fightingStyleIndex;
         if (fsSlug) {
           const props = (action.properties ?? []).map((p) => p.toLowerCase());
           const isTwoHanded = props.includes('two-handed');
