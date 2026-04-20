@@ -630,6 +630,28 @@ export class CombatService {
   }
 
   /**
+   * Fighter L13 Studied Attacks (RAW 2024) — attacker tem a feature ativa?
+   * Match por prefixo (DB tem `studied-attacks-fighter-13`; variantes futuras
+   * aceitam o mesmo prefixo).
+   */
+  private async hasStudiedAttacks(
+    attacker: EncounterParticipantEntity,
+    requesterUserId: string,
+  ): Promise<boolean> {
+    if (attacker.type !== 'pc' || !attacker.characterId) return false;
+    try {
+      const ownerId = await this.resolveParticipantOwner(attacker, requesterUserId);
+      const sheet = await this.sheetService.computeSheet(ownerId, attacker.characterId);
+      const features = (sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [];
+      return features
+        .filter((f) => f.active !== false)
+        .some((f) => f.slug.startsWith('studied-attacks'));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Spec 012 Fase 0 — prof bonus do attacker pra Topple save DC.
    * PC: lê da sheet computada. Monster: usa `monster.proficiency_bonus`.
    */
@@ -1344,6 +1366,11 @@ export class CombatService {
     let rerollLowDamage = false;
     let appliedFightingStyle: string | undefined;
 
+    // Fighter L13 Studied Attacks (RAW 2024) — flag "attack atual é weapon ou
+    // unarmed" (feature só triggera nesses tipos; spell attacks / cast não contam).
+    // Setada true nas branches unarmed e PC weapon; lida no branch miss.
+    let isWeaponOrUnarmedAttack = false;
+
     // Spec 003 Fatia 4 — Unarmed Strike (XPHB 2024) com 3 modes:
     //   damage   → attack roll normal (1 + STR mod bludgeoning)
     //   grapple  → STR save DC 8+prof+STR; falha aplica condition 'grappled' (Spec 4)
@@ -1353,6 +1380,7 @@ export class CombatService {
       attacker.type === 'pc' &&
       attacker.characterId
     ) {
+      isWeaponOrUnarmedAttack = true;
       const pcOwnerId = await this.resolveParticipantOwner(
         attacker,
         dto.ownerUserId,
@@ -1498,6 +1526,7 @@ export class CombatService {
           `Acao "${dto.actionName}" nao encontrada.`,
           'INVALID_ACTION',
         );
+      if (action.source === 'weapon') isWeaponOrUnarmedAttack = true;
       attackBonus = action.attackBonus ?? 0;
       if (action.damage) {
         damageDice = action.damage.dice;
@@ -2054,6 +2083,40 @@ export class CombatService {
             extraDamageBonuses: [],
           } as any;
         }
+      }
+
+      // Fighter L13 Studied Attacks (RAW 2024) — quando miss com weapon/unarmed,
+      // attacker ganha advantage no próximo attack contra mesmo alvo (until end
+      // of next turn). Aplica `self_advantage_next_attack` com `requiredTargetId`
+      // (mesmo effect kind do Vex mastery — trigger oposto). Só PC weapon/unarmed.
+      if (
+        isWeaponOrUnarmedAttack &&
+        attacker.type === 'pc' &&
+        (await this.hasStudiedAttacks(attacker, dto.ownerUserId))
+      ) {
+        const { effect, events: effEvents } = await this.effectInstances.addEffect(
+          attacker,
+          {
+            kind: 'self_advantage_next_attack',
+            sourceFeatureSlug: 'fighter:studied-attacks',
+            sourceCasterParticipantId: attacker.id,
+            payload: { requiredTargetId: target.id },
+            expiresAt: { kind: 'until_consumed' },
+            requiresConcentration: false,
+          },
+        );
+        events.push(...effEvents);
+        events.push({
+          event_type: 'class_feature_triggered',
+          actor_participant_id: attacker.id,
+          target_participant_id: target.id,
+          data: {
+            featureSlug: 'studied-attacks',
+            trigger: 'miss',
+            effectId: effect.id,
+            requiredTargetId: target.id,
+          },
+        });
       }
     }
 
