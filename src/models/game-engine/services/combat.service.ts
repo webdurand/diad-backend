@@ -603,6 +603,33 @@ export class CombatService {
   }
 
   /**
+   * Spec 012 Fase 0 — Improved Critical (Champion L3+) / Superior Critical (L15+).
+   * Retorna o natural mínimo pra virar crit (20 default, 19 com IC, 18 com SC).
+   * Só PC Champion Fighter; monsters ficam com 20.
+   */
+  private async computeCritThreshold(
+    attacker: EncounterParticipantEntity,
+    requesterUserId: string,
+  ): Promise<number> {
+    if (attacker.type !== 'pc' || !attacker.characterId) return 20;
+    try {
+      const ownerId = await this.resolveParticipantOwner(attacker, requesterUserId);
+      const sheet = await this.sheetService.computeSheet(ownerId, attacker.characterId);
+      const features = (sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [];
+      const activeSlugs = features.filter((f) => f.active !== false).map((f) => f.slug);
+      // DB tem variantes (improved-critical, improved-critical-fighter-champion-3,
+      // improved-critical-fighter-champion-3-phb). Match por prefixo pra aceitar todas.
+      const hasSuperior = activeSlugs.some((s) => s.startsWith('superior-critical'));
+      const hasImproved = activeSlugs.some((s) => s.startsWith('improved-critical'));
+      if (hasSuperior) return 18;
+      if (hasImproved) return 19;
+      return 20;
+    } catch {
+      return 20;
+    }
+  }
+
+  /**
    * Spec 012 Fase 0 — prof bonus do attacker pra Topple save DC.
    * PC: lê da sheet computada. Monster: usa `monster.proficiency_bonus`.
    */
@@ -1648,7 +1675,10 @@ export class CombatService {
       attackRoll = this.diceService.roll(20);
     }
 
-    const isCritical = attackRoll === 20;
+    // Spec 012 Fase 0 — Improved/Superior Critical (Champion Fighter):
+    // L3+ crit em 19-20, L15+ crit em 18-20. Default 20.
+    const critThreshold = await this.computeCritThreshold(attacker, dto.ownerUserId);
+    const isCritical = attackRoll >= critThreshold;
     const isCriticalMiss = attackRoll === 1;
 
     // Get target AC

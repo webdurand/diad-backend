@@ -537,6 +537,10 @@ export class LevelUpService {
           });
           if (subclass) {
             existingCharClass!.subclass_id = subclass.id;
+            // TypeORM save() usa relation eager como source of truth — se só
+            // setamos subclass_id e a relation `subclass` fica undefined, o
+            // save zera o FK. Setar ambos mantém consistência.
+            existingCharClass!.subclass = subclass;
           }
         }
         await manager.save(CharacterClassEntity, existingCharClass!);
