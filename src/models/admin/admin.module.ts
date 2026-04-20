@@ -5,6 +5,8 @@ import {
   CharacterEntity,
   ClassEntity,
   SubclassEntity,
+  EquipmentEntity,
+  CharacterEquipmentEntity,
 } from 'src/entities';
 import { ENTITIES } from '../../entities';
 import { AdminController } from './admin.controller';
@@ -21,6 +23,8 @@ import { CharactersModule } from '../characters/characters.module';
       CharacterEntity,
       ClassEntity,
       SubclassEntity,
+      EquipmentEntity,
+      CharacterEquipmentEntity,
     ]),
     AuthModule,
     CharactersModule,

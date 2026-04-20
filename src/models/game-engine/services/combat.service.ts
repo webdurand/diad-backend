@@ -1431,11 +1431,18 @@ export class CombatService {
         ...actions.actions,
         ...actions.bonusActions,
       ];
-      const action = allActions.find(
-        (a) =>
-          a.name.toLowerCase() === dto.actionName.toLowerCase() ||
-          a.id === dto.actionName,
-      );
+      // Spec 012 Fase 0 — prioriza match por actionSlug (id) quando presente,
+      // antes de cair pro match por nome. Sem isso, quando há 2 armas com mesmo
+      // nome (ex: Greatsword PHB + XPHB no inventário), o find pegava a primeira
+      // pelo nome (PHB sem mastery), perdendo a XPHB.
+      const actionSlugKey = dto.actionSlug ?? dto.actionName;
+      const action =
+        allActions.find((a) => a.id === actionSlugKey) ??
+        allActions.find(
+          (a) =>
+            a.name.toLowerCase() === dto.actionName.toLowerCase() ||
+            a.id === dto.actionName,
+        );
       if (!action)
         return failure(
           `Acao "${dto.actionName}" nao encontrada.`,

@@ -85,4 +85,15 @@ export class SeedCharacterDto {
   @IsArray()
   @IsString({ each: true })
   weaponMasteryChoices?: string[];
+
+  /**
+   * Spec 012 Fase 0 — slugs adicionais de equipment (armas/armaduras) a inserir
+   * no inventário do char APÓS o starter pack. Útil pra testes que precisam
+   * de uma arma XPHB específica não incluída no pacote "A" da classe
+   * (ex: greatsword XPHB, maul, rapier). Empty/undefined → só starter pack.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  additionalEquipmentSlugs?: string[];
 }

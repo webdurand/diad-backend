@@ -68,6 +68,8 @@ describe('SeedCharacterService', () => {
       characterRepo as never,
       classRepo as never,
       subclassRepo as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      { save: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -141,7 +143,9 @@ describe('SeedCharacterService', () => {
       await service.seed(validDto);
       const createCall = charactersService.create.mock.calls[0][0];
       expect(createCall.data.sourceCode).toBe('XPHB');
-      expect(createCall.data.classStartingGold).toBeDefined();
+      // Spec 012: agora usa classEquipmentChoices ['A'] (materializa starter pack)
+      // em vez de classStartingGold (que deixava fighter/ranger sem armas).
+      expect(createCall.data.classEquipmentChoices).toEqual(['A']);
     });
   });
 

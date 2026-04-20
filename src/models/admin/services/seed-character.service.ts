@@ -13,7 +13,10 @@ import {
   CharacterEntity,
   ClassEntity,
   SubclassEntity,
+  CharacterEquipmentEntity,
+  EquipmentEntity,
 } from 'src/entities';
+import { EquipmentSourceEnum } from 'src/entities/enums';
 import { CharactersService } from '../../characters/services/characters.service';
 import { CharacterSheetService } from '../../characters/services/character-sheet.service';
 import {
@@ -123,7 +126,37 @@ export class SeedCharacterService {
     private readonly classRepo: Repository<ClassEntity>,
     @InjectRepository(SubclassEntity)
     private readonly subclassRepo: Repository<SubclassEntity>,
+    @InjectRepository(EquipmentEntity)
+    private readonly equipmentRepo: Repository<EquipmentEntity>,
+    @InjectRepository(CharacterEquipmentEntity)
+    private readonly characterEquipRepo: Repository<CharacterEquipmentEntity>,
   ) {}
+
+  /**
+   * Spec 012 Fase 0 — adiciona extras de equipamento ao char (append-only,
+   * source=bought, equipped=false pra não afetar AC; weapons continuam no
+   * inventário e podem ser usadas como ações). Usado em fixtures que exigem
+   * armas XPHB específicas não incluídas no starter pack (ex: greatsword XPHB).
+   */
+  private async addExtraEquipment(
+    characterId: string,
+    slugs: string[],
+  ): Promise<void> {
+    for (const slug of slugs) {
+      const eq = await this.equipmentRepo.findOne({ where: { slug } });
+      if (!eq) {
+        this.logger.warn(`addExtraEquipment: slug "${slug}" não existe em equipments. Pulando.`);
+        continue;
+      }
+      await this.characterEquipRepo.save({
+        character_id: characterId,
+        equipment_id: eq.id,
+        quantity: 1,
+        equipped: false,
+        source: EquipmentSourceEnum.Bought,
+      });
+    }
+  }
 
   async seed(dto: SeedCharacterDto): Promise<SeedCharacterResult> {
     const classEntity = await this.resolveClass(dto.classSlug);
@@ -141,6 +174,11 @@ export class SeedCharacterService {
       classSlug: dto.classSlug,
       abilityScores,
     });
+
+    // Spec 012 Fase 0 — adiciona equipments extras (opcional) após starter pack.
+    if (dto.additionalEquipmentSlugs?.length) {
+      await this.addExtraEquipment(character.id, dto.additionalEquipmentSlugs);
+    }
 
     if (dto.level > 1) {
       // Harness L10/L20 exige level-up determinístico com escolhas de ASI/feat/spells/subclass.
