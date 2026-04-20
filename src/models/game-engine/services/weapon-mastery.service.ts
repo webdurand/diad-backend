@@ -38,6 +38,8 @@ export interface MasteryContext {
   targetSizeOk?: boolean;
   /** Grid cell size (ft). Used by Push to convert 10ft → cells. */
   cellSizeFt?: number;
+  /** Cleave — dano rolado no hit primário. Cleave aplica mesmo total num 2º alvo. */
+  damageRolledAmount?: number;
 }
 
 export interface MasteryOnHitResult {
@@ -51,6 +53,16 @@ export interface MasteryOnHitResult {
   pushedTo?: { x: number; y: number };
   /** Topple: resultado do CON save (applied prone só em falha). */
   toppleSave?: { roll: number; total: number; dc: number; success: boolean };
+  /**
+   * Cleave (RAW 2024) — se houver alvo adjacente ao primário (5ft Chebyshev,
+   * mesma faction inimiga), retorna descritor pra combat.service aplicar damage.
+   * Service não mexe HP direto; responsabilidade fica no caller.
+   */
+  cleaveSecondTarget?: {
+    participantId: string;
+    damageAmount: number;
+    damageType: string;
+  };
 }
 
 export interface MasteryOnMissResult {
@@ -93,16 +105,20 @@ export class WeaponMasteryService {
       case 'push':
         await this.applyPush(ctx, result);
         break;
-      // Tier B (não tratamos aqui — emitimos só evento informativo):
       case 'cleave':
+        await this.applyCleave(ctx, result);
+        break;
       case 'nick':
+        // Nick é "action economy rider" — expõe via actions.service + flag
+        // nickUsedThisTurn (gerenciado em combat.service quando extra attack
+        // light é feito). Aqui só emite marker.
         result.events.push({
-          event_type: 'weapon_mastery_deferred',
+          event_type: 'weapon_mastery_triggered',
           actor_participant_id: ctx.attacker.id,
           target_participant_id: ctx.target.id,
           data: {
-            masterySlug: ctx.masterySlug,
-            reason: 'fase_2_pendente',
+            masterySlug: 'nick',
+            note: 'Extra attack light disponível dentro da Attack action',
           },
         });
         break;
@@ -135,6 +151,78 @@ export class WeaponMasteryService {
       },
     });
     return result;
+  }
+
+  /**
+   * Cleave (RAW 2024) — hit melee com weapon 2-handed + Cleave causa o mesmo
+   * damage total num 2º alvo adjacente (5ft Chebyshev) ao primário. 1× por turno.
+   * Service apenas identifica o 2º alvo; combat.service aplica damage (mantém
+   * responsabilidade de HP/defeat/events de damage_applied no caller).
+   */
+  private async applyCleave(
+    ctx: MasteryContext,
+    result: MasteryOnHitResult,
+  ): Promise<void> {
+    // Limite 1×/turno
+    if (ctx.attacker.cleaveUsedThisTurn) {
+      result.events.push({
+        event_type: 'weapon_mastery_deferred',
+        actor_participant_id: ctx.attacker.id,
+        target_participant_id: ctx.target.id,
+        data: { masterySlug: 'cleave', reason: 'already_used_this_turn' },
+      });
+      return;
+    }
+    if (!ctx.damageRolledAmount || ctx.damageRolledAmount <= 0) return;
+    if (ctx.target.positionX == null || ctx.target.positionY == null) return;
+
+    // Busca 2º alvo adjacente (hostil, não o primário, não o próprio attacker)
+    const all = await this.participantRepo.find({
+      where: { encounterId: ctx.target.encounterId },
+    });
+    const adjacent = all.find((p) => {
+      if (p.id === ctx.target.id || p.id === ctx.attacker.id) return false;
+      if (p.isDefeated) return false;
+      if (p.faction === ctx.attacker.faction) return false; // só hostis
+      if (p.positionX == null || p.positionY == null) return false;
+      const dx = Math.abs(p.positionX - (ctx.target.positionX ?? 0));
+      const dy = Math.abs(p.positionY - (ctx.target.positionY ?? 0));
+      // Chebyshev distance 1 = adjacente em grid quadrada (inclui diagonais)
+      return Math.max(dx, dy) <= 1 && dx + dy > 0;
+    });
+
+    if (!adjacent) {
+      result.events.push({
+        event_type: 'weapon_mastery_deferred',
+        actor_participant_id: ctx.attacker.id,
+        target_participant_id: ctx.target.id,
+        data: { masterySlug: 'cleave', reason: 'no_adjacent_hostile' },
+      });
+      return;
+    }
+
+    // Marca flag per-turn + retorna descritor pro combat.service aplicar damage
+    ctx.attacker.cleaveUsedThisTurn = true;
+    await this.participantRepo.save(ctx.attacker);
+
+    result.cleaveSecondTarget = {
+      participantId: adjacent.id,
+      damageAmount: ctx.damageRolledAmount,
+      damageType: ctx.damageType,
+    };
+    result.applied.push('cleave');
+    result.events.push({
+      event_type: 'weapon_mastery_triggered',
+      actor_participant_id: ctx.attacker.id,
+      target_participant_id: adjacent.id,
+      data: {
+        masterySlug: 'cleave',
+        primaryTargetId: ctx.target.id,
+        secondTargetId: adjacent.id,
+        damageAmount: ctx.damageRolledAmount,
+        damageType: ctx.damageType,
+      },
+    });
   }
 
   /**

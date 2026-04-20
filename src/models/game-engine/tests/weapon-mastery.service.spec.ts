@@ -279,8 +279,8 @@ describe('WeaponMasteryService', () => {
     });
   });
 
-  describe('Cleave/Nick (deferred)', () => {
-    it('emite evento weapon_mastery_deferred', async () => {
+  describe('Cleave (RAW 2024)', () => {
+    it('sem damage rolado não emite cleaveSecondTarget', async () => {
       const res = await service.resolveOnHit({
         masterySlug: 'cleave',
         attacker: makeParticipant(),
@@ -288,10 +288,41 @@ describe('WeaponMasteryService', () => {
         abilityMod: 3,
         profBonus: 2,
         damageType: 'slashing',
+        // sem damageRolledAmount — cleave não tem o que aplicar
       });
-      expect(res.events).toHaveLength(1);
+      expect(res.cleaveSecondTarget).toBeUndefined();
+    });
+
+    it('já usou este turno: emite weapon_mastery_deferred e não aplica', async () => {
+      const attacker = makeParticipant({ id: 'att' });
+      attacker.cleaveUsedThisTurn = true;
+      const res = await service.resolveOnHit({
+        masterySlug: 'cleave',
+        attacker,
+        target: makeParticipant({ id: 'p2' }),
+        abilityMod: 3,
+        profBonus: 2,
+        damageType: 'slashing',
+        damageRolledAmount: 12,
+      });
+      expect(res.cleaveSecondTarget).toBeUndefined();
       expect(res.events[0].event_type).toBe('weapon_mastery_deferred');
-      expect(res.applied).toEqual([]);
+      expect((res.events[0].data as { reason?: string }).reason).toBe('already_used_this_turn');
+    });
+  });
+
+  describe('Nick (RAW 2024 — marker)', () => {
+    it('emite weapon_mastery_triggered como marker pra frontend', async () => {
+      const res = await service.resolveOnHit({
+        masterySlug: 'nick',
+        attacker: makeParticipant(),
+        target: makeParticipant({ id: 'p2' }),
+        abilityMod: 2,
+        profBonus: 2,
+        damageType: 'piercing',
+      });
+      expect(res.events[0].event_type).toBe('weapon_mastery_triggered');
+      expect((res.events[0].data as { masterySlug?: string }).masterySlug).toBe('nick');
     });
   });
 });

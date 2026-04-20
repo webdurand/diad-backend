@@ -1997,7 +1997,7 @@ export class CombatService {
         }
       }
 
-      // Spec 012 Fase 0 — Weapon Mastery on-hit (Sap/Slow/Topple/Vex/Push).
+      // Spec 012 Fase 0 — Weapon Mastery on-hit (Sap/Slow/Topple/Vex/Push/Cleave/Nick).
       // Dispara mesmo em target defeated: RAW 2024 não restringe ("on a hit…"),
       // e Prone/Sap em cadáver é harmless. Assim o caso "Maul one-shot + Topple"
       // continua emitindo evento do pipeline.
@@ -2009,8 +2009,59 @@ export class CombatService {
           abilityMod: masteryAbilityMod,
           profBonus: await this.getAttackerProfBonus(attacker, dto.ownerUserId),
           damageType,
+          // Cleave: total final do damage no primário (pós-resistência/vulnerabilidade)
+          damageRolledAmount: damageRollResult?.finalDamage,
         });
         events.push(...mRes.events);
+
+        // Cleave (RAW 2024) — aplica mesmo damage no 2º alvo adjacente identificado
+        // pelo weapon-mastery.service. Re-utiliza o mesmo fluxo de damage application.
+        if (mRes.cleaveSecondTarget) {
+          const secondTarget = await this.participantRepo.findOne({
+            where: { id: mRes.cleaveSecondTarget.participantId },
+          });
+          if (secondTarget) {
+            const cleaveDmg = mRes.cleaveSecondTarget.damageAmount;
+            if (secondTarget.type === 'pc' && secondTarget.characterId) {
+              const targetOwnerId = await this.resolveParticipantOwner(
+                secondTarget,
+                dto.ownerUserId,
+              );
+              const hpRes = await this.stateService.updateHp(
+                targetOwnerId,
+                secondTarget.characterId,
+                { damage: cleaveDmg },
+              );
+              if (hpRes.instantDeath) {
+                secondTarget.dyingState = 'dead';
+                secondTarget.isDefeated = true;
+                await this.participantRepo.save(secondTarget);
+              } else if (hpRes.isDown) {
+                secondTarget.dyingState = 'dying';
+                await this.participantRepo.save(secondTarget);
+              }
+            } else {
+              this.applyDamageToMonster(secondTarget, cleaveDmg);
+              await this.participantRepo.save(secondTarget);
+            }
+            events.push({
+              event_type: 'damage_applied',
+              actor_participant_id: attacker.id,
+              target_participant_id: secondTarget.id,
+              data: {
+                rolls: [],
+                bonus: 0,
+                total: cleaveDmg,
+                type: mRes.cleaveSecondTarget.damageType,
+                resisted: false,
+                immune: false,
+                vulnerable: false,
+                finalDamage: cleaveDmg,
+                source: 'weapon-mastery:cleave',
+              },
+            });
+          }
+        }
       }
     } else {
       // Spec 012 Fase 0 — Weapon Mastery on-miss (Graze). Damage = abilityMod.

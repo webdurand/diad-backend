@@ -384,6 +384,10 @@ export class MovementService {
     // Premissa weapons-in-hand — free object interaction recarrega no início do turno.
     participant.freeObjectInteractionsUsed = 0;
 
+    // Weapon Mastery Tier B — Cleave / Nick recarregam 1× por turno.
+    participant.cleaveUsedThisTurn = false;
+    participant.nickUsedThisTurn = false;
+
     await this.participantRepo.save(participant);
   }
 

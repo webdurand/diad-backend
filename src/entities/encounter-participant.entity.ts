@@ -167,6 +167,20 @@ export class EncounterParticipantEntity {
   @Column({ name: 'indomitable_armed', type: 'boolean', default: false })
   indomitableArmed: boolean;
 
+  /**
+   * Weapon Mastery Cleave (RAW 2024) — hit melee com weapon Cleave causa
+   * damage num 2º alvo adjacente. Limite 1×/turno. Reset em start-turn.
+   */
+  @Column({ name: 'cleave_used_this_turn', type: 'boolean', default: false })
+  cleaveUsedThisTurn: boolean;
+
+  /**
+   * Weapon Mastery Nick (RAW 2024) — light weapon com Nick permite extra attack
+   * dentro da Attack action (não consome bonus). Limite 1×/turno. Reset em start-turn.
+   */
+  @Column({ name: 'nick_used_this_turn', type: 'boolean', default: false })
+  nickUsedThisTurn: boolean;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;
