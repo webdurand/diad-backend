@@ -1854,8 +1854,10 @@ export class CombatService {
       }
 
       // Spec 012 Fase 0 — Weapon Mastery on-hit (Sap/Slow/Topple/Vex/Push).
-      // Ignora se target já defeated (Prone/Slow em morto não faz sentido).
-      if (masterySlug && !targetDefeated) {
+      // Dispara mesmo em target defeated: RAW 2024 não restringe ("on a hit…"),
+      // e Prone/Sap em cadáver é harmless. Assim o caso "Maul one-shot + Topple"
+      // continua emitindo evento do pipeline.
+      if (masterySlug) {
         const mRes = await this.weaponMastery.resolveOnHit({
           masterySlug,
           attacker,
