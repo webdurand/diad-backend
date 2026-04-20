@@ -962,6 +962,9 @@ export class CombatService {
       rechargeRequired: a.rechargeRequired,
       // Spec 011 Phase 3 — slug canônico pra dispatch no frontend.
       featureSlug: a.featureSlug,
+      // Spec 012 Fase 0 — weapon mastery surface (frontend ActionBar chip)
+      weaponSlug: a.weaponSlug,
+      masterySlug: a.masterySlug,
     } as TurnActionBlock;
   }
 

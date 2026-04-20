@@ -148,6 +148,11 @@ export interface TurnActionBlock {
   /** Spec 011 Phase 3 — slug canônico (ex: 'arcane-recovery', 'second-wind') sem prefixo `feature-{uuid}-`.
    *  Necessário pro front chamar /class-feature com o featureSlug certo do catálogo. */
   featureSlug?: string;
+  /** Spec 012 Fase 0 — weapon slug (só armas). Usado pra lookup Fighting Style / mastery. */
+  weaponSlug?: string;
+  /** Spec 012 Fase 0 — mastery property (Cleave/Graze/Nick/Push/Sap/Slow/Topple/Vex).
+   *  Populado só quando o PC escolheu essa arma em weapon_mastery_choices. */
+  masterySlug?: string;
 }
 
 export interface AoEResolveResult {
