@@ -552,9 +552,19 @@ export class EncounterService {
       character.userId,
     );
 
-    // Roll initiative
+    // Roll initiative (Barbarian L7 Feral Instinct → advantage)
     const mod = participant.initiativeModifier ?? 0;
-    const init = this.diceService.rollInitiative(mod);
+    let initAdvantage = false;
+    try {
+      const sheet = (await this.sheetService.computeSheet(
+        character.userId,
+        characterId,
+      )) as unknown as { hasFeralInstinct?: boolean };
+      initAdvantage = sheet.hasFeralInstinct === true;
+    } catch {
+      /* fallback sem sheet */
+    }
+    const init = this.diceService.rollInitiative(mod, { advantage: initAdvantage });
     participant.initiativeRoll = init.roll;
     participant.initiativeTotal = init.total;
     await this.participantRepo.save(participant);

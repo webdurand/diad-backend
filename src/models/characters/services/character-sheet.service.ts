@@ -218,6 +218,36 @@ export interface CharacterSheet {
    */
   hasSurvivor?: boolean;
 
+  /** Barbarian L2 Danger Sense (RAW 2024) — advantage em DEX save vs effects visíveis (não Incapacitated). */
+  hasDangerSense?: boolean;
+  /** Barbarian L3 Primal Knowledge (RAW 2024) — pode usar STR pra checks que usariam outra ability. */
+  hasPrimalKnowledge?: boolean;
+  /** Barbarian L5 Fast Movement (RAW 2024) — +10ft speed quando não usa Heavy Armor. */
+  hasFastMovement?: boolean;
+  /** Barbarian L7 Feral Instinct (RAW 2024) — advantage initiative + não Surprised se pode agir. */
+  hasFeralInstinct?: boolean;
+  /** Barbarian L7 Instinctive Pounce (RAW 2024) — ao ativar Rage via BA, move ½ speed grátis. */
+  hasInstinctivePounce?: boolean;
+  /** Barbarian L9 Brutal Strike (RAW 2024) — abrir mão da adv do Reckless → +1d10 + option. L13+: 2 options, L17+: 2d10. */
+  hasBrutalStrike?: boolean;
+  /** Barbarian L11 Relentless Rage (RAW 2024) — 0 HP com Rage ativo → CON save DC 10 (+5 cada vez) volta 1 HP. */
+  hasRelentlessRage?: boolean;
+  /** Barbarian L15 Persistent Rage (RAW 2024) — Rage só termina se Incapacitated OU voluntário. */
+  hasPersistentRage?: boolean;
+  /** Barbarian L18 Indomitable Might (RAW 2024) — STR check/save floor = STR score. */
+  hasIndomitableMight?: boolean;
+  /** Barbarian L20 Primal Champion (RAW 2024) — STR/CON +4 com cap 25. */
+  hasPrimalChampion?: boolean;
+
+  /** Berserker L3 Frenzy (RAW 2024) — Reckless+Rage primeiro hit → +Nd6 bonus damage. */
+  hasFrenzy?: boolean;
+  /** Berserker L6 Mindless Rage (RAW 2024) — immune Charmed/Frightened while raging. */
+  hasMindlessRage?: boolean;
+  /** Berserker L10 Retaliation (RAW 2024) — reaction ao tomar dano 5ft, melee attack free. */
+  hasRetaliation?: boolean;
+  /** Berserker L14 Intimidating Presence (RAW 2024) — Bonus action 30ft emanation, WIS save → Frightened 1min. */
+  hasIntimidatingPresence?: boolean;
+
   // Equipment & Inventory
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
@@ -382,8 +412,21 @@ export class CharacterSheetService {
     }
     maxHp += charState?.max_hp_bonus ?? 0;
 
-    // Speed (from race)
-    const speed = charOrigin.race?.speed ?? 30;
+    // Speed (from race) + Barbarian Fast Movement L5 rider
+    let speed = charOrigin.race?.speed ?? 30;
+    const hasFastMovementFeat = charFeatures.some((cf) =>
+      (cf.feature?.slug ?? '').startsWith('fast-movement'),
+    );
+    if (hasFastMovementFeat) {
+      // RAW 2024: Fast Movement +10ft enquanto não usa Heavy Armor.
+      const heavyArmorSlugs = new Set(['chain-mail', 'splint', 'plate', 'ring-mail']);
+      const heavyArmorEquipped = charEquip.some(
+        (eq) =>
+          eq.equipped &&
+          heavyArmorSlugs.has((eq.equipment?.slug ?? '').toLowerCase()),
+      );
+      if (!heavyArmorEquipped) speed += 10;
+    }
 
     // AC calculation
     const dexMod = mod('dex');
@@ -798,6 +841,41 @@ export class CharacterSheetService {
       hasSurvivor: charFeatures.some((cf) =>
         (cf.feature?.slug ?? '').startsWith('survivor'),
       ),
+      hasDangerSense: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('danger-sense'),
+      ),
+      hasPrimalKnowledge: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('primal-knowledge'),
+      ),
+      hasFastMovement: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('fast-movement'),
+      ),
+      hasFeralInstinct: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('feral-instinct'),
+      ),
+      hasInstinctivePounce: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('instinctive-pounce'),
+      ),
+      hasBrutalStrike: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('brutal-strike') ||
+        (cf.feature?.slug ?? '').startsWith('improved-brutal-strike'),
+      ),
+      hasRelentlessRage: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('relentless-rage'),
+      ),
+      hasPersistentRage: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('persistent-rage'),
+      ),
+      hasIndomitableMight: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('indomitable-might'),
+      ),
+      hasPrimalChampion: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('primal-champion'),
+      ),
+      hasFrenzy: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'frenzy' || (cf.feature?.slug ?? '').startsWith('frenzy-')),
+      hasMindlessRage: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'mindless-rage' || (cf.feature?.slug ?? '').startsWith('mindless-rage-')),
+      hasRetaliation: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'retaliation' || (cf.feature?.slug ?? '').startsWith('retaliation-')),
+      hasIntimidatingPresence: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'intimidating-presence' || (cf.feature?.slug ?? '').startsWith('intimidating-presence-')),
 
       equipment,
       magicItems,

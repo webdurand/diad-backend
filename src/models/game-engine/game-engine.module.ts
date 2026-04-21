@@ -62,6 +62,12 @@ import { FightingStyleReactionsService } from './services/fighting-style-reactio
 import { TacticalFeaturesService } from './services/tactical-features.service';
 // Spec 012 Fighter 100% — Battle Master (Combat Superiority + maneuvers)
 import { BattleMasterService } from './services/battle-master.service';
+// Spec 012 Barbarian 100% — Brutal Strike L9 (Forceful/Hamstring)
+import { BrutalStrikeService } from './services/brutal-strike.service';
+// Spec 012 Barbarian 100% — Relentless Rage L11 + Indomitable Might L18
+import { BarbarianFeaturesService } from './services/barbarian-features.service';
+// Spec 012 Barbarian 100% — Berserker subclass (Frenzy, Retaliation, Intimidating Presence)
+import { BerserkerService } from './services/berserker.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -153,6 +159,9 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     TacticalFeaturesService,
     // Spec 012 Fighter 100% — Battle Master
     BattleMasterService,
+    BrutalStrikeService,
+    BarbarianFeaturesService,
+    BerserkerService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -198,6 +207,9 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     TacticalFeaturesService,
     // Spec 012 Fighter 100% — Battle Master
     BattleMasterService,
+    BrutalStrikeService,
+    BarbarianFeaturesService,
+    BerserkerService,
     // Spec 002
     JoinRequestService,
   ],

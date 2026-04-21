@@ -48,6 +48,9 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
 import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
 import { TacticalFeaturesService } from './services/tactical-features.service';
 import { BattleMasterService } from './services/battle-master.service';
+import { BrutalStrikeService } from './services/brutal-strike.service';
+import { BarbarianFeaturesService } from './services/barbarian-features.service';
+import { BerserkerService } from './services/berserker.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -105,6 +108,9 @@ export class GameEngineController {
     private readonly fsReactions: FightingStyleReactionsService,
     private readonly tacticalFeatures: TacticalFeaturesService,
     private readonly battleMaster: BattleMasterService,
+    private readonly brutalStrike: BrutalStrikeService,
+    private readonly barbarianFeatures: BarbarianFeaturesService,
+    private readonly berserker: BerserkerService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -1104,6 +1110,158 @@ export class GameEngineController {
       encounterId,
       participantId,
       body.originalAttackTotal,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Berserker L3 Frenzy (RAW 2024) — primeiro hit do turno em rage+reckless
+   * ganha +Nd6 damage. Chamado após hit confirmado.
+   */
+  @Post('encounters/:id/participants/:participantId/berserker/frenzy')
+  async berserkerFrenzy(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantId: string },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.berserker.frenzy(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Berserker L10 Retaliation (RAW 2024) — reaction melee attack contra
+   * atacante adjacente que causou dano.
+   */
+  @Post('encounters/:id/participants/:participantId/berserker/retaliation')
+  async berserkerRetaliation(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantId: string },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.berserker.retaliation(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Berserker L14 Intimidating Presence (RAW 2024) — Bonus action, 30ft
+   * emanation, cada target WIS save DC 8+STR+PB. Falha = Frightened 1min.
+   */
+  @Post('encounters/:id/participants/:participantId/berserker/intimidating-presence')
+  async berserkerIntimidatingPresence(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantIds: string[] },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.berserker.intimidatingPresence(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantIds,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Barbarian L11 Relentless Rage (RAW 2024) — PC em rage caiu a 0 HP.
+   * CON save DC 10+5×uses. Passa: volta 1 HP + consome use.
+   */
+  @Post('encounters/:id/participants/:participantId/relentless-rage')
+  async barbarianRelentlessRage(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+  ) {
+    const userId = getUserId(req);
+    const result = await this.barbarianFeatures.relentlessRage(
+      userId,
+      encounterId,
+      participantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Barbarian L18 Indomitable Might (RAW 2024) — STR check < score, usa score.
+   */
+  @Post('encounters/:id/participants/:participantId/indomitable-might')
+  async barbarianIndomitableMight(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { rawCheckTotal: number; abilitySlug: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha' },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.barbarianFeatures.indomitableMight(
+      userId,
+      encounterId,
+      participantId,
+      body.rawCheckTotal,
+      body.abilitySlug,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Barbarian L9 Brutal Strike (RAW 2024) — Forceful Blow: +Nd10 damage +
+   * target push 10ft + attacker move ½ speed. Exige Rage ativo.
+   */
+  @Post('encounters/:id/participants/:participantId/brutal-strike/forceful-blow')
+  async brutalStrikeForcefulBlow(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantId: string },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.brutalStrike.forcefulBlow(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Barbarian L9 Brutal Strike (RAW 2024) — Hamstring Blow: +Nd10 damage +
+   * target speed -15ft até fim do próximo turno. Exige Rage ativo.
+   */
+  @Post('encounters/:id/participants/:participantId/brutal-strike/hamstring-blow')
+  async brutalStrikeHamstringBlow(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantId: string },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.brutalStrike.hamstringBlow(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
     );
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };

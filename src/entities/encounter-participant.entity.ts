@@ -197,6 +197,13 @@ export class EncounterParticipantEntity {
   @Column({ name: 'superiority_dice_used', type: 'int', default: 0 })
   superiorityDiceUsed: number;
 
+  /**
+   * Barbarian L11 Relentless Rage (RAW 2024) — DC escala com uses (10 + 5×n).
+   * Reset em long rest.
+   */
+  @Column({ name: 'relentless_rage_uses_used', type: 'int', default: 0 })
+  relentlessRageUsesUsed: number;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;

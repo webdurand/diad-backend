@@ -138,8 +138,13 @@ export class DiceService {
   /**
    * Roll initiative: 1d20 + modifier.
    */
-  rollInitiative(modifier: number): InitiativeResult {
-    const roll = this.roll(20);
+  rollInitiative(modifier: number, options?: { advantage?: boolean }): InitiativeResult {
+    let roll = this.roll(20);
+    // Barbarian L7 Feral Instinct (RAW 2024) — advantage em initiative
+    if (options?.advantage) {
+      const second = this.roll(20);
+      if (second > roll) roll = second;
+    }
     return {
       roll,
       modifier,
