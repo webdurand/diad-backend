@@ -599,14 +599,37 @@ export class LevelUpService {
         : existingCharClass;
 
       if (charClass?.subclass_id) {
-        const { levelData: subLevelData } = await this.resolveLevelData(
-          classEntity,
-          newClassLevel,
-          character.source?.rules,
-          charClass.subclass_id,
-        );
-        if (subLevelData?.level_features) {
+        // Spec 012 fix cross-class: quando subclass é escolhida em L3 (ex: Cleric
+        // Life escolhe em L3 mas features existem em L1/L2 da subclass), features
+        // dos níveis anteriores NÃO aplicam naquele level-up sem processamento
+        // retroativo. Cleric Life L1 Disciple, Cleric Life L2 Preserve Life,
+        // Paladin Oath L3 spells always-prep, Druid Circle L3, etc.
+        //
+        // Fix: quando `dto.subclassSlug` veio no payload DESTE level-up (ou seja,
+        // char ganhou subclass agora), processa features L1..(newClassLevel-1)
+        // da subclass também. Só adiciona as que ainda não existem em character_features.
+        const subclassJustPicked = Boolean(dto.subclassSlug);
+        const levelsToProcess: number[] = subclassJustPicked
+          ? Array.from({ length: newClassLevel }, (_, i) => i + 1) // 1..newClassLevel
+          : [newClassLevel];
+
+        for (const lv of levelsToProcess) {
+          const { levelData: subLevelData } = await this.resolveLevelData(
+            classEntity,
+            lv,
+            character.source?.rules,
+            charClass.subclass_id,
+          );
+          if (!subLevelData?.level_features) continue;
           for (const lf of subLevelData.level_features) {
+            // Evita duplicatas quando processando retroativamente
+            const existing = await manager.findOne(CharacterFeatureEntity, {
+              where: {
+                character_id: characterId,
+                feature_id: lf.feature.id,
+              },
+            });
+            if (existing) continue;
             await manager.save(CharacterFeatureEntity, {
               character_id: characterId,
               feature_id: lf.feature.id,
