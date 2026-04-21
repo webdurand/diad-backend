@@ -248,6 +248,42 @@ export interface CharacterSheet {
   /** Berserker L14 Intimidating Presence (RAW 2024) — Bonus action 30ft emanation, WIS save → Frightened 1min. */
   hasIntimidatingPresence?: boolean;
 
+  /** Cleric L1 Divine Order (RAW 2024) — escolha Protector (heavy+martial) OR Thaumaturge (+cantrip+religion). Flag existência; choice fica em originDetails. */
+  hasDivineOrder?: boolean;
+  /** Cleric L2 Channel Divinity (RAW 2024) — pool reset short rest. Uses: 1 (L2), 2 (L6), 3 (L18). */
+  hasChannelDivinity?: boolean;
+  /** Cleric L2 Turn Undead (RAW 2024) — CD option universal. Magic action 30ft WIS save → Frightened 1min. */
+  hasTurnUndead?: boolean;
+  /** Cleric L5 Sear Undead (RAW 2024, substitui Destroy Undead 2014) — CD scaling damage 10+5×(level-5) radiant, CON save half. */
+  hasSearUndead?: boolean;
+  /** Cleric L7 Blessed Strikes (RAW 2024, substitui Divine Strike/Potent Spellcasting 2014) — 1/turn melee hit OR cantrip save → +1d8 radiant. */
+  hasBlessedStrikes?: boolean;
+  /** Cleric L14 Improved Blessed Strikes (RAW 2024) — +2d8 radiant. */
+  hasImprovedBlessedStrikes?: boolean;
+  /** Cleric L10 Divine Intervention (RAW 2024) — Magic action, cast spell via divindade, auto-sucesso, cap nível do slot gasto. */
+  hasDivineIntervention?: boolean;
+  /** Cleric L20 Greater Divine Intervention (RAW 2024) — sem CD cost, recharge 2d4 long rests. */
+  hasGreaterDivineIntervention?: boolean;
+
+  /** Cleric Life Domain L1 Disciple of Life — cura spells +2+slot HP. */
+  hasDiscipleOfLife?: boolean;
+  /** Cleric Life Domain L2 Preserve Life — CD pool 5×level HP dividido entre aliados 30ft. */
+  hasPreserveLife?: boolean;
+  /** Cleric Life Domain L6 Blessed Healer — heal others → self heal 2+slot. */
+  hasBlessedHealer?: boolean;
+  /** Cleric Life Domain L17 Supreme Healing — max dice heals (em vez de roll). */
+  hasSupremeHealing?: boolean;
+  /** Cleric Light Domain L3 Warding Flare — reaction disadvantage WIS/LR. */
+  hasWardingFlare?: boolean;
+  /** Cleric Light Domain L3 Radiance of the Dawn — CD 30ft nova radiant. */
+  hasRadianceOfTheDawn?: boolean;
+  /** Cleric Trickery Domain L3 Invoke Duplicity — CD illusion duplicate 1min. */
+  hasInvokeDuplicity?: boolean;
+  /** Cleric War Domain L3 War Priest — Attack action → Bonus extra attack. */
+  hasWarPriest?: boolean;
+  /** Cleric War Domain L3 Guided Strike — CD +10 attack bonus after seeing d20. */
+  hasGuidedStrike?: boolean;
+
   // Equipment & Inventory
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
@@ -876,6 +912,35 @@ export class CharacterSheetService {
       hasMindlessRage: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'mindless-rage' || (cf.feature?.slug ?? '').startsWith('mindless-rage-')),
       hasRetaliation: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'retaliation' || (cf.feature?.slug ?? '').startsWith('retaliation-')),
       hasIntimidatingPresence: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'intimidating-presence' || (cf.feature?.slug ?? '').startsWith('intimidating-presence-')),
+      hasDivineOrder: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('divine-order')),
+      hasChannelDivinity: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('channel-divinity')),
+      hasTurnUndead: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('channel-divinity-turn-undead') ||
+        (cf.feature?.slug ?? '') === 'turn-undead',
+      ),
+      hasSearUndead: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sear-undead')),
+      hasBlessedStrikes: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('blessed-strikes') ||
+        (cf.feature?.slug ?? '').startsWith('improved-blessed-strikes'),
+      ),
+      hasImprovedBlessedStrikes: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('improved-blessed-strikes')),
+      hasDivineIntervention: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('divine-intervention') ||
+        (cf.feature?.slug ?? '').startsWith('greater-divine-intervention'),
+      ),
+      hasGreaterDivineIntervention: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('greater-divine-intervention')),
+      hasDiscipleOfLife: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('disciple-of-life')),
+      hasPreserveLife: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('channel-divinity-preserve-life') ||
+        (cf.feature?.slug ?? '') === 'preserve-life',
+      ),
+      hasBlessedHealer: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('blessed-healer')),
+      hasSupremeHealing: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('supreme-healing')),
+      hasWardingFlare: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('warding-flare')),
+      hasRadianceOfTheDawn: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('radiance-of-the-dawn')),
+      hasInvokeDuplicity: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('invoke-duplicity')),
+      hasWarPriest: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('war-priest')),
+      hasGuidedStrike: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('guided-strike')),
 
       equipment,
       magicItems,

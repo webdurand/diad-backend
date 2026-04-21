@@ -51,6 +51,7 @@ import { BattleMasterService } from './services/battle-master.service';
 import { BrutalStrikeService } from './services/brutal-strike.service';
 import { BarbarianFeaturesService } from './services/barbarian-features.service';
 import { BerserkerService } from './services/berserker.service';
+import { ClericFeaturesService } from './services/cleric-features.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -111,6 +112,7 @@ export class GameEngineController {
     private readonly brutalStrike: BrutalStrikeService,
     private readonly barbarianFeatures: BarbarianFeaturesService,
     private readonly berserker: BerserkerService,
+    private readonly clericFeatures: ClericFeaturesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -1110,6 +1112,96 @@ export class GameEngineController {
       encounterId,
       participantId,
       body.originalAttackTotal,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Cleric L5 Sear Undead (RAW 2024) — CD + Magic action. Undead 30ft CON
+   * save DC 8+WIS+PB. Falha = 10+5×(L-5) radiant; sucesso half.
+   */
+  @Post('encounters/:id/participants/:participantId/cleric/sear-undead')
+  async clericSearUndead(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantIds: string[] },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.clericFeatures.searUndead(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantIds,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Cleric Life Domain L3 Preserve Life (RAW 2024 CD) — distribui pool 5×level
+   * HP entre aliados 30ft, cap individual = pool/2.
+   */
+  @Post('encounters/:id/participants/:participantId/cleric/preserve-life')
+  async clericPreserveLife(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { allocations: Array<{ targetParticipantId: string; hp: number }> },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.clericFeatures.preserveLife(
+      userId,
+      encounterId,
+      participantId,
+      body.allocations,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Cleric L7 Blessed Strikes (RAW 2024) — 1/turn melee hit OR cantrip save-fail
+   * → +1d8 radiant (+2d8 em L14 Improved).
+   */
+  @Post('encounters/:id/participants/:participantId/cleric/blessed-strikes')
+  async clericBlessedStrikes(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantId: string; trigger: 'melee-hit' | 'cantrip-save-failed' },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.clericFeatures.blessedStrikes(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
+      body.trigger,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Cleric L10 Divine Intervention (RAW 2024) — Magic action, auto-sucesso.
+   * Cap slot L5 em L10-L19, L9 em L20 (Greater).
+   */
+  @Post('encounters/:id/participants/:participantId/cleric/divine-intervention')
+  async clericDivineIntervention(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { spellSlug: string; slotLevel: number },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.clericFeatures.divineIntervention(
+      userId,
+      encounterId,
+      participantId,
+      body.spellSlug,
+      body.slotLevel,
     );
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };

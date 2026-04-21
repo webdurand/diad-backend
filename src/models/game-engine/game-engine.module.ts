@@ -68,6 +68,8 @@ import { BrutalStrikeService } from './services/brutal-strike.service';
 import { BarbarianFeaturesService } from './services/barbarian-features.service';
 // Spec 012 Barbarian 100% — Berserker subclass (Frenzy, Retaliation, Intimidating Presence)
 import { BerserkerService } from './services/berserker.service';
+// Spec 012 Cleric 100% — Sear Undead L5 + Divine Intervention L10
+import { ClericFeaturesService } from './services/cleric-features.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -162,6 +164,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     BrutalStrikeService,
     BarbarianFeaturesService,
     BerserkerService,
+    ClericFeaturesService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -210,6 +213,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     BrutalStrikeService,
     BarbarianFeaturesService,
     BerserkerService,
+    ClericFeaturesService,
     // Spec 002
     JoinRequestService,
   ],
