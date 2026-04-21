@@ -284,6 +284,32 @@ export interface CharacterSheet {
   /** Cleric War Domain L3 Guided Strike — CD +10 attack bonus after seeing d20. */
   hasGuidedStrike?: boolean;
 
+  /** Paladin L1 Divine Sense — Magic action detect Celestial/Fiend/Undead 60ft. */
+  hasDivineSense?: boolean;
+  /** Paladin L2 Divine Smite (RAW 2024) — spell Bonus Action L1, 2d8+upcast radiant após melee/unarmed hit. */
+  hasDivineSmite?: boolean;
+  /** Paladin L2 Paladin's Smite — 1 cast grátis de Divine Smite/long rest (sem slot). */
+  hasPaladinsSmite?: boolean;
+  /** Paladin L5 Faithful Steed — Find Steed sempre preparado + 1 cast grátis/LR. */
+  hasFaithfulSteed?: boolean;
+  /** Paladin L6 Aura of Protection — self + aliados 10ft +CHA mod em saves. 30ft L18. */
+  hasAuraOfProtection?: boolean;
+  /** Paladin L10 Aura of Courage — self + aliados na aura immune Frightened. */
+  hasAuraOfCourage?: boolean;
+  /** Paladin L11 Radiant Strikes (RAW 2024, substitui Improved Divine Smite 2014) — +1d8 radiant passive em melee/unarmed hit. */
+  hasRadiantStrikes?: boolean;
+  /** Paladin L14 Restoring Touch (RAW 2024, substitui Cleansing Touch 2014) — Lay on Hands remove Blinded/Charmed/Deafened/Frightened/Paralyzed/Stunned (5 HP each). */
+  hasRestoringTouch?: boolean;
+  /** Paladin L18 Aura Expansion — auras 10ft → 30ft. */
+  hasAuraExpansion?: boolean;
+
+  /** Paladin Devotion L3 Sacred Weapon — CD arma +CHA attack + Radiant + luz 20ft. */
+  hasSacredWeapon?: boolean;
+  /** Paladin Devotion L7 Aura of Devotion — immune Charm aliados na aura. */
+  hasAuraOfDevotion?: boolean;
+  /** Paladin Devotion L20 Holy Nimbus — sunlight + radiant retaliation 10 min. */
+  hasHolyNimbus?: boolean;
+
   // Equipment & Inventory
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
@@ -941,6 +967,19 @@ export class CharacterSheetService {
       hasInvokeDuplicity: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('invoke-duplicity')),
       hasWarPriest: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('war-priest')),
       hasGuidedStrike: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('guided-strike')),
+
+      hasDivineSense: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('divine-sense')),
+      hasDivineSmite: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'divine-smite' || (cf.feature?.slug ?? '').startsWith('divine-smite-')),
+      hasPaladinsSmite: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('paladins-smite')),
+      hasFaithfulSteed: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('faithful-steed')),
+      hasAuraOfProtection: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-of-protection')),
+      hasAuraOfCourage: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-of-courage')),
+      hasRadiantStrikes: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('radiant-strikes')),
+      hasRestoringTouch: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('restoring-touch')),
+      hasAuraExpansion: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-expansion')),
+      hasSacredWeapon: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('channel-divinity-sacred-weapon')),
+      hasAuraOfDevotion: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-of-devotion')),
+      hasHolyNimbus: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('holy-nimbus')),
 
       equipment,
       magicItems,

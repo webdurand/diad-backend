@@ -52,6 +52,7 @@ import { BrutalStrikeService } from './services/brutal-strike.service';
 import { BarbarianFeaturesService } from './services/barbarian-features.service';
 import { BerserkerService } from './services/berserker.service';
 import { ClericFeaturesService } from './services/cleric-features.service';
+import { PaladinFeaturesService } from './services/paladin-features.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -113,6 +114,7 @@ export class GameEngineController {
     private readonly barbarianFeatures: BarbarianFeaturesService,
     private readonly berserker: BerserkerService,
     private readonly clericFeatures: ClericFeaturesService,
+    private readonly paladinFeatures: PaladinFeaturesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -1134,6 +1136,80 @@ export class GameEngineController {
       encounterId,
       participantId,
       body.targetParticipantIds,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Paladin L1 Divine Smite (RAW 2024) — spell Bonus Action pós hit melee/unarmed.
+   * Base 2d8 + (slotLevel-1)×1d8 radiant (cap 5d8 em slot 4+). +1d8 se Fiend/Undead.
+   * Crit dobra. freeCast=true usa Paladin's Smite L2 (sem slot).
+   */
+  @Post('encounters/:id/participants/:participantId/paladin/divine-smite')
+  async paladinDivineSmite(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: {
+      targetParticipantId: string;
+      slotLevel: number;
+      hitWasCritical: boolean;
+      targetType: 'fiend' | 'undead' | null;
+      freeCast: boolean;
+    },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.paladinFeatures.divineSmite(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
+      body.slotLevel,
+      body.hitWasCritical,
+      body.targetType,
+      body.freeCast,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Paladin L11 Radiant Strikes (RAW 2024) — +1d8 radiant passive em melee/unarmed hit.
+   */
+  @Post('encounters/:id/participants/:participantId/paladin/radiant-strikes')
+  async paladinRadiantStrikes(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetParticipantId: string },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.paladinFeatures.radiantStrikes(
+      userId,
+      encounterId,
+      participantId,
+      body.targetParticipantId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value };
+  }
+
+  /**
+   * Paladin Devotion L3 Sacred Weapon (RAW 2024 CD) — arma +CHA attack + radiant
+   * damage + luz 20ft por 1 min (10 rounds).
+   */
+  @Post('encounters/:id/participants/:participantId/paladin/sacred-weapon')
+  async paladinSacredWeapon(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+  ) {
+    const userId = getUserId(req);
+    const result = await this.paladinFeatures.sacredWeapon(
+      userId,
+      encounterId,
+      participantId,
     );
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };

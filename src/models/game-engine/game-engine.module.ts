@@ -70,6 +70,8 @@ import { BarbarianFeaturesService } from './services/barbarian-features.service'
 import { BerserkerService } from './services/berserker.service';
 // Spec 012 Cleric 100% — Sear Undead L5 + Divine Intervention L10
 import { ClericFeaturesService } from './services/cleric-features.service';
+// Spec 012 Paladin 100% — Divine Smite + Radiant Strikes + Sacred Weapon
+import { PaladinFeaturesService } from './services/paladin-features.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -165,6 +167,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     BarbarianFeaturesService,
     BerserkerService,
     ClericFeaturesService,
+    PaladinFeaturesService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -214,6 +217,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     BarbarianFeaturesService,
     BerserkerService,
     ClericFeaturesService,
+    PaladinFeaturesService,
     // Spec 002
     JoinRequestService,
   ],
