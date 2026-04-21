@@ -310,6 +310,29 @@ export interface CharacterSheet {
   /** Paladin Devotion L20 Holy Nimbus — sunlight + radiant retaliation 10 min. */
   hasHolyNimbus?: boolean;
 
+  /** Wizard L1 Arcane Recovery — recupera slots em short rest (total níveis = wizard/2 rounded up). */
+  hasArcaneRecovery?: boolean;
+  /** Wizard L1 Ritual Adept (RAW 2024) — pode castar ritual spells do spellbook sem prepará-las. */
+  hasRitualAdept?: boolean;
+  /** Wizard L2 Scholar (RAW 2024) — ganha expertise em 1 skill INT. */
+  hasScholar?: boolean;
+  /** Wizard L5 Memorize Spell (RAW 2024) — troca 1 spell prepared sem long rest. */
+  hasMemorizeSpell?: boolean;
+  /** Wizard L18 Spell Mastery — pode castar 1 spell L1 e 1 spell L2 sem gastar slot. */
+  hasSpellMastery?: boolean;
+  /** Wizard L20 Signature Spells — pode castar 2 spells L3 sem slot, 1×/SR each. */
+  hasSignatureSpells?: boolean;
+  /** Wizard Evocation L2 Evocation Savant — aprende 2 evocation spells sem custo. */
+  hasEvocationSavant?: boolean;
+  /** Wizard Evocation L2 Sculpt Spells — AoE próprio exclui até INT+1 aliados. */
+  hasSculptSpells?: boolean;
+  /** Wizard Evocation L6 Potent Cantrip — target em save success ainda sofre half damage. */
+  hasPotentCantrip?: boolean;
+  /** Wizard Evocation L10 Empowered Evocation — +INT mod em damage de 1 evocation spell/turn. */
+  hasEmpoweredEvocation?: boolean;
+  /** Wizard Evocation L14 Overchannel — max damage L1-L5 spell 1/LR, depois self-damage recursivo. */
+  hasOverchannel?: boolean;
+
   // Equipment & Inventory
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
@@ -980,6 +1003,21 @@ export class CharacterSheetService {
       hasSacredWeapon: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('channel-divinity-sacred-weapon')),
       hasAuraOfDevotion: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-of-devotion')),
       hasHolyNimbus: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('holy-nimbus')),
+
+      hasArcaneRecovery: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('arcane-recovery')),
+      hasRitualAdept: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('ritual-adept')),
+      hasScholar: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('scholar-wizard') || (cf.feature?.slug ?? '') === 'scholar'),
+      hasMemorizeSpell: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('memorize-spell')),
+      hasSpellMastery: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('spell-mastery')),
+      hasSignatureSpells: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('signature-spell') ||
+        (cf.feature?.slug ?? '').startsWith('signature-spells'),
+      ),
+      hasEvocationSavant: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('evocation-savant')),
+      hasSculptSpells: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sculpt-spells')),
+      hasPotentCantrip: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('potent-cantrip')),
+      hasEmpoweredEvocation: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('empowered-evocation')),
+      hasOverchannel: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('overchannel')),
 
       equipment,
       magicItems,
