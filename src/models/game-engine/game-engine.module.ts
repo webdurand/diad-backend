@@ -9,6 +9,7 @@ import {
   GameEventEntity,
   MonsterEntity,
   CharacterEntity,
+  CharacterStateEntity,
   LootTableEntity,
   LootTableItemEntity,
   SpellEntity,
@@ -74,6 +75,8 @@ import { ClericFeaturesService } from './services/cleric-features.service';
 import { PaladinFeaturesService } from './services/paladin-features.service';
 // Spec 012 Sorcerer — Font of Magic (SP pool + convert SP↔slot)
 import { SorcererFeaturesService } from './services/sorcerer-features.service';
+// Spec 012 Druid + genérico — Transformation pipeline (Wild Shape, Polymorph, Form of Dread, ...)
+import { TransformationService } from './services/transformation.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -97,6 +100,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
       GameEventEntity,
       MonsterEntity,
       CharacterEntity,
+      CharacterStateEntity,
       LootTableEntity,
       LootTableItemEntity,
       SpellEntity,
@@ -171,6 +175,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     ClericFeaturesService,
     PaladinFeaturesService,
     SorcererFeaturesService,
+    TransformationService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -222,6 +227,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     ClericFeaturesService,
     PaladinFeaturesService,
     SorcererFeaturesService,
+    TransformationService,
     // Spec 002
     JoinRequestService,
   ],

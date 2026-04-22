@@ -364,4 +364,27 @@ export class EncounterParticipantEntity {
     nullable: true,
   })
   grappledByParticipantId: string | null;
+
+  /**
+   * Spec 012 — Transformation pipeline.
+   * Snapshot do estado original + overlay do form ativo quando o participant
+   * está transformado (Wild Shape, Polymorph, Form of Dread, etc).
+   * Null = não-transformado. Ver TransformationService.
+   */
+  @Column({ name: 'transformation_state', type: 'jsonb', nullable: true })
+  transformationState: import('../models/game-engine/interfaces/transformation.interfaces').TransformationState | null = null;
+
+  /**
+   * Spec 012 — Summoning pipeline.
+   * FK pro caster quando este participant é uma criação dele (summon,
+   * duplicate, illusion). Permite cleanup em cascata quando caster morre ou
+   * perde concentração. Null = participant autônomo.
+   */
+  @Column({
+    name: 'linked_caster_participant_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  linkedCasterParticipantId: string | null = null;
 }

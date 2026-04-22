@@ -54,6 +54,7 @@ import { BerserkerService } from './services/berserker.service';
 import { ClericFeaturesService } from './services/cleric-features.service';
 import { PaladinFeaturesService } from './services/paladin-features.service';
 import { SorcererFeaturesService } from './services/sorcerer-features.service';
+import { TransformationService } from './services/transformation.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -117,6 +118,7 @@ export class GameEngineController {
     private readonly clericFeatures: ClericFeaturesService,
     private readonly paladinFeatures: PaladinFeaturesService,
     private readonly sorcererFeatures: SorcererFeaturesService,
+    private readonly transformationService: TransformationService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -1767,5 +1769,66 @@ export class GameEngineController {
       await this.eventService.emit(dto.sessionId, dto.encounterId ?? null, result.events);
     }
     return { ok: true, value: result.value };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Spec 012 — Transformation pipeline (Wild Shape + Polymorph + …)
+  // ─────────────────────────────────────────────────────────────────────
+
+  /**
+   * Druid Wild Shape (L2+) — entra em forma de besta.
+   * RAW 2024 XPHB: CR max = 1/4 L2 (no fly/swim), 1/2 L4 (no fly), 1 L8+ (any).
+   * Duração: 1h por uso (não concentração). HP separado. Reverte em HP 0.
+   */
+  @Post('encounters/:id/participants/:participantId/wild-shape/enter')
+  async wildShapeEnter(
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { monsterSlug: string; formDisplayName?: string },
+  ) {
+    try {
+      const updated = await this.transformationService.enterForm(participantId, {
+        source: 'wild-shape',
+        monsterSlug: body.monsterSlug,
+        formDisplayName: body.formDisplayName,
+        durationRoundsTotal: 600, // 1h RAW = 600 rounds (6 seg cada)
+        retainedAbilities: ['mental-stats', 'speech', 'class-features'],
+        equipmentHandling: 'merge',
+        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: false },
+      });
+      return {
+        ok: true,
+        value: {
+          participantId: updated.id,
+          displayName: updated.displayName,
+          form: updated.transformationState?.form,
+        },
+      };
+    } catch (err) {
+      const e = err as { message?: string };
+      return { ok: false, error: e.message ?? 'UNKNOWN', code: 'WILD_SHAPE_ERROR' };
+    }
+  }
+
+  /**
+   * Reverte transformação (Wild Shape, Polymorph, etc). Player dismiss manual.
+   */
+  @Post('encounters/:id/participants/:participantId/wild-shape/revert')
+  async wildShapeRevert(
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+  ) {
+    const updated = await this.transformationService.revertForm(
+      participantId,
+      'player-dismiss',
+    );
+    return {
+      ok: true,
+      value: {
+        participantId: updated.id,
+        displayName: updated.displayName,
+        transformed: !!updated.transformationState,
+      },
+    };
   }
 }
