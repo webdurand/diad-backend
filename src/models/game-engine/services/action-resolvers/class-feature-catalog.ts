@@ -291,4 +291,24 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetShape: 'self',
     resolution: 'stub',
   },
+  {
+    slug: 'dark-ones-blessing',
+    displayName: "Bênção Fiendish (Dark One's Blessing)",
+    classSlug: 'warlock',
+    requiredLevel: 1, // Fiend L1 pre-2024; aceita em qualquer level desde que subclass='fiend'
+    actionCost: 'free',
+    targetShape: 'self',
+    resolution: 'stub',
+  },
+  {
+    slug: 'dark-ones-own-luck',
+    displayName: "Sorte Fiendish (Dark One's Own Luck)",
+    classSlug: 'warlock',
+    requiredLevel: 6,
+    actionCost: 'reaction',
+    targetShape: 'self',
+    resolution: 'stub',
+    maxUsesByLevel: () => 1,
+    rechargeOn: 'short',
+  },
 ];

@@ -88,9 +88,55 @@ export class ClassFeatureResolverService {
         return this.handleDivineSense(sourceParticipantId, payload, events);
       case 'bardic-inspiration':
         return this.handleBardicInspiration(sourceParticipantId, payload, events);
+      case 'dark-ones-blessing':
+        return this.handleDarkOnesBlessing(sourceParticipantId, payload, events);
+      case 'dark-ones-own-luck':
+        return this.handleDarkOnesOwnLuck(sourceParticipantId, payload, events);
       default:
         return { resolved: false, events };
     }
+  }
+
+  // ---- Handler: Dark One's Blessing (Fiend Warlock L3) ----
+  // RAW 2024 XPHB: reduzir criatura a 0 HP (ou matar) \u2192 temp HP = CHA mod + Warlock level.
+  // Handler fire-manual: player aciona ap\u00f3s kill pra granting o bonus.
+  private async handleDarkOnesBlessing(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    const chaMod = payload.caster?.abilityMods?.cha ?? 0;
+    const warlockLevel = payload.caster?.classLevel ?? 3;
+    const tempHp = Math.max(1, chaMod + warlockLevel);
+
+    source.tempHp = Math.max(source.tempHp ?? 0, tempHp); // RAW: temp HP substitui se maior
+    await this.participants.save(source);
+
+    events.push({
+      event_type: 'dark_ones_blessing_granted',
+      actor_participant_id: sourceId,
+      data: { tempHp, chaMod, warlockLevel },
+    });
+    return { resolved: true, events, resolutionPayload: { tempHp } };
+  }
+
+  // ---- Handler: Dark One's Own Luck (Fiend Warlock L6) ----
+  // RAW 2024: reaction, +1d10 num ability check ou save, recarga SR. 1/SR.
+  // Simplifica\u00e7\u00e3o: roll 1d10 e retorna bonus a aplicar (UI pode adicionar).
+  private async handleDarkOnesOwnLuck(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const rolled = this.dice.roll(10);
+    events.push({
+      event_type: 'dark_ones_own_luck_rolled',
+      actor_participant_id: sourceId,
+      data: { bonus: rolled },
+    });
+    return { resolved: true, events, resolutionPayload: { bonus: rolled } };
   }
 
   // ---- Handler: Bardic Inspiration (Bard L1+) ----

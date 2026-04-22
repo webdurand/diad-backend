@@ -31,8 +31,9 @@ export const CLASS_AVAILABILITY: Record<string, ClassAvailability> = {
   druid: { available: true, canonicalSubclasses: ['druid-land', 'land'] },
   // Bard L1-L20 + Lore canonical liberado. Bardic Inspiration + spellcasting em tela.
   bard: { available: true, canonicalSubclasses: ['bard-lore', 'lore'] },
+  // Warlock: Pact Magic + Fiend canonical (Dark One's Blessing + Dark One's Own Luck).
+  warlock: { available: true, canonicalSubclasses: ['warlock-fiend', 'fiend'] },
   // Marco C — a liberar conforme cada classe fecha L1-L20 + 1 canônica RAW
-  warlock: { available: false, canonicalSubclasses: [] },
   monk: { available: false, canonicalSubclasses: [] },
   rogue: { available: false, canonicalSubclasses: [] },
   ranger: { available: false, canonicalSubclasses: [] },
