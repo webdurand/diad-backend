@@ -40,6 +40,7 @@ import { getSpellHealing } from './spell-healing-catalog';
 import { substituteSpellcastingMod } from './spellcasting-mod';
 import { getSpellCondition } from './spell-condition-catalog';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
+import { SummoningService } from './summoning.service';
 
 // --- Result interfaces ---
 
@@ -154,7 +155,25 @@ export class SpellCastingService {
     private readonly monsterSpellcasting: MonsterSpellcastingService,
     private readonly effectInstanceService: EffectInstanceService,
     private readonly conditionLifecycle: ConditionLifecycleService,
+    private readonly summoning: SummoningService,
   ) {}
+
+  /**
+   * Spec 012 \u2014 spell slug \u2192 catalog de summons (beast de CR apropriada).
+   * RAW 2024 XPHB: spells de summon convocam 1 criatura espirituosa com
+   * stats escaladas pelo slot level. MVP: escolhemos uma besta fixa por slot
+   * pra validar o pipeline. V2: UI picker pro player escolher a besta.
+   */
+  private getSummonMonsterForSpell(spellSlug: string, slotLevel: number): string | null {
+    const map: Record<string, Record<number, string>> = {
+      'summon-beast': { 2: 'wolf', 3: 'wolf', 4: 'panther', 5: 'brown-bear' },
+      'conjure-animals': { 3: 'wolf', 4: 'wolf', 5: 'brown-bear' },
+      'conjure-woodland-beings': { 4: 'giant-spider' },
+      'find-familiar': { 1: 'giant-owl' },
+      'spiritual-weapon': { 2: 'giant-badger' }, // proxy: n\u00e3o tem monster "weapon", usar besta pequena
+    };
+    return map[spellSlug]?.[slotLevel] ?? map[spellSlug]?.[Object.keys(map[spellSlug] ?? {}).map(Number).sort()[0]] ?? null;
+  }
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
     // 1. Get character sheet to verify spell access and slots
@@ -767,9 +786,54 @@ export class SpellCastingService {
 
     await this.participantRepo.save(participant);
 
+    // Spec 012 \u2014 hook summon spells. Se o spell \u00e9 de summon, spawna no grid.
+    // summonEvents inicia separado e \u00e9 merged em events ap\u00f3s declara\u00e7\u00e3o abaixo.
+    const summonEvents: import('../interfaces/result.type').GameEventData[] = [];
+    const summonMonsterSlug = this.getSummonMonsterForSpell(dto.spellSlug, dto.slotLevel);
+    if (summonMonsterSlug) {
+      try {
+        const summon = await this.summoning.spawnSummon(dto.encounterId, {
+          casterParticipantId: participant.id,
+          monsterSlug: summonMonsterSlug,
+          displayName: `${dto.spellSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} (${summonMonsterSlug})`,
+          position: participant.positionX != null && participant.positionY != null ? { x: participant.positionX + 1, y: participant.positionY } : undefined,
+          faction: 'ally',
+          concentrationLinked: spellResult.concentration === true,
+          durationRoundsTotal: spellResult.concentration ? 10 : 60,
+          source: dto.spellSlug === 'find-familiar'
+            ? 'find-familiar-spell'
+            : dto.spellSlug === 'conjure-animals'
+              ? 'conjure-animals-spell'
+              : dto.spellSlug === 'summon-beast'
+                ? 'summon-beast-spell'
+                : dto.spellSlug === 'spiritual-weapon'
+                  ? 'spiritual-weapon-spell'
+                  : 'summon-beast-spell',
+        });
+        summonEvents.push({
+          event_type: 'summon_spawned',
+          actor_participant_id: participant.id,
+          data: {
+            spellSlug: dto.spellSlug,
+            summonId: summon.id,
+            summonMonsterSlug,
+            slotLevel: dto.slotLevel,
+          },
+        });
+      } catch (err) {
+        // N\u00e3o aborta o cast em caso de erro do summon (spell j\u00e1 foi paga).
+        const msg = err instanceof Error ? err.message : String(err);
+        summonEvents.push({
+          event_type: 'summon_error',
+          actor_participant_id: participant.id,
+          data: { spellSlug: dto.spellSlug, error: msg },
+        });
+      }
+    }
+
     // 8. Apply effects to targets
     const targetsHit: CombatSpellResult['targetsHit'] = [];
-    const events = [...(castResult.events ?? [])];
+    const events = [...(castResult.events ?? []), ...summonEvents];
 
     // Spec 012 Sorcerer — emitir evento metamagic_applied (histórico + UI).
     if (metamagicAppliedType) {
