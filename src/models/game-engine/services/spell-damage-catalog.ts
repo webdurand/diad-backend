@@ -89,6 +89,10 @@ export const SPELL_DAMAGE_CATALOG: Record<string, SpellDamageEntry> = {
   'witch-bolt': bySlotLinear(1, 1, 'lightning', 12, 1),
   'guiding-bolt': bySlotLinear(1, 4, 'radiant', 6, 1),
   'inflict-wounds': bySlotLinear(1, 3, 'necrotic', 10, 1),
+  // Chromatic Orb (Sorcerer/Wizard): 3d8 base + 1d8/upcast; damage type
+  // escolhido pelo caster (acid/cold/fire/lightning/poison/thunder). DIAD
+  // MVP: fixa 'fire' (subsystem de damage-type selection V2).
+  'chromatic-orb': bySlotLinear(1, 3, 'fire', 8, 1),
 
   // ── L2 ──────────────────────────────────────────────────────────────
   // Scorching Ray: 3 rays at L2, +1 per slot. Each ray = 2d6 fire (attack roll per ray).

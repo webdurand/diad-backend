@@ -204,6 +204,22 @@ export class EncounterParticipantEntity {
   @Column({ name: 'relentless_rage_uses_used', type: 'int', default: 0 })
   relentlessRageUsesUsed: number;
 
+  /**
+   * Sorcerer L2+ Font of Magic (RAW 2024) — Sorcery Points pool gastos.
+   * Max: classLevel (L2=2, L5=5, L10=10, L20=20). Incrementado por convert
+   * SP→slot e metamagic (SP cost). Reset: all em long rest; L5 Sorcerous
+   * Restoration 1/LR regain floor(max/2) em SR.
+   */
+  @Column({ name: 'sorcery_points_used', type: 'int', default: 0 })
+  sorceryPointsUsed: number;
+
+  /**
+   * Sorcerer L5 Sorcerous Restoration (RAW 2024) — 1/LR uso em SR recupera
+   * floor(classLevel/2) SP. Flag boolean (consumido até long rest).
+   */
+  @Column({ name: 'sorcerous_restoration_used', type: 'boolean', default: false })
+  sorcerousRestorationUsed: boolean;
+
   // Grid position for battle map
   @Column({ name: 'position_x', type: 'int', nullable: true })
   positionX?: number;

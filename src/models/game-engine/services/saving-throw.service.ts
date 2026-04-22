@@ -115,7 +115,21 @@ export class SavingThrowService {
       roll = this.diceService.roll(20);
     }
 
-    let total = roll + modifier;
+    // Spec 012 Paladin — Aura of Protection L6 (+CHA save em aliados 10ft) +
+    // Aura Expansion L18 (10 → 30ft). Busca PC ally Paladin L6+ com flag
+    // hasAuraOfProtection dentro de 10/30ft do subject. Usa maior CHA mod.
+    let auraBonus = 0;
+    let auraSourceName: string | null = null;
+    if (dto.participantId) {
+      const auraResult = await this.computeAuraOfProtectionBonus(
+        dto.participantId,
+        dto.userId,
+      );
+      auraBonus = auraResult.bonus;
+      auraSourceName = auraResult.sourceName;
+    }
+
+    let total = roll + modifier + auraBonus;
     let passed = total >= dto.dc;
 
     // Fighter L9 Indomitable (RAW 2024) — se save falhou e o participant armou
@@ -169,7 +183,83 @@ export class SavingThrowService {
     const events = this.buildEvents(dto, roll, modifier, total, passed);
     if (inspirationEvent) events.unshift(inspirationEvent);
     if (indomitableEvent) events.push(indomitableEvent);
+    if (auraBonus > 0 && auraSourceName) {
+      events.push({
+        event_type: 'aura_of_protection_applied',
+        target_participant_id: dto.participantId,
+        data: {
+          bonus: auraBonus,
+          sourcePaladinName: auraSourceName,
+          ability: dto.ability,
+          dc: dto.dc,
+          finalTotal: total,
+        },
+      } as GameEventData);
+    }
     return success(result, events);
+  }
+
+  /**
+   * Spec 012 Paladin Aura of Protection (L6+, expande 10→30ft em L18).
+   * Busca PCs Paladin L6+ vivos dentro de 10/30ft (2/6 cells) do subject
+   * + que tenham hasAuraOfProtection flag. Retorna o maior CHA mod encontrado
+   * (RAW: auras não stackam — pegamos a mais forte). Aplica em self + PC aliados.
+   */
+  private async computeAuraOfProtectionBonus(
+    subjectParticipantId: string,
+    userId: string,
+  ): Promise<{ bonus: number; sourceName: string | null }> {
+    const subject = await this.participantRepo.findOne({
+      where: { id: subjectParticipantId },
+    });
+    if (
+      !subject ||
+      subject.type !== 'pc' ||
+      subject.positionX == null ||
+      subject.positionY == null ||
+      subject.isDefeated
+    ) {
+      return { bonus: 0, sourceName: null };
+    }
+
+    const allies = await this.participantRepo.find({
+      where: { encounterId: subject.encounterId, type: 'pc' },
+    });
+
+    let bestBonus = 0;
+    let bestSource: string | null = null;
+    for (const ally of allies) {
+      if (
+        ally.isDefeated ||
+        !ally.characterId ||
+        ally.positionX == null ||
+        ally.positionY == null
+      ) {
+        continue;
+      }
+      const sheet = await this.sheetService.computeSheet(userId, ally.characterId).catch(() => null);
+      if (!sheet || !(sheet as any).hasAuraOfProtection) continue;
+      const paladinClass = (sheet as any).classes?.find((c: any) => c.slug === 'paladin');
+      if (!paladinClass || paladinClass.level < 6) continue;
+      const auraExpansion = Boolean((sheet as any).hasAuraExpansion);
+      const reachCells = auraExpansion ? 6 : 2; // 30ft ou 10ft
+
+      const dx = Math.abs(ally.positionX - subject.positionX);
+      const dy = Math.abs(ally.positionY - subject.positionY);
+      const chebyshevCells = Math.max(dx, dy);
+      if (chebyshevCells > reachCells) continue;
+
+      const chaBlock = (sheet.abilityScores ?? []).find(
+        (a) => a.slug === 'cha' || a.slug === 'charisma',
+      );
+      const chaMod = chaBlock?.modifier ?? 0;
+      const bonus = Math.max(chaMod, 1); // RAW: mínimo +1
+      if (bonus > bestBonus) {
+        bestBonus = bonus;
+        bestSource = (ally.displayName as string | undefined) ?? ally.id;
+      }
+    }
+    return { bonus: bestBonus, sourceName: bestSource };
   }
 
   /**

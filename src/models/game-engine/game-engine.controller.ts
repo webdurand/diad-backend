@@ -53,6 +53,7 @@ import { BarbarianFeaturesService } from './services/barbarian-features.service'
 import { BerserkerService } from './services/berserker.service';
 import { ClericFeaturesService } from './services/cleric-features.service';
 import { PaladinFeaturesService } from './services/paladin-features.service';
+import { SorcererFeaturesService } from './services/sorcerer-features.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -115,6 +116,7 @@ export class GameEngineController {
     private readonly berserker: BerserkerService,
     private readonly clericFeatures: ClericFeaturesService,
     private readonly paladinFeatures: PaladinFeaturesService,
+    private readonly sorcererFeatures: SorcererFeaturesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -837,11 +839,25 @@ export class GameEngineController {
       participantId: string;
       spellSlug: string;
       slotLevel: number;
-      targetParticipantIds: string[];
+      targetParticipantIds?: string[];
       /** Spec 003 Fatia 9 — cast como reaction (Shield, Counterspell, etc.). */
       asReaction?: boolean;
       /** Evento que disparou a reaction (ex: attack_rolled). Obrigatorio se asReaction=true. */
       triggerEventId?: string;
+      /** Spec 012 Gap 1 — centro da AoE em coordenadas de grid (cells). */
+      aoeOriginCell?: { x: number; y: number };
+      /** Spec 012 Sorcerer — Metamagic RAW 2024 (6 types). */
+      metamagic?: {
+        type:
+          | 'twinned'
+          | 'quickened'
+          | 'distant'
+          | 'heightened'
+          | 'extended'
+          | 'subtle';
+        targetExtra?: string;
+        heightenedTargetId?: string;
+      };
     },
   ) {
     return this.spellCastingService.castSpellInCombat({
@@ -849,10 +865,14 @@ export class GameEngineController {
       participantId: body.participantId,
       spellSlug: body.spellSlug,
       slotLevel: body.slotLevel,
-      targetParticipantIds: body.targetParticipantIds,
+      targetParticipantIds: Array.isArray(body.targetParticipantIds)
+        ? body.targetParticipantIds
+        : [],
       ownerUserId: getUserId(req),
       asReaction: body.asReaction,
       triggerEventId: body.triggerEventId,
+      aoeOriginCell: body.aoeOriginCell,
+      metamagic: body.metamagic,
     });
   }
 
@@ -1193,6 +1213,79 @@ export class GameEngineController {
     );
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
+  }
+
+  /**
+   * Sorcerer L2+ Font of Magic — pool de Sorcery Points.
+   * GET retorna {total, used, remaining}.
+   */
+  @Get('encounters/:id/participants/:participantId/sorcerer/sorcery-points')
+  async sorcererGetSorceryPoints(
+    @Req() req: AuthRequest,
+    @Param('participantId') participantId: string,
+  ) {
+    const userId = getUserId(req);
+    const state = await this.sorcererFeatures.getSorceryPointsState(
+      participantId,
+      userId,
+    );
+    return { ok: true, value: state };
+  }
+
+  /**
+   * Sorcerer L2+ Font of Magic — converte 1 spell slot em N SP (N = slotLevel).
+   */
+  @Post('encounters/:id/participants/:participantId/sorcerer/convert-slot-to-sp')
+  async sorcererConvertSlotToSp(
+    @Req() req: AuthRequest,
+    @Param('participantId') participantId: string,
+    @Body() body: { slotLevel: number },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.sorcererFeatures.convertSlotToSp(
+      participantId,
+      body.slotLevel,
+      userId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value, events: result.events };
+  }
+
+  /**
+   * Sorcerer L2+ Font of Magic — converte SP em 1 spell slot (RAW: L1=2/L2=3/L3=5/L4=6/L5=7).
+   */
+  @Post('encounters/:id/participants/:participantId/sorcerer/convert-sp-to-slot')
+  async sorcererConvertSpToSlot(
+    @Req() req: AuthRequest,
+    @Param('participantId') participantId: string,
+    @Body() body: { targetSlotLevel: number },
+  ) {
+    const userId = getUserId(req);
+    const result = await this.sorcererFeatures.convertSpToSlot(
+      participantId,
+      body.targetSlotLevel,
+      userId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value, events: result.events };
+  }
+
+  /**
+   * Sorcerer L5+ Sorcerous Restoration — 1/LR uso em SR recupera
+   * floor(classLevel/2) SP.
+   */
+  @Post('encounters/:id/participants/:participantId/sorcerer/sorcerous-restoration')
+  async sorcererSorcerousRestoration(
+    @Req() req: AuthRequest,
+    @Param('participantId') participantId: string,
+  ) {
+    const userId = getUserId(req);
+    const result = await this.sorcererFeatures.sorcerousRestoration(
+      participantId,
+      userId,
+    );
+    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    return { ok: true, value: result.value, events: result.events };
   }
 
   /**

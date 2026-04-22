@@ -72,6 +72,8 @@ import { BerserkerService } from './services/berserker.service';
 import { ClericFeaturesService } from './services/cleric-features.service';
 // Spec 012 Paladin 100% — Divine Smite + Radiant Strikes + Sacred Weapon
 import { PaladinFeaturesService } from './services/paladin-features.service';
+// Spec 012 Sorcerer — Font of Magic (SP pool + convert SP↔slot)
+import { SorcererFeaturesService } from './services/sorcerer-features.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -168,6 +170,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     BerserkerService,
     ClericFeaturesService,
     PaladinFeaturesService,
+    SorcererFeaturesService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -218,6 +221,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     BerserkerService,
     ClericFeaturesService,
     PaladinFeaturesService,
+    SorcererFeaturesService,
     // Spec 002
     JoinRequestService,
   ],

@@ -333,6 +333,35 @@ export interface CharacterSheet {
   /** Wizard Evocation L14 Overchannel — max damage L1-L5 spell 1/LR, depois self-damage recursivo. */
   hasOverchannel?: boolean;
 
+  /** Sorcerer L1 Innate Sorcery (RAW 2024) — Bonus Action 1 min: advantage em sorcerer spell attacks + DC +1 dos saves. 2/LR. */
+  hasInnateSorcery?: boolean;
+  /** Sorcerer L2 Font of Magic — Sorcery Points pool (= sorcerer level). Convert SP ↔ spell slots. */
+  hasFontOfMagic?: boolean;
+  /** Sorcerer L2 Metamagic (RAW 2024, era L3) — escolhe 2 metamagic options, +1 em L10, +1 em L17. */
+  hasMetamagic?: boolean;
+  /** Sorcerer L5 Sorcerous Restoration (RAW 2024, era L20) — 1/LR recupera metade do SP máx em short rest. */
+  hasSorcerousRestoration?: boolean;
+  /** Sorcerer L7 Sorcery Incarnate (RAW 2024 NEW) — 1/LR Bonus Action: 1 min, pode aplicar 2 metamagics num único cast. */
+  hasSorceryIncarnate?: boolean;
+  /** Sorcerer L20 Arcane Apotheosis (RAW 2024 NEW) — 1/turn ao castar spell L1+, aplica 1 metamagic sem SP cost. */
+  hasArcaneApotheosis?: boolean;
+
+  /** Sorcerer Draconic L3 Draconic Resilience — HP +1/level + unarmored AC = 13 + DEX. */
+  hasDraconicResilience?: boolean;
+  /** Sorcerer Draconic L3 Dragon Ancestor — 1 elemental type (fire/cold/lightning/etc). Draconic language + CHA +PB em interação com dragons. */
+  hasDragonAncestor?: boolean;
+  /** Sorcerer Draconic L6 Elemental Affinity — +CHA damage + resistance do elemento (1 hr custa 1 SP). */
+  hasElementalAffinity?: boolean;
+  /** Sorcerer Draconic L14 Dragon Wings — bonus action wings 60ft fly 1 hr. */
+  hasDragonWings?: boolean;
+  /** Sorcerer Draconic L18 Draconic Presence — 5 SP, aura 60ft Frightened/Charmed WIS save 1 min. */
+  hasDraconicPresence?: boolean;
+
+  /** Sorcerer Wild Magic L3 Wild Magic Surge — 1/LR (2014) ou cast trigger (2024) rola d100 efeito aleatório. */
+  hasWildMagicSurge?: boolean;
+  /** Sorcerer Wild Magic L3 Tides of Chaos — advantage 1 attack/save/check; próximo cast L1+ triggera Surge. */
+  hasTidesOfChaos?: boolean;
+
   // Equipment & Inventory
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
@@ -1018,6 +1047,25 @@ export class CharacterSheetService {
       hasPotentCantrip: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('potent-cantrip')),
       hasEmpoweredEvocation: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('empowered-evocation')),
       hasOverchannel: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('overchannel')),
+
+      hasInnateSorcery: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('innate-sorcery')),
+      hasFontOfMagic: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('font-of-magic')),
+      hasMetamagic: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? '').startsWith('metamagic-sorcerer') ||
+        (cf.feature?.slug ?? '') === 'metamagic-1' ||
+        (cf.feature?.slug ?? '') === 'metamagic-2' ||
+        (cf.feature?.slug ?? '').startsWith('metamagic-options'),
+      ),
+      hasSorcerousRestoration: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sorcerous-restoration')),
+      hasSorceryIncarnate: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sorcery-incarnate')),
+      hasArcaneApotheosis: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('arcane-apotheosis')),
+      hasDraconicResilience: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('draconic-resilience')),
+      hasDragonAncestor: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('dragon-ancestor')),
+      hasElementalAffinity: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('elemental-affinity')),
+      hasDragonWings: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('dragon-wings')),
+      hasDraconicPresence: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('draconic-presence')),
+      hasWildMagicSurge: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('wild-magic-surge')),
+      hasTidesOfChaos: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('tides-of-chaos')),
 
       equipment,
       magicItems,

@@ -97,17 +97,33 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
   },
   rogue: {},
   sorcerer: {
-    cantrips: ['fire-bolt', 'light', 'prestidigitation', 'mage-hand'],
-    preparedSpells: ['magic-missile', 'shield'],
+    // Spec 012 Sorcerer — starter spells RAW 2024: 4 cantrips + 4 L1 spells.
+    // Cantrips incluem ray-of-frost (debuff cold), fire-bolt (damage), light,
+    // prestidigitation, mage-hand. Spells inclui burning-hands (AoE cone),
+    // chromatic-orb (damage versátil), magic-missile (multi-dart), shield (reaction).
+    cantrips: ['fire-bolt', 'ray-of-frost', 'light', 'prestidigitation', 'mage-hand'],
+    preparedSpells: ['magic-missile', 'shield', 'burning-hands', 'chromatic-orb'],
   },
   warlock: {
     cantrips: ['eldritch-blast', 'mage-hand'],
     preparedSpells: ['hex', 'armor-of-agathys'],
   },
   wizard: {
-    cantrips: ['fire-bolt', 'mage-hand', 'prestidigitation'],
-    spellbook: ['mage-armor', 'magic-missile', 'shield', 'sleep', 'detect-magic', 'feather-fall'],
-    preparedSpells: ['mage-armor', 'magic-missile'],
+    // Spec 012 Gap 4 — cantrips incluem ray-of-frost (debuff) e minor-illusion
+    // (utility). Spellbook inclui witch-bolt (concentration multi-turn) e
+    // burning-hands (AoE cone), alinhado ao starter pack RAW 2024 XPHB.
+    cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand', 'prestidigitation', 'minor-illusion', 'light'],
+    spellbook: [
+      'mage-armor',
+      'magic-missile',
+      'shield',
+      'sleep',
+      'detect-magic',
+      'feather-fall',
+      'witch-bolt',
+      'burning-hands',
+    ],
+    preparedSpells: ['mage-armor', 'magic-missile', 'shield', 'sleep'],
   },
 };
 
