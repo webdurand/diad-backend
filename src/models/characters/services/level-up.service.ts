@@ -40,6 +40,7 @@ import {
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
 import { type EditionRules, getSubclassLevel as getSubclassLevelFromRules, getPreparedFormula } from 'src/shared/edition-rules';
+import { isClassAvailable, getCanonicalSubclassSlugs } from 'src/shared/class-availability';
 import { Logger } from '@nestjs/common';
 
 type CasterType = CasterClassType;
@@ -244,6 +245,10 @@ export class LevelUpService {
       const isMulticlass = !isCurrentClass;
       const nextClassLevel = isCurrentClass ? charClass!.class_level + 1 : 1;
 
+      // Canonical-first: classe s\u00f3 aparece pra multiclasse se estiver liberada.
+      // Classe atual do PC continua aparecendo pra ele poder subir de n\u00edvel.
+      if (!isCurrentClass && !isClassAvailable(cls.slug)) continue;
+
       // Parse multiclassing prerequisites + compute missing
       const prereqs = this.parsePrerequisites(cls.multi_classing);
       const missingPrerequisites = isCurrentClass
@@ -313,7 +318,11 @@ export class LevelUpService {
         const subs = await this.subclassRepo.find({
           where: { class_id: cls.id },
         });
-        availableSubclasses = subs.map((s) => ({ slug: s.slug, name: s.name }));
+        // Canonical-first: filtra pela allowlist da classe.
+        const allowed = new Set(getCanonicalSubclassSlugs(cls.slug));
+        availableSubclasses = subs
+          .filter((s) => allowed.has(s.slug))
+          .map((s) => ({ slug: s.slug, name: s.name }));
       }
 
       // Features
