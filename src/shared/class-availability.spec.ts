@@ -2,7 +2,7 @@ import { isClassAvailable, getCanonicalSubclassSlugs } from './class-availabilit
 
 describe('class-availability (spec 012 canonical-first)', () => {
   describe('isClassAvailable', () => {
-    it('retorna true pras 11 classes validadas em tela', () => {
+    it('retorna true pras 12 classes validadas em tela (TODAS RAW 2024 XPHB)', () => {
       expect(isClassAvailable('fighter')).toBe(true);
       expect(isClassAvailable('barbarian')).toBe(true);
       expect(isClassAvailable('cleric')).toBe(true);
@@ -14,24 +14,17 @@ describe('class-availability (spec 012 canonical-first)', () => {
       expect(isClassAvailable('warlock')).toBe(true);
       expect(isClassAvailable('monk')).toBe(true);
       expect(isClassAvailable('rogue')).toBe(true);
+      expect(isClassAvailable('ranger')).toBe(true);
     });
 
-    it('retorna false pra 1 classe pendente', () => {
-      expect(isClassAvailable('ranger')).toBe(false);
-    });
-
-    it('canonicaliza slugs 2014 (-phb) pras mesmas regras', () => {
+    it('canonicaliza slugs 2014 (-phb) pras mesmas regras \u2014 todas liberadas em XPHB canonical', () => {
       expect(isClassAvailable('fighter-phb')).toBe(true);
       expect(isClassAvailable('druid-phb')).toBe(true);
       expect(isClassAvailable('bard-phb')).toBe(true);
       expect(isClassAvailable('warlock-phb')).toBe(true);
       expect(isClassAvailable('monk-phb')).toBe(true);
       expect(isClassAvailable('rogue-phb')).toBe(true);
-      expect(isClassAvailable('ranger-phb')).toBe(false);
-    });
-
-    it('retorna false pra slug desconhecida', () => {
-      expect(isClassAvailable('blood-hunter')).toBe(false);
+      expect(isClassAvailable('ranger-phb')).toBe(true);
     });
   });
 
@@ -49,10 +42,11 @@ describe('class-availability (spec 012 canonical-first)', () => {
       expect(getCanonicalSubclassSlugs('warlock')).toEqual(['warlock-fiend', 'fiend']);
       expect(getCanonicalSubclassSlugs('monk')).toEqual(['monk-open-hand', 'open-hand']);
       expect(getCanonicalSubclassSlugs('rogue')).toEqual(['rogue-thief', 'thief']);
+      expect(getCanonicalSubclassSlugs('ranger')).toEqual(['ranger-hunter', 'hunter']);
     });
 
-    it('retorna lista vazia pras classes pendentes', () => {
-      expect(getCanonicalSubclassSlugs('ranger')).toEqual([]);
+    it('retorna lista vazia pra slug desconhecida', () => {
+      expect(getCanonicalSubclassSlugs('blood-hunter')).toEqual([]);
     });
 
     it('canonicaliza -phb', () => {

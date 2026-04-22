@@ -104,9 +104,69 @@ export class ClassFeatureResolverService {
         return this.handleSteadyAim(sourceParticipantId, payload, events);
       case 'uncanny-dodge':
         return this.handleUncannyDodge(sourceParticipantId, payload, events);
+      case 'tireless':
+        return this.handleTireless(sourceParticipantId, payload, events);
+      case 'natures-veil':
+        return this.handleNaturesVeil(sourceParticipantId, payload, events);
       default:
         return { resolved: false, events };
     }
+  }
+
+  // ---- Handler: Tireless (Ranger L10) ----
+  // RAW 2024 XPHB: bonus action, PB/LR. Heal self 1d8 + WIS. Tamb\u00e9m reduz 1 n\u00edvel
+  // de Exhaustion. Pra MVP s\u00f3 heal.
+  private async handleTireless(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    const wisMod = payload.caster?.abilityMods?.wis ?? 0;
+    const rolled = this.dice.roll(8);
+    const total = rolled + wisMod;
+    if (source.characterId) {
+      const st = await this.charStates.findOne({ where: { character_id: source.characterId } });
+      if (st) {
+        st.current_hp = st.current_hp + total;
+        await this.charStates.save(st);
+      }
+    } else {
+      source.currentHp = Math.min(source.maxHp ?? 0, (source.currentHp ?? 0) + total);
+      await this.participants.save(source);
+    }
+    events.push({
+      event_type: 'tireless_heal',
+      actor_participant_id: sourceId,
+      data: { rolled, wisMod, total },
+    });
+    return { resolved: true, events, resolutionPayload: { healAmount: total } };
+  }
+
+  // ---- Handler: Nature's Veil (Ranger L13) ----
+  // RAW 2024 XPHB: bonus action, 1/LR. Invis\u00edvel at\u00e9 fim do pr\u00f3ximo turno.
+  // Aplica Invisible condition ao self com dura\u00e7\u00e3o 1 round.
+  private async handleNaturesVeil(
+    sourceId: string,
+    _payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    const r = await this.conditionLifecycle.applyCondition(source, {
+      slug: 'invisible',
+      appliedBy: sourceId,
+      sourceFeature: 'natures-veil',
+      sourceConcentration: false,
+      durationRoundsRemaining: 1,
+    } as unknown as Parameters<typeof this.conditionLifecycle.applyCondition>[1]);
+    events.push(...r.events, {
+      event_type: 'natures_veil_activated',
+      actor_participant_id: sourceId,
+      data: { durationRounds: 1 },
+    });
+    return { resolved: true, events };
   }
 
   // ---- Handler: Steady Aim (Rogue L1 XPHB) ----

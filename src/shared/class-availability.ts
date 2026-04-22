@@ -37,8 +37,8 @@ export const CLASS_AVAILABILITY: Record<string, ClassAvailability> = {
   monk: { available: true, canonicalSubclasses: ['monk-open-hand', 'open-hand'] },
   // Rogue: Cunning Action (Dash/Disengage/Hide) + Steady Aim + Uncanny Dodge + Thief canonical
   rogue: { available: true, canonicalSubclasses: ['rogue-thief', 'thief'] },
-  // Marco C — a liberar conforme cada classe fecha L1-L20 + 1 canônica RAW
-  ranger: { available: false, canonicalSubclasses: [] },
+  // Ranger: Hunter's Mark + Tireless + Nature's Veil + Hunter canonical
+  ranger: { available: true, canonicalSubclasses: ['ranger-hunter', 'hunter'] },
 };
 
 function canonicalizeClassSlug(slug: string): string {
