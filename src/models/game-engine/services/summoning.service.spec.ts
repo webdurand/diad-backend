@@ -52,7 +52,7 @@ describe('SummoningService (spec 012)', () => {
       opts.monsterExists === false ? null : makeWolfMonster(),
     );
 
-    const encounterRepo = {} as unknown as Parameters<typeof SummoningService.prototype['constructor']>[0];
+    const encounterRepo = {} as unknown as Record<string, never>;
 
     const svc = new SummoningService(
       { findOne: participantFindOne, find: participantFind, save: participantSave, remove: participantRemove } as any,

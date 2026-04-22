@@ -103,6 +103,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
       MonsterEntity,
       CharacterEntity,
       CharacterStateEntity,
+      // CharacterStateEntity já declarado acima; mantém pra injeção no ClassFeatureResolverService
       LootTableEntity,
       LootTableItemEntity,
       SpellEntity,
