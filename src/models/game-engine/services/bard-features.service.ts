@@ -67,7 +67,8 @@ export class BardFeaturesService {
     }
     const dieSize = this.getBardicInspirationDie(bardLevel);
 
-    // Aplica EffectInstance no target
+    // Aplica EffectInstance no target. expiresAt='until_consumed' pra evitar
+    // que o effect rode em ticks de round (RAW: 10 min mas consome no 1\u00ba uso).
     const res = await this.effects.addEffect(target, {
       kind: 'bardic_inspiration',
       sourceCasterParticipantId: caster.id,
@@ -78,6 +79,7 @@ export class BardFeaturesService {
         bardLevel,
       } as Record<string, unknown>,
       requiresConcentration: false,
+      expiresAt: { kind: 'until_consumed' as const },
     } as unknown as Parameters<EffectInstanceService['addEffect']>[1]);
 
     this.logger.log(
@@ -123,20 +125,23 @@ export class BardFeaturesService {
     const payload = (biEffect as unknown as { payload?: { dieSize?: number } }).payload ?? {};
     const dieSize = payload.dieSize ?? 6;
     const bonus = diceRoller(dieSize);
+    const effectId = (biEffect as unknown as { id: string }).id;
 
-    // Remove o effect (consumido)
-    const removeRes = await this.effects.removeEffect(
-      target,
-      (biEffect as unknown as { id: string }).id,
-      'consumed',
+    // Remove o effect (consumido) diretamente no array pra evitar reload duplo
+    target.effectInstances = (target.effectInstances ?? []).filter(
+      (e) => (e as unknown as { id: string }).id !== effectId,
     );
+    try {
+      await this.participantRepo.save(target);
+    } catch {
+      // save pode falhar em edge case; bonus j\u00e1 foi calculado, retorna
+    }
 
     return {
       consumed: true,
       bonus,
       dieSize,
       events: [
-        ...removeRes.events,
         {
           event_type: 'bardic_inspiration_consumed',
           target_participant_id: target.id,

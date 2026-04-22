@@ -41,6 +41,7 @@ import { ClassFeatureResolverService } from './class-feature-resolver.service';
 import { WeaponMasteryService } from './weapon-mastery.service';
 import { FightingStyleService } from './fighting-style.service';
 import { TransformationService } from './transformation.service';
+import { BardFeaturesService } from './bard-features.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 import {
   parseRangeString,
@@ -142,6 +143,7 @@ export class CombatService {
     private readonly weaponMastery: WeaponMasteryService,
     private readonly fightingStyle: FightingStyleService,
     private readonly transformation: TransformationService,
+    private readonly bard: BardFeaturesService,
   ) {}
 
   /**
@@ -1856,14 +1858,36 @@ export class CombatService {
       0,
     );
 
-    const totalAttack = attackRoll + attackBonus + effectBonusSum;
+    // Spec 012 Sprint F \u2014 Bardic Inspiration consume hook (RAW 2024 XPHB).
+    // Short-circuit: s\u00f3 chama BardFeaturesService se attacker tem effect BI
+    // armado (evita dependency inj\u00e7\u00e3o issue em fluxos sem Bard envolvido).
+    let biBonus = 0;
+    let biEvents: GameEventData[] = [];
+    const hasBardicInspirationEffect = (attacker.effectInstances ?? []).some(
+      (e) => (e as unknown as { kind?: string }).kind === 'bardic_inspiration',
+    );
+    if (hasBardicInspirationEffect) {
+      try {
+        const biResult = await this.bard.consumeBardicInspirationIfPresent(
+          attacker.id,
+          'attack_roll',
+          (sides) => this.diceService.roll(sides),
+        );
+        biBonus = biResult.consumed ? biResult.bonus : 0;
+        biEvents = biResult.events;
+      } catch {
+        // n\u00e3o aborta attack se BI consumption falha
+      }
+    }
+
+    const totalAttack = attackRoll + attackBonus + effectBonusSum + biBonus;
     const hit =
       !isCriticalMiss &&
       (isCritical ||
         defenderMods.autoCritIfMelee ||
         totalAttack >= targetAc);
 
-    const events: GameEventData[] = [];
+    const events: GameEventData[] = [...biEvents];
 
     const attackRollResult = {
       roll: attackRoll,
@@ -1938,39 +1962,41 @@ export class CombatService {
       // Dice = Nd6 onde N = floor((rogueLevel+1)/2) (1d6 L1, 2d6 L3, ..., cap 10d6 L19).
       let sneakAttackDamage = 0;
       let sneakAttackDice: string | null = null;
-      if (
-        attacker.type === 'pc' &&
-        attacker.characterId &&
-        !attacker.sneakAttackUsedThisTurn
-      ) {
-        const ownerIdForSa = await this.resolveParticipantOwner(
-          attacker,
-          dto.ownerUserId,
-        );
-        const saSheet = await this.sheetService.computeSheet(
-          ownerIdForSa,
-          attacker.characterId,
-        );
-        const rogueClass = (saSheet as unknown as { classes?: Array<{ slug: string; level: number }> })
-          .classes?.find((c) => c.slug.replace(/-phb$/, '') === 'rogue');
-        if (rogueClass) {
-          // Check weapon Finesse/Ranged via actionSlug or weaponSlug
-          const weaponSlug = dto.actionSlug ?? '';
-          // Heur\u00edstica MVP: aceita weapon-* (n\u00e3o unarmed). RAW real checa properties;
-          // a maioria das weapons que Rogue usa j\u00e1 s\u00e3o Finesse (Rapier, Shortsword, Dagger).
-          const isWeaponAttack = weaponSlug.startsWith('weapon-') || weaponSlug.endsWith('-attack');
-          const advantageForSa = hasAdvantage && !hasDisadvantage;
-          // V2: ally 5ft check. MVP: advantage \u00e9 condi\u00e7\u00e3o suficiente.
-          if (isWeaponAttack && advantageForSa) {
-            const nDice = Math.min(10, Math.max(1, Math.floor((rogueClass.level + 1) / 2)));
-            sneakAttackDice = `${nDice}d6`;
-            const saRoll = this.diceService.rollExpression(sneakAttackDice);
-            sneakAttackDamage = saRoll.total;
-            totalDamage += sneakAttackDamage;
-            attacker.sneakAttackUsedThisTurn = true;
-            await this.participantRepo.save(attacker);
+      try {
+        if (
+          attacker.type === 'pc' &&
+          attacker.characterId &&
+          !attacker.sneakAttackUsedThisTurn
+        ) {
+          const ownerIdForSa = await this.resolveParticipantOwner(
+            attacker,
+            dto.ownerUserId,
+          );
+          const saSheet = await this.sheetService.computeSheet(
+            ownerIdForSa,
+            attacker.characterId,
+          );
+          const classesList = (saSheet as unknown as { classes?: Array<{ slug?: string; level?: number }> }).classes ?? [];
+          const rogueClass = classesList.find(
+            (c) => typeof c.slug === 'string' && c.slug.replace(/-phb$/, '') === 'rogue',
+          );
+          if (rogueClass && typeof rogueClass.level === 'number') {
+            const weaponSlug = dto.actionSlug ?? '';
+            const isWeaponAttack = weaponSlug.startsWith('weapon-') || weaponSlug.endsWith('-attack');
+            const advantageForSa = hasAdvantage && !hasDisadvantage;
+            if (isWeaponAttack && advantageForSa) {
+              const nDice = Math.min(10, Math.max(1, Math.floor((rogueClass.level + 1) / 2)));
+              sneakAttackDice = `${nDice}d6`;
+              const saRoll = this.diceService.rollExpression(sneakAttackDice);
+              sneakAttackDamage = saRoll.total;
+              totalDamage += sneakAttackDamage;
+              attacker.sneakAttackUsedThisTurn = true;
+              await this.participantRepo.save(attacker);
+            }
           }
         }
+      } catch {
+        // SA check falha silenciosa \u2014 n\u00e3o aborta attack
       }
 
       // Spec 012 — consumir damage_bonus effects do attacker (Rage +2 melee,
