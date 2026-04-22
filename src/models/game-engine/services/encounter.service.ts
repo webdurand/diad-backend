@@ -247,6 +247,10 @@ export class EncounterService {
             (p as any).armorClass = sheet.armorClass;
             (p as any).speed = sheet.speed ?? 30;
           }
+          // Spec 012 Gap #23 — tempHp vive em char_state pra PCs (Dark One's Blessing,
+          // False Life, Heroism, etc). Participant.tempHp podia ficar stale. Overlay do
+          // sheet garante que combat e /sheet usem a mesma fonte.
+          (p as any).tempHp = sheet.tempHp ?? 0;
           if (p.initiativeModifier == null || p.initiativeModifier !== sheet.initiative) {
             (p as any).initiativeModifier = sheet.initiative;
           }

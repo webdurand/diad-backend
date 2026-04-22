@@ -2048,6 +2048,26 @@ export class CombatService {
         }
       }
 
+      // Spec 012 Gap #25 — Hex / Hunter's Mark damage riders. Target carrega
+      // `hex_mark` / `hunter_mark` effect linkado ao attacker. Por weapon attack
+      // hit, +1d6 (necrotic pra Hex, damage type do weapon pra HM).
+      const targetMarks = (target.effectInstances ?? []).filter(
+        (e) =>
+          (e.kind === 'hex_mark' || e.kind === 'hunter_mark') &&
+          e.sourceCasterParticipantId === attacker.id,
+      );
+      for (const mark of targetMarks) {
+        const p = (mark.payload ?? {}) as { riderDice?: string; riderType?: string };
+        const dice = p.riderDice ?? '1d6';
+        const r = this.diceService.rollExpression(dice);
+        totalDamage += r.total;
+        extraDamageBonuses.push({
+          source: mark.sourceSpellSlug ?? mark.kind,
+          amount: r.total,
+          dice,
+        });
+      }
+
       // Check monster immunities/resistances/vulnerabilities
       let resisted = false;
       let immune = false;

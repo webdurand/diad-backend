@@ -368,6 +368,48 @@ export function materializeSpellEffects(
       ];
     }
 
+    case 'hex': {
+      // RAW 2024 XPHB Hex: 1 target, concentração 1h. Attacker deals extra 1d6 necrotic
+      // em qualquer weapon attack que hit no target enquanto hex mantém.
+      // Bonus action cast. Damage type: necrotic. Target ability check disadvantage (one chosen).
+      const target = ctx.targetParticipantIds[0];
+      if (!target) return [];
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'hex_mark',
+            sourceSpellSlug: 'hex',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { riderDice: '1d6', riderType: 'necrotic' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+    case 'hunters-mark':
+    case 'hunter-mark': {
+      // RAW 2024 XPHB Hunter's Mark: 1 target, concentração 1h. Attacker deals
+      // extra 1d6 em cada weapon attack hit no target enquanto marca mantém.
+      // Bonus action cast. No damage type increase (damage type do weapon).
+      const target = ctx.targetParticipantIds[0];
+      if (!target) return [];
+      return [
+        {
+          targetParticipantId: target,
+          input: {
+            kind: 'hunter_mark',
+            sourceSpellSlug: 'hunters-mark',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { riderDice: '1d6' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        },
+      ];
+    }
+
     default:
       return [];
   }

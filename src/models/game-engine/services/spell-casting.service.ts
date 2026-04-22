@@ -290,7 +290,17 @@ export class SpellCastingService {
 
       if (expression) {
         const rollResult = this.diceService.rollExpression(expression);
-        const damageType = damageInfo?.damage_type?.name ?? 'magical';
+        // Spell data tem duas shapes: SRD JSON usa {damage_type: {name}}, transform-spells (5eTools)
+        // grava como string[]. Aceita ambos pra não cair em 'magical' genérico.
+        const rawDt = damageInfo?.damage_type as unknown;
+        const damageType =
+          (typeof rawDt === 'object' && rawDt !== null && 'name' in rawDt
+            ? String((rawDt as { name: string }).name).toLowerCase()
+            : Array.isArray(rawDt)
+              ? String(rawDt[0] ?? '').toLowerCase()
+              : typeof rawDt === 'string'
+                ? rawDt.toLowerCase()
+                : null) ?? 'magical';
         result.damage = {
           expression,
           total: rollResult.total,
@@ -1216,10 +1226,15 @@ export class SpellCastingService {
 
     // Damage from spell.damage JSON (damage_at_slot_level keyed by slot number).
     const damageInfo: any = (spell as any).damage ?? {};
+    const rawDt = damageInfo?.damage_type as unknown;
     const damageType: string =
-      damageInfo?.damage_type?.name ??
-      damageInfo?.damage_type ??
-      'force';
+      (typeof rawDt === 'object' && rawDt !== null && 'name' in rawDt
+        ? String((rawDt as { name: string }).name).toLowerCase()
+        : Array.isArray(rawDt)
+          ? String(rawDt[0] ?? '').toLowerCase()
+          : typeof rawDt === 'string'
+            ? rawDt.toLowerCase()
+            : null) ?? 'force';
 
     let damageExpression: string | undefined;
     if (damageInfo.damage_at_slot_level) {

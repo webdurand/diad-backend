@@ -373,7 +373,9 @@ export type EffectInstanceKind =
   | 'speed_multiplier'                  // Haste (×2 speed)
   | 'extra_action'                      // Haste (1 extra action)
   | 'true_sight'                        // True Seeing
-  | 'damage_immunity_threshold';        // Globe of Invulnerability (immune ≤ L5)
+  | 'damage_immunity_threshold'         // Globe of Invulnerability (immune ≤ L5)
+  | 'hex_mark'                          // Hex: target recebe +1d6 necrotic rider do caster
+  | 'hunter_mark';                      // Hunter's Mark: target recebe +1d6 rider do caster
 
 export type EffectExpirationKind =
   | 'rounds'
@@ -396,6 +398,10 @@ export interface EffectInstancePayload {
   requiredTargetId?: string;
   /** Mastery source descriptor pra events/logs — ex: "weapon-mastery:vex". */
   masterySlug?: string;
+  /** Hex / Hunter's Mark: dice a somar em cada weapon hit do caster no target. */
+  riderDice?: string;
+  /** Hex: tipo de dano do rider (necrotic). HM usa weapon damage type. */
+  riderType?: string;
 }
 
 /**

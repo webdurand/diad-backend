@@ -412,7 +412,17 @@ export class ClassFeatureResolverService {
     const warlockLevel = payload.caster?.classLevel ?? 3;
     const tempHp = Math.max(1, chaMod + warlockLevel);
 
-    source.tempHp = Math.max(source.tempHp ?? 0, tempHp); // RAW: temp HP substitui se maior
+    // Spec 012 Gap #23 — fonte de verdade pro tempHp de PC é char_state.temp_hp.
+    // Participant.tempHp ficaria stale e /sheet mostraria 0. Escreve no state service,
+    // enricher overlaya no participant automaticamente.
+    if (source.characterId) {
+      const st = await this.charStates.findOne({ where: { character_id: source.characterId } });
+      if (st) {
+        st.temp_hp = Math.max(st.temp_hp ?? 0, tempHp); // RAW: não empilha, pega maior
+        await this.charStates.save(st);
+      }
+    }
+    source.tempHp = Math.max(source.tempHp ?? 0, tempHp);
     await this.participants.save(source);
 
     events.push({
