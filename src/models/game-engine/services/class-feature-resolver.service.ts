@@ -92,9 +92,122 @@ export class ClassFeatureResolverService {
         return this.handleDarkOnesBlessing(sourceParticipantId, payload, events);
       case 'dark-ones-own-luck':
         return this.handleDarkOnesOwnLuck(sourceParticipantId, payload, events);
+      case 'flurry-of-blows':
+        return this.handleFlurryOfBlows(sourceParticipantId, payload, events);
+      case 'patient-defense':
+        return this.handlePatientDefense(sourceParticipantId, payload, events);
+      case 'step-of-the-wind':
+        return this.handleStepOfTheWind(sourceParticipantId, payload, events);
+      case 'stunning-strike':
+        return this.handleStunningStrike(sourceParticipantId, payload, events);
       default:
         return { resolved: false, events };
     }
+  }
+
+  // ---- Handler: Flurry of Blows (Monk L2+) ----
+  // RAW 2024 XPHB: bonus action ap\u00f3s Attack action, 1 FP \u2192 2 unarmed strikes
+  // (usa Martial Arts die). Incrementa attacksMaxThisTurn em 2.
+  private async handleFlurryOfBlows(
+    sourceId: string,
+    _payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    source.attacksMaxThisTurn = (source.attacksMaxThisTurn ?? 1) + 2;
+    await this.participants.save(source);
+    events.push({
+      event_type: 'flurry_of_blows_armed',
+      actor_participant_id: sourceId,
+      data: { extraAttacks: 2, focusPointsCost: 1 },
+    });
+    return { resolved: true, events, resolutionPayload: { extraAttacks: 2 } };
+  }
+
+  // ---- Handler: Patient Defense (Monk L2+) ----
+  // RAW 2024 XPHB: bonus action, 1 FP \u2192 Dodge + Disengage at\u00e9 pr\u00f3ximo turno.
+  // Seta `dodgingUntilTurnOfParticipantId` (default do Dodge) + flag `hasDisengaged`.
+  private async handlePatientDefense(
+    sourceId: string,
+    _payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    source.dodgingUntilTurnOfParticipantId = sourceId;
+    source.hasDisengaged = true;
+    await this.participants.save(source);
+    events.push({
+      event_type: 'patient_defense_activated',
+      actor_participant_id: sourceId,
+      data: { focusPointsCost: 1, dodgeUntil: sourceId, disengaged: true },
+    });
+    return { resolved: true, events };
+  }
+
+  // ---- Handler: Step of the Wind (Monk L2+) ----
+  // RAW 2024 XPHB: bonus action, 1 FP \u2192 Dash + Disengage + 2x speed jump height.
+  // Seta hasDashed + hasDisengaged + dobra movementRemaining.
+  private async handleStepOfTheWind(
+    sourceId: string,
+    _payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    source.hasDashed = true;
+    source.hasDisengaged = true;
+    if (source.movementRemaining != null) {
+      source.movementRemaining *= 2;
+    }
+    await this.participants.save(source);
+    events.push({
+      event_type: 'step_of_the_wind_activated',
+      actor_participant_id: sourceId,
+      data: { focusPointsCost: 1, dashed: true, disengaged: true },
+    });
+    return { resolved: true, events };
+  }
+
+  // ---- Handler: Stunning Strike (Monk L5+) ----
+  // RAW 2024 XPHB: ap\u00f3s hit, 2 FP \u2192 target CON save vs DC 8+prof+WIS.
+  // Falha = Stunned at\u00e9 pr\u00f3ximo turno do Monk.
+  // body.options.targetParticipantId = alvo j\u00e1 hit
+  private async handleStunningStrike(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const opts = payload.options ?? {};
+    const targetId = (opts.targetParticipantId as string) ?? (payload.targets?.[0] as string);
+    if (!targetId) return { resolved: false, events };
+    const target = await this.participants.findOne({ where: { id: targetId } });
+    if (!target) return { resolved: false, events };
+    const saveDc = payload.saveDc ?? (8 + (payload.caster?.profBonus ?? 2) + (payload.caster?.abilityMods?.wis ?? 0));
+    const conMod = this.getAbilityMod(target, 'con');
+    const rolled = this.dice.roll(20);
+    const total = rolled + conMod;
+    const saved = total >= saveDc;
+    events.push({
+      event_type: 'save_rolled',
+      target_participant_id: targetId,
+      data: { ability: 'con', dc: saveDc, rolled, modifier: conMod, total, success: saved, source: 'stunning-strike' },
+    });
+    if (!saved) {
+      const r = await this.conditionLifecycle.applyCondition(target, {
+        slug: 'stunned',
+        appliedBy: sourceId,
+        sourceFeature: 'stunning-strike',
+        sourceConcentration: false,
+        saveAbility: 'con',
+        saveDc,
+        repeatSaveTiming: 'end_of_turn',
+        durationRoundsRemaining: 1,
+      } as unknown as Parameters<typeof this.conditionLifecycle.applyCondition>[1]);
+      events.push(...r.events);
+    }
+    return { resolved: true, events, resolutionPayload: { saved, rolled, total, saveDc } };
   }
 
   // ---- Handler: Dark One's Blessing (Fiend Warlock L3) ----
