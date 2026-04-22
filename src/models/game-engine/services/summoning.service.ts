@@ -95,6 +95,7 @@ export class SummoningService {
     summon.recklessAttackActive = false;
     summon.cleaveUsedThisTurn = false;
     summon.nickUsedThisTurn = false;
+    summon.sneakAttackUsedThisTurn = false;
     summon.tacticalMasterOverride = null;
     summon.inspirationArmed = false;
     summon.superiorityDiceUsed = 0;

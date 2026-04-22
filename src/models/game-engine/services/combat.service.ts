@@ -1914,6 +1914,47 @@ export class CombatService {
         totalDamage += critTotal;
       }
 
+      // Spec 012 Sprint F \u2014 Rogue Sneak Attack (RAW 2024 XPHB).
+      // 1/turn damage rider se: attacker PC Rogue + weapon tem Finesse OR Ranged
+      // + (hasAdvantage OU (ally adjacente ao target AND !hasDisadvantage)).
+      // Dice = Nd6 onde N = floor((rogueLevel+1)/2) (1d6 L1, 2d6 L3, ..., cap 10d6 L19).
+      let sneakAttackDamage = 0;
+      let sneakAttackDice: string | null = null;
+      if (
+        attacker.type === 'pc' &&
+        attacker.characterId &&
+        !attacker.sneakAttackUsedThisTurn
+      ) {
+        const ownerIdForSa = await this.resolveParticipantOwner(
+          attacker,
+          dto.ownerUserId,
+        );
+        const saSheet = await this.sheetService.computeSheet(
+          ownerIdForSa,
+          attacker.characterId,
+        );
+        const rogueClass = (saSheet as unknown as { classes?: Array<{ slug: string; level: number }> })
+          .classes?.find((c) => c.slug.replace(/-phb$/, '') === 'rogue');
+        if (rogueClass) {
+          // Check weapon Finesse/Ranged via actionSlug or weaponSlug
+          const weaponSlug = dto.actionSlug ?? '';
+          // Heur\u00edstica MVP: aceita weapon-* (n\u00e3o unarmed). RAW real checa properties;
+          // a maioria das weapons que Rogue usa j\u00e1 s\u00e3o Finesse (Rapier, Shortsword, Dagger).
+          const isWeaponAttack = weaponSlug.startsWith('weapon-') || weaponSlug.endsWith('-attack');
+          const advantageForSa = hasAdvantage && !hasDisadvantage;
+          // V2: ally 5ft check. MVP: advantage \u00e9 condi\u00e7\u00e3o suficiente.
+          if (isWeaponAttack && advantageForSa) {
+            const nDice = Math.min(10, Math.max(1, Math.floor((rogueClass.level + 1) / 2)));
+            sneakAttackDice = `${nDice}d6`;
+            const saRoll = this.diceService.rollExpression(sneakAttackDice);
+            sneakAttackDamage = saRoll.total;
+            totalDamage += sneakAttackDamage;
+            attacker.sneakAttackUsedThisTurn = true;
+            await this.participantRepo.save(attacker);
+          }
+        }
+      }
+
       // Spec 012 — consumir damage_bonus effects do attacker (Rage +2 melee,
       // Hunter's Mark +1d6, etc). Filtra por scope: 'melee' só em melee,
       // 'ranged' só em ranged, 'any' sempre. Flat amount vai direto; dice é
@@ -1927,6 +1968,13 @@ export class CombatService {
         amount: number;
         dice?: string;
       }> = [];
+      if (sneakAttackDice) {
+        extraDamageBonuses.push({
+          source: 'sneak-attack',
+          amount: sneakAttackDamage,
+          dice: sneakAttackDice,
+        });
+      }
       for (const eff of damageBonusEffects) {
         const payload = (eff.payload ?? {}) as {
           amount?: number;

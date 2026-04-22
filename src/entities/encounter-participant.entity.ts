@@ -182,6 +182,14 @@ export class EncounterParticipantEntity {
   nickUsedThisTurn: boolean;
 
   /**
+   * Rogue Sneak Attack (RAW 2024 XPHB) — 1/turn damage rider quando ataque
+   * usa Finesse/Ranged weapon + (advantage OU ally adjacente ao alvo). Reset
+   * em start-turn. Dice = Nd6 por classLevel (1d6 L1, +1d6 cada 2 levels, cap 10d6 L19).
+   */
+  @Column({ name: 'sneak_attack_used_this_turn', type: 'boolean', default: false })
+  sneakAttackUsedThisTurn: boolean = false;
+
+  /**
    * Fighter L9 Tactical Master (RAW 2024) — mastery alternativa armada
    * (push/sap/slow). Consumido no próximo attack (combat.service aplica
    * mastery alternativa em vez da original e limpa o override).

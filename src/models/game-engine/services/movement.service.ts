@@ -392,6 +392,9 @@ export class MovementService {
     participant.cleaveUsedThisTurn = false;
     participant.nickUsedThisTurn = false;
 
+    // Rogue Sneak Attack — reset 1/turn flag
+    participant.sneakAttackUsedThisTurn = false;
+
     // Champion L10 Heroic Warrior (RAW 2024) + L18 Survivor — triggers start-turn.
     if (participant.type === 'pc' && participant.characterId && ownerUserId) {
       await this.applyChampionStartTurnTriggers(participant, ownerUserId);
