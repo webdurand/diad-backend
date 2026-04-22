@@ -1561,6 +1561,24 @@ export class CombatService {
         damageDice = hasBothHandsFree ? '1d8' : '1d6';
         appliedFightingStyle = 'unarmed-fighting';
       }
+
+      // Spec 012 Sprint F \u2014 Monk Martial Arts (RAW 2024 XPHB).
+      // Unarmed strike: upgrade damage die to dN (L1=d6, L5=d8, L11=d10, L17=d12)
+      // + use max(STR, DEX) for attack bonus + damage.
+      const monkClass = (sheet as unknown as { classes?: Array<{ slug: string; level: number }> })
+        .classes?.find((c) => c.slug.replace(/-phb$/, '') === 'monk');
+      if (monkClass) {
+        const monkLvl = monkClass.level;
+        const maDie = monkLvl >= 17 ? 'd12' : monkLvl >= 11 ? 'd10' : monkLvl >= 5 ? 'd8' : 'd6';
+        damageDice = `1${maDie}`;
+        const dexScore = sheet.abilityScores.find((a) => a.slug === 'dex');
+        const dexMod = dexScore?.modifier ?? 0;
+        // Usa DEX se maior que STR (RAW: Monk's choice)
+        if (dexMod > strMod) {
+          attackBonus = dexMod + profBonus;
+          damageBonus = dexMod;
+        }
+      }
     } else if (attacker.type === 'pc' && attacker.transformationState) {
       // Spec 012 \u2014 PC transformado: resolve a\u00e7\u00e3o via form.actions como se fosse
       // monster. Skip da PC weapon pipeline (sheet.equipment, fighting style,
