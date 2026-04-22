@@ -207,6 +207,17 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: () => 2,
     rechargeOn: 'short',
   },
+  {
+    slug: 'natural-recovery',
+    displayName: 'Recuperação Natural',
+    classSlug: 'druid',
+    requiredLevel: 2,
+    actionCost: 'free',
+    targetShape: 'self',
+    resolution: 'stub',
+    maxUsesByLevel: () => 1,
+    rechargeOn: 'long',
+  },
   // ---- Bard ----
   {
     slug: 'bardic-inspiration',

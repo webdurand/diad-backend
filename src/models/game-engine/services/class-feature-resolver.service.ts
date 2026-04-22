@@ -108,9 +108,79 @@ export class ClassFeatureResolverService {
         return this.handleTireless(sourceParticipantId, payload, events);
       case 'natures-veil':
         return this.handleNaturesVeil(sourceParticipantId, payload, events);
+      case 'natural-recovery':
+        return this.handleNaturalRecovery(sourceParticipantId, payload, events);
+      case 'favored-enemy':
+        return this.handleFavoredEnemy(sourceParticipantId, payload, events);
       default:
         return { resolved: false, events };
     }
+  }
+
+  // ---- Handler: Favored Enemy (Ranger L1 XPHB) ----
+  // RAW 2024: L1 Ranger tem Hunter's Mark preparada + N free casts por LR
+  // (N progride: 2 L1, 3 L5, 4 L9, 5 L13, 6 L17). Este handler s\u00f3 arma o
+  // effect 'favored_enemy_free_cast_available' que o spell-casting pode consumir
+  // quando spellSlug='hunter-mark'/'hunters-mark' no lugar do slot.
+  private async handleFavoredEnemy(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    const rangerLevel = payload.caster?.classLevel ?? 1;
+    const freeCasts = rangerLevel >= 17 ? 6 : rangerLevel >= 13 ? 5 : rangerLevel >= 9 ? 4 : rangerLevel >= 5 ? 3 : 2;
+    events.push({
+      event_type: 'favored_enemy_ready',
+      actor_participant_id: sourceId,
+      data: { freeCasts, rangerLevel, spellSlug: 'hunter-mark' },
+    });
+    return { resolved: true, events, resolutionPayload: { freeCasts, rangerLevel } };
+  }
+
+  // ---- Handler: Natural Recovery (Land Druid L3 XPHB, originally L2 data 2014) ----
+  // RAW 2024: 1/LR em SR, regain spell slot levels totaling floor(druid_level/2),
+  // no slot L6+. body.options.slotAssignments igual Arcane Recovery.
+  private async handleNaturalRecovery(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const opts = payload.options ?? {};
+    const classLevel = payload.caster?.classLevel ?? 2;
+    const budget = Math.floor(classLevel / 2);
+    const assignments = (opts.slotAssignments as Record<string, number>) ?? { level1: 1 };
+
+    let spent = 0;
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source?.characterId) return { resolved: false, events };
+    const st = await this.charStates.findOne({ where: { character_id: source.characterId } });
+    if (!st) return { resolved: false, events };
+
+    const slots = (st as unknown as { spell_slots?: Record<string, number> }).spell_slots ?? {};
+    const regained: Record<string, number> = {};
+    for (const [lvlKey, count] of Object.entries(assignments)) {
+      const lvl = parseInt(lvlKey.replace('level', ''), 10);
+      if (lvl > 5 || count <= 0) continue;
+      const addBudget = lvl * count;
+      if (spent + addBudget > budget) continue;
+      const currentUsed = (slots as Record<string, number>)[lvlKey] ?? 0;
+      const toRegain = Math.min(currentUsed, count);
+      if (toRegain <= 0) continue;
+      (slots as Record<string, number>)[lvlKey] = currentUsed - toRegain;
+      regained[lvlKey] = toRegain;
+      spent += lvl * toRegain;
+    }
+    (st as unknown as { spell_slots?: Record<string, number> }).spell_slots = slots as Record<string, number>;
+    await this.charStates.save(st);
+
+    events.push({
+      event_type: 'natural_recovery_used',
+      actor_participant_id: sourceId,
+      data: { budgetSpent: spent, budgetTotal: budget, regained },
+    });
+    return { resolved: true, events, resolutionPayload: { budgetSpent: spent, regained } };
   }
 
   // ---- Handler: Tireless (Ranger L10) ----
