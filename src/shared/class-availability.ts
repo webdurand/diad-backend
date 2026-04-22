@@ -26,8 +26,10 @@ export const CLASS_AVAILABILITY: Record<string, ClassAvailability> = {
   paladin: { available: true, canonicalSubclasses: ['devotion'] },
   wizard: { available: true, canonicalSubclasses: ['evocation'] },
   sorcerer: { available: true, canonicalSubclasses: ['draconic'] },
+  // Druid L1-L20 + Land canonical liberado (Sprint C+D do spec 012).
+  // Wild Shape (Transformation) + Conjure Animals (Summoning) em tela.
+  druid: { available: true, canonicalSubclasses: ['druid-land', 'land'] },
   // Marco C — a liberar conforme cada classe fecha L1-L20 + 1 canônica RAW
-  druid: { available: false, canonicalSubclasses: [] },
   bard: { available: false, canonicalSubclasses: [] },
   warlock: { available: false, canonicalSubclasses: [] },
   monk: { available: false, canonicalSubclasses: [] },
