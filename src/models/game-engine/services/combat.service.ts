@@ -210,6 +210,20 @@ export class CombatService {
       return success(eq.name, []);
     }
 
+    // Spec 012 \u2014 PC transformado (Wild Shape, Polymorph). Slug \u00e9 formatado como
+    // monsterSlug-<actionName> igual monster branch. Valida contra form.actions
+    // do transformationState em vez da sheet.
+    if (attacker.type === 'pc' && attacker.transformationState) {
+      const form = attacker.transformationState.form;
+      const formSlug = form.monsterSlug ?? '';
+      if (formSlug && slug.startsWith(formSlug + '-')) {
+        const rest = slug.slice(formSlug.length + 1);
+        const actions = (form.actions ?? []) as Array<{ name: string }>;
+        const match = actions.find((a) => this.slugifyName(a.name) === rest);
+        if (match) return success(match.name, []);
+      }
+    }
+
     // Monster: slug prefixado por monster.slug. Match por rest == action name (kebab).
     if (attacker.type === 'monster' && attacker.monster) {
       const monsterSlug: string = (attacker.monster as any).slug ?? '';
@@ -838,13 +852,24 @@ export class CombatService {
     let reactions: TurnActionBlock[] = [];
 
     if (participant.type === 'pc' && participant.characterId) {
-      const pcActions = await this.actionsService.getActions(
-        resolvedOwnerId,
-        participant.characterId,
-      );
-      actions = pcActions.actions.map(this.toTurnActionBlock);
-      bonusActions = pcActions.bonusActions.map(this.toTurnActionBlock);
-      reactions = pcActions.reactions.map(this.toTurnActionBlock);
+      // Spec 012 \u2014 quando PC est\u00e1 transformado (Wild Shape, Polymorph, etc),
+      // ActionBar mostra as a\u00e7\u00f5es do form em vez das weapons do PC.
+      if (participant.transformationState) {
+        const formSynthetic = {
+          slug: participant.transformationState.form.monsterSlug ?? 'transformed',
+          name: participant.transformationState.form.formName,
+          actions: participant.transformationState.form.actions,
+        };
+        actions = this.parseMonsterActions(formSynthetic);
+      } else {
+        const pcActions = await this.actionsService.getActions(
+          resolvedOwnerId,
+          participant.characterId,
+        );
+        actions = pcActions.actions.map(this.toTurnActionBlock);
+        bonusActions = pcActions.bonusActions.map(this.toTurnActionBlock);
+        reactions = pcActions.reactions.map(this.toTurnActionBlock);
+      }
     } else if (participant.type === 'monster' && participant.monster) {
       actions = this.parseMonsterActions(participant.monster);
       const multiattack = (participant.monster as any).multiattack;
@@ -1500,6 +1525,32 @@ export class CombatService {
         damageDice = hasBothHandsFree ? '1d8' : '1d6';
         appliedFightingStyle = 'unarmed-fighting';
       }
+    } else if (attacker.type === 'pc' && attacker.transformationState) {
+      // Spec 012 \u2014 PC transformado: resolve a\u00e7\u00e3o via form.actions como se fosse
+      // monster. Skip da PC weapon pipeline (sheet.equipment, fighting style,
+      // weapon mastery) porque o PC n\u00e3o est\u00e1 empunhando weapon \u2014 est\u00e1 com as
+      // actions do form (Bite do Wolf, Claws do Bear, etc).
+      const form = attacker.transformationState.form;
+      const syntheticMonster = {
+        slug: form.monsterSlug ?? 'transformed',
+        name: form.formName,
+        actions: form.actions,
+      };
+      const resolved = this.monsterActionResolver.resolveByName(
+        syntheticMonster as unknown as Parameters<typeof this.monsterActionResolver.resolveByName>[0],
+        dto.actionName,
+      );
+      if (!resolved) {
+        return failure(
+          `Acao "${dto.actionName}" nao encontrada no form "${form.formName}".`,
+          'INVALID_ACTION',
+        );
+      }
+      attackBonus = resolved.attackBonus;
+      if (resolved.damageDice) damageDice = resolved.damageDice;
+      if (resolved.damageType) damageType = resolved.damageType;
+      damageBonus = resolved.damageBonus;
+      actionRangeStr = resolved.range ?? resolved.reach ?? null;
     } else if (attacker.type === 'pc' && attacker.characterId) {
       const actions = await this.actionsService.getActions(
         dto.ownerUserId,
@@ -1603,6 +1654,7 @@ export class CombatService {
       damageBonus = resolved.damageBonus;
       actionRangeStr = resolved.range ?? resolved.reach ?? null;
     }
+
 
     // Spec 012 #1 — range check unificado (PC weapon + monster). Ficou depois
     // do unarmed check porque unarmed returns early em grapple/shove. Se
