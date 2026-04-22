@@ -2,7 +2,7 @@ import { isClassAvailable, getCanonicalSubclassSlugs } from './class-availabilit
 
 describe('class-availability (spec 012 canonical-first)', () => {
   describe('isClassAvailable', () => {
-    it('retorna true pras 7 classes validadas em tela', () => {
+    it('retorna true pras 8 classes validadas em tela', () => {
       expect(isClassAvailable('fighter')).toBe(true);
       expect(isClassAvailable('barbarian')).toBe(true);
       expect(isClassAvailable('cleric')).toBe(true);
@@ -10,10 +10,10 @@ describe('class-availability (spec 012 canonical-first)', () => {
       expect(isClassAvailable('wizard')).toBe(true);
       expect(isClassAvailable('sorcerer')).toBe(true);
       expect(isClassAvailable('druid')).toBe(true);
+      expect(isClassAvailable('bard')).toBe(true);
     });
 
-    it('retorna false pras 5 classes pendentes', () => {
-      expect(isClassAvailable('bard')).toBe(false);
+    it('retorna false pras 4 classes pendentes', () => {
       expect(isClassAvailable('warlock')).toBe(false);
       expect(isClassAvailable('monk')).toBe(false);
       expect(isClassAvailable('rogue')).toBe(false);
@@ -23,7 +23,8 @@ describe('class-availability (spec 012 canonical-first)', () => {
     it('canonicaliza slugs 2014 (-phb) pras mesmas regras', () => {
       expect(isClassAvailable('fighter-phb')).toBe(true);
       expect(isClassAvailable('druid-phb')).toBe(true);
-      expect(isClassAvailable('bard-phb')).toBe(false);
+      expect(isClassAvailable('bard-phb')).toBe(true);
+      expect(isClassAvailable('warlock-phb')).toBe(false);
     });
 
     it('retorna false pra slug desconhecida', () => {
@@ -41,11 +42,12 @@ describe('class-availability (spec 012 canonical-first)', () => {
       expect(getCanonicalSubclassSlugs('sorcerer')).toEqual(['draconic']);
       // Druid tem 2 slugs can\u00f4nicos (duplica\u00e7\u00e3o DB 'druid-land' vs 'land')
       expect(getCanonicalSubclassSlugs('druid')).toEqual(['druid-land', 'land']);
+      expect(getCanonicalSubclassSlugs('bard')).toEqual(['bard-lore', 'lore']);
     });
 
     it('retorna lista vazia pras classes pendentes', () => {
-      expect(getCanonicalSubclassSlugs('bard')).toEqual([]);
       expect(getCanonicalSubclassSlugs('warlock')).toEqual([]);
+      expect(getCanonicalSubclassSlugs('monk')).toEqual([]);
     });
 
     it('canonicaliza -phb', () => {

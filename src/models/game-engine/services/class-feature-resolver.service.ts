@@ -7,6 +7,7 @@ import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { EffectInstanceService } from './effect-instance.service';
 import { DiceService } from './dice.service';
 import { TransformationService } from './transformation.service';
+import { BardFeaturesService } from './bard-features.service';
 import type { GameEventData } from '../interfaces/result.type';
 
 /**
@@ -54,6 +55,7 @@ export class ClassFeatureResolverService {
     private readonly effectInstances: EffectInstanceService,
     private readonly dice: DiceService,
     private readonly transformation: TransformationService,
+    private readonly bard: BardFeaturesService,
   ) {}
 
   async resolveInvocation(
@@ -84,8 +86,48 @@ export class ClassFeatureResolverService {
         return this.handleArcaneRecovery(sourceParticipantId, payload, events);
       case 'divine-sense':
         return this.handleDivineSense(sourceParticipantId, payload, events);
+      case 'bardic-inspiration':
+        return this.handleBardicInspiration(sourceParticipantId, payload, events);
       default:
         return { resolved: false, events };
+    }
+  }
+
+  // ---- Handler: Bardic Inspiration (Bard L1+) ----
+  // RAW 2024 XPHB: bonus action, target 1 aliado dentro de 60ft que pode ouvir.
+  // Aliado ganha 1 die (d6/d8/d10/d12 por tier) pra usar em attack/save/check
+  // num pr\u00f3ximo 10 min. Pool = CHA mod (min 1), recarga LR (L5+ Font of Inspiration = SR).
+  // body.options.targetParticipantId = aliado
+  private async handleBardicInspiration(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const opts = payload.options ?? {};
+    const target =
+      (opts.targetParticipantId as string) ??
+      (payload.targets?.[0] as string);
+    if (!target) return { resolved: false, events };
+    // O ownerUserId precisa vir de payload.caster \u2014 fallback pra pegar do participant.
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source?.characterId) return { resolved: false, events };
+    const bardLevel = payload.caster?.classLevel ?? 1;
+    try {
+      const res = await this.bard.grantBardicInspiration(sourceId, target, bardLevel);
+      events.push(...res.events);
+      return {
+        resolved: true,
+        events,
+        resolutionPayload: { dieSize: res.dieSize, targetParticipantId: target },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      events.push({
+        event_type: 'class_feature_error',
+        actor_participant_id: sourceId,
+        data: { featureSlug: 'bardic-inspiration', error: msg },
+      });
+      return { resolved: true, events };
     }
   }
 

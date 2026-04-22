@@ -75,6 +75,8 @@ import { ClericFeaturesService } from './services/cleric-features.service';
 import { PaladinFeaturesService } from './services/paladin-features.service';
 // Spec 012 Sorcerer — Font of Magic (SP pool + convert SP↔slot)
 import { SorcererFeaturesService } from './services/sorcerer-features.service';
+// Spec 012 Bard — Bardic Inspiration + Cutting Words (Lore)
+import { BardFeaturesService } from './services/bard-features.service';
 // Spec 012 Druid + genérico — Transformation pipeline (Wild Shape, Polymorph, Form of Dread, ...)
 import { TransformationService } from './services/transformation.service';
 // Spec 012 Druid + genérico — Summoning pipeline (Summon Beast, Conjure Animals, Spiritual Weapon, Familiar, ...)
@@ -180,6 +182,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     SorcererFeaturesService,
     TransformationService,
     SummoningService,
+    BardFeaturesService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -233,6 +236,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     SorcererFeaturesService,
     TransformationService,
     SummoningService,
+    BardFeaturesService,
     // Spec 002
     JoinRequestService,
   ],
