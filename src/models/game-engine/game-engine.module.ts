@@ -77,6 +77,8 @@ import { PaladinFeaturesService } from './services/paladin-features.service';
 import { SorcererFeaturesService } from './services/sorcerer-features.service';
 // Spec 012 Druid + genérico — Transformation pipeline (Wild Shape, Polymorph, Form of Dread, ...)
 import { TransformationService } from './services/transformation.service';
+// Spec 012 Druid + genérico — Summoning pipeline (Summon Beast, Conjure Animals, Spiritual Weapon, Familiar, ...)
+import { SummoningService } from './services/summoning.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -176,6 +178,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     PaladinFeaturesService,
     SorcererFeaturesService,
     TransformationService,
+    SummoningService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -228,6 +231,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     PaladinFeaturesService,
     SorcererFeaturesService,
     TransformationService,
+    SummoningService,
     // Spec 002
     JoinRequestService,
   ],

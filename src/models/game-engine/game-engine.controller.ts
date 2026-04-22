@@ -55,6 +55,7 @@ import { ClericFeaturesService } from './services/cleric-features.service';
 import { PaladinFeaturesService } from './services/paladin-features.service';
 import { SorcererFeaturesService } from './services/sorcerer-features.service';
 import { TransformationService } from './services/transformation.service';
+import { SummoningService } from './services/summoning.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -119,6 +120,7 @@ export class GameEngineController {
     private readonly paladinFeatures: PaladinFeaturesService,
     private readonly sorcererFeatures: SorcererFeaturesService,
     private readonly transformationService: TransformationService,
+    private readonly summoningService: SummoningService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -1851,6 +1853,81 @@ export class GameEngineController {
         displayName: updated.displayName,
         transformed: !!updated.transformationState,
       },
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Spec 012 — Summoning pipeline (Summon Beast, Conjure Animals, Familiar, ...)
+  // ─────────────────────────────────────────────────────────────────────
+
+  @Post('encounters/:id/participants/:participantId/summon/spawn')
+  async summonSpawn(
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: {
+      monsterSlug: string;
+      displayName?: string;
+      position?: { x: number; y: number };
+      faction?: 'ally' | 'enemy' | 'neutral';
+      durationRoundsTotal?: number | null;
+      concentrationLinked?: boolean;
+      source?: string;
+    },
+  ) {
+    try {
+      const summon = await this.summoningService.spawnSummon(encounterId, {
+        casterParticipantId: participantId,
+        monsterSlug: body.monsterSlug,
+        displayName: body.displayName,
+        position: body.position,
+        faction: body.faction ?? 'ally',
+        durationRoundsTotal: body.durationRoundsTotal,
+        concentrationLinked: body.concentrationLinked,
+        source: (body.source as 'summon-beast-spell') ?? 'summon-beast-spell',
+      });
+      return {
+        ok: true,
+        value: {
+          summonId: summon.id,
+          displayName: summon.displayName,
+          linkedCasterParticipantId: summon.linkedCasterParticipantId,
+          currentHp: summon.currentHp,
+          maxHp: summon.maxHp,
+          position: { x: summon.positionX, y: summon.positionY },
+          faction: summon.faction,
+        },
+      };
+    } catch (err) {
+      const e = err as { message?: string };
+      return { ok: false, error: e.message ?? 'UNKNOWN', code: 'SUMMON_ERROR' };
+    }
+  }
+
+  @Post('encounters/:id/summons/:summonId/dismiss')
+  async summonDismiss(
+    @Param('id') encounterId: string,
+    @Param('summonId') summonId: string,
+  ) {
+    await this.summoningService.dismissSummon(summonId, 'player-dismiss');
+    return { ok: true, value: { summonId, dismissed: true } };
+  }
+
+  @Get('encounters/:id/participants/:participantId/summons')
+  async getSummonsOf(
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+  ) {
+    const list = await this.summoningService.getSummonsOf(participantId);
+    return {
+      ok: true,
+      value: list.map((s) => ({
+        id: s.id,
+        displayName: s.displayName,
+        currentHp: s.currentHp,
+        maxHp: s.maxHp,
+        position: { x: s.positionX, y: s.positionY },
+        faction: s.faction,
+      })),
     };
   }
 }
