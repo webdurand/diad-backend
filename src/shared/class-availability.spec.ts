@@ -2,7 +2,7 @@ import { isClassAvailable, getCanonicalSubclassSlugs } from './class-availabilit
 
 describe('class-availability (spec 012 canonical-first)', () => {
   describe('isClassAvailable', () => {
-    it('retorna true pras 10 classes validadas em tela', () => {
+    it('retorna true pras 11 classes validadas em tela', () => {
       expect(isClassAvailable('fighter')).toBe(true);
       expect(isClassAvailable('barbarian')).toBe(true);
       expect(isClassAvailable('cleric')).toBe(true);
@@ -13,10 +13,10 @@ describe('class-availability (spec 012 canonical-first)', () => {
       expect(isClassAvailable('bard')).toBe(true);
       expect(isClassAvailable('warlock')).toBe(true);
       expect(isClassAvailable('monk')).toBe(true);
+      expect(isClassAvailable('rogue')).toBe(true);
     });
 
-    it('retorna false pras 2 classes pendentes', () => {
-      expect(isClassAvailable('rogue')).toBe(false);
+    it('retorna false pra 1 classe pendente', () => {
       expect(isClassAvailable('ranger')).toBe(false);
     });
 
@@ -26,7 +26,8 @@ describe('class-availability (spec 012 canonical-first)', () => {
       expect(isClassAvailable('bard-phb')).toBe(true);
       expect(isClassAvailable('warlock-phb')).toBe(true);
       expect(isClassAvailable('monk-phb')).toBe(true);
-      expect(isClassAvailable('rogue-phb')).toBe(false);
+      expect(isClassAvailable('rogue-phb')).toBe(true);
+      expect(isClassAvailable('ranger-phb')).toBe(false);
     });
 
     it('retorna false pra slug desconhecida', () => {
@@ -47,10 +48,10 @@ describe('class-availability (spec 012 canonical-first)', () => {
       expect(getCanonicalSubclassSlugs('bard')).toEqual(['bard-lore', 'lore']);
       expect(getCanonicalSubclassSlugs('warlock')).toEqual(['warlock-fiend', 'fiend']);
       expect(getCanonicalSubclassSlugs('monk')).toEqual(['monk-open-hand', 'open-hand']);
+      expect(getCanonicalSubclassSlugs('rogue')).toEqual(['rogue-thief', 'thief']);
     });
 
     it('retorna lista vazia pras classes pendentes', () => {
-      expect(getCanonicalSubclassSlugs('rogue')).toEqual([]);
       expect(getCanonicalSubclassSlugs('ranger')).toEqual([]);
     });
 

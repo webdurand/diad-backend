@@ -100,9 +100,67 @@ export class ClassFeatureResolverService {
         return this.handleStepOfTheWind(sourceParticipantId, payload, events);
       case 'stunning-strike':
         return this.handleStunningStrike(sourceParticipantId, payload, events);
+      case 'steady-aim':
+        return this.handleSteadyAim(sourceParticipantId, payload, events);
+      case 'uncanny-dodge':
+        return this.handleUncannyDodge(sourceParticipantId, payload, events);
       default:
         return { resolved: false, events };
     }
+  }
+
+  // ---- Handler: Steady Aim (Rogue L1 XPHB) ----
+  // RAW 2024: bonus action, advantage no pr\u00f3ximo attack ATE o fim do turno.
+  // Custo: speed=0 no turno (n\u00e3o pode mover). Flag effect self_advantage_next_attack.
+  private async handleSteadyAim(
+    sourceId: string,
+    _payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    source.movementRemaining = 0;
+    const res = await this.effectInstances.addEffect(source, {
+      kind: 'self_advantage_next_attack' as never,
+      sourceCasterParticipantId: sourceId,
+      sourceFeatureSlug: 'steady-aim',
+      payload: { reason: 'steady-aim' },
+      requiresConcentration: false,
+    } as unknown as Parameters<typeof this.effectInstances.addEffect>[1]);
+    await this.participants.save(source);
+    events.push(...res.events, {
+      event_type: 'steady_aim_armed',
+      actor_participant_id: sourceId,
+      data: { advantageNextAttack: true, movementSpent: true },
+    });
+    return { resolved: true, events };
+  }
+
+  // ---- Handler: Uncanny Dodge (Rogue L5) ----
+  // RAW 2024: reaction, halve damage de 1 attack que voc\u00ea pode ver. Emite intent
+  // (V2 real integration: hook em applyDamage pra reduzir pr\u00f3ximo damage/2).
+  private async handleUncannyDodge(
+    sourceId: string,
+    _payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source) return { resolved: false, events };
+    source.reactionsUsed = (source.reactionsUsed ?? 0) + 1;
+    const res = await this.effectInstances.addEffect(source, {
+      kind: 'uncanny_dodge_armed' as never,
+      sourceCasterParticipantId: sourceId,
+      sourceFeatureSlug: 'uncanny-dodge',
+      payload: { halvesNextDamage: true },
+      requiresConcentration: false,
+    } as unknown as Parameters<typeof this.effectInstances.addEffect>[1]);
+    await this.participants.save(source);
+    events.push(...res.events, {
+      event_type: 'uncanny_dodge_armed',
+      actor_participant_id: sourceId,
+      data: { halvesNextDamage: true },
+    });
+    return { resolved: true, events };
   }
 
   // ---- Handler: Flurry of Blows (Monk L2+) ----
