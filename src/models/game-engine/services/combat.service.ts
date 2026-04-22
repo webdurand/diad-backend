@@ -40,6 +40,7 @@ import { ConcentrationService } from './concentration.service';
 import { ClassFeatureResolverService } from './class-feature-resolver.service';
 import { WeaponMasteryService } from './weapon-mastery.service';
 import { FightingStyleService } from './fighting-style.service';
+import { TransformationService } from './transformation.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 import {
   parseRangeString,
@@ -140,7 +141,42 @@ export class CombatService {
     private readonly inspirationService: InspirationService,
     private readonly weaponMastery: WeaponMasteryService,
     private readonly fightingStyle: FightingStyleService,
+    private readonly transformation: TransformationService,
   ) {}
+
+  /**
+   * Spec 012 \u2014 aplica dano num PC respeitando Wild Shape/Polymorph: se PC
+   * est\u00e1 transformado, dano vai pro form HP primeiro; excesso (overflow) vai
+   * pro HP original. Retorna shape compat\u00edvel com stateService.updateHp.
+   */
+  private async applyDamageToPcFormAware(
+    target: EncounterParticipantEntity,
+    damage: number,
+    ownerUserId: string,
+  ): Promise<{ currentHp: number; isDown: boolean; instantDeath: boolean }> {
+    if (damage <= 0) {
+      const st = await this.stateService.updateHp(ownerUserId, target.characterId!, { damage: 0 });
+      return { currentHp: st.currentHp, isDown: st.isDown, instantDeath: st.instantDeath ?? false };
+    }
+    if (target.transformationState) {
+      const res = await this.transformation.applyDamageToForm(target.id, damage);
+      if (!res.reverted) {
+        // Form absorveu tudo. N\u00e3o toca o HP original.
+        // Retorna a cabe\u00e7a do form como "currentHp" pra logs/eventos externos.
+        const formHp = target.transformationState.form.currentHp - res.absorbedByForm;
+        return { currentHp: Math.max(0, formHp), isDown: false, instantDeath: false };
+      }
+      // Reverteu. Overflow j\u00e1 foi aplicado no char_state pelo service.
+      // Reload state pra refletir mudan\u00e7a atual.
+      if (res.overflowToOriginal > 0) {
+        const st = await this.stateService.updateHp(ownerUserId, target.characterId!, { damage: 0 });
+        return { currentHp: st.currentHp, isDown: st.isDown, instantDeath: st.instantDeath ?? false };
+      }
+      return { currentHp: 0, isDown: false, instantDeath: false };
+    }
+    const st = await this.stateService.updateHp(ownerUserId, target.characterId!, { damage });
+    return { currentHp: st.currentHp, isDown: st.isDown, instantDeath: st.instantDeath ?? false };
+  }
 
   /**
    * Spec 003 — traduz `actionSlug` em `actionName` interno.
@@ -1998,10 +2034,11 @@ export class CombatService {
             data: { failuresAdded: failuresDelta, failures: ds.failures, dyingState: target.dyingState },
           });
         } else {
-          const hpResult = await this.stateService.updateHp(
+          // Spec 012 \u2014 Wild Shape/Polymorph: dano vai pro form HP primeiro, reverte em 0
+          const hpResult = await this.applyDamageToPcFormAware(
+            target,
+            finalDamage,
             targetOwnerId,
-            target.characterId,
-            { damage: finalDamage },
           );
           targetHpAfter = hpResult.currentHp;
           targetDefeated = hpResult.isDown;

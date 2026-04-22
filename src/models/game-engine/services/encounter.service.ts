@@ -233,10 +233,20 @@ export class EncounterService {
         if (!ownerId) return;
         try {
           const sheet = await this.sheetService.computeSheet(ownerId, p.characterId!);
-          (p as any).currentHp = sheet.currentHp;
-          (p as any).maxHp = sheet.maxHp;
-          (p as any).armorClass = sheet.armorClass;
-          (p as any).speed = sheet.speed ?? 30;
+          // Spec 012 \u2014 PC transformado: overlay de HP/AC/speed do form
+          // (Wild Shape, Polymorph, etc). Display reflete a criatura ativa.
+          if (p.transformationState) {
+            const form = p.transformationState.form;
+            (p as any).currentHp = form.currentHp;
+            (p as any).maxHp = form.maxHp;
+            (p as any).armorClass = form.ac;
+            (p as any).speed = form.speed.walk ?? 30;
+          } else {
+            (p as any).currentHp = sheet.currentHp;
+            (p as any).maxHp = sheet.maxHp;
+            (p as any).armorClass = sheet.armorClass;
+            (p as any).speed = sheet.speed ?? 30;
+          }
           if (p.initiativeModifier == null || p.initiativeModifier !== sheet.initiative) {
             (p as any).initiativeModifier = sheet.initiative;
           }

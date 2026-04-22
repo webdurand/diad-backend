@@ -126,6 +126,11 @@ export class TransformationService {
     participant.displayName = newDisplay;
     form.displayName = newDisplay;
 
+    // Wild Shape \u00e9 bonus action em 2024 XPHB \u2014 consome agora se for a fonte
+    if (dto.source === 'wild-shape') {
+      participant.bonusActionUsed = true;
+    }
+
     await this.participantRepo.save(participant);
     this.logger.log(
       `[transformation] ${participantId} \u2192 ${form.formName} (source=${dto.source}, maxHp=${form.maxHp})`,
