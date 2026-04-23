@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { CharacterClassEntity } from 'src/entities/character-class.entity';
 import type {
   ConditionInstance,
   ConditionSlug,
@@ -38,9 +39,31 @@ export class ConditionLifecycleService {
   constructor(
     @InjectRepository(EncounterParticipantEntity)
     private readonly participants: Repository<EncounterParticipantEntity>,
+    @InjectRepository(CharacterClassEntity)
+    private readonly characterClasses: Repository<CharacterClassEntity>,
     private readonly concentration: ConcentrationService,
     private readonly dice: DiceService,
   ) {}
+
+  /**
+   * Spec 012 — Nature's Ward (Land Druid L10 XPHB). Imunidade Charmed, Frightened,
+   * Poisoned pra PC. Retorna true se a condição deve ser bloqueada.
+   */
+  private async isBlockedByNaturesWard(
+    target: EncounterParticipantEntity,
+    slug: string,
+  ): Promise<boolean> {
+    if (target.type !== 'pc' || !target.characterId) return false;
+    if (!['charmed', 'frightened', 'poisoned'].includes(slug)) return false;
+    const classes = await this.characterClasses.find({
+      where: { character_id: target.characterId },
+      relations: ['class', 'subclass'],
+    });
+    const druid = classes.find((c) => c.class?.slug === 'druid' || c.class?.slug === 'druid-phb');
+    if (!druid || druid.class_level < 10) return false;
+    const sub = (druid.subclass as { slug?: string } | undefined)?.slug?.replace(/-(phb|xphb)$/, '');
+    return sub === 'land';
+  }
 
   /**
    * Cria uma ConditionInstance no participante.
@@ -54,6 +77,35 @@ export class ConditionLifecycleService {
     instance: ConditionInstance;
     concentrationBroken: boolean;
   }> {
+    // Spec 012 Gap #6 — Land Druid L10+ imune a charmed/frightened/poisoned.
+    const blockedByWard = await this.isBlockedByNaturesWard(target, input.slug);
+    if (blockedByWard) {
+      const stubInstance: ConditionInstance = {
+        id: randomUUID(),
+        slug: input.slug,
+        appliedBy: input.appliedBy ?? null,
+        sourceSpell: input.sourceSpell ?? null,
+        sourceConcentration: false,
+        saveAbility: null,
+        saveDc: null,
+        repeatSaveTiming: 'never',
+        durationRoundsRemaining: 0,
+        level: input.level,
+        appliedAt: new Date().toISOString(),
+      };
+      return {
+        events: [
+          {
+            event_type: 'condition_blocked_by_immunity',
+            target_participant_id: target.id,
+            data: { slug: input.slug, source: 'natures-ward', feature: 'Land Druid L10' },
+          },
+        ],
+        instance: stubInstance,
+        concentrationBroken: false,
+      };
+    }
+
     const instance: ConditionInstance = {
       id: randomUUID(),
       slug: input.slug,

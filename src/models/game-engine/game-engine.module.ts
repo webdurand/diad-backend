@@ -10,6 +10,7 @@ import {
   MonsterEntity,
   CharacterEntity,
   CharacterStateEntity,
+  CharacterClassEntity,
   LootTableEntity,
   LootTableItemEntity,
   SpellEntity,
@@ -105,6 +106,7 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
       MonsterEntity,
       CharacterEntity,
       CharacterStateEntity,
+      CharacterClassEntity, // Spec 012 — ConditionLifecycleService usa pra checar Land Druid L10+ immunity
       // CharacterStateEntity já declarado acima; mantém pra injeção no ClassFeatureResolverService
       LootTableEntity,
       LootTableItemEntity,
