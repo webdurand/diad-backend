@@ -890,6 +890,37 @@ export class GameEngineController {
   }
 
   /**
+   * Spec 012 Lote D — Rogue L20 Stroke of Luck: arm 1/SR auto-hit OU d20=20.
+   */
+  @Post('encounters/:id/participants/:participantId/stroke-of-luck/arm')
+  async strokeOfLuckArm(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { kind: 'attack' | 'check' },
+  ) {
+    const userId = getUserId(req);
+    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
+    if (!participant) return { ok: false, code: 'PARTICIPANT_NOT_FOUND' };
+    return this.capstonesService.strokeOfLuckArm(participant, userId, body.kind);
+  }
+
+  /**
+   * Spec 012 Lote D — Paladin L20 Devotion Holy Nimbus: cast aura 30ft 1min.
+   */
+  @Post('encounters/:id/participants/:participantId/holy-nimbus')
+  async holyNimbus(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+  ) {
+    const userId = getUserId(req);
+    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
+    if (!participant) return { ok: false, code: 'PARTICIPANT_NOT_FOUND' };
+    return this.capstonesService.holyNimbusCast(participant, userId);
+  }
+
+  /**
    * Spec 012 Lote C — Warlock L20 Eldritch Master.
    * 1/LR meditação 1min regain all pact slots.
    */

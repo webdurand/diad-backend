@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { CharacterStateEntity } from 'src/entities/character-state.entity';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
+import { PersistentAreaService } from './persistent-area.service';
 import type { GameEventData } from '../interfaces/result.type';
 import type { EffectInstancePayload } from '../interfaces/combat.interfaces';
 
@@ -31,6 +32,7 @@ export class CapstonesService {
     @InjectRepository(CharacterStateEntity)
     private readonly stateRepo: Repository<CharacterStateEntity>,
     private readonly sheetService: CharacterSheetService,
+    private readonly persistentArea: PersistentAreaService,
   ) {}
 
   async runStartOfCombat(
@@ -211,5 +213,148 @@ export class CapstonesService {
     ];
 
     return { ok: true, events, regained };
+  }
+
+  /**
+   * Spec 012 Lote D — Rogue L20 Stroke of Luck (RAW 2024 XPHB).
+   * 1/SR arm: próximo attack roll que erra vira hit OU próximo ability check
+   * é tratado como d20=20. Consumo automático via effectInstance.
+   */
+  async strokeOfLuckArm(
+    participant: EncounterParticipantEntity,
+    ownerUserId: string,
+    kind: 'attack' | 'check',
+  ): Promise<{ ok: boolean; code?: string; events: GameEventData[] }> {
+    if (participant.type !== 'pc' || !participant.characterId) {
+      return { ok: false, code: 'INVALID_PARTICIPANT', events: [] };
+    }
+    const alreadyUsed = (participant.effectInstances ?? []).some(
+      (e) => (e as unknown as { kind?: string }).kind === 'stroke_of_luck_used_this_rest',
+    );
+    if (alreadyUsed) {
+      return { ok: false, code: 'ALREADY_USED_THIS_REST', events: [] };
+    }
+    const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId);
+    const hasStrokeOfLuck = (sheet as { hasStrokeOfLuck?: boolean }).hasStrokeOfLuck === true;
+    if (!hasStrokeOfLuck) {
+      return { ok: false, code: 'FEATURE_NOT_AVAILABLE', events: [] };
+    }
+
+    const armedKind = kind === 'attack' ? 'stroke_of_luck_armed_attack' : 'stroke_of_luck_armed_check';
+    participant.effectInstances = [
+      ...(participant.effectInstances ?? []),
+      {
+        id: randomUUID(),
+        kind: armedKind as unknown as 'stroke_of_luck_armed_attack',
+        sourceFeatureSlug: 'stroke-of-luck',
+        sourceCasterParticipantId: participant.id,
+        payload: {} as unknown as EffectInstancePayload,
+        expiresAt: { kind: 'until_consumed' },
+        requiresConcentration: false,
+        appliedAt: new Date().toISOString(),
+      } as unknown as (typeof participant.effectInstances)[number],
+      {
+        id: randomUUID(),
+        kind: 'stroke_of_luck_used_this_rest' as unknown as 'stroke_of_luck_armed_attack',
+        sourceFeatureSlug: 'stroke-of-luck',
+        sourceCasterParticipantId: participant.id,
+        payload: {} as unknown as EffectInstancePayload,
+        expiresAt: { kind: 'end_of_encounter' },
+        requiresConcentration: false,
+        appliedAt: new Date().toISOString(),
+      } as unknown as (typeof participant.effectInstances)[number],
+    ];
+    await this.participants.save(participant);
+
+    return {
+      ok: true,
+      events: [
+        {
+          event_type: 'capstone_stroke_of_luck_armed',
+          actor_participant_id: participant.id,
+          data: { featureSlug: 'stroke-of-luck', kind },
+        },
+      ],
+    };
+  }
+
+  /**
+   * Spec 012 Lote D — Paladin L20 Devotion Holy Nimbus (RAW 2024 XPHB).
+   * 1min aura 30ft. Inimigos no start de turn deles → save CON ou 10 radiant damage.
+   * Player advantage em saves vs spells de undead/fiend. 1/LR.
+   * Implementação: PersistentAreaEffect 30ft (6 cells) + flag `holy_nimbus_armed`
+   * no caster. Duração 100 rounds (proxy 1min).
+   */
+  async holyNimbusCast(
+    participant: EncounterParticipantEntity,
+    ownerUserId: string,
+  ): Promise<{ ok: boolean; code?: string; events: GameEventData[] }> {
+    if (participant.type !== 'pc' || !participant.characterId) {
+      return { ok: false, code: 'INVALID_PARTICIPANT', events: [] };
+    }
+    const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId);
+    const hasHolyNimbus = (sheet as { hasHolyNimbus?: boolean }).hasHolyNimbus === true;
+    if (!hasHolyNimbus) {
+      return { ok: false, code: 'FEATURE_NOT_AVAILABLE', events: [] };
+    }
+    if (participant.positionX == null || participant.positionY == null) {
+      return { ok: false, code: 'NO_POSITION', events: [] };
+    }
+
+    // Save DC = 8 + PB + CHA mod (Paladin spellcasting)
+    const classes = (sheet as unknown as { classes?: Array<{ slug?: string; spellSaveDc?: number }> }).classes ?? [];
+    const paladinClass = classes.find((c) => c.slug === 'paladin' || c.spellSaveDc != null);
+    const dc = paladinClass?.spellSaveDc ?? 15;
+
+    const area = await this.persistentArea.create({
+      encounterId: participant.encounterId,
+      casterParticipantId: participant.id,
+      sourceSpell: 'holy-nimbus',
+      shapeKind: 'sphere',
+      originCell: { x: participant.positionX, y: participant.positionY },
+      radiusCells: 6, // 30ft
+      damageDice: '10', // 10 radiant flat
+      damageType: 'radiant',
+      saveAbility: 'con',
+      saveDc: dc,
+      halfOnSave: false, // RAW: save avoids damage entirely
+      durationRoundsRemaining: 100, // 1min
+      sourceConcentration: false,
+    });
+
+    // Marker no caster (advantage em saves vs undead/fiend spells — V2 hook em save)
+    participant.effectInstances = [
+      ...(participant.effectInstances ?? []),
+      {
+        id: randomUUID(),
+        kind: 'holy_nimbus_armed',
+        sourceFeatureSlug: 'holy-nimbus',
+        sourceCasterParticipantId: participant.id,
+        payload: {} as unknown as EffectInstancePayload,
+        expiresAt: { kind: 'rounds', value: 100 },
+        requiresConcentration: false,
+        appliedAt: new Date().toISOString(),
+      } as unknown as (typeof participant.effectInstances)[number],
+    ];
+    await this.participants.save(participant);
+
+    return {
+      ok: true,
+      events: [
+        {
+          event_type: 'capstone_holy_nimbus_armed',
+          actor_participant_id: participant.id,
+          data: {
+            featureSlug: 'holy-nimbus',
+            radiusFt: 30,
+            damage: 10,
+            damageType: 'radiant',
+            saveDc: dc,
+            areaId: area.id,
+            durationRounds: 100,
+          },
+        },
+      ],
+    };
   }
 }

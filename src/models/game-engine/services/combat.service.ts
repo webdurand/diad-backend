@@ -2000,13 +2000,39 @@ export class CombatService {
     }
 
     const totalAttack = attackRoll + attackBonus + effectBonusSum + biBonus + exhaustionAttackPenalty;
-    const hit =
+    const rawHit =
       !isCriticalMiss &&
       (isCritical ||
         defenderMods.autoCritIfMelee ||
         totalAttack >= targetAc);
 
+    // Spec 012 Lote D — Rogue L20 Stroke of Luck: se attack iria miss, consome
+    // stroke_of_luck_armed_attack effect e converte em hit.
+    let hit = rawHit;
+    let strokeOfLuckConsumed = false;
+    if (!rawHit && !isCriticalMiss) {
+      const armed = (attacker.effectInstances ?? []).find(
+        (e) => (e as unknown as { kind?: string }).kind === 'stroke_of_luck_armed_attack',
+      );
+      if (armed) {
+        hit = true;
+        strokeOfLuckConsumed = true;
+        attacker.effectInstances = (attacker.effectInstances ?? []).filter(
+          (e) => (e as unknown as { kind?: string }).kind !== 'stroke_of_luck_armed_attack',
+        );
+        await this.participantRepo.save(attacker);
+      }
+    }
+
     const events: GameEventData[] = [...biEvents, ...naturesSanctuaryEvents];
+    if (strokeOfLuckConsumed) {
+      events.push({
+        event_type: 'stroke_of_luck_consumed',
+        actor_participant_id: attacker.id,
+        target_participant_id: target.id,
+        data: { featureSlug: 'stroke-of-luck', kind: 'attack', originalMiss: true },
+      });
+    }
     if (elusiveCancelledAdvantage) {
       events.push({
         event_type: 'elusive_cancelled_advantage',

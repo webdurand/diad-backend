@@ -379,9 +379,17 @@ export type EffectInstanceKind =
   | 'hex_mark'                          // Hex: target recebe +1d6 necrotic rider do caster
   | 'hunter_mark'                       // Hunter's Mark: target recebe +1d6 rider do caster
   | 'foe_slayer_used_this_turn'         // Ranger L20 Foe Slayer: 1/turn consumed flag
-  | 'bardic_inspiration'                // Bardic Inspiration armada no target (consume em d20 test)
-  | 'bane'                              // agrupador BO para payload agregado (se usado)
-  | 'bless';                            // agrupador BO para payload agregado
+  | 'bardic_inspiration'                // Bardic Inspiration armada no target
+  | 'bane'
+  | 'bless'
+  | 'capstone_start_combat_done'        // Spec 012 Lote C — marker capstone start-of-combat
+  | 'eldritch_master_used_this_rest'    // Warlock L20 — marker 1/LR
+  | 'stroke_of_luck_armed_attack'       // Rogue L20 — próximo attack miss → hit
+  | 'stroke_of_luck_armed_check'        // Rogue L20 — próximo ability check → d20=20
+  | 'stroke_of_luck_used_this_rest'     // Rogue L20 — marker 1/SR
+  | 'holy_nimbus_armed'                 // Paladin L20 Devotion — aura 30ft 1min
+  | 'spell_mastery_slot_free'           // Wizard L18 — marcador de cast grátis
+  | 'signature_spell_used_this_rest';   // Wizard L20 — marker 1/SR por spell
 
 export type EffectExpirationKind =
   | 'rounds'

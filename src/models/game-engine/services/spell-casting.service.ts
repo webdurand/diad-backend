@@ -83,6 +83,10 @@ export interface CastSpellDto {
   encounterId?: string;
   sessionId?: string;
   ownerUserId: string;
+  /** Spec 012 Lote D — Wizard L18 Spell Mastery / L20 Signature Spells.
+   * Skip slot consumption quando cast é free (Spell Mastery L1/L2 sempre,
+   * Signature Spells L3 com limit 1/SR por spell). Caller valida conditions. */
+  _skipSlotConsumption?: boolean;
 }
 
 export interface CastSpellInCombatDto {
@@ -231,10 +235,13 @@ export class SpellCastingService {
       }
 
       // 6. Consume the slot — pact usa level=-1 convention no updateSpellSlots.
-      await this.spellService.updateSpellSlots(dto.userId, dto.characterId, {
-        level: slotBlock.kind === 'pact' ? -1 : dto.slotLevel,
-        used: slotBlock.used + 1,
-      });
+      // Spec 012 Lote D — skip consumption quando Wizard cast free (Spell Mastery/Signature).
+      if (!dto._skipSlotConsumption) {
+        await this.spellService.updateSpellSlots(dto.userId, dto.characterId, {
+          level: slotBlock.kind === 'pact' ? -1 : dto.slotLevel,
+          used: slotBlock.used + 1,
+        });
+      }
     }
 
     // 7. Handle concentration
@@ -761,6 +768,32 @@ export class SpellCastingService {
     }
 
     // 5. Cast the spell (validates slots, components, etc.)
+    // Spec 012 Lote D — Wizard Spell Mastery (L18, L1/L2 free) + Signature Spells (L20, L3 1/SR each).
+    let skipSlotConsumption = false;
+    let spellMasteryApplied = false;
+    let signatureSpellApplied = false;
+    try {
+      const casterSheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
+      const hasSpellMastery = (casterSheet as { hasSpellMastery?: boolean }).hasSpellMastery === true;
+      const hasSignatureSpells = (casterSheet as { hasSignatureSpells?: boolean }).hasSignatureSpells === true;
+      if (hasSpellMastery && (dto.slotLevel === 1 || dto.slotLevel === 2) && spellData.level <= dto.slotLevel) {
+        skipSlotConsumption = true;
+        spellMasteryApplied = true;
+      } else if (hasSignatureSpells && dto.slotLevel === 3 && spellData.level <= 3) {
+        // 1/SR por spell específica. Marker kind='signature_spell_used_this_rest' payload.slug.
+        const usedMarkers = (participant.effectInstances ?? []).filter(
+          (e) => (e as unknown as { kind?: string }).kind === 'signature_spell_used_this_rest',
+        );
+        const usedSlugs = usedMarkers.map((m) => (m.payload as unknown as { slug?: string })?.slug).filter(Boolean);
+        if (!usedSlugs.includes(dto.spellSlug) && usedMarkers.length < 2) {
+          skipSlotConsumption = true;
+          signatureSpellApplied = true;
+        }
+      }
+    } catch {
+      // fallback: no skip
+    }
+
     const castResult = await this.castSpell({
       characterId: participant.characterId,
       userId: dto.ownerUserId,
@@ -769,11 +802,29 @@ export class SpellCastingService {
       targetIds: effectiveTargetIds,
       encounterId: dto.encounterId,
       ownerUserId: dto.ownerUserId,
+      _skipSlotConsumption: skipSlotConsumption,
     });
 
     if (!castResult.ok) return castResult as any;
 
     const spellResult = castResult.value;
+
+    // Spec 012 Lote D — marcar Signature Spell consumed (1/SR por spell).
+    if (signatureSpellApplied) {
+      participant.effectInstances = [
+        ...(participant.effectInstances ?? []),
+        {
+          id: require('crypto').randomUUID(),
+          kind: 'signature_spell_used_this_rest',
+          sourceFeatureSlug: 'signature-spells',
+          sourceCasterParticipantId: participant.id,
+          payload: { slug: dto.spellSlug } as unknown as import('../interfaces/combat.interfaces').EffectInstancePayload,
+          expiresAt: { kind: 'end_of_encounter' },
+          requiresConcentration: false,
+          appliedAt: new Date().toISOString(),
+        } as unknown as (typeof participant.effectInstances)[number],
+      ];
+    }
 
     // 6. Mark action used (Spec 003 Fatia 9: asReaction consome reaction em vez).
     if (dto.asReaction) {
@@ -1182,6 +1233,21 @@ export class SpellCastingService {
       if (retroactiveReview?.events) {
         events.push(...retroactiveReview.events);
       }
+    }
+
+    if (spellMasteryApplied) {
+      events.push({
+        event_type: 'spell_mastery_free_cast',
+        actor_participant_id: participant.id,
+        data: { featureSlug: 'spell-mastery', spellSlug: dto.spellSlug, slotLevel: dto.slotLevel },
+      });
+    }
+    if (signatureSpellApplied) {
+      events.push({
+        event_type: 'signature_spell_free_cast',
+        actor_participant_id: participant.id,
+        data: { featureSlug: 'signature-spells', spellSlug: dto.spellSlug, slotLevel: dto.slotLevel },
+      });
     }
 
     return success(
