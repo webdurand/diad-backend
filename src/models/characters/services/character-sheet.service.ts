@@ -367,6 +367,34 @@ export interface CharacterSheet {
   /** Druid Land L14 Nature's Sanctuary (RAW 2024) — beast/plant precisa WIS save DC 8+PB+WIS antes de atacar. Falha = cannot attack. */
   hasNaturesSanctuary?: boolean;
 
+  // Spec 012 Lote C — Capstones L18-L20 (RAW 2024 XPHB) — flags + wires por classe.
+  /** Monk L18 Empty Body — 4 Focus Points → invisibility 1min + resistance all except force. */
+  hasEmptyBody?: boolean;
+  /** Monk L18 Superior Defense — 3 FP → 1 round resistance all non-force damage. */
+  hasSuperiorDefense?: boolean;
+  /** Monk L20 Body and Mind — +4 DEX + +4 WIS (cap 25). */
+  hasBodyAndMind?: boolean;
+  /** Monk L20 Perfect Self — start-combat sem FP ganha 4. */
+  hasPerfectSelf?: boolean;
+  /** Rogue L18 Elusive — attacks contra você não têm advantage (enquanto não Incapacitated). */
+  hasElusive?: boolean;
+  /** Rogue L20 Stroke of Luck — 1/SR pool pra auto-hit OU d20=20 em ability check. */
+  hasStrokeOfLuck?: boolean;
+  /** Ranger L18 Feral Senses — 30ft blindsight (RAW 2024 XPHB). */
+  hasFeralSenses?: boolean;
+  /** Ranger L20 Foe Slayer — 1/turn +WIS em attack OR damage. */
+  hasFoeSlayer?: boolean;
+  /** Warlock L20 Eldritch Master — 1/LR meditação regain all pact slots. */
+  hasEldritchMaster?: boolean;
+  /** Druid L18 Beast Spells — casta spells enquanto Wild Shape. */
+  hasBeastSpells?: boolean;
+  /** Druid L20 Archdruid — Wild Shape uses ilimitadas + idade suspensa. */
+  hasArchdruid?: boolean;
+  /** Bard L18 Superior Inspiration — start-combat sem BI uses ganha 1 use. */
+  hasSuperiorInspiration?: boolean;
+  /** Bard L20 Words of Creation — ganha Power Word Heal + Power Word Kill extra. */
+  hasWordsOfCreation?: boolean;
+
   // Equipment & Inventory
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
@@ -1077,6 +1105,21 @@ export class CharacterSheetService {
         return slug.includes('lands-stride') || slug.includes('land-s-stride');
       }),
       hasNaturesSanctuary: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('natures-sanctuary') || (cf.feature?.slug ?? '').startsWith('nature-s-sanctuary')),
+
+      // Spec 012 Lote C — Capstones L18-L20 (RAW 2024 XPHB)
+      hasEmptyBody: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('empty-body')),
+      hasSuperiorDefense: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('superior-defense')),
+      hasBodyAndMind: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('body-and-mind')),
+      hasPerfectSelf: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('perfect-self')),
+      hasElusive: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('elusive')),
+      hasStrokeOfLuck: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('stroke-of-luck')),
+      hasFeralSenses: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('feral-senses')),
+      hasFoeSlayer: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('foe-slayer')),
+      hasEldritchMaster: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('eldritch-master')),
+      hasBeastSpells: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('beast-spells')),
+      hasArchdruid: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('archdruid')),
+      hasSuperiorInspiration: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('superior-inspiration')),
+      hasWordsOfCreation: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('words-of-creation')),
 
       equipment,
       magicItems,

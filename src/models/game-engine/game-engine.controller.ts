@@ -58,6 +58,7 @@ import { TransformationService } from './services/transformation.service';
 import { SummoningService } from './services/summoning.service';
 import { MarkTransferService } from './services/mark-transfer.service';
 import { OpportunityAttackService } from './services/opportunity-attack.service';
+import { CapstonesService } from './services/capstones.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -125,6 +126,7 @@ export class GameEngineController {
     private readonly summoningService: SummoningService,
     private readonly markTransferService: MarkTransferService,
     private readonly opportunityAttackService: OpportunityAttackService,
+    private readonly capstonesService: CapstonesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -885,6 +887,24 @@ export class GameEngineController {
       metamagic: body.metamagic,
       polymorphBeastSlug: body.polymorphBeastSlug,
     });
+  }
+
+  /**
+   * Spec 012 Lote C — Warlock L20 Eldritch Master.
+   * 1/LR meditação 1min regain all pact slots.
+   */
+  @Post('encounters/:id/participants/:participantId/eldritch-master')
+  async eldritchMaster(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+  ) {
+    const userId = getUserId(req);
+    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
+    if (!participant) {
+      return { ok: false, code: 'PARTICIPANT_NOT_FOUND' };
+    }
+    return this.capstonesService.eldritchMaster(participant, userId);
   }
 
   /**

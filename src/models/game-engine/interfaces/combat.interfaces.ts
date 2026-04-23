@@ -377,7 +377,11 @@ export type EffectInstanceKind =
   | 'true_sight'                        // True Seeing
   | 'damage_immunity_threshold'         // Globe of Invulnerability (immune ≤ L5)
   | 'hex_mark'                          // Hex: target recebe +1d6 necrotic rider do caster
-  | 'hunter_mark';                      // Hunter's Mark: target recebe +1d6 rider do caster
+  | 'hunter_mark'                       // Hunter's Mark: target recebe +1d6 rider do caster
+  | 'foe_slayer_used_this_turn'         // Ranger L20 Foe Slayer: 1/turn consumed flag
+  | 'bardic_inspiration'                // Bardic Inspiration armada no target (consume em d20 test)
+  | 'bane'                              // agrupador BO para payload agregado (se usado)
+  | 'bless';                            // agrupador BO para payload agregado
 
 export type EffectExpirationKind =
   | 'rounds'

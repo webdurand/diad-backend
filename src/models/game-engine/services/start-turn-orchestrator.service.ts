@@ -7,6 +7,7 @@ import { ConcentrationService } from './concentration.service';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { LegendaryActionService } from './legendary-action.service';
 import { PersistentAreaService } from './persistent-area.service';
+import { CapstonesService } from './capstones.service';
 import type { GameEventData } from '../interfaces/result.type';
 import type { SaveAbility } from '../interfaces/combat.interfaces';
 
@@ -31,6 +32,7 @@ export class StartTurnOrchestratorService {
     private readonly conditions: ConditionLifecycleService,
     private readonly legendary: LegendaryActionService,
     private readonly persistentArea: PersistentAreaService,
+    private readonly capstones: CapstonesService,
   ) {}
 
   /**
@@ -45,9 +47,16 @@ export class StartTurnOrchestratorService {
       getSaveModifier?: (
         ability: SaveAbility,
       ) => Promise<{ modifier: number; advantage: boolean; disadvantage: boolean }>;
+      ownerUserId?: string;
     },
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
+
+    // 0. Spec 012 Lote C — Capstones start-of-combat (Perfect Self, Arcane
+    // Apotheosis, Superior Inspiration). CapstonesService skip se já processou
+    // via marker effectInstance 'capstone_start_combat_done'.
+    const capRes = await this.capstones.runStartOfCombat(participant, opts?.ownerUserId);
+    events.push(...capRes.events);
 
     // 1. Recharge
     const r = await this.rollRecharges(participant);

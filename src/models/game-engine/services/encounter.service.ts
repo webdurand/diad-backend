@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -21,6 +23,7 @@ import { DiceService } from './dice.service';
 import { EventService } from './event.service';
 import { SessionService } from './session.service';
 import { CampaignService } from 'src/models/world/services/campaign.service';
+import { CapstonesService } from './capstones.service';
 import { getAbilityModifier } from 'src/shared/srd-utils';
 import { XP_THRESHOLDS } from 'src/shared/srd-constants';
 import { EquipmentSourceEnum } from 'src/entities/enums';
@@ -87,6 +90,8 @@ export class EncounterService {
     private readonly stateService: CharacterStateService,
     private readonly inventoryService: InventoryService,
     private readonly campaignService: CampaignService,
+    @Inject(forwardRef(() => CapstonesService))
+    private readonly capstones: CapstonesService,
   ) {}
 
   async create(
@@ -753,7 +758,8 @@ export class EncounterService {
       encounter.id,
     );
 
-    await this.eventService.emit(encounter.sessionId, encounter.id, [
+    // Spec 012 Lote C — Capstones start-of-combat pro primeiro participante.
+    const startEvents: Array<import('../interfaces/result.type').GameEventData> = [
       {
         event_type: 'encounter_start',
         data: {
@@ -767,7 +773,25 @@ export class EncounterService {
         actor_participant_id: encounter.turnOrder[0],
         data: { round: 1 },
       },
-    ]);
+    ];
+    try {
+      const firstPid = encounter.turnOrder[0];
+      const firstParticipant = participants.find((p) => p.id === firstPid);
+      if (firstParticipant?.type === 'pc' && firstParticipant.characterId) {
+        // Resolve ownerUserId via characterRepo
+        const char = await this.characterRepo.findOne({
+          where: { id: firstParticipant.characterId },
+        });
+        if (char?.userId) {
+          const capRes = await this.capstones.runStartOfCombat(firstParticipant, char.userId);
+          startEvents.push(...capRes.events);
+        }
+      }
+    } catch {
+      // capstones nunca aborta start
+    }
+
+    await this.eventService.emit(encounter.sessionId, encounter.id, startEvents);
 
     return this.getById(encounterId);
   }

@@ -144,6 +144,7 @@ function createHarness() {
     { applyDamageToForm: async () => ({ absorbedByForm: 0, overflowToOriginal: 0, reverted: false }), isTransformed: () => false, getActiveForm: () => null, enterForm: async () => ({}), revertForm: async () => ({}), getEffectiveSpeed: () => null, getEffectiveAc: () => null, getEffectiveActions: () => null } as any,
     { consumeBardicInspirationIfPresent: async () => ({ consumed: false, bonus: 0, events: [] }), grantBardicInspiration: async () => ({ events: [], dieSize: 6 }), getBardicInspirationDie: () => 6 } as any,
     { getModifiers: () => ({ disadvAbility: false, disadvAttack: false, disadvSave: false, speedMultiplier: 1, speedPenaltyFt: 0, maxHpMultiplier: 1, dead: false, d20Penalty: 0 }), getLevelFromInstances: () => 0 } as any,
+    { runStartOfCombat: async () => ({ events: [] }), eldritchMaster: async () => ({ ok: false, code: 'TEST_STUB', events: [] }) } as any,
   );
 
   return { combat, participants, encounter };

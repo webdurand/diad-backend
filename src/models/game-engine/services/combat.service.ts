@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
@@ -43,6 +44,7 @@ import { FightingStyleService } from './fighting-style.service';
 import { TransformationService } from './transformation.service';
 import { BardFeaturesService } from './bard-features.service';
 import { ExhaustionService } from './exhaustion.service';
+import { CapstonesService } from './capstones.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 import {
   parseRangeString,
@@ -150,6 +152,7 @@ export class CombatService {
     private readonly transformation: TransformationService,
     private readonly bard: BardFeaturesService,
     private readonly exhaustion: ExhaustionService,
+    private readonly capstones: CapstonesService,
   ) {}
 
   /**
@@ -1327,6 +1330,16 @@ export class CombatService {
     if (nextParticipant) {
       const ownerId = await this.resolveParticipantOwner(nextParticipant, '');
       await this.movementService.initializeTurn(nextParticipant, ownerId || undefined);
+      // Spec 012 Lote C — Capstones start-of-combat (PC first turn).
+      try {
+        const capRes = await this.capstones.runStartOfCombat(
+          nextParticipant,
+          ownerId || undefined,
+        );
+        events.push(...capRes.events);
+      } catch {
+        // capstones nunca aborta endTurn
+      }
     }
 
     events.push({
@@ -1863,6 +1876,24 @@ export class CombatService {
       rangeCheck.disadvantage ||
       (dto.forceDisadvantage ?? false);
 
+    // Spec 012 Lote C — Rogue L18 Elusive (RAW 2024 XPHB).
+    // "Enquanto não Incapacitated, attack rolls contra você não têm advantage."
+    let elusiveCancelledAdvantage = false;
+    if (target.type === 'pc' && target.characterId && hasAdvantage) {
+      try {
+        const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+        const targetSheet = await this.sheetService.computeSheet(targetOwnerId, target.characterId);
+        const hasElusive = (targetSheet as { hasElusive?: boolean }).hasElusive === true;
+        const incapacitated = (target.conditions ?? []).some((c) =>
+          ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'].includes(c),
+        );
+        if (hasElusive && !incapacitated) {
+          hasAdvantage = false;
+          elusiveCancelledAdvantage = true;
+        }
+      } catch { /* fallback */ }
+    }
+
     // Advantage and disadvantage cancel out
     if (hasAdvantage && hasDisadvantage) {
       hasAdvantage = false;
@@ -1976,6 +2007,14 @@ export class CombatService {
         totalAttack >= targetAc);
 
     const events: GameEventData[] = [...biEvents, ...naturesSanctuaryEvents];
+    if (elusiveCancelledAdvantage) {
+      events.push({
+        event_type: 'elusive_cancelled_advantage',
+        actor_participant_id: attacker.id,
+        target_participant_id: target.id,
+        data: { featureSlug: 'elusive' },
+      });
+    }
     if (exhaustionAttackPenalty !== 0) {
       events.push({
         event_type: 'exhaustion_penalty_applied',
@@ -2101,6 +2140,59 @@ export class CombatService {
         // SA check falha silenciosa \u2014 n\u00e3o aborta attack
       }
 
+      // Spec 012 Lote C \u2014 Ranger L20 Foe Slayer (RAW 2024 XPHB).
+      // 1/turn: +WIS mod em damage no hit. Rastreia via effectInstance
+      // `foe_slayer_used_this_turn` com expiresAt.kind='turns' value=1.
+      let foeSlayerBonus = 0;
+      let foeSlayerConsumed = false;
+      try {
+        const alreadyUsed = (attacker.effectInstances ?? []).some(
+          (e) => e.kind === 'foe_slayer_used_this_turn',
+        );
+        if (
+          !alreadyUsed &&
+          attacker.type === 'pc' &&
+          attacker.characterId
+        ) {
+          const ownerIdForFs = await this.resolveParticipantOwner(
+            attacker,
+            dto.ownerUserId,
+          );
+          const fsSheet = await this.sheetService.computeSheet(
+            ownerIdForFs,
+            attacker.characterId,
+          );
+          const hasFoeSlayer = (fsSheet as { hasFoeSlayer?: boolean }).hasFoeSlayer === true;
+          if (hasFoeSlayer) {
+            const wisAbility = fsSheet.abilityScores.find((a) => a.slug === 'wis');
+            const wisMod = wisAbility?.modifier ?? 0;
+            // RAW 2024: Foe Slayer sempre consome 1/turn ao hit, mesmo com WIS mod ≤ 0.
+            // Isso mantém determinismo e emite evento p/ observabilidade no harness.
+            if (hasFoeSlayer) {
+              foeSlayerBonus = Math.max(0, wisMod);
+              foeSlayerConsumed = true;
+              totalDamage += foeSlayerBonus;
+              attacker.effectInstances = [
+                ...(attacker.effectInstances ?? []),
+                {
+                  id: randomUUID(),
+                  kind: 'foe_slayer_used_this_turn',
+                  sourceFeatureSlug: 'foe-slayer',
+                  sourceCasterParticipantId: attacker.id,
+                  payload: {} as unknown as import('../interfaces/combat.interfaces').EffectInstancePayload,
+                  expiresAt: { kind: 'turns', value: 1 },
+                  requiresConcentration: false,
+                  appliedAt: new Date().toISOString(),
+                },
+              ];
+              await this.participantRepo.save(attacker);
+            }
+          }
+        }
+      } catch {
+        // Foe Slayer check falha silenciosa
+      }
+
       // Spec 012 — consumir damage_bonus effects do attacker (Rage +2 melee,
       // Hunter's Mark +1d6, etc). Filtra por scope: 'melee' só em melee,
       // 'ranged' só em ranged, 'any' sempre. Flat amount vai direto; dice é
@@ -2114,6 +2206,20 @@ export class CombatService {
         amount: number;
         dice?: string;
       }> = [];
+      if (foeSlayerConsumed) {
+        if (foeSlayerBonus > 0) {
+          extraDamageBonuses.push({
+            source: 'foe-slayer',
+            amount: foeSlayerBonus,
+          });
+        }
+        events.push({
+          event_type: 'foe_slayer_applied',
+          actor_participant_id: attacker.id,
+          target_participant_id: target.id,
+          data: { wisBonus: foeSlayerBonus, oneshot: true },
+        });
+      }
       if (sneakAttackDice) {
         extraDamageBonuses.push({
           source: 'sneak-attack',
