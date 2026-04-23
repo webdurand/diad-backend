@@ -1,6 +1,7 @@
 import { SkillCheckService, SkillCheckDto } from '../services/skill-check.service';
 import { DiceService } from '../services/dice.service';
 import { ConditionEffectsService } from '../services/condition-effects.service';
+import { ExhaustionService } from '../services/exhaustion.service';
 
 // Minimal mock of CharacterSheetService
 const mockSheet = {
@@ -43,6 +44,7 @@ describe('SkillCheckService', () => {
       new ConditionEffectsService(),
       mockEventService as any,
       { consumeIfArmed: async () => ({ consumed: false }) } as any,
+      new ExhaustionService(),
     );
     mockSheetService.computeSheet.mockResolvedValue({ ...mockSheet, conditions: [] });
   });

@@ -60,6 +60,14 @@ export interface TransformationOriginalSnapshot {
 export interface TransformationState {
   source: TransformationSource;
   enteredAtRound: number;
+  /**
+   * Spec 012 Lote B \u2014 Quando a fonte \u00e9 uma spell de concentra\u00e7\u00e3o
+   * (polymorph-spell, true-polymorph-spell, shapechange-spell), rastreia o
+   * caster para que a quebra de concentra\u00e7\u00e3o dele dispare revertForm
+   * automaticamente. Null para fontes que n\u00e3o dependem de caster externo
+   * (wild-shape, form-of-dread).
+   */
+  sourceCasterParticipantId?: string | null;
   /** Null = indefinido (dura at\u00e9 dismiss/HP zero); em rounds. */
   durationRoundsTotal: number | null;
   durationRoundsRemaining: number | null;

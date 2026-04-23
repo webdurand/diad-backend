@@ -42,6 +42,7 @@ import { WeaponMasteryService } from './weapon-mastery.service';
 import { FightingStyleService } from './fighting-style.service';
 import { TransformationService } from './transformation.service';
 import { BardFeaturesService } from './bard-features.service';
+import { ExhaustionService } from './exhaustion.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 import {
   parseRangeString,
@@ -74,6 +75,10 @@ export interface AttackDto {
   ownerUserId: string;
   /** Internal: skip turn/action validation and action-consumption. Set only by resolveMultiattack. */
   _isSubAttack?: boolean;
+  /** Spec 012 Lote B — Opportunity Attack: skipa range check porque o trigger
+   *  foi computado no momento que o mover ainda estava em reach. Attack roda
+   *  "retroativamente" com target já potencialmente fora de reach. */
+  _bypassRangeCheck?: boolean;
 }
 
 export interface SubAttackResult {
@@ -144,6 +149,7 @@ export class CombatService {
     private readonly fightingStyle: FightingStyleService,
     private readonly transformation: TransformationService,
     private readonly bard: BardFeaturesService,
+    private readonly exhaustion: ExhaustionService,
   ) {}
 
   /**
@@ -1776,7 +1782,9 @@ export class CombatService {
       this.positionOf(target),
       parsedRange,
     );
-    if (!rangeCheck.ok) {
+    // Spec 012 Lote B — OAs bypassam range check: trigger já foi computado
+    // quando o mover ainda estava em reach.
+    if (!rangeCheck.ok && !dto._bypassRangeCheck) {
       const actionLabel = dto.actionName || 'Ataque';
       return failure(
         `Alvo a ${rangeCheck.distanceFt}ft, ${actionLabel} alcança ${rangeCheck.maxFt}ft.`,
@@ -1939,7 +1947,28 @@ export class CombatService {
       }
     }
 
-    const totalAttack = attackRoll + attackBonus + effectBonusSum + biBonus;
+    // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em attack rolls do PC.
+    // Monsters não sofrem exhaustion via mecânica RAW (apenas em NPCs especiais).
+    let exhaustionAttackPenalty = 0;
+    let attackerExhaustionLevel = 0;
+    if (attacker.type === 'pc' && attacker.characterId) {
+      try {
+        const ownerIdForExh = await this.resolveParticipantOwner(attacker, dto.ownerUserId);
+        const attackerSheet = await this.sheetService.computeSheet(
+          ownerIdForExh,
+          attacker.characterId,
+        );
+        attackerExhaustionLevel = (attackerSheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+        if (attackerExhaustionLevel > 0) {
+          const mods = this.exhaustion.getModifiers(attackerExhaustionLevel, '2024_ten_levels');
+          exhaustionAttackPenalty = mods.d20Penalty ?? 0;
+        }
+      } catch {
+        // fallback 0
+      }
+    }
+
+    const totalAttack = attackRoll + attackBonus + effectBonusSum + biBonus + exhaustionAttackPenalty;
     const hit =
       !isCriticalMiss &&
       (isCritical ||
@@ -1947,6 +1976,20 @@ export class CombatService {
         totalAttack >= targetAc);
 
     const events: GameEventData[] = [...biEvents, ...naturesSanctuaryEvents];
+    if (exhaustionAttackPenalty !== 0) {
+      events.push({
+        event_type: 'exhaustion_penalty_applied',
+        actor_participant_id: attacker.id,
+        data: {
+          kind: 'attack_roll',
+          level: attackerExhaustionLevel,
+          d20Penalty: exhaustionAttackPenalty,
+          rawRoll: attackRoll,
+          modifier: attackBonus,
+          finalTotal: totalAttack,
+        },
+      });
+    }
 
     const attackRollResult = {
       roll: attackRoll,

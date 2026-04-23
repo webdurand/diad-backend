@@ -81,6 +81,35 @@ export interface EnrichedParticipantResponse {
 
   legendaryPointsAvailable: number | null;
   legendaryPointsMax: number | null;
+
+  /**
+   * Spec 012 Lote B — Transformation ativa (Wild Shape, Polymorph, Form of
+   * Dread, etc). Null quando não transformado. UI usa pra mostrar formName
+   * no token e badge de revert.
+   */
+  transformationState: {
+    source: string;
+    sourceCasterParticipantId?: string | null;
+    enteredAtRound: number;
+    durationRoundsTotal: number | null;
+    durationRoundsRemaining: number | null;
+    form: {
+      monsterSlug: string | null;
+      formName: string;
+      displayName: string;
+      size: string;
+      ac: number;
+      maxHp: number;
+      currentHp: number;
+      speed: Record<string, number | undefined>;
+    };
+    revertTriggers: {
+      hpZero: boolean;
+      concentrationBroken: boolean;
+      durationEnd: boolean;
+      playerDismiss: boolean;
+    };
+  } | null;
 }
 
 export interface EnrichedEncounterResponse {
@@ -186,6 +215,27 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
 
     legendaryPointsAvailable: p.legendaryPointsAvailable ?? null,
     legendaryPointsMax: p.legendaryPointsMax ?? null,
+
+    transformationState: p.transformationState
+      ? {
+          source: p.transformationState.source,
+          sourceCasterParticipantId: p.transformationState.sourceCasterParticipantId ?? null,
+          enteredAtRound: p.transformationState.enteredAtRound,
+          durationRoundsTotal: p.transformationState.durationRoundsTotal,
+          durationRoundsRemaining: p.transformationState.durationRoundsRemaining,
+          form: {
+            monsterSlug: p.transformationState.form.monsterSlug,
+            formName: p.transformationState.form.formName,
+            displayName: p.transformationState.form.displayName,
+            size: p.transformationState.form.size,
+            ac: p.transformationState.form.ac,
+            maxHp: p.transformationState.form.maxHp,
+            currentHp: p.transformationState.form.currentHp,
+            speed: p.transformationState.form.speed,
+          },
+          revertTriggers: p.transformationState.revertTriggers,
+        }
+      : null,
   };
 }
 

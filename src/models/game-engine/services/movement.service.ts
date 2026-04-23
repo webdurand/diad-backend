@@ -8,6 +8,7 @@ import { CharacterSheetService } from 'src/models/characters/services/character-
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
 import { EncounterService } from './encounter.service';
 import { PersistentAreaService } from './persistent-area.service';
+import { ExhaustionService } from './exhaustion.service';
 import {
   GameResult,
   GameEventData,
@@ -51,6 +52,7 @@ export class MovementService {
     private readonly sheetService: CharacterSheetService,
     private readonly stateService: CharacterStateService,
     private readonly persistentArea: PersistentAreaService,
+    private readonly exhaustion: ExhaustionService,
   ) {}
 
   /**
@@ -83,7 +85,22 @@ export class MovementService {
     const reductionTotal = (participant.effectInstances ?? [])
       .filter((e) => e.kind === 'speed_reduction')
       .reduce((sum, e) => sum + ((e.payload as { amount?: number })?.amount ?? 0), 0);
-    return Math.max(0, baseSpeed - reductionTotal);
+
+    // Spec 012 Lote B — Exhaustion XPHB 2024: -5×level ft em speed (flat).
+    let exhaustionSpeedPenalty = 0;
+    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+      try {
+        const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId);
+        const exhLevel = (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+        if (exhLevel > 0) {
+          const mods = this.exhaustion.getModifiers(exhLevel, '2024_ten_levels');
+          // mods.speedPenaltyFt é negativo (-5×level); somamos como redução.
+          exhaustionSpeedPenalty = -(mods.speedPenaltyFt ?? 0);
+        }
+      } catch { /* fallback 0 */ }
+    }
+
+    return Math.max(0, baseSpeed - reductionTotal - exhaustionSpeedPenalty);
   }
 
   /**
@@ -168,9 +185,24 @@ export class MovementService {
     if (occupant)
       return failure(`Posicao ocupada por ${occupant.displayName}.`, 'POSITION_OCCUPIED');
 
-    // Calculate distance (Manhattan for grid-based D&D)
+    // Spec 012 Lote B — Difficult terrain + Land's Stride (RAW 2024 XPHB).
+    // Cells marcadas como difficult terrain custam 10ft em vez de 5ft. Land's
+    // Stride bypasses isso pra beast-aligned PCs (Druid L6 / Ranger L8+).
+    const difficultCells = new Set(
+      (encounter.mapData?.difficultTerrainCells ?? []).map((c) => `${c.x},${c.y}`),
+    );
+    let hasLandsStride = false;
+    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+      try {
+        const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId);
+        hasLandsStride = !!(sheet as { hasLandsStride?: boolean }).hasLandsStride;
+      } catch { /* fallback */ }
+    }
+
     const distanceCells = Math.abs(targetX - fromX) + Math.abs(targetY - fromY);
-    const distanceFt = distanceCells * 5;
+    const { costFt: distanceFt, difficultCellsCrossed } = this.computeMoveCost(
+      fromX, fromY, targetX, targetY, difficultCells, hasLandsStride,
+    );
 
     // Initialize movement if not set
     const speed = await this.getSpeed(participant, ownerUserId);
@@ -217,11 +249,44 @@ export class MovementService {
           fromY,
           toX: targetX,
           toY: targetY,
+          distanceCells,
           distanceFt,
+          difficultCellsCrossed,
+          hasLandsStride,
           remainingMovement: participant.movementRemaining,
         },
       },
     ];
+    if (difficultCellsCrossed > 0) {
+      events.push({
+        event_type: 'difficult_terrain_traversed',
+        actor_participant_id: participantId,
+        data: {
+          cellsCrossed: difficultCellsCrossed,
+          extraCostFt: hasLandsStride ? 0 : difficultCellsCrossed * 5,
+          bypassedByLandsStride: hasLandsStride,
+        },
+      });
+    }
+
+    // Spec 012 Lote B — emite 1 evento `opportunity_attack_available` por OA trigger.
+    // UI/harness usa pra prompt o player OA attacker a responder via
+    // POST /encounters/:id/opportunity-attack (OpportunityAttackService).
+    for (const oa of opportunityAttacks) {
+      events.push({
+        event_type: 'opportunity_attack_available',
+        actor_participant_id: oa.attackerParticipantId,
+        target_participant_id: participantId,
+        data: {
+          attackerName: oa.attackerName,
+          mover: participantId,
+          fromX,
+          fromY,
+          toX: targetX,
+          toY: targetY,
+        },
+      });
+    }
 
     return success(
       {
@@ -236,6 +301,38 @@ export class MovementService {
       },
       events,
     );
+  }
+
+  /**
+   * Spec 012 Lote B — Custo de movimento considerando difficult terrain.
+   * Path Manhattan: anda primeiro X até alinhar, depois Y. Cada cell visitada
+   * (exceto origem) custa 5ft normal, 10ft se difficult (a menos que hasLandsStride).
+   */
+  private computeMoveCost(
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    difficultCells: Set<string>,
+    hasLandsStride: boolean,
+  ): { costFt: number; difficultCellsCrossed: number } {
+    let cost = 0;
+    let crossed = 0;
+    let cx = fromX;
+    let cy = fromY;
+    while (cx !== toX) {
+      cx += Math.sign(toX - cx);
+      const isDiff = difficultCells.has(`${cx},${cy}`);
+      if (isDiff) crossed++;
+      cost += isDiff && !hasLandsStride ? 10 : 5;
+    }
+    while (cy !== toY) {
+      cy += Math.sign(toY - cy);
+      const isDiff = difficultCells.has(`${cx},${cy}`);
+      if (isDiff) crossed++;
+      cost += isDiff && !hasLandsStride ? 10 : 5;
+    }
+    return { costFt: cost, difficultCellsCrossed: crossed };
   }
 
   /**

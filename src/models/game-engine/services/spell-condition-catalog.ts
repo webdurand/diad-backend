@@ -82,13 +82,8 @@ export const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
     requiresConcentration: false,
     repeatSaveTiming: 'never',
   },
-  'polymorph': {
-    conditionSlug: 'incapacitated',
-    saveAbility: 'wis',
-    durationRounds: 10,
-    requiresConcentration: true,
-    repeatSaveTiming: 'never',
-  },
+  // Spec 012 Lote B — polymorph é transformation (statblock swap), não condition.
+  // Wire dedicado em spell-casting.service via TransformationService.enterForm.
   'maze': {
     conditionSlug: 'incapacitated',
     saveAbility: 'int',

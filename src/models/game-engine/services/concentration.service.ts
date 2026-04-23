@@ -182,6 +182,31 @@ export class ConcentrationService {
           await this.participants.save(p);
         }
       }
+
+      // Spec 012 Lote B — revert transformations mantidas pela concentração.
+      // Polymorph e similares registram sourceCasterParticipantId + revertTriggers.concentrationBroken.
+      const tState = p.transformationState;
+      if (
+        tState &&
+        tState.sourceCasterParticipantId === caster.id &&
+        tState.revertTriggers?.concentrationBroken
+      ) {
+        const formName = tState.form.formName;
+        const originalDisplay = tState.original.displayName;
+        p.displayName = originalDisplay;
+        p.transformationState = null;
+        await this.participants.save(p);
+        events.push({
+          event_type: 'transformation_reverted',
+          target_participant_id: p.id,
+          actor_participant_id: caster.id,
+          data: {
+            reason: 'concentration_broken',
+            formName,
+            source: tState.source,
+          },
+        });
+      }
     }
 
     caster.isConcentrating = false;

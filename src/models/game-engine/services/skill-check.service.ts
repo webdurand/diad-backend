@@ -4,6 +4,7 @@ import { DiceService } from './dice.service';
 import { ConditionEffectsService } from './condition-effects.service';
 import { EventService } from './event.service';
 import { InspirationService } from './inspiration.service';
+import { ExhaustionService } from './exhaustion.service';
 import {
   GameResult,
   GameEventData,
@@ -50,6 +51,7 @@ export class SkillCheckService {
     private readonly conditionEffects: ConditionEffectsService,
     private readonly eventService: EventService,
     private readonly inspirationService: InspirationService,
+    private readonly exhaustionService: ExhaustionService,
   ) {}
 
   async rollAbilityCheck(dto: SkillCheckDto): Promise<GameResult<SkillCheckResult>> {
@@ -85,6 +87,14 @@ export class SkillCheckService {
     // Check condition effects on ability checks
     const conditions = sheet.conditions ?? [];
     const condMods = this.getAbilityCheckModifiers(conditions);
+
+    // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em todos d20 tests.
+    // Pra 2024_ten_levels, não há disadvantage — é flat d20 penalty.
+    const exhLevel = (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+    const exhMods = exhLevel > 0
+      ? this.exhaustionService.getModifiers(exhLevel, '2024_ten_levels')
+      : null;
+    const exhaustionD20Penalty = exhMods?.d20Penalty ?? 0;
 
     // Determine advantage/disadvantage
     let hasAdvantage = dto.advantage ?? false;
@@ -137,7 +147,7 @@ export class SkillCheckService {
       roll = this.diceService.roll(20);
     }
 
-    const total = roll + modifier;
+    const total = roll + modifier + exhaustionD20Penalty;
     const passed = total >= dto.dc;
 
     const result: SkillCheckResult = {
@@ -155,13 +165,28 @@ export class SkillCheckService {
 
     const events = this.buildEvents(dto, roll, modifier, total, passed);
     if (inspirationEvent) events.unshift(inspirationEvent);
+    if (exhaustionD20Penalty !== 0) {
+      events.push({
+        event_type: 'exhaustion_penalty_applied',
+        data: {
+          kind: 'ability_check',
+          level: exhLevel,
+          d20Penalty: exhaustionD20Penalty,
+          rawRoll: roll,
+          modifier,
+          finalTotal: total,
+        },
+      });
+    }
     return success(result, events);
   }
 
   private getAbilityCheckModifiers(conditions: string[]) {
     const set = new Set(conditions);
     return {
-      hasDisadvantage: set.has('poisoned') || set.has('frightened') || set.has('exhaustion'),
+      // Spec 012 Lote B — exhaustion 2024 é flat d20 penalty, não disadvantage.
+      // Só poisoned/frightened seguem RAW 2024 com disadvantage.
+      hasDisadvantage: set.has('poisoned') || set.has('frightened'),
       autoFail:
         set.has('incapacitated') ||
         set.has('stunned') ||

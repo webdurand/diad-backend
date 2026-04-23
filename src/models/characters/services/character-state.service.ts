@@ -366,7 +366,8 @@ export class CharacterStateService {
   ): Promise<{ exhaustionLevel: number }> {
     await this.ensureOwnership(userId, characterId);
     const state = await this.getState(characterId);
-    state.exhaustion_level = Math.max(0, Math.min(6, dto.level));
+    // Spec 012 Lote B — RAW 2024 XPHB exhaustion vai até 10 (antes 6).
+    state.exhaustion_level = Math.max(0, Math.min(10, dto.level));
     await this.stateRepo.save(state);
     return { exhaustionLevel: state.exhaustion_level };
   }

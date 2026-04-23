@@ -143,6 +143,7 @@ function createHarness() {
     { resolveAttackModifiers: () => ({ attackBonus: 0, damageBonus: 0, rerollLowDamage: false }), resolveAcBonus: () => 0, applyRerollLowDamage: (r: number[]) => ({ rolls: r, total: r.reduce((s, v) => s + v, 0), rerolled: false }) } as any,
     { applyDamageToForm: async () => ({ absorbedByForm: 0, overflowToOriginal: 0, reverted: false }), isTransformed: () => false, getActiveForm: () => null, enterForm: async () => ({}), revertForm: async () => ({}), getEffectiveSpeed: () => null, getEffectiveAc: () => null, getEffectiveActions: () => null } as any,
     { consumeBardicInspirationIfPresent: async () => ({ consumed: false, bonus: 0, events: [] }), grantBardicInspiration: async () => ({ events: [], dieSize: 6 }), getBardicInspirationDie: () => 6 } as any,
+    { getModifiers: () => ({ disadvAbility: false, disadvAttack: false, disadvSave: false, speedMultiplier: 1, speedPenaltyFt: 0, maxHpMultiplier: 1, dead: false, d20Penalty: 0 }), getLevelFromInstances: () => 0 } as any,
   );
 
   return { combat, participants, encounter };

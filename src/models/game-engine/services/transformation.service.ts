@@ -72,6 +72,8 @@ export class TransformationService {
       equipmentHandling?: TransformationState['equipmentHandling'];
       revertTriggers?: Partial<TransformationState['revertTriggers']>;
       currentEncounterRound?: number;
+      /** Spec 012 Lote B — Caster que mantém concentração (Polymorph etc). */
+      sourceCasterParticipantId?: string | null;
     },
   ): Promise<EncounterParticipantEntity> {
     const participant = await this.participantRepo.findOne({
@@ -106,6 +108,7 @@ export class TransformationService {
     const state: TransformationState = {
       source: dto.source,
       enteredAtRound: dto.currentEncounterRound ?? 0,
+      sourceCasterParticipantId: dto.sourceCasterParticipantId ?? null,
       durationRoundsTotal: dto.durationRoundsTotal ?? null,
       durationRoundsRemaining: dto.durationRoundsTotal ?? null,
       original,

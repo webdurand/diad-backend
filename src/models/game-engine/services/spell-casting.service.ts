@@ -42,6 +42,7 @@ import { getSpellCondition } from './spell-condition-catalog';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { SummoningService } from './summoning.service';
 import { PersistentAreaService } from './persistent-area.service';
+import { TransformationService } from './transformation.service';
 
 // --- Result interfaces ---
 
@@ -123,6 +124,10 @@ export interface CastSpellInCombatDto {
     /** Target do save com disadvantage pro Heightened Spell. */
     heightenedTargetId?: string;
   };
+  /** Spec 012 Lote B — Polymorph: slug do monster (beast form) escolhido
+   *  pelo caster para transformar o alvo. RAW 2024: beast com CR ≤ target's
+   *  CR/level. Se omitido, default 'brown-bear' (CR 1). */
+  polymorphBeastSlug?: string;
 }
 
 export interface CombatSpellResult extends SpellCastResult {
@@ -158,6 +163,7 @@ export class SpellCastingService {
     private readonly conditionLifecycle: ConditionLifecycleService,
     private readonly summoning: SummoningService,
     private readonly persistentArea: PersistentAreaService,
+    private readonly transformation: TransformationService,
   ) {}
 
   /**
@@ -1072,6 +1078,91 @@ export class SpellCastingService {
           damageType: area.damageType,
         },
       });
+    }
+
+    // Spec 012 Lote B — Polymorph wire (RAW 2024 XPHB).
+    // Target faz WIS save; se falha, TransformationService.enterForm swap
+    // pro monster escolhido (beast form). Concentração 1h = 600 rounds.
+    // durationRoundsTotal=600, revertTriggers: hpZero|concentrationBroken|dismiss.
+    if (slugNorm === 'polymorph') {
+      const encounterRound = (await this.encounterRepo.findOne({ where: { id: dto.encounterId } }))?.currentRound ?? 0;
+      const beastSlug = dto.polymorphBeastSlug ?? 'brown-bear';
+
+      // Save DC do caster
+      const casterSheet = await this.sheetService
+        .computeSheet(dto.ownerUserId, participant.characterId)
+        .catch(() => null as any);
+      const casterClass = (casterSheet as any)?.classes?.find((c: any) => c.spellSaveDc != null);
+      const spellSaveDc: number = casterClass?.spellSaveDc ?? 13;
+
+      for (const targetId of effectiveTargetIds) {
+        // Ignorar self (Polymorph RAW aceita self, mas aí sem save)
+        const isSelf = targetId === participant.id;
+        const target = await this.encounterService.getParticipant(targetId).catch(() => null);
+        if (!target) continue;
+
+        // Se target já está transformado, recusar (idempotência, previne conflito)
+        if (target.transformationState) {
+          events.push({
+            event_type: 'polymorph_rejected',
+            actor_participant_id: participant.id,
+            target_participant_id: targetId,
+            data: { reason: 'already_transformed' },
+          });
+          continue;
+        }
+
+        let savedSuccessfully = false;
+        if (!isSelf) {
+          const saveResult = await this.rollMonsterOrPcSave(
+            target,
+            'wis',
+            spellSaveDc,
+            dto.ownerUserId,
+          );
+          savedSuccessfully = saveResult.success;
+          events.push({
+            event_type: 'polymorph_save',
+            actor_participant_id: participant.id,
+            target_participant_id: targetId,
+            data: { ability: 'wis', dc: spellSaveDc, success: savedSuccessfully, total: saveResult.total },
+          });
+          const hit = targetsHit.find((th) => th.participantId === targetId);
+          if (hit) hit.savedSuccessfully = savedSuccessfully;
+        }
+
+        if (savedSuccessfully) continue;
+
+        try {
+          await this.transformation.enterForm(targetId, {
+            source: 'polymorph-spell',
+            monsterSlug: beastSlug,
+            durationRoundsTotal: 600, // 1 hour
+            revertTriggers: {
+              hpZero: true,
+              concentrationBroken: true,
+              durationEnd: true,
+              playerDismiss: true,
+            },
+            currentEncounterRound: encounterRound,
+            sourceCasterParticipantId: participant.id,
+          });
+          events.push({
+            event_type: 'polymorph_applied',
+            actor_participant_id: participant.id,
+            target_participant_id: targetId,
+            data: { beastSlug, durationRounds: 600, source: 'polymorph-spell' },
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'unknown';
+          events.push({
+            event_type: 'polymorph_failed',
+            actor_participant_id: participant.id,
+            target_participant_id: targetId,
+            data: { beastSlug, reason: msg },
+          });
+        }
+      }
     }
 
     // 10. Spec 004 — Shield retroativa: se cast com triggerEventId, re-avalia

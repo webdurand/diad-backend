@@ -7,6 +7,7 @@ import { DiceService } from './dice.service';
 import { ConditionEffectsService } from './condition-effects.service';
 import { EventService } from './event.service';
 import { InspirationService } from './inspiration.service';
+import { ExhaustionService } from './exhaustion.service';
 import {
   GameResult,
   GameEventData,
@@ -43,6 +44,7 @@ export class SavingThrowService {
     private readonly conditionEffects: ConditionEffectsService,
     private readonly eventService: EventService,
     private readonly inspirationService: InspirationService,
+    private readonly exhaustionService: ExhaustionService,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
   ) {}
@@ -148,7 +150,14 @@ export class SavingThrowService {
       }
     }
 
-    let total = roll + modifier + auraBonus + effectBonusSum;
+    // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em saving throws (flat).
+    const exhLevel = (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+    const exhMods = exhLevel > 0
+      ? this.exhaustionService.getModifiers(exhLevel, '2024_ten_levels')
+      : null;
+    const exhaustionD20Penalty = exhMods?.d20Penalty ?? 0;
+
+    let total = roll + modifier + auraBonus + effectBonusSum + exhaustionD20Penalty;
     let passed = total >= dto.dc;
 
     // Fighter L9 Indomitable (RAW 2024) — se save falhou e o participant armou
@@ -202,6 +211,20 @@ export class SavingThrowService {
     const events = this.buildEvents(dto, roll, modifier, total, passed);
     if (inspirationEvent) events.unshift(inspirationEvent);
     if (indomitableEvent) events.push(indomitableEvent);
+    if (exhaustionD20Penalty !== 0) {
+      events.push({
+        event_type: 'exhaustion_penalty_applied',
+        target_participant_id: dto.participantId,
+        data: {
+          kind: 'saving_throw',
+          level: exhLevel,
+          d20Penalty: exhaustionD20Penalty,
+          rawRoll: roll,
+          modifier,
+          finalTotal: total,
+        },
+      } as GameEventData);
+    }
     if (auraBonus > 0 && auraSourceName) {
       events.push({
         event_type: 'aura_of_protection_applied',

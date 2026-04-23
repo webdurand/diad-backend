@@ -82,6 +82,10 @@ import { BardFeaturesService } from './services/bard-features.service';
 import { TransformationService } from './services/transformation.service';
 // Spec 012 Druid + genérico — Summoning pipeline (Summon Beast, Conjure Animals, Spiritual Weapon, Familiar, ...)
 import { SummoningService } from './services/summoning.service';
+// Spec 012 Lote B — Hunter's Mark / Hex transfer (RAW 2024 XPHB)
+import { MarkTransferService } from './services/mark-transfer.service';
+// Spec 012 Lote B — Opportunity Attacks (reaction window, RAW 2024 XPHB)
+import { OpportunityAttackService } from './services/opportunity-attack.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CloudinaryService } from 'src/shared/cloudinary.service';
 import { WorldModule } from '../world/world.module';
@@ -185,6 +189,10 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     TransformationService,
     SummoningService,
     BardFeaturesService,
+    // Spec 012 Lote B — Mark transfer
+    MarkTransferService,
+    // Spec 012 Lote B — Opportunity Attacks
+    OpportunityAttackService,
     // Spec 002
     JoinRequestService,
     EncounterRoomAuthorizer,
@@ -239,6 +247,10 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     TransformationService,
     SummoningService,
     BardFeaturesService,
+    // Spec 012 Lote B — Mark transfer
+    MarkTransferService,
+    // Spec 012 Lote B — Opportunity Attacks
+    OpportunityAttackService,
     // Spec 002
     JoinRequestService,
   ],

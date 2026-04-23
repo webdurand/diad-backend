@@ -1071,7 +1071,11 @@ export class CharacterSheetService {
       hasDraconicPresence: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('draconic-presence')),
       hasWildMagicSurge: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('wild-magic-surge')),
       hasTidesOfChaos: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('tides-of-chaos')),
-      hasLandsStride: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('lands-stride') || (cf.feature?.slug ?? '').startsWith('land-s-stride')),
+      hasLandsStride: charFeatures.some((cf) => {
+        const slug = cf.feature?.slug ?? '';
+        // Aceita slugs: 'lands-stride-*', 'land-s-stride-*', 'druid-lands-stride', 'ranger-lands-stride'.
+        return slug.includes('lands-stride') || slug.includes('land-s-stride');
+      }),
       hasNaturesSanctuary: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('natures-sanctuary') || (cf.feature?.slug ?? '').startsWith('nature-s-sanctuary')),
 
       equipment,

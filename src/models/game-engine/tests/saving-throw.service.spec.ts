@@ -1,6 +1,7 @@
 import { SavingThrowService, SavingThrowDto } from '../services/saving-throw.service';
 import { DiceService } from '../services/dice.service';
 import { ConditionEffectsService } from '../services/condition-effects.service';
+import { ExhaustionService } from '../services/exhaustion.service';
 
 const mockSheet = {
   savingThrows: [
@@ -35,6 +36,7 @@ describe('SavingThrowService', () => {
       new ConditionEffectsService(),
       mockEventService as any,
       { consumeIfArmed: async () => ({ consumed: false }) } as any,
+      new ExhaustionService(),
       {
         findOne: async () => null,
         save: async () => undefined,

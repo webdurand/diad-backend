@@ -56,6 +56,8 @@ import { PaladinFeaturesService } from './services/paladin-features.service';
 import { SorcererFeaturesService } from './services/sorcerer-features.service';
 import { TransformationService } from './services/transformation.service';
 import { SummoningService } from './services/summoning.service';
+import { MarkTransferService } from './services/mark-transfer.service';
+import { OpportunityAttackService } from './services/opportunity-attack.service';
 import { AiTurnService } from './services/ai-turn.service';
 import { EncounterSnapshotService } from './services/encounter-snapshot.service';
 import { UpdateControlDto } from './dto/update-control.dto';
@@ -121,6 +123,8 @@ export class GameEngineController {
     private readonly sorcererFeatures: SorcererFeaturesService,
     private readonly transformationService: TransformationService,
     private readonly summoningService: SummoningService,
+    private readonly markTransferService: MarkTransferService,
+    private readonly opportunityAttackService: OpportunityAttackService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
     // Spec 004
@@ -862,6 +866,8 @@ export class GameEngineController {
         targetExtra?: string;
         heightenedTargetId?: string;
       };
+      /** Spec 012 Lote B — Polymorph: beast form slug (default 'brown-bear'). */
+      polymorphBeastSlug?: string;
     },
   ) {
     return this.spellCastingService.castSpellInCombat({
@@ -877,6 +883,64 @@ export class GameEngineController {
       triggerEventId: body.triggerEventId,
       aoeOriginCell: body.aoeOriginCell,
       metamagic: body.metamagic,
+      polymorphBeastSlug: body.polymorphBeastSlug,
+    });
+  }
+
+  /**
+   * Spec 012 Lote B — Opportunity Attack (RAW 2024 XPHB).
+   *
+   * Disparado como reaction quando um participante sai da reach de um inimigo.
+   * Movement.service emite `opportunity_attack_available`; este endpoint
+   * executa a reação (1 weapon attack) e consome reactionsUsed.
+   */
+  @Post('encounters/:id/opportunity-attack')
+  async opportunityAttack(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      attackerParticipantId: string;
+      targetParticipantId: string;
+      actionSlug?: string;
+      actionName?: string;
+    },
+  ) {
+    return this.opportunityAttackService.resolve({
+      encounterId: id,
+      attackerParticipantId: body.attackerParticipantId,
+      targetParticipantId: body.targetParticipantId,
+      actionSlug: body.actionSlug,
+      actionName: body.actionName,
+      ownerUserId: getUserId(req),
+    });
+  }
+
+  /**
+   * Spec 012 Lote B — Hunter's Mark / Hex transfer.
+   *
+   * RAW 2024 XPHB: quando o alvo marcado cai a 0 HP antes da spell expirar,
+   * o caster pode mover a mark para um novo alvo usando bonus action no
+   * turno subsequente, SEM gastar novo spell slot. A concentração continua
+   * ativa (só muda o alvo).
+   */
+  @Post('encounters/:id/transfer-mark')
+  async transferMark(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      casterParticipantId: string;
+      newTargetParticipantId: string;
+      sourceSpellSlug: 'hunters-mark' | 'hex';
+    },
+  ) {
+    return this.markTransferService.transferMark({
+      encounterId: id,
+      casterParticipantId: body.casterParticipantId,
+      newTargetParticipantId: body.newTargetParticipantId,
+      sourceSpellSlug: body.sourceSpellSlug,
+      ownerUserId: getUserId(req),
     });
   }
 
@@ -916,6 +980,33 @@ export class GameEngineController {
     @Body() body: { participantId: string },
   ) {
     return this.movementService.disengageAction(id, body.participantId);
+  }
+
+  /**
+   * Spec 012 Lote B — Setar difficult terrain cells no grid do encontro.
+   * Substitui o array inteiro; cada cell em `cells` custa 10ft ao mover
+   * (bypassed por Land's Stride).
+   */
+  @Patch('encounters/:id/difficult-terrain')
+  async setDifficultTerrain(
+    @Param('id') id: string,
+    @Body() body: { cells: Array<{ x: number; y: number }> },
+  ) {
+    const encounter = await this.encounterRepo.findOne({ where: { id } });
+    if (!encounter) {
+      return { ok: false, code: 'ENCOUNTER_NOT_FOUND' };
+    }
+    encounter.mapData = {
+      ...(encounter.mapData ?? {}),
+      difficultTerrainCells: Array.isArray(body.cells) ? body.cells : [],
+    };
+    await this.encounterRepo.save(encounter);
+    return {
+      ok: true,
+      value: {
+        cellsCount: encounter.mapData.difficultTerrainCells?.length ?? 0,
+      },
+    };
   }
 
   @Get('encounters/:id/movement/:participantId')
