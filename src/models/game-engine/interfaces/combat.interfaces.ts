@@ -356,7 +356,9 @@ export interface AppliedEffect {
 export type EffectInstanceKind =
   | 'ac_bonus'                          // Mage Armor, Shield, Haste
   | 'attack_bonus'                      // Bless (attack portion), Divine Favor
+  | 'attack_penalty'                    // Bane (attack portion) — rolled dice subtracts
   | 'save_bonus'                        // Bless (save portion)
+  | 'save_penalty'                      // Bane (save portion) — rolled dice subtracts
   | 'damage_bonus'                      // Rage, Divine Favor
   | 'damage_resistance'                 // Rage, Protection from Energy, Fire Shield
   | 'grant_advantage_to_attackers'      // Guiding Bolt, Reckless Attack target

@@ -821,6 +821,13 @@ export class CombatService {
           amount: e.payload?.amount,
         });
       }
+      if (e.kind === 'attack_penalty') {
+        attackBonuses.push({
+          source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? 'effect',
+          dice: e.payload?.diceExpression ? `-${e.payload.diceExpression}` : undefined,
+          amount: e.payload?.amount != null ? -e.payload.amount : undefined,
+        });
+      }
     }
 
     // --- Target-side effects ---
@@ -1410,6 +1417,54 @@ export class CombatService {
         'CONDITION_PREVENTS_ACTION',
       );
 
+    // Spec 012 — Nature's Sanctuary (Druid Land L14): if target has the feature
+    // and attacker is a Beast/Plant, attacker makes WIS save DC 8+PB+WIS. Fail
+    // means attack is aborted (attacker cannot target caster).
+    const naturesSanctuaryEvents: GameEventData[] = [];
+    if (
+      target.type === 'pc' &&
+      target.characterId &&
+      attacker.type === 'monster' &&
+      attacker.monster
+    ) {
+      const creatureType = (attacker.monster.type ?? '').toLowerCase();
+      if (creatureType === 'beast' || creatureType === 'plant') {
+        try {
+          const targetOwnerId = await this.resolveParticipantOwner(target, '');
+          if (targetOwnerId) {
+            const targetSheet = await this.sheetService.computeSheet(targetOwnerId, target.characterId);
+            if ((targetSheet as any).hasNaturesSanctuary) {
+              const pb = targetSheet.proficiencyBonus ?? 2;
+              const wisBlock = (targetSheet.abilityScores ?? []).find((a: any) => a.slug === 'wis');
+              const wisMod = wisBlock?.modifier ?? 0;
+              const dc = 8 + pb + wisMod;
+              const attackerWisMod = getAbilityModifier(attacker.monster.wisdom);
+              const roll = this.diceService.roll(20);
+              const saveTotal = roll + attackerWisMod;
+              const saved = saveTotal >= dc;
+              naturesSanctuaryEvents.push({
+                event_type: 'natures_sanctuary_save',
+                actor_participant_id: attacker.id,
+                target_participant_id: target.id,
+                data: { dc, roll, modifier: attackerWisMod, total: saveTotal, success: saved },
+              });
+              if (!saved) {
+                return success(
+                  {
+                    attackRoll: { roll: 0, modifier: 0, total: 0, targetAc: 0, hit: false, critical: false, criticalMiss: false },
+                    targetDefeated: false,
+                  } as AttackResult,
+                  naturesSanctuaryEvents,
+                );
+              }
+            }
+          }
+        } catch {
+          // Se sheet lookup falhar, não bloqueia o ataque (graceful degradation).
+        }
+      }
+    }
+
     // Get attack bonus and damage info
     let attackBonus = 0;
     let damageDice = '1d4';
@@ -1846,10 +1901,14 @@ export class CombatService {
     targetAc += effectDec.targetAcBonus;
 
     // Spec 004 — rolar dice-bonuses dos EffectInstance (Bless +1d4 etc) e somar ao total.
+    // Bane usa dice com prefixo "-" (ex: "-1d4") — rolamos a expressão e negamos.
     const rolledEffectBonuses = effectDec.attackBonuses.map((b) => {
       if (b.dice) {
-        const r = this.diceService.rollExpression(b.dice);
-        return { source: b.source, dice: b.dice, rolled: r.total };
+        const negated = b.dice.startsWith('-');
+        const expr = negated ? b.dice.slice(1) : b.dice;
+        const r = this.diceService.rollExpression(expr);
+        const total = negated ? -r.total : r.total;
+        return { source: b.source, dice: b.dice, rolled: total };
       }
       return { source: b.source, amount: b.amount ?? 0, rolled: b.amount ?? 0 };
     });
@@ -1887,7 +1946,7 @@ export class CombatService {
         defenderMods.autoCritIfMelee ||
         totalAttack >= targetAc);
 
-    const events: GameEventData[] = [...biEvents];
+    const events: GameEventData[] = [...biEvents, ...naturesSanctuaryEvents];
 
     const attackRollResult = {
       roll: attackRoll,
@@ -2194,6 +2253,10 @@ export class CombatService {
           target_participant_id: target.id,
           data: concResult,
         });
+        if (!concResult.maintained) {
+          const breakRes = await this.concentration.break(target, 'damage');
+          events.push(...breakRes.events);
+        }
       }
 
       if (targetDefeated) {
@@ -2202,6 +2265,43 @@ export class CombatService {
         if (target.isConcentrating) {
           const breakRes = await this.concentration.breakDueToDeath(target);
           events.push(...breakRes.events);
+        }
+
+        // Spec 012 — Hunter's Mark / Hex: RAW 2024 XPHB permite mover a mark
+        // pra novo alvo (bonus action em turno subsequente) SEM novo slot, se
+        // o alvo marcado caiu a 0 HP antes da spell expirar. Emite evento de
+        // sinal — UI pode prompt player. (Endpoint de transfer é deferido.)
+        const hunterMarks = (target.effectInstances ?? []).filter(
+          (e) => e.kind === 'hunter_mark' && e.sourceCasterParticipantId === attacker.id,
+        );
+        const hexMarks = (target.effectInstances ?? []).filter(
+          (e) => e.kind === 'hex_mark' && e.sourceCasterParticipantId === attacker.id,
+        );
+        for (const mk of hunterMarks) {
+          events.push({
+            event_type: 'mark_ready_to_transfer',
+            actor_participant_id: attacker.id,
+            target_participant_id: target.id,
+            data: {
+              sourceSpell: mk.sourceSpellSlug ?? 'hunters-mark',
+              previousTargetId: target.id,
+              effectId: mk.id,
+              bonusActionRecast: true,
+            },
+          });
+        }
+        for (const mk of hexMarks) {
+          events.push({
+            event_type: 'mark_ready_to_transfer',
+            actor_participant_id: attacker.id,
+            target_participant_id: target.id,
+            data: {
+              sourceSpell: mk.sourceSpellSlug ?? 'hex',
+              previousTargetId: target.id,
+              effectId: mk.id,
+              bonusActionRecast: true,
+            },
+          });
         }
       }
 
@@ -3031,20 +3131,18 @@ export class CombatService {
     const roll = this.diceService.roll(20);
     const total = roll + conMod;
     const maintained = total >= dc;
+    const spellName = participant.concentratingOn ?? undefined;
 
-    if (!maintained) {
-      participant.isConcentrating = false;
-      participant.concentratingOn = undefined;
-      await this.participantRepo.save(participant);
-    }
-
+    // NB: break cascade is delegated to ConcentrationService.break('damage') in
+    // the caller, so we keep `isConcentrating` true here — break() checks the
+    // flag before cascading. Only flip if maintained.
     return {
       dc,
       roll,
       modifier: conMod,
       total,
       maintained,
-      spellName: participant.concentratingOn ?? undefined,
+      spellName,
     };
   }
 }

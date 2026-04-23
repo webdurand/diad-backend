@@ -153,6 +153,24 @@ export class PersistentAreaService {
     await this.areas.delete({ casterParticipantId, sourceConcentration: true });
   }
 
+  /**
+   * Spec 012 — recentraliza aura em torno do caster (Spirit Guardians).
+   * Chamado a cada movimento do caster. Afeta apenas áreas cujo sourceSpell está
+   * na whitelist de "auras que seguem o caster".
+   */
+  async relocateAurasByCaster(
+    casterParticipantId: string,
+    newCell: { x: number; y: number },
+  ): Promise<void> {
+    const aurasFollowingCaster = new Set(['spirit-guardians']);
+    const areas = await this.areas.find({ where: { casterParticipantId } });
+    for (const a of areas) {
+      if (!aurasFollowingCaster.has(a.sourceSpell)) continue;
+      a.originCell = newCell;
+      await this.areas.save(a);
+    }
+  }
+
   private cellInArea(
     x: number,
     y: number,

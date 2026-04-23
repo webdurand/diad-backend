@@ -41,6 +41,7 @@ import { substituteSpellcastingMod } from './spellcasting-mod';
 import { getSpellCondition } from './spell-condition-catalog';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { SummoningService } from './summoning.service';
+import { PersistentAreaService } from './persistent-area.service';
 
 // --- Result interfaces ---
 
@@ -156,6 +157,7 @@ export class SpellCastingService {
     private readonly effectInstanceService: EffectInstanceService,
     private readonly conditionLifecycle: ConditionLifecycleService,
     private readonly summoning: SummoningService,
+    private readonly persistentArea: PersistentAreaService,
   ) {}
 
   /**
@@ -1022,6 +1024,54 @@ export class SpellCastingService {
         await this.effectInstanceService.addEffect(targetP, m.input);
       appliedEffectIds.push(effect.id);
       events.push(...effectEvents);
+    }
+
+    // Spec 012 — Persistent area spawn (Spirit Guardians etc). Aura centrada
+    // no caster com raio 15ft, 3d8 radiant/necrotic, WIS save half. Spell de
+    // concentração — cascade em break via PersistentAreaService.removeBy...
+    const slugNorm = dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, '');
+    if (
+      slugNorm === 'spirit-guardians' &&
+      participant.positionX != null &&
+      participant.positionY != null
+    ) {
+      let saveDc: number | null = null;
+      if (participant.type === 'pc' && participant.characterId) {
+        try {
+          const s = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
+          const casterClass = (s as any).classes?.find((c: any) => c.spellSaveDc != null);
+          saveDc = casterClass?.spellSaveDc ?? null;
+        } catch {
+          saveDc = null;
+        }
+      }
+      const area = await this.persistentArea.create({
+        encounterId: dto.encounterId,
+        casterParticipantId: participant.id,
+        sourceSpell: 'spirit-guardians',
+        shapeKind: 'sphere',
+        originCell: { x: participant.positionX, y: participant.positionY },
+        radiusCells: 3, // 15ft = 3 cells
+        damageDice: '3d8',
+        damageType: 'radiant',
+        saveAbility: 'wis',
+        saveDc,
+        halfOnSave: true,
+        durationRoundsRemaining: 100, // 10 min = concentration-gated
+        sourceConcentration: true,
+      });
+      events.push({
+        event_type: 'persistent_area_created',
+        actor_participant_id: participant.id,
+        data: {
+          areaId: area.id,
+          sourceSpell: 'spirit-guardians',
+          originCell: area.originCell,
+          radiusCells: area.radiusCells,
+          damageDice: area.damageDice,
+          damageType: area.damageType,
+        },
+      });
     }
 
     // 10. Spec 004 — Shield retroativa: se cast com triggerEventId, re-avalia

@@ -134,6 +134,38 @@ export function materializeSpellEffects(
       }
       return out;
     }
+    case 'bane': {
+      // RAW Bane: até 3 alvos (CHA save na cast; falha → -1d4 em attack/save por 1 min,
+      // concentration). Materialização aplica a TODOS os alvos — o save é resolvido
+      // pela spell-casting.service ANTES de chamar materialize. Aqui só materializamos
+      // quem falhou (catálogo delega seleção ao caller; MVP aplica em todos os targetIds).
+      const out: SpellEffectMaterialization[] = [];
+      for (const tid of ctx.targetParticipantIds.slice(0, 3)) {
+        out.push({
+          targetParticipantId: tid,
+          input: {
+            kind: 'attack_penalty',
+            sourceSpellSlug: 'bane',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { diceExpression: '1d4' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        });
+        out.push({
+          targetParticipantId: tid,
+          input: {
+            kind: 'save_penalty',
+            sourceSpellSlug: 'bane',
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: { diceExpression: '1d4' },
+            expiresAt: { kind: 'concentration' },
+            requiresConcentration: true,
+          },
+        });
+      }
+      return out;
+    }
     case 'guiding-bolt': {
       // RAW: "Make a ranged spell attack against the creature" — on hit, 4d6 radiant
       // + "until the end of your next turn, the next attack roll made against

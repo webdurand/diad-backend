@@ -7,6 +7,7 @@ import { ActionsService } from 'src/models/characters/services/actions.service';
 import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
 import { CharacterStateService } from 'src/models/characters/services/character-state.service';
 import { EncounterService } from './encounter.service';
+import { PersistentAreaService } from './persistent-area.service';
 import {
   GameResult,
   GameEventData,
@@ -49,6 +50,7 @@ export class MovementService {
     private readonly actionsService: ActionsService,
     private readonly sheetService: CharacterSheetService,
     private readonly stateService: CharacterStateService,
+    private readonly persistentArea: PersistentAreaService,
   ) {}
 
   /**
@@ -199,6 +201,12 @@ export class MovementService {
     participant.positionY = targetY;
     participant.movementRemaining -= distanceFt;
     await this.participantRepo.save(participant);
+
+    // Spec 012 — mover auras (Spirit Guardians) junto com o caster.
+    await this.persistentArea.relocateAurasByCaster(participant.id, {
+      x: targetX,
+      y: targetY,
+    });
 
     const events: GameEventData[] = [
       {

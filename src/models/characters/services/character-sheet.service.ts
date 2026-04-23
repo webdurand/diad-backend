@@ -362,6 +362,11 @@ export interface CharacterSheet {
   /** Sorcerer Wild Magic L3 Tides of Chaos — advantage 1 attack/save/check; próximo cast L1+ triggera Surge. */
   hasTidesOfChaos?: boolean;
 
+  /** Druid Land L6 Land's Stride (RAW 2024) — ignora difficult terrain + vantagem save vs plant-based movement. Blocked on difficult-terrain modeling. */
+  hasLandsStride?: boolean;
+  /** Druid Land L14 Nature's Sanctuary (RAW 2024) — beast/plant precisa WIS save DC 8+PB+WIS antes de atacar. Falha = cannot attack. */
+  hasNaturesSanctuary?: boolean;
+
   // Equipment & Inventory
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
@@ -1066,6 +1071,8 @@ export class CharacterSheetService {
       hasDraconicPresence: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('draconic-presence')),
       hasWildMagicSurge: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('wild-magic-surge')),
       hasTidesOfChaos: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('tides-of-chaos')),
+      hasLandsStride: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('lands-stride') || (cf.feature?.slug ?? '').startsWith('land-s-stride')),
+      hasNaturesSanctuary: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('natures-sanctuary') || (cf.feature?.slug ?? '').startsWith('nature-s-sanctuary')),
 
       equipment,
       magicItems,

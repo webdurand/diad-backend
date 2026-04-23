@@ -129,7 +129,26 @@ export class SavingThrowService {
       auraSourceName = auraResult.sourceName;
     }
 
-    let total = roll + modifier + auraBonus;
+    // Spec 004/012 — somar save_bonus/save_penalty dos EffectInstance do participant
+    // (Bless +1d4, Bane -1d4). Só quando conhecemos o participant.
+    let effectBonusSum = 0;
+    const rolledEffectBonuses: Array<{ source: string; dice?: string; rolled: number }> = [];
+    if (dto.participantId) {
+      const subject = await this.participantRepo.findOne({ where: { id: dto.participantId } });
+      for (const e of subject?.effectInstances ?? []) {
+        if (e.kind === 'save_bonus' && e.payload?.diceExpression) {
+          const r = this.diceService.rollExpression(e.payload.diceExpression);
+          rolledEffectBonuses.push({ source: e.sourceSpellSlug ?? 'effect', dice: e.payload.diceExpression, rolled: r.total });
+          effectBonusSum += r.total;
+        } else if (e.kind === 'save_penalty' && e.payload?.diceExpression) {
+          const r = this.diceService.rollExpression(e.payload.diceExpression);
+          rolledEffectBonuses.push({ source: e.sourceSpellSlug ?? 'effect', dice: `-${e.payload.diceExpression}`, rolled: -r.total });
+          effectBonusSum += -r.total;
+        }
+      }
+    }
+
+    let total = roll + modifier + auraBonus + effectBonusSum;
     let passed = total >= dto.dc;
 
     // Fighter L9 Indomitable (RAW 2024) — se save falhou e o participant armou
