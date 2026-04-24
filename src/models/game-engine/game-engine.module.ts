@@ -86,6 +86,8 @@ import { SummoningService } from './services/summoning.service';
 import { MarkTransferService } from './services/mark-transfer.service';
 // Spec 012 Lote B — Opportunity Attacks (reaction window, RAW 2024 XPHB)
 import { OpportunityAttackService } from './services/opportunity-attack.service';
+// Spec 015 Eixo 7 — Reaction opportunities (Shield, Counterspell, Cutting Words)
+import { ReactionOpportunityService } from './services/reaction-opportunity.service';
 // Spec 012 Lote C — Capstones L18-L20 (start-of-combat hooks RAW 2024 XPHB)
 import { CapstonesService } from './services/capstones.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
@@ -195,6 +197,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     MarkTransferService,
     // Spec 012 Lote B — Opportunity Attacks
     OpportunityAttackService,
+    // Spec 015 Eixo 7 — Reaction opportunities (Shield, Counterspell, ...)
+    ReactionOpportunityService,
     // Spec 012 Lote C — Capstones
     CapstonesService,
     // Spec 002
@@ -255,6 +259,8 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     MarkTransferService,
     // Spec 012 Lote B — Opportunity Attacks
     OpportunityAttackService,
+    // Spec 015 Eixo 7 — Reaction opportunities (Shield, Counterspell, ...)
+    ReactionOpportunityService,
     // Spec 012 Lote C — Capstones
     CapstonesService,
     // Spec 002

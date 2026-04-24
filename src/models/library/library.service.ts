@@ -17,6 +17,7 @@ import {
   SelectQueryBuilder,
 } from 'typeorm';
 import { LibraryQueryDto } from './dto/library-query.dto';
+import { MonsterEntity } from 'src/entities/monster.entity';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -172,6 +173,32 @@ export class LibraryService {
         // category_items.category already joined via relations config
         qb.andWhere('category_items_category.name ILIKE :category', { category: `%${query.category}%` });
       }
+    }
+  }
+
+  /**
+   * Spec 015 Eixo 4: lista beasts com CR ≤ maxCr ordenados por CR asc.
+   * Usado pelo picker de Wild Shape/Polymorph/True Polymorph. Não aplica
+   * source filter (Polymorph usa SRD base).
+   *
+   * Filtra "summons" genéricos (Beast of the Land/Sea/Sky do Summon Beast
+   * XPHB 2024 e Ranger Primal Companion) que têm type='beast' mas não são
+   * feras reais RAW — são templates conjurados.
+   */
+  async findBeastsForForm(maxCr: number): Promise<MonsterEntity[]> {
+    try {
+      return await this.entityManager
+        .createQueryBuilder(MonsterEntity, 'monster')
+        .where('monster.type = :type', { type: 'beast' })
+        .andWhere('monster.challenge_rating <= :maxCr', { maxCr })
+        // Exclui summons conjurados. Slugs SRD: beast-of-the-land,
+        // beast-of-the-sea, beast-of-the-sky, beast-of-the-land-tce, etc.
+        .andWhere('monster.slug NOT LIKE :summonPrefix', { summonPrefix: 'beast-of-%' })
+        .orderBy('monster.challenge_rating', 'ASC')
+        .addOrderBy('monster.name', 'ASC')
+        .getMany();
+    } catch (error) {
+      this.handleErrors(error);
     }
   }
 

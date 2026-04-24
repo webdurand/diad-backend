@@ -16,6 +16,7 @@ import {
   TransformationSource,
   TransformationState,
 } from '../interfaces/transformation.interfaces';
+import type { GameEventData } from '../interfaces/result.type';
 
 /**
  * Spec 012 — TransformationService.
@@ -124,8 +125,11 @@ export class TransformationService {
     };
 
     participant.transformationState = state;
-    // Display name do token vira "Original (Forma)"
-    const newDisplay = dto.formDisplayName ?? `${original.displayName} (${form.formName})`;
+    // RAW: o token representa a FORMA enquanto transformado (todo mundo vê
+    // o urso, não o druida). Display name = formName simples pro token
+    // exibir initials corretos ("Brown Bear" → "BB"). Original preservado
+    // em state.original.displayName pra restaurar no revert.
+    const newDisplay = dto.formDisplayName ?? form.formName;
     participant.displayName = newDisplay;
     form.displayName = newDisplay;
 
@@ -221,6 +225,79 @@ export class TransformationService {
       overflowToOriginal: overflow,
       reverted,
     };
+  }
+
+  /**
+   * Spec 015 Eixo 4 \u2014 tick de dura\u00e7\u00e3o no in\u00edcio de cada turno do participante
+   * transformado. Retorna eventos emitidos.
+   *
+   * RAW 2024:
+   *   - Wild Shape: 1h (600 rounds); ao expirar, reverte para forma humana.
+   *   - Polymorph: 1h concentration; se dura\u00e7\u00e3o chega a 0, reverte.
+   *   - True Polymorph: 1h concentration \u2192 ap\u00f3s isso, **permanente** (a forma
+   *     n\u00e3o expira mais; s\u00f3 dispel/greater restoration reverte).
+   *
+   * `durationRoundsRemaining: null` = sem prazo (Shapechange via dismiss). N\u00e3o
+   * decrementa nem reverte por timeout.
+   */
+  async tickDurationOnTurnStart(
+    participantId: string,
+  ): Promise<{ events: GameEventData[] }> {
+    const events: GameEventData[] = [];
+    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
+    if (!participant?.transformationState) return { events };
+    const state = participant.transformationState;
+    if (state.durationRoundsRemaining == null) return { events };
+
+    state.durationRoundsRemaining -= 1;
+    if (state.durationRoundsRemaining > 0) {
+      await this.participantRepo.save(participant);
+      return { events };
+    }
+
+    // Chegou a 0. Comportamento depende da source.
+    if (state.source === 'true-polymorph-spell') {
+      // RAW XPHB 2024: "If the creature maintains the spell for 1 hour, the
+      // form becomes permanent". Remove concentration bind; mant\u00e9m a forma.
+      state.sourceCasterParticipantId = null;
+      state.revertTriggers = {
+        ...state.revertTriggers,
+        concentrationBroken: false,
+        durationEnd: false,
+      };
+      state.durationRoundsTotal = null;
+      state.durationRoundsRemaining = null;
+      await this.participantRepo.save(participant);
+      events.push({
+        event_type: 'true_polymorph_became_permanent',
+        target_participant_id: participant.id,
+        data: {
+          formName: state.form.formName,
+          narrativeDescriptor: `A transforma\u00e7\u00e3o em ${state.form.formName} torna-se permanente.`,
+        },
+      });
+      this.logger.log(`[transformation] ${participantId} true-polymorph \u2192 permanent`);
+      return { events };
+    }
+
+    // Wild Shape, Polymorph, Shapechange: reverte ao expirar.
+    const formName = state.form.formName;
+    const originalDisplay = state.original.displayName;
+    participant.displayName = originalDisplay;
+    participant.transformationState = null;
+    await this.participantRepo.save(participant);
+    events.push({
+      event_type: 'transformation_reverted',
+      target_participant_id: participant.id,
+      data: {
+        reason: 'duration-expired',
+        formName,
+        source: state.source,
+        narrativeDescriptor: `${formName} se desfaz e ${originalDisplay} retorna \u00e0 forma original.`,
+      },
+    });
+    this.logger.log(`[transformation] ${participantId} reverted (duration-expired, source=${state.source})`);
+    return { events };
   }
 
   /**

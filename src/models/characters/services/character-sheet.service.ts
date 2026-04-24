@@ -32,6 +32,11 @@ import {
 } from 'src/shared/srd-constants';
 import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
 import type { EquipmentArmorClass } from 'src/shared/equipment-types';
+import { classifyFeatureForActions } from './feature-classification';
+import {
+  renderFeatureDescription,
+  extractNarrativeDescriptor,
+} from './feature-text-renderer';
 
 // ---- Response DTOs ----
 
@@ -99,6 +104,16 @@ interface ProficiencyBlock {
   source: string;
 }
 
+/**
+ * Spec 015 Eixo 1 — FeatureBlock enriquecido (Princípio X: AI-Legible Mechanics).
+ *
+ * Campos `category`, `displayText`, `narrativeDescriptor`, `tacticalValue`,
+ * `resourceCharges`, `recharge` são opcionais: populados via override curado
+ * no DB (migration `SeedFeatureCategoryOverrides`) OU via fallback heurístico
+ * em `classifyFeatureForActions` + `extractNarrativeDescriptor`.
+ *
+ * `isPassive` é derivado: `category ∈ {passive, capstone}` OR classificação hide.
+ */
 interface FeatureBlock {
   slug: string;
   name: string;
@@ -106,6 +121,17 @@ interface FeatureBlock {
   description: Record<string, unknown>;
   sourceClass?: string;
   active: boolean;
+  category?: 'active' | 'passive' | 'capstone' | 'resource';
+  displayText?: string;
+  narrativeDescriptor?: string;
+  tacticalValue?: number;
+  resourceCharges?: {
+    current?: number;
+    max: number | null;
+    formula?: string;
+    recharge?: 'short' | 'long' | 'turn' | 'none';
+  };
+  isPassive: boolean;
 }
 
 export interface EquipmentBlock {
@@ -410,6 +436,74 @@ export interface CharacterSheet {
 
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Spec 015 Eixo 1 — merge puro de FeatureEntity + uses consumidos + fallback.
+ *
+ * Ordem de precedência em cada campo:
+ *   1. Override curado (coluna populada em `features`).
+ *   2. Classificação in-code (`classifyFeatureForActions`).
+ *   3. Fallback heurístico (extrai 1ª frase de `description`, categoria `active`).
+ *
+ * `resourceCharges.current = max - used` quando ambos são literais; caso
+ * contrário deixa `current` undefined e frontend decide fallback.
+ */
+export function buildFeatureBlock(
+  cf: CharacterFeatureEntity,
+  featureUsesUsed: Record<string, number>,
+): FeatureBlock {
+  const feature = cf.feature;
+  const slug = feature.slug;
+  const classification = classifyFeatureForActions(slug);
+
+  const overrideCategory = feature.category;
+  const isPassive =
+    overrideCategory === 'passive' ||
+    overrideCategory === 'capstone' ||
+    classification?.kind === 'hide';
+
+  const category: FeatureBlock['category'] =
+    overrideCategory ??
+    (classification?.kind === 'hide' ? 'passive' : undefined);
+
+  const displayText =
+    feature.display_text?.trim() ||
+    renderFeatureDescription(feature.description) ||
+    undefined;
+
+  const narrativeDescriptor =
+    feature.narrative_descriptor?.trim() ||
+    (displayText ? extractNarrativeDescriptor(displayText, 120) : undefined) ||
+    undefined;
+
+  let resourceCharges: FeatureBlock['resourceCharges'] | undefined;
+  if (feature.resource_charges || feature.recharge_rule) {
+    const rawCharges = feature.resource_charges ?? { max: null };
+    const used = featureUsesUsed[slug] ?? 0;
+    const max = rawCharges.max ?? null;
+    resourceCharges = {
+      max,
+      current: max != null ? Math.max(0, max - used) : undefined,
+      formula: rawCharges.formula,
+      recharge: feature.recharge_rule,
+    };
+  }
+
+  return {
+    slug,
+    name: feature.name,
+    level: feature.level,
+    description: feature.description,
+    sourceClass: cf.source_class?.name,
+    active: cf.active,
+    category,
+    displayText,
+    narrativeDescriptor,
+    tacticalValue: feature.tactical_value,
+    resourceCharges,
+    isPassive,
+  };
 }
 
 @Injectable()
@@ -792,15 +886,14 @@ export class CharacterSheetService {
       }
     }
 
-    // Features
-    const features: FeatureBlock[] = charFeatures.map((cf) => ({
-      slug: cf.feature.slug,
-      name: cf.feature.name,
-      level: cf.feature.level,
-      description: cf.feature.description,
-      sourceClass: cf.source_class?.name,
-      active: cf.active,
-    }));
+    // Features — Spec 015 Eixo 1 enrichment
+    const featureUsesUsed =
+      (charState as unknown as { feature_uses_used?: Record<string, number> })
+        ?.feature_uses_used ?? {};
+
+    const features: FeatureBlock[] = charFeatures.map((cf) =>
+      buildFeatureBlock(cf, featureUsesUsed),
+    );
 
     // Origin details (misc creation metadata)
     const raceTraitChoices = charOrigin.race_trait_choices ?? [];

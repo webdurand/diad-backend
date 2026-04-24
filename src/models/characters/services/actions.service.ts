@@ -20,6 +20,7 @@ import {
   normalizeClassSlug,
 } from 'src/shared/srd-constants';
 import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
+import { classifyFeatureForActions } from './feature-classification';
 
 // ---- Types ----
 
@@ -738,22 +739,75 @@ export class ActionsService {
     // Feature-to-action mapping for known class features
     const featureActionMap = this.getFeatureActionDefinitions(profBonus, mod, charClasses);
 
+    // Spec 015 — pool de usos consumidos (feature_uses_used do state). Usado
+    // pra calcular `uses` atuais (max - used). Cutting Words compartilha pool
+    // com bardic-inspiration (RAW).
+    const featureUsesUsed = (charState as unknown as { feature_uses_used?: Record<string, number> })?.feature_uses_used ?? {};
+    const SHARED_POOLS: Record<string, string> = {
+      'cutting-words': 'bardic-inspiration',
+      // Adicione aqui outras features que compartilham pool.
+    };
+    const resolveUsesForDef = (actionDef: ActionBlock): ActionBlock => {
+      if (actionDef.uses == null || actionDef.usesMax == null) return actionDef;
+      const poolKey = SHARED_POOLS[actionDef.id] ?? actionDef.id;
+      const used = featureUsesUsed[poolKey] ?? 0;
+      return {
+        ...actionDef,
+        uses: Math.max(0, actionDef.usesMax - used),
+      };
+    };
+
+    // Spec 015 Eixo 1 — dedup: se já emitimos actionDef.id via canonical
+    // mapeado OU via alias de uma variante anterior, não emitir 2x.
+    const emittedCanonicals = new Set<string>();
+
     for (const cf of charFeatures) {
       if (!cf.active || !cf.feature) continue;
 
       const slug = cf.feature.slug;
-      const mapped = featureActionMap.get(slug);
+
+      // Spec 015 Eixo 1 — classificação curada (passive → hide; scaling → alias).
+      const classification = classifyFeatureForActions(slug);
+      if (classification?.kind === 'hide') {
+        // Feature passiva (Song of Rest, Expertise, Archdruid, Timeless Body,
+        // ASI, Epic Boon, subclass/college markers, spellcasting grants, etc).
+        // Mostradas na aba Traits/Features via FeatureBlock, não como action.
+        continue;
+      }
+
+      // Resolve slug efetivo: se é alias, usar canonical pra lookup no map.
+      const effectiveSlug =
+        classification?.kind === 'alias' && classification.canonicalSlug
+          ? classification.canonicalSlug
+          : slug;
+
+      // Dedup: se já emitimos esse canonical (ex: BI-d8 e BI-d10 ambos
+      // apontam pra `bardic-inspiration` canonical), emite apenas 1x.
+      if (classification?.kind === 'alias' && emittedCanonicals.has(effectiveSlug)) {
+        continue;
+      }
+
+      const mapped = featureActionMap.get(effectiveSlug);
 
       if (mapped) {
         // Use known mapping
         for (const actionDef of mapped) {
+          // Spec 015 — subtrai uses já consumidos do pool (usesSharedWith aware).
+          const withUses = resolveUsesForDef(actionDef);
           out.push({
-            ...actionDef,
+            ...withUses,
             id: `feature-${cf.id}-${actionDef.id}`,
             // Spec 011 Phase 3 — preserva slug canônico pro dispatcher.
             featureSlug: actionDef.id,
           });
         }
+        emittedCanonicals.add(effectiveSlug);
+        continue;
+      }
+
+      // Aliases sem canonical mapeado → hide silencioso (não tem stats
+      // concretos pra emitir e regex do description dispararia dup).
+      if (classification?.kind === 'alias') {
         continue;
       }
 
@@ -876,6 +930,25 @@ export class ActionsService {
         usesMax: fighterClass.class_level >= 17 ? 2 : 1,
         usesRecharge: 'short_rest',
       }]);
+
+      // Spec 015 Eixo 1 — Indomitable (Fighter L9+). Re-rola 1 save falho.
+      // L9=1 uso, L13=2, L17=3 (RAW XPHB 2024 p.168).
+      if (fighterClass.class_level >= 9) {
+        const indomitableUses = fighterClass.class_level >= 17 ? 3
+          : fighterClass.class_level >= 13 ? 2
+          : 1;
+        map.set('indomitable', [{
+          id: 'indomitable',
+          name: 'Indomavel (Indomitable)',
+          timing: 'reaction',
+          source: 'feature',
+          sourceLabel: 'Guerreiro',
+          description: `Re-rola um teste de resistencia falho. ${indomitableUses} uso${indomitableUses > 1 ? 's' : ''} por descanso longo.`,
+          uses: indomitableUses,
+          usesMax: indomitableUses,
+          usesRecharge: 'long_rest',
+        }]);
+      }
     }
 
     // Barbarian
@@ -999,6 +1072,26 @@ export class ActionsService {
         sourceLabel: 'Monge',
         description: 'Apos usar a acao de Ataque com arma de monge ou ataque desarmado, faz um ataque desarmado como acao bonus.',
       }]);
+
+      // Spec 015 Eixo 1 — Stunning Strike (Monk L5+). Quando acerta ataque
+      // desarmado/monge, gasta 1 Ki; target rola CON save (DC 8+prof+WIS).
+      // Falha = Stunned até fim do próximo turno do monge. RAW XPHB 2024.
+      if (monkClass.class_level >= 5) {
+        const stunDc = 8 + profBonus + wisMod;
+        map.set('stunning-strike', [{
+          id: 'stunning-strike',
+          name: 'Golpe Atordoante (Stunning Strike)',
+          timing: 'free',
+          source: 'feature',
+          sourceLabel: 'Monge',
+          description: `Apos acertar ataque desarmado, gasta 1 Ki: alvo rola CON save (DC ${stunDc}). Falha = Stunned ate o fim do seu proximo turno.`,
+          saveDc: stunDc,
+          saveAbility: 'CON',
+          uses: kiPoints,
+          usesMax: kiPoints,
+          usesRecharge: 'short_rest',
+        }]);
+      }
     }
 
     // Cleric
@@ -1113,6 +1206,34 @@ export class ActionsService {
         : bardClass.class_level >= 5 ? 'd8'
         : 'd6';
       const uses = Math.max(1, chaMod);
+
+      // Spec 015 — Cutting Words (Lore L3) e Countercharm (L5 XPHB/L6 PHB)
+      // chegam aqui como source='feature' via fallback regex do actions.service.
+      // O regex erra timing (aparecem como 'action'). Aqui explicitamos
+      // timing='reaction' RAW. Cutting Words compartilha pool de BI.
+      if (bardClass.class_level >= 3) {
+        map.set('cutting-words', [{
+          id: 'cutting-words',
+          name: 'Palavras Cortantes',
+          timing: 'reaction',
+          source: 'feature',
+          sourceLabel: 'Bardo · Lore',
+          description: `Reação: criatura visível em 60ft faz attack/check/damage roll. Gasta 1 uso de Inspiração Bárdica; o alvo subtrai 1${inspirationDie} do resultado.`,
+          uses,
+          usesMax: uses,
+          usesRecharge: bardClass.class_level >= 5 ? 'short_rest' : 'long_rest',
+        }]);
+      }
+      if (bardClass.class_level >= 5) {
+        map.set('countercharm', [{
+          id: 'countercharm',
+          name: 'Contrafeitiço',
+          timing: 'reaction',
+          source: 'feature',
+          sourceLabel: 'Bardo',
+          description: 'Reação: criatura em 30ft que falhou save vs Charmed/Frightened re-rola o save.',
+        }]);
+      }
 
       map.set('bardic-inspiration', [{
         id: 'bardic-inspiration',

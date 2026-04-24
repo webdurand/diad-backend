@@ -70,6 +70,28 @@ export class FeatureEntity {
   @Column({ type: 'jsonb', nullable: true })
   raw?: Record<string, unknown>;
 
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  category?: 'active' | 'passive' | 'capstone' | 'resource';
+
+  @Column({ type: 'text', nullable: true })
+  display_text?: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  narrative_descriptor?: string;
+
+  @Column({ type: 'smallint', nullable: true })
+  tactical_value?: number;
+
+  @Column({ type: 'jsonb', nullable: true })
+  resource_charges?: {
+    current?: number;
+    max: number | null;
+    formula?: string;
+  };
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  recharge_rule?: 'short' | 'long' | 'turn' | 'none';
+
   @Column({ type: 'timestamptz', default: () => 'now()' })
   created_at: Date;
 

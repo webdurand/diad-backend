@@ -99,6 +99,9 @@ export enum GameErrorCode {
   SPELL_OUT_OF_RANGE = 'SPELL_OUT_OF_RANGE',
   LIBRARY_MONSTER_NOT_FOUND = 'LIBRARY_MONSTER_NOT_FOUND',
 
+  // Spec 015 Eixo 2: spell range semantics (Self-origin-attack rejeita caster)
+  INVALID_TARGET_SELF = 'INVALID_TARGET_SELF',
+
   // Spec 003 (combat action registry) — novos codes
   MISSING_ACTION_SLUG = 'MISSING_ACTION_SLUG',
   INVALID_ACTION_SLUG = 'INVALID_ACTION_SLUG',
@@ -208,6 +211,9 @@ export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
     'Alvo esta fora do alcance da magia.',
   [GameErrorCode.LIBRARY_MONSTER_NOT_FOUND]:
     'Monstro nao encontrado na biblioteca.',
+
+  [GameErrorCode.INVALID_TARGET_SELF]:
+    'Esta magia precisa ser lancada contra outra criatura.',
 
   // Spec 003 (combat action registry)
   [GameErrorCode.MISSING_ACTION_SLUG]:

@@ -135,19 +135,36 @@ export class ClassFeatureExecutorService {
     }
 
     // Usos restantes.
+    // Spec 015 — quando a spec declara `usesSharedWith`, pool e fórmula vêm
+    // do slug compartilhado (ex: Cutting Words usa pool de Bardic Inspiration).
+    const usesKey = spec.usesSharedWith ?? spec.slug;
+    const usesSource =
+      spec.usesSharedWith !== undefined
+        ? CLASS_FEATURE_CATALOG.find((s) => s.slug === spec.usesSharedWith)
+        : spec;
+    const maxUsesFormula = spec.maxUsesByLevel ?? usesSource?.maxUsesByLevel;
     const featureUses = await this.stateService.getFeatureUsesUsed(
       participant.characterId,
     );
-    const used = featureUses[featureSlug] ?? 0;
-    const maxUses =
-      spec.maxUsesByLevel !== undefined
-        ? spec.maxUsesByLevel(classLevel)
+    const used = featureUses[usesKey] ?? 0;
+    let maxUses =
+      maxUsesFormula !== undefined
+        ? maxUsesFormula(classLevel)
         : Number.POSITIVE_INFINITY;
+
+    // Spec 015 — overrides de maxUses que dependem de ability score (não vivem
+    // no catalog, porque o catalog só recebe classLevel). Curado por slug.
+    if (usesKey === 'bardic-inspiration') {
+      // RAW: CHA modifier (min 1) uses. L1-4 LR, L5+ SR (Font of Inspiration).
+      const chaMod =
+        sheet.abilityScores.find((a: { slug: string; modifier: number }) => a.slug === 'cha')?.modifier ?? 0;
+      maxUses = Math.max(1, chaMod);
+    }
 
     // Pool-based (lay-on-hands): validação feita no handler FULL.
     if (spec.slug !== 'lay-on-hands' && used >= maxUses) {
       return failure(
-        `Sem usos restantes de '${featureSlug}' (${used}/${maxUses}).`,
+        `Sem usos restantes de '${usesKey}' (${used}/${maxUses}).`,
         'NO_USES_REMAINING',
       );
     }
@@ -541,10 +558,19 @@ export class ClassFeatureExecutorService {
     await this.participantRepo.save(participant);
 
     // Decrementa usos (exceto 'free' features sem maxUses).
-    if (spec.maxUsesByLevel !== undefined) {
+    // Spec 015 — incrementa no pool compartilhado se `usesSharedWith`.
+    const incrementKey = spec.usesSharedWith ?? spec.slug;
+    const sharedSource =
+      spec.usesSharedWith !== undefined
+        ? CLASS_FEATURE_CATALOG.find((s) => s.slug === spec.usesSharedWith)
+        : undefined;
+    const hasMaxUses =
+      spec.maxUsesByLevel !== undefined ||
+      sharedSource?.maxUsesByLevel !== undefined;
+    if (hasMaxUses) {
       await this.stateService.incrementFeatureUses(
         participant.characterId!,
-        spec.slug,
+        incrementKey,
         1,
       );
     }

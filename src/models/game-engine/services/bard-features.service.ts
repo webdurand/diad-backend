@@ -19,7 +19,9 @@ import type { GameEventData } from '../interfaces/result.type';
  *   Aliado pode gastar em attack/save/check em 10 min. Pool = CHA mod (min 1),
  *   recarrega LR. A partir de L5 (Font of Inspiration) tamb\u00e9m recarrega em SR.
  * - **Cutting Words (Lore L3)**: reaction, caster gasta 1 BI die pra REDUZIR
- *   o roll de ataque/dano/check de inimigo em at\u00e9 60ft que pode ouvir.
+ *   o roll de ataque/dano/check de inimigo em ate 60ft que pode ouvir.
+ * - **Countercharm (L5/L6)**: reaction, forca target em 30ft que falhou save
+ *   vs Charmed/Frightened a re-rolar o save. RAW 2024 XPHB.
  */
 @Injectable()
 export class BardFeaturesService {
@@ -146,6 +148,115 @@ export class BardFeaturesService {
           event_type: 'bardic_inspiration_consumed',
           target_participant_id: target.id,
           data: { dieSize, bonus, context },
+        },
+      ],
+    };
+  }
+
+  /**
+   * Spec 015 — Cutting Words (Lore Bard L3).
+   * Aplica effect `cutting_words_penalty` no target. Consome 1 uso de BI.
+   * O debuff e consumido no proximo attack roll / ability check / damage
+   * roll do target (consumo real em roll handlers e plumbing futuro; MVP
+   * emite o evento e applies o effect com dieSize correto).
+   */
+  async applyCuttingWords(
+    casterParticipantId: string,
+    targetParticipantId: string,
+    bardLevel: number,
+  ): Promise<{ events: GameEventData[]; dieSize: number }> {
+    const caster = await this.participantRepo.findOne({
+      where: { id: casterParticipantId },
+    });
+    if (!caster?.characterId) {
+      throw new NotFoundException('caster nao e PC Bard');
+    }
+    const target = await this.participantRepo.findOne({
+      where: { id: targetParticipantId },
+    });
+    if (!target) {
+      throw new NotFoundException('target nao encontrado');
+    }
+    const dieSize = this.getBardicInspirationDie(bardLevel);
+
+    const res = await this.effects.addEffect(target, {
+      kind: 'cutting_words_penalty',
+      sourceCasterParticipantId: caster.id,
+      sourceFeatureSlug: 'cutting-words',
+      payload: {
+        dieSize,
+        dieFormula: `1d${dieSize}`,
+        bardLevel,
+      } as Record<string, unknown>,
+      requiresConcentration: false,
+      expiresAt: { kind: 'until_consumed' as const },
+    } as unknown as Parameters<EffectInstanceService['addEffect']>[1]);
+
+    this.logger.log(
+      `[bard] Cutting Words: caster=${caster.id} -> target=${target.id} (d${dieSize})`,
+    );
+
+    return {
+      events: [
+        ...res.events,
+        {
+          event_type: 'cutting_words_applied',
+          actor_participant_id: caster.id,
+          target_participant_id: target.id,
+          data: { dieSize, bardLevel },
+        },
+      ],
+      dieSize,
+    };
+  }
+
+  /**
+   * Spec 015 — Countercharm (Bard L5 XPHB / L6 PHB).
+   * Aplica effect `countercharm_reroll_available` no target (aliado ou self)
+   * que falhou save vs Charmed/Frightened. Re-roll do save consumido na
+   * proxima iteracao do save handler (plumbing futuro). MVP emite o evento
+   * e valida range 30ft.
+   */
+  async applyCountercharm(
+    casterParticipantId: string,
+    targetParticipantId: string,
+  ): Promise<{ events: GameEventData[] }> {
+    const caster = await this.participantRepo.findOne({
+      where: { id: casterParticipantId },
+    });
+    if (!caster) {
+      throw new NotFoundException('caster nao encontrado');
+    }
+    const target = await this.participantRepo.findOne({
+      where: { id: targetParticipantId },
+    });
+    if (!target) {
+      throw new NotFoundException('target nao encontrado');
+    }
+
+    const res = await this.effects.addEffect(target, {
+      kind: 'countercharm_reroll_available',
+      sourceCasterParticipantId: caster.id,
+      sourceFeatureSlug: 'countercharm',
+      payload: {
+        appliesTo: ['charmed', 'frightened'],
+      } as Record<string, unknown>,
+      requiresConcentration: false,
+      expiresAt: { kind: 'until_consumed' as const },
+    } as unknown as Parameters<EffectInstanceService['addEffect']>[1]);
+
+    this.logger.log(
+      `[bard] Countercharm: caster=${caster.id} -> target=${target.id}`,
+    );
+
+    return {
+      events: [
+        ...res.events,
+        {
+          event_type: 'countercharm_activated',
+          actor_participant_id: caster.id,
+          target_participant_id: target.id,
+          data: { appliesTo: ['charmed', 'frightened'] },
         },
       ],
     };

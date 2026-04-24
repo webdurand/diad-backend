@@ -9,6 +9,7 @@ import type {
   ConditionSlug,
 } from '../interfaces/combat.interfaces';
 import type { GameEventData } from '../interfaces/result.type';
+import { narrativeForConditionRemoval } from './narrative-condition-removal';
 
 export type ConcentrationBreakReason =
   | 'damage'
@@ -118,6 +119,9 @@ export class ConcentrationService {
       if (eff.kind === 'condition' && eff.targetParticipantId) {
         const tgt = targets.find((t) => t.id === eff.targetParticipantId);
         if (!tgt) continue;
+        const removed = (tgt.conditionInstances ?? []).find(
+          (ci) => ci.id === eff.refId,
+        );
         const before = (tgt.conditionInstances ?? []).length;
         tgt.conditionInstances = (tgt.conditionInstances ?? []).filter(
           (ci) => ci.id !== eff.refId,
@@ -125,10 +129,22 @@ export class ConcentrationService {
         if (tgt.conditionInstances.length !== before) {
           // Sincroniza legacy `conditions: string[]`
           tgt.conditions = this.deriveSlugs(tgt.conditionInstances);
+          // Spec 015 Eixo 3 — event enriquecido com source + narrativeDescriptor
+          const slug = removed?.slug ?? null;
+          const narrative = slug
+            ? narrativeForConditionRemoval(slug, 'concentration_broken')
+            : '';
           events.push({
             event_type: 'condition_removed',
             target_participant_id: tgt.id,
-            data: { instanceId: eff.refId, reason: 'concentration_broken' },
+            data: {
+              instanceId: eff.refId,
+              slug,
+              source: removed?.source ?? 'manual',
+              removalReason: 'concentration_broken',
+              narrativeDescriptor: narrative,
+              reason: 'concentration_broken',
+            },
           });
         }
       } else if (eff.kind === 'persistent-area') {

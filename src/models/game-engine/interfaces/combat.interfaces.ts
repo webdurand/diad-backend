@@ -168,6 +168,12 @@ export interface TurnActionBlock {
   proficient?: boolean;
   /** Premissa weapons-in-hand — slot (main | off | null). Unarmed é null (intrínseco). */
   handSlot?: 'main' | 'off' | null;
+  /** Spec 015 — uses restantes (features com carga contável: BI, Second Wind, Rage, etc.). */
+  uses?: number;
+  /** Spec 015 — max uses no nível atual (usado pra render "3/5" no card). */
+  usesMax?: number;
+  /** Spec 015 — quando recarrega: `short` / `long` / `day` / `encounter` / `turn`. */
+  usesRecharge?: string;
 }
 
 export interface AoEResolveResult {
@@ -308,6 +314,32 @@ export type SaveAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 export type RepeatSaveTiming = 'end_of_turn' | 'start_of_turn' | 'never';
 
 /**
+ * Spec 015 Eixo 3 — semântica de origem da condição.
+ *
+ * Tipos de source:
+ *   - `'manual'`             → aplicação pelo DM (default legado).
+ *   - `'hp_zero'`            → Unconscious derivada de HP=0 (sai ao HP>0).
+ *   - `'spell:<slug>'`       → aplicada por magia (break concentration cessa).
+ *   - `'feature:<slug>'`     → aplicada por feature de classe (stunning strike, etc).
+ *   - `'ability:<slug>'`     → monstro usou ability não-magia (petrifying gaze, etc).
+ *   - `'environment:<slug>'` → efeito ambiental (difficult terrain, trap).
+ *
+ * Usado pra:
+ *   1. `ConditionLifecycleService.revalidateAfterHpChange` — remove `hp_zero`
+ *      ao HP > 0 mantendo outros sources (ex: Faerie Fire persiste em heal).
+ *   2. `removeConditionsBySource('spell:<slug>')` — cascade de concentration
+ *      break cessa condições de UMA magia em todos os targets afetados.
+ *   3. Narrative descriptor em `condition_removed` events — render UI.
+ */
+export type ConditionSource =
+  | 'manual'
+  | 'hp_zero'
+  | `spell:${string}`
+  | `feature:${string}`
+  | `ability:${string}`
+  | `environment:${string}`;
+
+/**
  * Instância de condição com metadata completa.
  * Substitui `conditions: string[]` ao longo do tempo (coexistência por 1 release).
  */
@@ -321,6 +353,11 @@ export interface ConditionInstance {
   sourceSpell: string | null;
   /** True se a fonte é magia de concentração — quebrou = removida em cascata. */
   sourceConcentration: boolean;
+  /**
+   * Spec 015 Eixo 3 — origem semântica (vê `ConditionSource`). Backfill
+   * de legados = `'manual'`. Novas aplicações sempre setam source explícito.
+   */
+  source: ConditionSource;
   saveAbility: SaveAbility | null;
   saveDc: number | null;
   repeatSaveTiming: RepeatSaveTiming;

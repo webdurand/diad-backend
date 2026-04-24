@@ -35,6 +35,13 @@ export interface FeatureSpec {
   /** Fórmula de max uses a partir do classLevel (ausente = ∞). */
   maxUsesByLevel?: (classLevel: number) => number;
   rechargeOn?: 'short' | 'long';
+  /**
+   * Spec 015 — quando preenchido, as validações + incremento de uses operam
+   * sobre ESTE slug em vez do próprio. Ex.: `cutting-words` compartilha pool
+   * com `bardic-inspiration`. A fórmula `maxUsesByLevel` do slug compartilhado
+   * é usada quando a feature atual não tem a sua própria.
+   */
+  usesSharedWith?: string;
 }
 
 function normalizeClassSlug(slug: string): string {
@@ -204,7 +211,8 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     actionCost: 'bonus',
     targetShape: 'self',
     resolution: 'stub',
-    maxUsesByLevel: () => 2,
+    // Spec 015 Eixo 4: L20 Archdruid = unlimited uses (RAW 2024 XPHB).
+    maxUsesByLevel: (level: number) => (level >= 20 ? 9999 : 2),
     rechargeOn: 'short',
   },
   {
@@ -231,6 +239,35 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     // Max uses = CHA modifier (min 1) — executor substitui com sheet.
     maxUsesByLevel: () => 1,
     rechargeOn: 'long',
+  },
+  // Spec 015 — Cutting Words (Lore Bard L3, RAW 2024 XPHB):
+  // Reaction quando criatura visível em 60ft faz attack/check/damage roll.
+  // Gasta 1 uso de Bardic Inspiration; target subtrai o d{N} do resultado.
+  // Compartilha pool com `bardic-inspiration` (RAW — mesmo recurso).
+  {
+    slug: 'cutting-words',
+    displayName: 'Palavras Cortantes',
+    classSlug: 'bard',
+    requiredLevel: 3,
+    actionCost: 'reaction',
+    targetShape: 'single-creature',
+    targetRange: 60,
+    resolution: 'full',
+    usesSharedWith: 'bardic-inspiration',
+  },
+  // Spec 015 — Countercharm (Bard L5 XPHB 2024 / L6 PHB 2014):
+  // Reaction quando criatura em 30ft falha save vs Charmed/Frightened;
+  // força re-roll desse save. Implementação MVP emite o evento e aplica
+  // effect `countercharm_reroll_available` no target pro próximo save.
+  {
+    slug: 'countercharm',
+    displayName: 'Contrafeitiço',
+    classSlug: 'bard',
+    requiredLevel: 5,
+    actionCost: 'reaction',
+    targetShape: 'single-creature',
+    targetRange: 30,
+    resolution: 'full',
   },
   // ---- Rogue ----
   {

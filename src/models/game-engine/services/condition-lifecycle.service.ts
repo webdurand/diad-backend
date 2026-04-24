@@ -7,23 +7,50 @@ import { CharacterClassEntity } from 'src/entities/character-class.entity';
 import type {
   ConditionInstance,
   ConditionSlug,
+  ConditionSource,
   RepeatSaveTiming,
   SaveAbility,
 } from '../interfaces/combat.interfaces';
 import type { GameEventData } from '../interfaces/result.type';
 import { ConcentrationService } from './concentration.service';
 import { DiceService } from './dice.service';
+import {
+  narrativeForConditionRemoval,
+  type RemovalReason,
+} from './narrative-condition-removal';
 
 export interface ApplyConditionInput {
   slug: ConditionSlug;
   appliedBy?: string | null;
   sourceSpell?: string | null;
   sourceConcentration?: boolean;
+  /**
+   * Spec 015 Eixo 3 — origem semântica (default `'manual'`). Quando não
+   * passado mas `sourceSpell` está preenchido, gera `'spell:<slug>'`
+   * automaticamente em `applyCondition` pra compat.
+   */
+  source?: ConditionSource;
   saveAbility?: SaveAbility | null;
   saveDc?: number | null;
   repeatSaveTiming?: RepeatSaveTiming;
   durationRoundsRemaining?: number | null;
   level?: number;
+}
+
+/**
+ * Spec 015 Eixo 3 — resolve o `ConditionSource` do input da aplicação.
+ *
+ * Ordem:
+ *   1. `input.source` explícito (preferido).
+ *   2. Auto-deriva `spell:<slug>` quando só `sourceSpell` foi passado.
+ *   3. Fallback `'manual'` (legacy, DM manual).
+ */
+function resolveSource(input: ApplyConditionInput): ConditionSource {
+  if (input.source) return input.source;
+  if (input.sourceSpell) {
+    return `spell:${input.sourceSpell}` as ConditionSource;
+  }
+  return 'manual';
 }
 
 /**
@@ -86,6 +113,7 @@ export class ConditionLifecycleService {
         appliedBy: input.appliedBy ?? null,
         sourceSpell: input.sourceSpell ?? null,
         sourceConcentration: false,
+        source: resolveSource(input),
         saveAbility: null,
         saveDc: null,
         repeatSaveTiming: 'never',
@@ -112,6 +140,7 @@ export class ConditionLifecycleService {
       appliedBy: input.appliedBy ?? null,
       sourceSpell: input.sourceSpell ?? null,
       sourceConcentration: input.sourceConcentration ?? false,
+      source: resolveSource(input),
       saveAbility: input.saveAbility ?? null,
       saveDc: input.saveDc ?? null,
       repeatSaveTiming: input.repeatSaveTiming ?? 'never',
@@ -162,9 +191,12 @@ export class ConditionLifecycleService {
   async removeConditionInstance(
     target: EncounterParticipantEntity,
     instanceId: string,
-    reason: string = 'manual',
+    reason: RemovalReason | string = 'manual',
   ): Promise<{ events: GameEventData[]; removed: boolean }> {
     const before = (target.conditionInstances ?? []).length;
+    const removed = (target.conditionInstances ?? []).find(
+      (ci) => ci.id === instanceId,
+    );
     target.conditionInstances = (target.conditionInstances ?? []).filter(
       (ci) => ci.id !== instanceId,
     );
@@ -179,16 +211,118 @@ export class ConditionLifecycleService {
     }
 
     await this.participants.save(target);
+    const narrativeDescriptor = removed
+      ? narrativeForConditionRemoval(removed.slug, reason)
+      : '';
     return {
       events: [
         {
           event_type: 'condition_removed',
           target_participant_id: target.id,
-          data: { instanceId, reason },
+          data: {
+            instanceId,
+            slug: removed?.slug ?? null,
+            source: removed?.source ?? 'manual',
+            removalReason: reason,
+            narrativeDescriptor,
+            // legado — manter `reason` por retrocompat com listeners antigos
+            reason,
+          },
         },
       ],
       removed: true,
     };
+  }
+
+  /**
+   * Spec 015 Eixo 3 — revalida condições após mudança de HP.
+   *
+   * Quando HP sai de ≤0 pra >0 (heal clássico), instâncias com
+   * `source='hp_zero'` são removidas (Unconscious derivada de dying acaba).
+   * Instâncias com outra source (spell:faerie-fire, feature:stun, etc.)
+   * permanecem — RAW 5e consistente.
+   *
+   * Retorna ids removidos + events pra caller incluir no stream.
+   */
+  async revalidateAfterHpChange(
+    target: EncounterParticipantEntity,
+    prevHp: number,
+    newHp: number,
+  ): Promise<{ events: GameEventData[]; removed: ConditionInstance[] }> {
+    if (!(prevHp <= 0 && newHp > 0)) {
+      return { events: [], removed: [] };
+    }
+    const before = target.conditionInstances ?? [];
+    const toRemove = before.filter((ci) => ci.source === 'hp_zero');
+    if (toRemove.length === 0) {
+      return { events: [], removed: [] };
+    }
+    target.conditionInstances = before.filter((ci) => ci.source !== 'hp_zero');
+    target.conditions = this.deriveSlugs(target.conditionInstances);
+    if (!target.conditionInstances.some((ci) => ci.slug === 'grappled')) {
+      target.grappledByParticipantId = null;
+    }
+    await this.participants.save(target);
+
+    const events: GameEventData[] = toRemove.map((ci) => ({
+      event_type: 'condition_removed',
+      target_participant_id: target.id,
+      data: {
+        instanceId: ci.id,
+        slug: ci.slug,
+        source: ci.source,
+        removalReason: 'hp_restored' as RemovalReason,
+        narrativeDescriptor: narrativeForConditionRemoval(
+          ci.slug,
+          'hp_restored',
+        ),
+        reason: 'hp_restored',
+      },
+    }));
+    return { events, removed: toRemove };
+  }
+
+  /**
+   * Spec 015 Eixo 3 — remove todas as instâncias de UMA source específica
+   * dos targets passados. Usado pela cascata de concentration break.
+   *
+   * Ex: `removeConditionsBySource([g1,g2,g3], 'spell:faerie-fire', 'concentration_broken')`
+   * → remove Faerie Fire nos 3 goblins atomicamente, emitindo 3 events.
+   */
+  async removeConditionsBySource(
+    targets: EncounterParticipantEntity[],
+    source: ConditionSource,
+    reason: RemovalReason = 'source_ended',
+  ): Promise<{ events: GameEventData[]; removedCount: number }> {
+    const events: GameEventData[] = [];
+    let removedCount = 0;
+    for (const target of targets) {
+      const before = target.conditionInstances ?? [];
+      const toRemove = before.filter((ci) => ci.source === source);
+      if (toRemove.length === 0) continue;
+      target.conditionInstances = before.filter((ci) => ci.source !== source);
+      target.conditions = this.deriveSlugs(target.conditionInstances);
+      if (!target.conditionInstances.some((ci) => ci.slug === 'grappled')) {
+        target.grappledByParticipantId = null;
+      }
+      await this.participants.save(target);
+      for (const ci of toRemove) {
+        events.push({
+          event_type: 'condition_removed',
+          target_participant_id: target.id,
+          data: {
+            instanceId: ci.id,
+            slug: ci.slug,
+            source: ci.source,
+            removalReason: reason,
+            narrativeDescriptor: narrativeForConditionRemoval(ci.slug, reason),
+            reason,
+          },
+        });
+        removedCount += 1;
+      }
+    }
+    return { events, removedCount };
   }
 
   /**

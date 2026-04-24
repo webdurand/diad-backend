@@ -235,6 +235,7 @@ function createHarness() {
     { consumeBardicInspirationIfPresent: async () => ({ consumed: false, bonus: 0, events: [] }), grantBardicInspiration: async () => ({ events: [], dieSize: 6 }), getBardicInspirationDie: () => 6 } as any,
     { getModifiers: () => ({ disadvAbility: false, disadvAttack: false, disadvSave: false, speedMultiplier: 1, speedPenaltyFt: 0, maxHpMultiplier: 1, dead: false, d20Penalty: 0 }), getLevelFromInstances: () => 0 } as any,
     { runStartOfCombat: async () => ({ events: [] }), eldritchMaster: async () => ({ ok: false, code: 'TEST_STUB', events: [] }) } as any,
+    { shouldOfferShield: async () => null } as any,
   );
 
   return {

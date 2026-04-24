@@ -28,6 +28,7 @@ import {
   getPerHitDamage,
 } from './spell-targeting';
 import { parseRangeString, chebyshevDistanceFt } from './combat-range';
+import { getSpellEffectiveRange } from './spell-effective-range';
 import { EffectInstanceService } from './effect-instance.service';
 import {
   materializeSpellEffects,
@@ -534,6 +535,24 @@ export class SpellCastingService {
       }
     }
 
+    // 3.65 Spec 015 Eixo 2 — desambigua range="Self".
+    // Pré-015: Produce Flame (range="Self" + attack_type="ranged") aceitava
+    // só o caster como alvo (parseRangeString("Self") = 0ft → mesma cell).
+    // Resultado: druida lançava em si mesmo e levava 4d8 fire.
+    // Pós-015: `getSpellEffectiveRange` detecta self-origin-attack e
+    //   (a) rejeita caster como alvo (rejectSelfAsTarget=true)
+    //   (b) valida range real do attack (30ft ranged, 5ft melee).
+    const effectiveRange = getSpellEffectiveRange(spellData);
+    if (
+      effectiveRange.kind === 'self-origin-attack' &&
+      effectiveTargetIds.includes(participant.id)
+    ) {
+      return failure(
+        'Esta magia precisa ser lancada contra outra criatura.',
+        GameErrorCode.INVALID_TARGET_SELF,
+      );
+    }
+
     // 3.7 Spec 012 Gap 3 — range check compartilhado com /attack.
     // Casta com targets individuais OU AoE com aoeOriginCell: valida distância
     // caster → alvo/origem. Skip se position null em qualquer lado (PC sem grid).
@@ -547,7 +566,13 @@ export class SpellCastingService {
       dto.metamagic?.type === 'distant'
         ? ((spellData.range ?? '').trim().toLowerCase() === 'touch' ? 6 : 2)
         : 1;
-    const parsedRange = parseRangeString(spellData.range);
+    // Spec 015 Eixo 2 — quando self-origin-attack, force range check usando
+    // attackRangeFt do helper (parseRangeString("Self") retornaria 0, skipando
+    // a validação inteira).
+    const parsedRange =
+      effectiveRange.kind === 'self-origin-attack'
+        ? { normal: effectiveRange.attackRangeFt }
+        : parseRangeString(spellData.range);
     if (parsedRange && parsedRange.normal > 0) {
       const casterPos =
         participant.positionX != null && participant.positionY != null

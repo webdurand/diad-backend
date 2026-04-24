@@ -99,7 +99,8 @@ describe('TransformationService (spec 012)', () => {
       expect(state.enteredAtRound).toBe(3);
       expect(state.original.currentHp).toBe(20);
       expect(state.original.displayName).toBe('Araxis');
-      expect(result.displayName).toBe('Araxis (Wolf)');
+      // Spec 015 Eixo 4: displayName passa a ser só o formName (token representa a forma).
+      expect(result.displayName).toBe('Wolf');
     });
 
     it('rejeita se participant j\u00e1 transformado', async () => {
@@ -245,6 +246,123 @@ describe('TransformationService (spec 012)', () => {
       expect(
         svc.isTransformed({ transformationState: { source: 'x' } } as any),
       ).toBe(true);
+    });
+  });
+
+  describe('tickDurationOnTurnStart (spec 015 Eixo 4)', () => {
+    function mkState(overrides: Record<string, unknown> = {}) {
+      return {
+        source: 'wild-shape',
+        enteredAtRound: 0,
+        sourceCasterParticipantId: null,
+        durationRoundsTotal: 600,
+        durationRoundsRemaining: 600,
+        original: { maxHp: 0, currentHp: 20, tempHp: 0, displayName: 'Araxis' },
+        form: {
+          monsterSlug: 'wolf',
+          formName: 'Wolf',
+          displayName: 'Wolf',
+          size: 'Medium',
+          ac: 13,
+          maxHp: 11,
+          currentHp: 11,
+          tempHp: 0,
+          speed: { walk: 40 },
+          stats: { str: 12, dex: 15, con: 12, int: 3, wis: 12, cha: 6 },
+          actions: [],
+        },
+        retainedAbilities: ['mental-stats', 'speech'],
+        equipmentHandling: 'merge',
+        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: false },
+        ...overrides,
+      };
+    }
+
+    it('decrementa duração mas não reverte quando > 0', async () => {
+      const state = mkState({ durationRoundsRemaining: 5 });
+      const { svc, mocks } = setup({
+        participantState: { transformationState: state },
+      });
+      const r = await svc.tickDurationOnTurnStart('p1');
+      expect(r.events).toHaveLength(0);
+      // save com duration decrementado pra 4
+      const saved = mocks.participantSave.mock.calls[0][0];
+      expect(saved.transformationState.durationRoundsRemaining).toBe(4);
+      expect(saved.transformationState).not.toBeNull();
+    });
+
+    it('no-op quando participant não está transformado', async () => {
+      const { svc, mocks } = setup();
+      const r = await svc.tickDurationOnTurnStart('p1');
+      expect(r.events).toHaveLength(0);
+      expect(mocks.participantSave).not.toHaveBeenCalled();
+    });
+
+    it('no-op quando durationRoundsRemaining = null (sem prazo)', async () => {
+      const state = mkState({ durationRoundsRemaining: null });
+      const { svc, mocks } = setup({
+        participantState: { transformationState: state },
+      });
+      const r = await svc.tickDurationOnTurnStart('p1');
+      expect(r.events).toHaveLength(0);
+      expect(mocks.participantSave).not.toHaveBeenCalled();
+    });
+
+    it('reverte Wild Shape quando duração chega a 0 (emit transformation_reverted)', async () => {
+      const state = mkState({ durationRoundsRemaining: 1 });
+      const { svc, mocks } = setup({
+        participantState: { transformationState: state, displayName: 'Wolf' },
+      });
+      const r = await svc.tickDurationOnTurnStart('p1');
+      expect(r.events).toHaveLength(1);
+      expect(r.events[0].event_type).toBe('transformation_reverted');
+      expect(r.events[0].data?.reason).toBe('duration-expired');
+      expect(r.events[0].data?.source).toBe('wild-shape');
+      // displayName restaurado
+      const saved = mocks.participantSave.mock.calls[0][0];
+      expect(saved.displayName).toBe('Araxis');
+      expect(saved.transformationState).toBeNull();
+    });
+
+    it('reverte Polymorph quando duração expira', async () => {
+      const state = mkState({
+        source: 'polymorph-spell',
+        durationRoundsRemaining: 1,
+        sourceCasterParticipantId: 'caster-1',
+      });
+      const { svc, mocks } = setup({
+        participantState: { transformationState: state, displayName: 'Wolf' },
+      });
+      const r = await svc.tickDurationOnTurnStart('p1');
+      expect(r.events[0].event_type).toBe('transformation_reverted');
+      expect(r.events[0].data?.source).toBe('polymorph-spell');
+      const saved = mocks.participantSave.mock.calls[0][0];
+      expect(saved.transformationState).toBeNull();
+    });
+
+    it('True Polymorph vira PERMANENTE após 1h (não reverte; remove concentration bind)', async () => {
+      const state = mkState({
+        source: 'true-polymorph-spell',
+        durationRoundsRemaining: 1,
+        sourceCasterParticipantId: 'caster-1',
+        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: true },
+      });
+      const { svc, mocks } = setup({
+        participantState: { transformationState: state, displayName: 'Wolf' },
+      });
+      const r = await svc.tickDurationOnTurnStart('p1');
+      expect(r.events).toHaveLength(1);
+      expect(r.events[0].event_type).toBe('true_polymorph_became_permanent');
+      const saved = mocks.participantSave.mock.calls[0][0];
+      // Forma permanece
+      expect(saved.transformationState).not.toBeNull();
+      // Concentration bind removido
+      expect(saved.transformationState.sourceCasterParticipantId).toBeNull();
+      expect(saved.transformationState.revertTriggers.concentrationBroken).toBe(false);
+      expect(saved.transformationState.revertTriggers.durationEnd).toBe(false);
+      // Duração zerada (sem prazo)
+      expect(saved.transformationState.durationRoundsTotal).toBeNull();
+      expect(saved.transformationState.durationRoundsRemaining).toBeNull();
     });
   });
 });

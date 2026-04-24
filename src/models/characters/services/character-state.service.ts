@@ -112,6 +112,18 @@ export class CharacterStateService {
   }
 
   /**
+   * Spec 015 Eixo 4 — leitura direta do HP atual do PC, sem checagem de
+   * ownership. Usado por endpoints que já validaram autoridade via
+   * permissionResolver (ex.: revert-transformation).
+   */
+  async getCurrentHp(characterId: string): Promise<number | null> {
+    const state = await this.stateRepo.findOne({
+      where: { character_id: characterId },
+    });
+    return state?.current_hp ?? null;
+  }
+
+  /**
    * Spec 003 — incrementa usos consumidos de uma feature. Usado pelo executor.
    * Se delta for HP gasto (ex: lay-on-hands), passar delta variável.
    */

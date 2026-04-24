@@ -8,6 +8,7 @@ import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { LegendaryActionService } from './legendary-action.service';
 import { PersistentAreaService } from './persistent-area.service';
 import { CapstonesService } from './capstones.service';
+import { TransformationService } from './transformation.service';
 import type { GameEventData } from '../interfaces/result.type';
 import type { SaveAbility } from '../interfaces/combat.interfaces';
 
@@ -33,6 +34,7 @@ export class StartTurnOrchestratorService {
     private readonly legendary: LegendaryActionService,
     private readonly persistentArea: PersistentAreaService,
     private readonly capstones: CapstonesService,
+    private readonly transformation: TransformationService,
   ) {}
 
   /**
@@ -82,6 +84,12 @@ export class StartTurnOrchestratorService {
     // 3. Concentração: decrementa duração
     const conc = await this.concentration.decrementDurationFor(participant);
     events.push(...conc.events);
+
+    // 3.5 Spec 015 Eixo 4 — tick de duração da transformação ativa (Wild
+    // Shape, Polymorph, True Polymorph). Reverte quando expira OU torna
+    // permanente no caso de True Polymorph.
+    const tRes = await this.transformation.tickDurationOnTurnStart(participant.id);
+    events.push(...tRes.events);
 
     // 4. Reset legendary pool
     if (participant.legendaryPointsMax != null) {

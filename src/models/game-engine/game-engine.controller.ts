@@ -890,6 +890,101 @@ export class GameEngineController {
   }
 
   /**
+   * Spec 015 Eixo 4 — Reverte transformação ativa (Wild Shape, Polymorph, etc).
+   * Idempotente: se participant não está transformado, retorna reverted=false.
+   * Permissão: owner do participant OU DM do encounter (resolveMutationOwner).
+   */
+  @Post('encounters/:id/participants/:participantId/revert-transformation')
+  async revertTransformation(
+    @Req() req: AuthRequest,
+    @Param('id') encounterId: string,
+    @Param('participantId') participantId: string,
+    @Body()
+    body: {
+      reason?:
+        | 'manual'
+        | 'concentration-broken'
+        | 'form-hp-zero'
+        | 'duration-expired';
+    },
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      participantId,
+      getUserId(req),
+      encounterId,
+    );
+
+    const before = await this.participantRepo.findOne({ where: { id: participantId } });
+    if (!before) {
+      return { ok: false, code: 'PARTICIPANT_NOT_FOUND', error: 'Participant não encontrado.' };
+    }
+    if (!before.transformationState) {
+      return { ok: true, reverted: false, events: [] };
+    }
+
+    const reason = body.reason ?? 'manual';
+    // Spec 015 Eixo 4 RAW: reverter Wild Shape voluntariamente custa bonus
+    // action (XPHB 2024 p.303). Outras sources (Polymorph via caster dismiss)
+    // seguem regra da própria spell — não bloqueia aqui. Auto-revert (hp-zero,
+    // duration-expired, concentration-broken) é grátis.
+    if (
+      reason === 'manual' &&
+      before.transformationState.source === 'wild-shape'
+    ) {
+      if (before.bonusActionUsed) {
+        return {
+          ok: false,
+          code: 'BONUS_ACTION_ALREADY_USED',
+          error: 'Bonus action já foi usada neste turno. Reverter Wild Shape custa bonus action (RAW 2024).',
+        };
+      }
+      before.bonusActionUsed = true;
+      await this.participantRepo.save(before);
+    }
+
+    const serviceReason =
+      reason === 'manual'
+        ? 'player-dismiss'
+        : reason === 'form-hp-zero'
+        ? 'hp-zero'
+        : reason === 'duration-expired'
+        ? 'duration-end'
+        : 'concentration-broken';
+
+    const formSlug = before.transformationState.form.monsterSlug ?? null;
+    const formName = before.transformationState.form.formName;
+    const originalDisplay = before.transformationState.original.displayName;
+
+    await this.transformationService.revertForm(participantId, serviceReason);
+
+    const hpFromState = before.characterId
+      ? await this.stateService.getCurrentHp(before.characterId).catch(() => null)
+      : null;
+    const hpAfter = hpFromState ?? before.currentHp ?? 0;
+
+    const events: Array<{ eventType: string; narrativeDescriptor?: string }> = [
+      {
+        eventType: 'transformation_reverted',
+        narrativeDescriptor: `${formName} encolhe de volta à forma de ${originalDisplay}.`,
+      },
+    ];
+    if (reason === 'concentration-broken') {
+      events.unshift({
+        eventType: 'concentration_broken',
+        narrativeDescriptor: 'A concentração do caster se rompe; a forma se desfaz.',
+      });
+    }
+
+    return {
+      ok: true,
+      reverted: true,
+      formSlugReverted: formSlug,
+      hpAfter,
+      events,
+    };
+  }
+
+  /**
    * Spec 012 Lote D — Rogue L20 Stroke of Luck: arm 1/SR auto-hit OU d20=20.
    */
   @Post('encounters/:id/participants/:participantId/stroke-of-luck/arm')

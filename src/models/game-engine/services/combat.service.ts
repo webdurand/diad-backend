@@ -45,6 +45,7 @@ import { TransformationService } from './transformation.service';
 import { BardFeaturesService } from './bard-features.service';
 import { ExhaustionService } from './exhaustion.service';
 import { CapstonesService } from './capstones.service';
+import { ReactionOpportunityService } from './reaction-opportunity.service';
 import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
 import {
   parseRangeString,
@@ -153,6 +154,7 @@ export class CombatService {
     private readonly bard: BardFeaturesService,
     private readonly exhaustion: ExhaustionService,
     private readonly capstones: CapstonesService,
+    private readonly reactionOpportunity: ReactionOpportunityService,
   ) {}
 
   /**
@@ -1098,6 +1100,10 @@ export class CombatService {
       // Premissa weapons-in-hand — proficiency + hand slot surface
       proficient: a.proficient,
       handSlot: a.handSlot,
+      // Spec 015 — uses/charges passthrough (BI, Second Wind, Rage, etc).
+      uses: a.uses,
+      usesMax: a.usesMax,
+      usesRecharge: a.usesRecharge,
     } as TurnActionBlock;
   }
 
@@ -2716,11 +2722,65 @@ export class CombatService {
 
       await this.participantRepo.save(attacker);
 
-      await this.eventService.emit(
+      const savedEvents = await this.eventService.emit(
         encounter.sessionId,
         encounterId,
         events,
       );
+
+      // Spec 015 Eixo 7 — Shield opportunity. Se o hit foi marginal E target é
+      // PC com Shield preparado + slot L1+ livre, emite `shield_opportunity`
+      // referenciando o attack_roll salvo (pra recompute retroactive).
+      if (hit && target.type === 'pc') {
+        const shieldOpp = await this.reactionOpportunity.shouldOfferShield(
+          target,
+          attackRollResult.total,
+          targetAc,
+          dto.ownerUserId,
+        );
+        if (shieldOpp) {
+          const attackRollSaved = savedEvents.find((e) => e.eventType === 'attack_roll');
+          if (attackRollSaved) {
+            const oppEvents = await this.eventService.emit(
+              encounter.sessionId,
+              encounterId,
+              [
+                {
+                  event_type: 'shield_opportunity',
+                  actor_participant_id: attacker.id,
+                  target_participant_id: target.id,
+                  data: {
+                    triggerEventId: attackRollSaved.id,
+                    attackerName: attacker.displayName,
+                    reactorName: shieldOpp.reactorName,
+                    attackTotal: attackRollResult.total,
+                    currentAc: targetAc,
+                    slotLevel: shieldOpp.slotLevel,
+                    timeoutSeconds: 10,
+                  },
+                },
+              ],
+            );
+            // Adiciona no retorno pra o frontend processar sem precisar re-fetch.
+            events.push({
+              event_type: 'shield_opportunity',
+              actor_participant_id: attacker.id,
+              target_participant_id: target.id,
+              data: {
+                triggerEventId: attackRollSaved.id,
+                attackerName: attacker.displayName,
+                reactorName: shieldOpp.reactorName,
+                attackTotal: attackRollResult.total,
+                currentAc: targetAc,
+                slotLevel: shieldOpp.slotLevel,
+                timeoutSeconds: 10,
+              },
+            });
+            // silencia lint: oppEvents usado só pra persistir
+            void oppEvents;
+          }
+        }
+      }
     }
 
     return success(
@@ -2911,13 +2971,59 @@ export class CombatService {
         }
         await this.participantRepo.save(target);
       } else {
-        const result = await this.stateService.updateHp(
-          dto.ownerUserId,
-          target.characterId,
-          { damage: dto.amount },
-        );
-        hpAfter = result.currentHp;
-        instantDeath = result.instantDeath;
+        // Spec 015 Eixo 4: se PC está transformado (Wild Shape/Polymorph), dano
+        // vai pro form HP primeiro; overflow aplicado ao caster via service.
+        let formAbsorbed = 0;
+        let formReverted = false;
+        let overflowAmount = 0;
+        let isDown = false;
+        hpAfter = 0;
+        if (target.transformationState) {
+          const formRes = await this.transformation.applyDamageToForm(target.id, dto.amount);
+          formAbsorbed = formRes.absorbedByForm;
+          formReverted = formRes.reverted;
+          overflowAmount = formRes.overflowToOriginal;
+          if (!formReverted) {
+            // Form absorveu tudo — HP original não muda.
+            const formHpAfter = Math.max(0, target.transformationState.form.currentHp - formAbsorbed);
+            hpAfter = formHpAfter;
+            instantDeath = false;
+            events.push({
+              event_type: 'form_damage_absorbed',
+              target_participant_id: target.id,
+              data: {
+                absorbedByForm: formAbsorbed,
+                formHpAfter,
+                formName: target.transformationState.form.formName,
+              },
+            });
+          }
+        }
+        if (!target.transformationState || formReverted) {
+          // Não transformado OU reverteu: consome do HP original. Se reverteu,
+          // applyDamageToForm já aplicou o overflow no character_state — aqui só lê.
+          const effectiveDamage = formReverted ? 0 : dto.amount;
+          const result = await this.stateService.updateHp(
+            dto.ownerUserId,
+            target.characterId,
+            { damage: effectiveDamage },
+          );
+          hpAfter = result.currentHp;
+          instantDeath = result.instantDeath;
+          isDown = result.isDown;
+          if (formReverted) {
+            events.push({
+              event_type: 'transformation_reverted',
+              target_participant_id: target.id,
+              data: {
+                reason: 'form-hp-zero',
+                absorbedByForm: formAbsorbed,
+                overflowDamageToCaster: overflowAmount,
+                hpAfter,
+              },
+            });
+          }
+        }
 
         if (instantDeath) {
           target.dyingState = 'dead';
@@ -2930,7 +3036,7 @@ export class CombatService {
             data: { damage: dto.amount, dyingState: 'dead' },
           });
           await this.participantRepo.save(target);
-        } else if (result.isDown) {
+        } else if (isDown) {
           target.dyingState = 'dying';
           target.isDefeated = false;
           dyingState = 'dying';
@@ -3040,6 +3146,16 @@ export class CombatService {
     let dyingState: 'none' | 'dying' | 'stable' | 'dead' | undefined;
     let defeated = false;
 
+    // Spec 015 Eixo 3 — capture prevHp para revalidateAfterHpChange.
+    // Tolera stateService sem `getCurrentHp` (mocks antigos) — cai pra
+    // `target.currentHp` que sempre reflete o último snapshot persistido.
+    const prevHp =
+      target.type === 'pc' &&
+      target.characterId &&
+      typeof this.stateService.getCurrentHp === 'function'
+        ? (await this.stateService.getCurrentHp(target.characterId)) ?? 0
+        : target.currentHp ?? 0;
+
     if (target.type === 'pc' && target.characterId) {
       const wasDyingOrStable =
         target.dyingState === 'dying' || target.dyingState === 'stable';
@@ -3085,6 +3201,21 @@ export class CombatService {
         data: { healing: dto.amount, hpAfter, dyingState, deathSavesReset },
       },
     ];
+
+    // Spec 015 Eixo 3 — remove Unconscious derivada de hp_zero quando heal
+    // transiciona HP≤0 → HP>0. Condições de outras fontes permanecem (RAW).
+    // Tolera mocks de teste sem o método (checagem defensiva).
+    if (
+      typeof this.conditionLifecycle.revalidateAfterHpChange === 'function'
+    ) {
+      const revalidation =
+        await this.conditionLifecycle.revalidateAfterHpChange(
+          target,
+          prevHp,
+          hpAfter,
+        );
+      events.push(...revalidation.events);
+    }
 
     await this.eventService.emit(
       encounter.sessionId,

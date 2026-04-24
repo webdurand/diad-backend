@@ -88,6 +88,10 @@ export class ClassFeatureResolverService {
         return this.handleDivineSense(sourceParticipantId, payload, events);
       case 'bardic-inspiration':
         return this.handleBardicInspiration(sourceParticipantId, payload, events);
+      case 'cutting-words':
+        return this.handleCuttingWords(sourceParticipantId, payload, events);
+      case 'countercharm':
+        return this.handleCountercharm(sourceParticipantId, payload, events);
       case 'dark-ones-blessing':
         return this.handleDarkOnesBlessing(sourceParticipantId, payload, events);
       case 'dark-ones-own-luck':
@@ -488,6 +492,73 @@ export class ClassFeatureResolverService {
     }
   }
 
+  // ---- Handler: Cutting Words (Lore Bard L3 XPHB/PHB) ----
+  // Reaction que gasta 1 uso de Bardic Inspiration pra aplicar debuff `cutting_words_penalty`
+  // no target. body.options.targetParticipantId (ou payload.targets[0]) = alvo.
+  private async handleCuttingWords(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const opts = payload.options ?? {};
+    const target =
+      (opts.targetParticipantId as string) ??
+      (payload.targets?.[0] as string);
+    if (!target) return { resolved: false, events };
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source?.characterId) return { resolved: false, events };
+    const bardLevel = payload.caster?.classLevel ?? 3;
+    try {
+      const res = await this.bard.applyCuttingWords(sourceId, target, bardLevel);
+      events.push(...res.events);
+      return {
+        resolved: true,
+        events,
+        resolutionPayload: { dieSize: res.dieSize, targetParticipantId: target },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      events.push({
+        event_type: 'class_feature_error',
+        actor_participant_id: sourceId,
+        data: { featureSlug: 'cutting-words', error: msg },
+      });
+      return { resolved: true, events };
+    }
+  }
+
+  // ---- Handler: Countercharm (Bard L5 XPHB / L6 PHB) ----
+  // Reaction: target em 30ft que falhou save vs Charmed/Frightened ganha
+  // re-roll via effect `countercharm_reroll_available`.
+  private async handleCountercharm(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const opts = payload.options ?? {};
+    const target =
+      (opts.targetParticipantId as string) ??
+      (payload.targets?.[0] as string) ??
+      sourceId; // fallback: caster aplica em si mesmo
+    try {
+      const res = await this.bard.applyCountercharm(sourceId, target);
+      events.push(...res.events);
+      return {
+        resolved: true,
+        events,
+        resolutionPayload: { targetParticipantId: target },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      events.push({
+        event_type: 'class_feature_error',
+        actor_participant_id: sourceId,
+        data: { featureSlug: 'countercharm', error: msg },
+      });
+      return { resolved: true, events };
+    }
+  }
+
   // ---- Handler: Wild Shape (Druid L2+) ----
   // Wrapper fino sobre TransformationService. body.options.monsterSlug = alvo.
   // RAW 2024 XPHB: bonus action, PB uses/SR, CR max L2=1/4, L4=1/2, L8=1.
@@ -497,7 +568,14 @@ export class ClassFeatureResolverService {
     events: GameEventData[],
   ) {
     const opts = payload.options ?? {};
-    const monsterSlug = (opts.monsterSlug as string) ?? (opts.targetMonsterSlug as string);
+    // Spec 015 Eixo 4: body pode chegar com options aninhadas (`options.options.monsterSlug`)
+    // quando o frontend empacota `{ featureSlug, options: { monsterSlug } }` — aceitar ambos.
+    const nested = (opts as Record<string, unknown>).options as Record<string, unknown> | undefined;
+    const monsterSlug =
+      (opts.monsterSlug as string) ??
+      (opts.targetMonsterSlug as string) ??
+      (nested?.monsterSlug as string | undefined) ??
+      (nested?.targetMonsterSlug as string | undefined);
     if (!monsterSlug) {
       return { resolved: false, events };
     }
