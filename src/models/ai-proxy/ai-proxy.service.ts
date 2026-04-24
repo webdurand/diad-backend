@@ -10,7 +10,7 @@ export class AiProxyService {
 
   constructor(private readonly configService: ConfigService) {
     this.agentBaseUrl =
-      this.configService.get<string>('AGENT_BASE_URL') ?? 'http://localhost:7777';
+      this.configService.get<string>('AGENT_BASE_URL') ?? 'http://localhost:9003';
   }
 
   getAgentBaseUrl(): string {

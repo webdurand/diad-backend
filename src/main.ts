@@ -8,10 +8,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(cookieParser());
   const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
+    'http://localhost:9001',
+    'http://localhost:9002',
+    'http://127.0.0.1:9001',
+    'http://127.0.0.1:9002',
     'https://diad-frontend.vercel.app',
   ];
   app.enableCors({
@@ -44,6 +44,6 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new GameErrorFilter());
-  await app.listen(process.env.PORT || 3000, '0.0.0.0');
+  await app.listen(process.env.PORT || 9001, '0.0.0.0');
 }
 bootstrap();

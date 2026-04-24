@@ -5,7 +5,7 @@
 
 import fs from 'node:fs';
 
-const BASE = 'http://localhost:3000';
+const BASE = 'http://localhost:9001';
 const LOG = 'c:/tmp/spec-005-trial.log';
 const accounts = JSON.parse(fs.readFileSync('c:/tmp/diad-test-accounts.json', 'utf8'));
 const DM = accounts.find((a) => a.key === 'dm');
