@@ -17,7 +17,12 @@ import { LocationService } from './services/location.service';
 import { NpcService } from './services/npc.service';
 import { FactionService } from './services/faction.service';
 import { QuestService } from './services/quest.service';
-import type { CreateCampaignDto, UpdateCampaignDto } from './services/campaign.service';
+import type {
+  CreateCampaignDto,
+  UpdateCampaignDto,
+  InitializeBudgetDto,
+  UpdateBudgetDto,
+} from './services/campaign.service';
 import type { CreateLocationDto, UpdateLocationDto, AddConnectionDto } from './services/location.service';
 import type { CreateNpcDto, AddRelationshipDto } from './services/npc.service';
 import type { CreateFactionDto, SetFactionRelationDto } from './services/faction.service';
@@ -71,6 +76,34 @@ export class WorldController {
   async updateCampaign(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdateCampaignDto) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
     return this.campaignService.update(id, dto);
+  }
+
+  // ==================== Spec 014 M1: BOUNDED WORLD ====================
+
+  @Post(':id/initialize-with-budget')
+  async initializeWithBudget(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: InitializeBudgetDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.campaignService.initializeWithBudget(id, dto);
+  }
+
+  @Get(':id/budget')
+  async getBudget(@Req() req: AuthRequest, @Param('id') id: string) {
+    await this.campaignService.ensureMembership(id, getUserId(req));
+    return this.campaignService.getBudget(id);
+  }
+
+  @Patch(':id/budget')
+  async updateBudget(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateBudgetDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.campaignService.updateBudget(id, dto);
   }
 
   @Get(':id/players')

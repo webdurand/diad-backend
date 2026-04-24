@@ -13,8 +13,10 @@ import {
   NpcEntity,
   NpcRelationshipEntity,
   QuestEntity,
+  VowEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
+import { WorldModule } from '../world/world.module';
 import { SessionController } from './session.controller';
 import { SceneService } from './services/scene.service';
 import { EventLogService } from './services/event-log.service';
@@ -36,8 +38,10 @@ import { SceneContextService } from './services/scene-context.service';
       NpcEntity,
       NpcRelationshipEntity,
       QuestEntity,
+      VowEntity,
     ]),
     AuthModule,
+    WorldModule,
   ],
   controllers: [SessionController],
   providers: [

@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { GameSessionEntity } from './game-session.entity';
 import { LocationEntity } from './location.entity';
+import type { ArcBeat } from './campaign.entity';
 
 @Entity('scenes')
 export class SceneEntity {
@@ -52,4 +53,8 @@ export class SceneEntity {
 
   @Column({ name: 'ended_at', type: 'timestamptz', nullable: true })
   endedAt?: Date;
+
+  // Spec 014 M1: Harmon Story Circle beat at which this scene happened.
+  @Column({ name: 'arc_beat', type: 'varchar', nullable: true })
+  arcBeat?: ArcBeat;
 }
