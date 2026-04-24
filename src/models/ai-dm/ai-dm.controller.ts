@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { CampaignService } from '../world/services/campaign.service';
+import { SceneService } from '../session/services/scene.service';
+import type { ArcBeat } from 'src/entities/campaign.entity';
 import { ClockService } from './services/clock.service';
 import type {
   AdvanceClockDto,
@@ -43,12 +45,30 @@ function getUserId(req: AuthRequest): string {
 export class AiDmController {
   constructor(
     private readonly campaignService: CampaignService,
+    private readonly sceneService: SceneService,
     private readonly clockService: ClockService,
     private readonly vowService: VowService,
     private readonly decisionService: NarrativeDecisionService,
     private readonly loreService: LoreEntryService,
     private readonly voiceService: VoiceProfileService,
   ) {}
+
+  // ============= ARC TRANSITION (Director force) =============
+
+  @Post('campaigns/:id/arc/transition')
+  async forceArcTransition(
+    @Req() req: AuthRequest,
+    @Param('id') campaignId: string,
+    @Body() body: { newBeat: ArcBeat; reason?: string; atScene?: number },
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    return this.sceneService.forceArcTransition(
+      campaignId,
+      body.newBeat,
+      body.reason ?? 'director_forced',
+      body.atScene,
+    );
+  }
 
   // ============= CLOCKS =============
 
@@ -75,7 +95,7 @@ export class AiDmController {
     return isDm ? clocks : clocks.filter((c) => c.visibleToPlayer);
   }
 
-  @Patch('clocks/:clockId/advance')
+  @Post('clocks/:clockId/advance')
   async advanceClock(
     @Req() req: AuthRequest,
     @Param('clockId') clockId: string,
@@ -185,14 +205,16 @@ export class AiDmController {
     return this.loreService.listByCampaign(campaignId);
   }
 
-  // ============= VOICE PROFILES (library) =============
+  // ============= VOICE PROFILES =============
+  // path `/voice-profiles` (não /library/voice-profiles) pra evitar conflito
+  // com LibraryController genérico que intercepta /library/:entity.
 
-  @Get('library/voice-profiles')
+  @Get('voice-profiles')
   async listVoices() {
     return this.voiceService.listAll();
   }
 
-  @Get('library/voice-profiles/:id')
+  @Get('voice-profiles/:id')
   async getVoice(@Param('id') id: string) {
     return this.voiceService.getById(id);
   }

@@ -181,6 +181,16 @@ export class WorldController {
     return this.locationService.remove(locId);
   }
 
+  @Post(':id/locations/:locId/visit')
+  async markLocationVisited(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('locId') locId: string,
+  ) {
+    await this.campaignService.ensureMembership(id, getUserId(req));
+    return this.locationService.markVisited(locId);
+  }
+
   @Get(':id/locations/:locId/connections')
   async getConnections(
     @Param('locId') locId: string,

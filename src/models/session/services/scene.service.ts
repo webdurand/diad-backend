@@ -143,6 +143,42 @@ export class SceneService {
     return BEAT_ORDER[idx + 1];
   }
 
+  /**
+   * Spec 014 M2.A — força transição arc_beat explicitamente.
+   * Usado por Director quando decide pular beat (ex: force RETURN pós-evento).
+   * Diferente de computeAndAdvanceArcBeat que infere do contexto; aqui o caller
+   * escolhe o beat e a razão é registrada no transitionHistory.
+   */
+  async forceArcTransition(
+    campaignId: string,
+    newBeat: ArcBeat,
+    reason: string,
+    atScene?: number,
+  ): Promise<CampaignEntity> {
+    if (!BEAT_ORDER.includes(newBeat)) {
+      throw new NotFoundException({
+        ok: false,
+        error: `Arc beat inválido: ${newBeat}.`,
+        code: 'ARC_BEAT_INVALID',
+      });
+    }
+    const campaign = await this.campaignRepo.findOne({ where: { id: campaignId } });
+    if (!campaign) throw new NotFoundException('Campanha nao encontrada.');
+
+    const sceneNumber = atScene ?? campaign.currentCounts.scenes;
+    const current = campaign.arcState.currentBeat;
+    if (current === newBeat) return campaign;
+
+    const history = [...(campaign.arcState.transitionHistory ?? [])];
+    history.push({ from: current, to: newBeat, atScene: sceneNumber, reason });
+    campaign.arcState = {
+      currentBeat: newBeat,
+      beatEnteredAtScene: sceneNumber,
+      transitionHistory: history,
+    };
+    return this.campaignRepo.save(campaign);
+  }
+
   private async mainVowFulfilled(campaignId: string): Promise<boolean> {
     const vow = await this.vowRepo.findOne({
       where: { campaignId, isMainVow: true, status: 'fulfilled' },

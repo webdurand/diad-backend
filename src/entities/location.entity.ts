@@ -66,6 +66,9 @@ export class LocationEntity {
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;
 
+  @Column({ name: 'visited_at', type: 'timestamptz', nullable: true })
+  visitedAt?: Date;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
