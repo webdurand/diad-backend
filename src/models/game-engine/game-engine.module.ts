@@ -101,6 +101,15 @@ import { JoinRequestService } from './services/join-request.service';
 // Spec 003 — Combat Action Registry (módulo extraído para evitar circular)
 import { CombatActionsModule } from '../combat-actions/combat-actions.module';
 import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
+// Spec 016 — Play Shell Foundation (M0 stubs; M3/M4 implement)
+import {
+  RestSessionEntity,
+  RestEventTemplateEntity,
+  ReactionDefaultEntity,
+} from 'src/entities';
+import { RestService } from './services/rest.service';
+import { XpAwardService } from './services/xp-award.service';
+import { FateLadderService } from './services/fate-ladder.service';
 
 @Module({
   imports: [
@@ -122,6 +131,10 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
       CampaignEntity,
       CampaignPlayerEntity,
       UserEntity,
+      // Spec 016 — Play Shell Foundation
+      RestSessionEntity,
+      RestEventTemplateEntity,
+      ReactionDefaultEntity,
     ]),
     AuthModule,
     CharactersModule,
@@ -206,6 +219,10 @@ import { ClassFeatureExecutorService } from './services/class-feature-executor.s
     EncounterRoomAuthorizer,
     // Spec 003 Fatia 7 — class features executor
     ClassFeatureExecutorService,
+    // Spec 016 — Play Shell Foundation (M0 stubs)
+    RestService,
+    XpAwardService,
+    FateLadderService,
   ],
   exports: [
     DiceService,

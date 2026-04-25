@@ -86,6 +86,10 @@ import { LoreEntryEntity } from './lore-entry.entity';
 import { EndingSlideEntity } from './ending-slide.entity';
 import { VoiceProfileEntity } from './voice-profile.entity';
 import { AiUsageLogEntity } from './ai-usage-log.entity';
+// Spec 016 — Play Shell Foundation
+import { RestSessionEntity } from './rest-session.entity';
+import { RestEventTemplateEntity } from './rest-event-template.entity';
+import { ReactionDefaultEntity } from './reaction-default.entity';
 
 export {
   AbilityScoreEntity,
@@ -176,6 +180,9 @@ export {
   EndingSlideEntity,
   VoiceProfileEntity,
   AiUsageLogEntity,
+  RestSessionEntity,
+  RestEventTemplateEntity,
+  ReactionDefaultEntity,
 };
 
 export const ENTITIES = [
@@ -267,6 +274,9 @@ export const ENTITIES = [
   EndingSlideEntity,
   VoiceProfileEntity,
   AiUsageLogEntity,
+  RestSessionEntity,
+  RestEventTemplateEntity,
+  ReactionDefaultEntity,
 ];
 
 export * from './enums';
