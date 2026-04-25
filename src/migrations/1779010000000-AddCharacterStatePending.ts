@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Spec 016 M0 — Pending state em character_states.
+ * Spec 016 M0 — Pending state em character_state.
  *
  * - pending_level_up: snapshot do drawer state (idempotent — refresh preserva).
  *   Disparado quando currentXP >= threshold[level+1]. Apply gated em rest/end-encounter.
@@ -16,7 +16,7 @@ export class AddCharacterStatePending1779010000000
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE character_states
+      `ALTER TABLE character_state
        ADD COLUMN IF NOT EXISTS pending_level_up JSONB NULL,
        ADD COLUMN IF NOT EXISTS reaction_prefs JSONB NOT NULL DEFAULT '{}'::jsonb,
        ADD COLUMN IF NOT EXISTS last_long_rest_at TIMESTAMPTZ NULL,
@@ -26,7 +26,7 @@ export class AddCharacterStatePending1779010000000
 
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE character_states
+      `ALTER TABLE character_state
        DROP COLUMN IF EXISTS last_short_rest_at,
        DROP COLUMN IF EXISTS last_long_rest_at,
        DROP COLUMN IF EXISTS reaction_prefs,

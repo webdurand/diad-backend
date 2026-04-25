@@ -7,7 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * (versus pop-up bloqueante puro). Defaults sensatos por classe reduzem
  * fadiga: Fighter OA always, Wizard Shield ask, Cleric nothing default-ask.
  *
- * Player override persiste em `character_states.reaction_prefs`.
+ * Player override persiste em `character_state.reaction_prefs`.
  *
  * Templates iniciais seedados em migration separada (M5).
  *
