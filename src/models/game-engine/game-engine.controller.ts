@@ -407,6 +407,69 @@ export class GameEngineController {
     return this.encounterService.endEncounter(id);
   }
 
+  /**
+   * Spec 016 P3 (M2) — Talk-down: tentativa narrativa pré-iniciativa.
+   * Player resolve um skill check (Persuasion/Deception/Intimidation/Insight)
+   * vs DC alto (default 18 T1). Sucesso → encounter ends sem combate (no XP);
+   * falha → caller proceeds para roll initiative com disadvantage NPCs.
+   *
+   * Body: { skill, dc, totalModifier, rawD20, advantage? }
+   * RawD20 vem do frontend (player rolagem visual). Server resolve verdict.
+   *
+   * NOTA M2: outcome 'talked_down' não persiste em status enum (evita migration).
+   * M3 adiciona CombatResolutionCard storage com outcome_kind explícito.
+   */
+  @Post('encounters/:id/talk-down')
+  async talkDownEncounter(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      skill: 'Persuasion' | 'Deception' | 'Intimidation' | 'Insight';
+      dc: number;
+      totalModifier: number;
+      rawD20: number;
+      rawD20Disadv?: number | null;
+    },
+  ) {
+    const resolved = this.diceService.resolveDiceRoll({
+      rollId: '00000000-0000-0000-0000-000000000000',
+      rawD20: body.rawD20,
+      rawD20Disadv: body.rawD20Disadv ?? null,
+      totalModifier: body.totalModifier,
+      dc: body.dc,
+      kind: 'ability_check',
+    });
+
+    const succeeded =
+      resolved.verdict === 'success' || resolved.verdict === 'crit_success';
+
+    if (succeeded) {
+      const encounter = await this.encounterService.getById(id);
+      if (encounter.status === 'preparing') {
+        await this.encounterService.endEncounter(id).catch(() => {
+          // endEncounter pode falhar com 0 monsters; ok pra talk-down narrativo
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      value: {
+        encounterId: id,
+        skill: body.skill,
+        dc: body.dc,
+        verdict: resolved.verdict,
+        succeeded,
+        outcome: succeeded ? 'talked_down' : 'failed_initiative_will_roll',
+        roll: {
+          rawD20: resolved.rawD20,
+          rawD20Disadv: resolved.rawD20Disadv,
+          total: resolved.total,
+        },
+      },
+    };
+  }
+
   @Post('encounters/:id/resolve')
   async resolveEncounter(
     @Req() req: AuthRequest,

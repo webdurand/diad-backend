@@ -1,7 +1,15 @@
+import { randomUUID } from 'crypto';
+
 import { Injectable } from '@nestjs/common';
 import {
-  DiceResult,
   AdvantageResult,
+  DiceModifierBreakdown,
+  DiceResult,
+  DiceRollAdvantage,
+  DiceRollKind,
+  DiceRollRequest,
+  DiceRollResolved,
+  DiceVerdict,
   InitiativeResult,
 } from '../interfaces/dice.interfaces';
 
@@ -149,6 +157,96 @@ export class DiceService {
       roll,
       modifier,
       total: roll + modifier,
+    };
+  }
+
+  /**
+   * Spec 016 P2 — Build a DiceRollRequest payload pro frontend renderizar
+   * `<DiceRollCard>`. Pure: não emite SSE aqui (responsabilidade do gateway).
+   *
+   * targetD20 = max(2, dc - totalModifier). Min 2 = nat 1 sempre falha
+   * (RAW 2024 ability checks); 30 = impossível.
+   */
+  buildDiceRollRequest(input: {
+    kind: DiceRollKind;
+    ability: DiceRollRequest['ability'];
+    skill?: string | null;
+    dc: number;
+    modifiers: DiceModifierBreakdown[];
+    advantage?: DiceRollAdvantage;
+    characterId?: string;
+    narrativeFraming?: string;
+    rollId?: string;
+  }): DiceRollRequest {
+    const totalModifier = input.modifiers.reduce(
+      (sum, m) => sum + m.value,
+      0,
+    );
+    const rawTarget = input.dc - totalModifier;
+    const targetD20 = Math.max(2, Math.min(30, rawTarget));
+    return {
+      rollId: input.rollId ?? randomUUID(),
+      characterId: input.characterId,
+      kind: input.kind,
+      ability: input.ability,
+      skill: input.skill ?? null,
+      dc: input.dc,
+      advantage: input.advantage ?? 'normal',
+      modifiers: input.modifiers,
+      totalModifier,
+      targetD20,
+      narrativeFraming: input.narrativeFraming,
+    };
+  }
+
+  /**
+   * Spec 016 P2 — Resolve um active dice check.
+   *
+   * Verdict rules:
+   *  - kind 'ability_check' / 'saving_throw' / 'death_save': nat 20
+   *    success automático? RAW 2024 NÃO — 5e 2024 removed auto-success em
+   *    skill checks (DMG 2024 p.2.2). Aqui mantemos: nat 20 = crit_success
+   *    flag, mas o success real é total ≥ dc.
+   *  - kind 'attack_roll': nat 20 hit + crit_success (dobra dados de dano);
+   *    nat 1 = miss + crit_failure.
+   *  - Cima do DC = success; abaixo = failure.
+   *  - rawD20 ∈ {1, 20} sempre dispara crit_* mesmo se total ≥ dc ou < dc
+   *    (preservar info pra UI ring + side-toast).
+   */
+  resolveDiceRoll(input: {
+    rollId: string;
+    rawD20: number;
+    rawD20Disadv?: number | null;
+    totalModifier: number;
+    dc: number;
+    kind: DiceRollKind;
+  }): DiceRollResolved {
+    const total = input.rawD20 + input.totalModifier;
+    const isNat20 = input.rawD20 === 20;
+    const isNat1 = input.rawD20 === 1;
+    const passes = total >= input.dc;
+
+    let verdict: DiceVerdict;
+    if (isNat20 && passes) {
+      verdict = 'crit_success';
+    } else if (isNat1 && !passes) {
+      verdict = 'crit_failure';
+    } else if (input.kind === 'attack_roll' && isNat20) {
+      verdict = 'crit_success';
+    } else if (input.kind === 'attack_roll' && isNat1) {
+      verdict = 'crit_failure';
+    } else if (passes) {
+      verdict = 'success';
+    } else {
+      verdict = 'failure';
+    }
+
+    return {
+      rollId: input.rollId,
+      rawD20: input.rawD20,
+      rawD20Disadv: input.rawD20Disadv ?? null,
+      total,
+      verdict,
     };
   }
 
