@@ -40,6 +40,32 @@ export class SessionController {
     private readonly sceneContextService: SceneContextService,
   ) {}
 
+  // ==================== SESSION FINALIZE (Spec 014 M2.C) ====================
+
+  @Post(':sessionId/finalize')
+  async finalizeSession(
+    @Param('sessionId') sessionId: string,
+    @Body() body: {
+      summaryText?: string;
+      summaryKeyFacts?: Record<string, any>;
+    },
+  ) {
+    return this.sceneService.finalizeSession(sessionId, body);
+  }
+
+  @Get(':sessionId/summary')
+  async getSummary(@Param('sessionId') sessionId: string) {
+    const s = await this.sceneService.getSession(sessionId);
+    return {
+      sessionId: s.id,
+      summaryText: s.summaryText ?? null,
+      summaryKeyFacts: s.summaryKeyFacts ?? {},
+      previousSessionId: s.previousSessionId ?? null,
+      endedAt: s.endedAt ?? null,
+      status: s.status,
+    };
+  }
+
   // ==================== SCENES ====================
 
   @Post(':sessionId/scenes')

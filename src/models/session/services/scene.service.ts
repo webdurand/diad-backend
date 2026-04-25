@@ -179,6 +179,47 @@ export class SceneService {
     return this.campaignRepo.save(campaign);
   }
 
+  /**
+   * Spec 014 M2.C — finaliza sessão (recap-ready).
+   * Persiste summaryText + summaryKeyFacts (geração delegada ao agents),
+   * marca status=completed e timestamp endedAt.
+   * Idempotente: re-finalize sobrescreve summary mas preserva endedAt original.
+   */
+  async finalizeSession(
+    sessionId: string,
+    payload: {
+      summaryText?: string;
+      summaryKeyFacts?: Record<string, any>;
+    },
+  ): Promise<GameSessionEntity> {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (!session) {
+      throw new NotFoundException({
+        ok: false,
+        error: 'Sessão não encontrada.',
+        code: 'SESSION_NOT_FOUND',
+      });
+    }
+    if (payload.summaryText !== undefined) session.summaryText = payload.summaryText;
+    if (payload.summaryKeyFacts !== undefined)
+      session.summaryKeyFacts = payload.summaryKeyFacts;
+    session.status = 'completed';
+    if (!session.endedAt) session.endedAt = new Date();
+    return this.sessionRepo.save(session);
+  }
+
+  async getSession(sessionId: string): Promise<GameSessionEntity> {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (!session) {
+      throw new NotFoundException({
+        ok: false,
+        error: 'Sessão não encontrada.',
+        code: 'SESSION_NOT_FOUND',
+      });
+    }
+    return session;
+  }
+
   private async mainVowFulfilled(campaignId: string): Promise<boolean> {
     const vow = await this.vowRepo.findOne({
       where: { campaignId, isMainVow: true, status: 'fulfilled' },
