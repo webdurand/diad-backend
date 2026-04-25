@@ -85,6 +85,7 @@ import { NarrativeDecisionEntity } from './narrative-decision.entity';
 import { LoreEntryEntity } from './lore-entry.entity';
 import { EndingSlideEntity } from './ending-slide.entity';
 import { VoiceProfileEntity } from './voice-profile.entity';
+import { AiUsageLogEntity } from './ai-usage-log.entity';
 
 export {
   AbilityScoreEntity,
@@ -174,6 +175,7 @@ export {
   LoreEntryEntity,
   EndingSlideEntity,
   VoiceProfileEntity,
+  AiUsageLogEntity,
 };
 
 export const ENTITIES = [
@@ -264,6 +266,7 @@ export const ENTITIES = [
   LoreEntryEntity,
   EndingSlideEntity,
   VoiceProfileEntity,
+  AiUsageLogEntity,
 ];
 
 export * from './enums';

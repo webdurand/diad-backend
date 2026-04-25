@@ -29,6 +29,8 @@ import type { CreateNarrativeDecisionDto } from './services/narrative-decision.s
 import { LoreEntryService } from './services/lore-entry.service';
 import type { CreateLoreEntryDto } from './services/lore-entry.service';
 import { VoiceProfileService } from './services/voice-profile.service';
+import { AiUsageService } from './services/ai-usage.service';
+import type { LogAiUsageDto } from './services/ai-usage.service';
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; role?: string };
@@ -51,6 +53,7 @@ export class AiDmController {
     private readonly decisionService: NarrativeDecisionService,
     private readonly loreService: LoreEntryService,
     private readonly voiceService: VoiceProfileService,
+    private readonly aiUsageService: AiUsageService,
   ) {}
 
   // ============= ARC TRANSITION (Director force) =============
@@ -217,5 +220,30 @@ export class AiDmController {
   @Get('voice-profiles/:id')
   async getVoice(@Param('id') id: string) {
     return this.voiceService.getById(id);
+  }
+
+  // ============= AI USAGE / COST TRACKING =============
+  // Ingest chamado por diad-agents com X-Service-Key (rotas internas tratadas
+  // em service-to-service; aqui versão DM-authenticated pra telemetria manual).
+
+  @Post('campaigns/:id/ai-usage')
+  async ingestAiUsage(
+    @Req() req: AuthRequest,
+    @Param('id') campaignId: string,
+    @Body() dto: Omit<LogAiUsageDto, 'campaignId'>,
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    return this.aiUsageService.log({ ...dto, campaignId });
+  }
+
+  @Get('campaigns/:id/cost-summary')
+  async costSummary(
+    @Req() req: AuthRequest,
+    @Param('id') campaignId: string,
+    @Query('targetPerSessionUsd') target?: string,
+  ) {
+    await this.campaignService.ensureMembership(campaignId, getUserId(req));
+    const targetUsd = target ? parseFloat(target) : 0.5;
+    return this.aiUsageService.summaryForCampaign(campaignId, targetUsd);
   }
 }

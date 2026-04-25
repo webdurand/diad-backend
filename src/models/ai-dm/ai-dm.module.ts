@@ -8,6 +8,7 @@ import {
   EndingSlideEntity,
   VoiceProfileEntity,
   GameSessionEntity,
+  AiUsageLogEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { WorldModule } from '../world/world.module';
@@ -18,6 +19,7 @@ import { VowService } from './services/vow.service';
 import { NarrativeDecisionService } from './services/narrative-decision.service';
 import { LoreEntryService } from './services/lore-entry.service';
 import { VoiceProfileService } from './services/voice-profile.service';
+import { AiUsageService } from './services/ai-usage.service';
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { VoiceProfileService } from './services/voice-profile.service';
       EndingSlideEntity,
       VoiceProfileEntity,
       GameSessionEntity,
+      AiUsageLogEntity,
     ]),
     AuthModule,
     WorldModule,
@@ -41,6 +44,7 @@ import { VoiceProfileService } from './services/voice-profile.service';
     NarrativeDecisionService,
     LoreEntryService,
     VoiceProfileService,
+    AiUsageService,
   ],
   exports: [
     ClockService,
@@ -48,6 +52,7 @@ import { VoiceProfileService } from './services/voice-profile.service';
     NarrativeDecisionService,
     LoreEntryService,
     VoiceProfileService,
+    AiUsageService,
   ],
 })
 export class AiDmModule {}
