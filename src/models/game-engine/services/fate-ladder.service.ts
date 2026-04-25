@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,7 +11,18 @@ import {
 import {
   GameResult,
   failure,
+  success,
 } from '../interfaces/result.type';
+import {
+  buildPayPriceOutcome,
+  DEFAULT_PRICE_TABLE,
+  eligibleResurrectionSpells,
+  pickRandomPrice,
+  PriceCost,
+  RESURRECTION_TABLE,
+  ResurrectionSpell,
+  validateSacrificeBounded,
+} from './fate-ladder-helpers';
 
 /**
  * Spec 016 M0 — Fate Ladder service stub.
@@ -68,46 +81,160 @@ export class FateLadderService {
 
   /**
    * Triggered ao 3º death save fail ou massive damage.
-   * Director monta state com ritual-of-death message (voice-aware).
+   *
+   * M3 implementação: helpers puros wireados. Carrega campaign.death_handling,
+   * resolve options disponíveis. Ritual-of-death message é template default;
+   * voice-aware rendering pelo Narrator (M4 enrichment).
    */
   async openLadder(
-    _characterId: string,
-    _trigger: FateLadderTrigger,
+    characterId: string,
+    trigger: FateLadderTrigger,
+    options?: {
+      casterPartyHasSpell?: ResurrectionSpell[];
+      diamondsAvailableGp?: number;
+      minutesSinceDeath?: number;
+      campaignId?: string;
+    },
   ): Promise<GameResult<FateLadderState>> {
-    // TODO M3: lookup campaign.death_handling; render ritual message
-    //         via voice profile few_shot_examples.death_ritual; check
-    //         resurrection availability (Director.checkResurrectionAvailability).
-    return failure('Fate Ladder not yet implemented (spec 016 M3).', 'INVALID_ACTION');
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId },
+    });
+    if (!character) {
+      return failure('Personagem não encontrado.', 'NOT_FOUND');
+    }
+    const campaign = options?.campaignId
+      ? await this.campaignRepo.findOne({ where: { id: options.campaignId } })
+      : null;
+    const mode: DeathHandlingMode =
+      (campaign as { deathHandling?: DeathHandlingMode } | null)
+        ?.deathHandling ?? 'narrative';
+
+    // Em hardcore, apenas opção A.
+    const baseOptions: FateLadderOption[] =
+      mode === 'hardcore' ? ['A'] : ['A', 'B', 'C'];
+
+    const eligibleSpells = eligibleResurrectionSpells({
+      minutesSinceDeath: options?.minutesSinceDeath ?? 0,
+      diamondsAvailableGp: options?.diamondsAvailableGp ?? 0,
+    });
+    const casterHas = options?.casterPartyHasSpell ?? [];
+    const optionDAvailable = eligibleSpells.some((s) => casterHas.includes(s));
+    if (mode === 'narrative' && optionDAvailable) {
+      baseOptions.push('D');
+    }
+
+    return success({
+      ladderId: randomUUID(),
+      characterId,
+      trigger,
+      deathHandlingMode: mode,
+      ritualOfDeathMessage: this.defaultRitualMessage(character.name ?? 'O herói'),
+      availableOptions: baseOptions,
+    });
   }
 
+  /**
+   * Resolve a opção escolhida. Retorna stateChanges descritivos
+   * (Archivist consome via Coordinator hook).
+   */
   async resolveLadder(
-    _resolution: FateLadderResolution,
-  ): Promise<GameResult<{ stateChanges: string[] }>> {
-    // TODO M3: per chosen option, dispatch:
-    //   A → force arc_beat=CHANGE; trigger EpilogueModal (reuse spec 014 M4)
-    //   B → validate sacrifice bounded; render epic prose; legacy bond next PC
-    //   C → pick from priceTable (forbidden: level drain, hp_max loss);
-    //       restore PC to 1 HP Stable Unconscious
-    //   D → consume diamond from inventory; revive 1 HP; apply RAW penalty
-    //       (-4 d20, -1 per long rest for Raise Dead; none for Revivify)
-    return failure('Fate Ladder resolution not yet implemented (spec 016 M3).', 'INVALID_ACTION');
+    resolution: FateLadderResolution,
+  ): Promise<GameResult<{ stateChanges: string[]; outcome?: unknown }>> {
+    switch (resolution.chosenOption) {
+      case 'A':
+        return success({
+          stateChanges: [
+            'arc_beat=CHANGE_forced',
+            'trigger_epilogue_modal',
+            'pc_status=dead_permanent',
+          ],
+        });
+      case 'B': {
+        if (!resolution.sacrificeDescription) {
+          return failure('Sacrifício requer descrição.', 'INVALID_ACTION');
+        }
+        const validation = validateSacrificeBounded(resolution.sacrificeDescription);
+        if (!validation.ok) {
+          return failure(
+            `Sacrifício rejeitado: ${validation.reason}`,
+            'INVALID_ACTION',
+          );
+        }
+        return success({
+          stateChanges: [
+            'arc_beat=CHANGE_forced_via_sacrifice',
+            'trigger_epilogue_modal_celebrate',
+            'legacy_bond_for_next_pc=true',
+            'bonus_inspiration_next_pc=1',
+          ],
+          outcome: { description: resolution.sacrificeDescription.trim() },
+        });
+      }
+      case 'C': {
+        const cost = pickRandomPrice(DEFAULT_PRICE_TABLE);
+        const outcome = buildPayPriceOutcome(cost);
+        return success({
+          stateChanges: [
+            'pc_hp=1',
+            'pc_status=stable_unconscious',
+            'wakes_next_round',
+            `cost_applied=${cost.kind}`,
+          ],
+          outcome,
+        });
+      }
+      case 'D':
+        return success({
+          stateChanges: [
+            'pc_hp=1',
+            'pc_status=alive',
+            'consume_diamond_component',
+          ],
+        });
+      default:
+        return failure(
+          `Opção ${resolution.chosenOption} desconhecida.`,
+          'INVALID_ACTION',
+        );
+    }
   }
 
   /**
    * Probe: can option D ("Ressurreição") be offered?
    * Requires ≥1 caster with appropriate spell + diamante in inventory + time window.
+   *
+   * M3 simplified: caller provides casterHasSpell + diamondsAvailableGp.
+   * Full DB scan (party iteration, inventory items) ficará em M4.
    */
-  protected async checkResurrectionAvailability(
-    _characterId: string,
-  ): Promise<{
+  async checkResurrectionAvailability(input: {
+    minutesSinceDeath: number;
+    diamondsAvailableGp: number;
+    casterPartyHasSpell: ResurrectionSpell[];
+  }): Promise<{
     available: boolean;
-    spellAvailable?: 'Revivify' | 'Raise Dead' | 'Resurrection' | 'True Resurrection';
+    spellAvailable?: ResurrectionSpell;
     diamondGp?: number;
-    casterId?: string;
   }> {
-    // TODO M3: scan party + nearby NPCs for spell access;
-    //         scan inventory for diamond components;
-    //         validate time window (Revivify 1min etc.).
-    return { available: false };
+    const eligible = eligibleResurrectionSpells({
+      minutesSinceDeath: input.minutesSinceDeath,
+      diamondsAvailableGp: input.diamondsAvailableGp,
+    });
+    const usable = eligible.filter((s) => input.casterPartyHasSpell.includes(s));
+    if (usable.length === 0) {
+      return { available: false };
+    }
+    // Prefer cheapest spell.
+    const cheapest = usable.sort(
+      (a, b) => RESURRECTION_TABLE[a].diamondGp - RESURRECTION_TABLE[b].diamondGp,
+    )[0];
+    return {
+      available: true,
+      spellAvailable: cheapest,
+      diamondGp: RESURRECTION_TABLE[cheapest].diamondGp,
+    };
+  }
+
+  private defaultRitualMessage(name: string): string {
+    return `E assim, ${name}, a luz dos céus se apaga lentamente. O destino aguarda sua escolha.`;
   }
 }
