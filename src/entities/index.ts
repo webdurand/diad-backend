@@ -79,6 +79,13 @@ import { SceneNpcEntity } from './scene-npc.entity';
 import { SessionEventEntity } from './session-event.entity';
 import { CampaignChronicleEntity } from './campaign-chronicle.entity';
 import { PartyKnowledgeEntity } from './party-knowledge.entity';
+import { ClockEntity } from './clock.entity';
+import { VowEntity } from './vow.entity';
+import { NarrativeDecisionEntity } from './narrative-decision.entity';
+import { LoreEntryEntity } from './lore-entry.entity';
+import { EndingSlideEntity } from './ending-slide.entity';
+import { VoiceProfileEntity } from './voice-profile.entity';
+import { AiUsageLogEntity } from './ai-usage-log.entity';
 
 export {
   AbilityScoreEntity,
@@ -162,6 +169,13 @@ export {
   SessionEventEntity,
   CampaignChronicleEntity,
   PartyKnowledgeEntity,
+  ClockEntity,
+  VowEntity,
+  NarrativeDecisionEntity,
+  LoreEntryEntity,
+  EndingSlideEntity,
+  VoiceProfileEntity,
+  AiUsageLogEntity,
 };
 
 export const ENTITIES = [
@@ -246,6 +260,13 @@ export const ENTITIES = [
   SessionEventEntity,
   CampaignChronicleEntity,
   PartyKnowledgeEntity,
+  ClockEntity,
+  VowEntity,
+  NarrativeDecisionEntity,
+  LoreEntryEntity,
+  EndingSlideEntity,
+  VoiceProfileEntity,
+  AiUsageLogEntity,
 ];
 
 export * from './enums';

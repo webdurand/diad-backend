@@ -59,6 +59,20 @@ export class GameSessionEntity {
     critical_variant?: 'double_dice' | 'double_damage';
   };
 
+  // ── Spec 014 M2.C: cross-session recap ──
+
+  @Column({ name: 'summary_text', type: 'text', nullable: true })
+  summaryText?: string;
+
+  @Column({ name: 'summary_key_facts', type: 'jsonb', default: {} })
+  summaryKeyFacts: Record<string, any>;
+
+  @Column({ name: 'previous_session_id', type: 'uuid', nullable: true })
+  previousSessionId?: string;
+
+  @Column({ name: 'ended_at', type: 'timestamptz', nullable: true })
+  endedAt?: Date;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

@@ -114,6 +114,23 @@ export class LocationService {
     await this.locationRepo.delete(locationId);
   }
 
+  /**
+   * Spec 014 M2.A — idempotent visit marker.
+   * Primeiro call grava visitedAt=now(); subsequentes preservam o timestamp original.
+   * Retorna {firstVisit: boolean} pra caller decidir se emite evento narrativo.
+   */
+  async markVisited(
+    locationId: string,
+  ): Promise<{ location: LocationEntity; firstVisit: boolean }> {
+    const loc = await this.getById(locationId);
+    if (loc.visitedAt) {
+      return { location: loc, firstVisit: false };
+    }
+    loc.visitedAt = new Date();
+    const saved = await this.locationRepo.save(loc);
+    return { location: saved, firstVisit: true };
+  }
+
   async addConnection(
     fromLocationId: string,
     dto: AddConnectionDto,
