@@ -20,6 +20,13 @@ export class AiProxyService {
   /**
    * Pipes an SSE stream from the Python agent to the Express response.
    * Uses raw http.request for reliable streaming (no fetch/undici issues).
+   *
+   * IMPORTANT: This is a *full passthrough* — every chunk received from the
+   * agents service is forwarded to the client verbatim, with NO parsing,
+   * filtering, or whitelisting by event type. New SSE event types added on
+   * the agents side (e.g. `state_delta`, `dice_roll_request`,
+   * `dice_roll_resolved`, future combat/UI events) flow through automatically
+   * without requiring backend changes.
    */
   pipeStream(
     path: string,
