@@ -77,4 +77,29 @@ export class CharacterStateEntity {
   /** Whether the character has inspiration */
   @Column({ type: 'boolean', default: false })
   inspiration: boolean;
+
+  // ── Spec 016 — Play Shell Foundation ──
+
+  /**
+   * Snapshot do drawer level-up (idempotent — refresh preserva).
+   * Disparado quando currentXP >= threshold[level+1]. Apply gated em
+   * rest/end-encounter.
+   */
+  @Column({ type: 'jsonb', name: 'pending_level_up', nullable: true })
+  pending_level_up?: Record<string, unknown> | null;
+
+  /**
+   * Reaction overrides per (reactionName -> 'auto'|'ask'|'off'). Defaults
+   * por classe via `reaction_defaults`. Player override sempre vence.
+   */
+  @Column({ type: 'jsonb', name: 'reaction_prefs', default: {} })
+  reaction_prefs: Record<string, 'auto' | 'ask' | 'off'>;
+
+  /** Última vez que o PC completou long rest (24h gate RAW 2024). */
+  @Column({ type: 'timestamptz', name: 'last_long_rest_at', nullable: true })
+  last_long_rest_at?: Date | null;
+
+  /** Última vez que o PC completou short rest (1h spend HD). */
+  @Column({ type: 'timestamptz', name: 'last_short_rest_at', nullable: true })
+  last_short_rest_at?: Date | null;
 }

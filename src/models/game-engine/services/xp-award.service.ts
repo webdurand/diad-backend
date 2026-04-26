@@ -1,32 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CharacterStateEntity, CampaignEntity } from 'src/entities';
+import {
+  CharacterStateEntity,
+  CampaignEntity,
+  XpAwardEventEntity,
+} from 'src/entities';
+import type { XpAwardSource } from 'src/entities/xp-award-event.entity';
+import { CharacterStateService } from '../../characters/services/character-state.service';
 import {
   GameResult,
   failure,
+  success,
 } from '../interfaces/result.type';
 
 /**
- * Spec 016 M0 — XP Award service stub.
+ * Spec 016 M4 — XP Award service granular.
  *
- * Granular XP awards. RAW 2024 default + flag `campaign.xp_mode`
- * ('rules' | 'milestone' | 'hybrid'). Paridade BG3: persuasion/stealth
- * resolvendo encounter dá XP igual ao kill (anti-grind).
+ * RAW 2024 default + flag `campaign.xp_mode` ('rules' | 'milestone' | 'hybrid').
+ * Paridade BG3: persuasion/stealth resolvendo encounter dá XP igual ao kill
+ * (anti-grind). Audit log em `xp_award_events` permite Director memory L4
+ * citar awards passados.
  *
- * Ver `specs/016-play-shell-foundation/spec.md` §7.1 + contract `xp-award.json`.
+ * Modes:
+ *  - rules:     amount cru aplicado.
+ *  - milestone: ignora amount, só passa em quest_completion (amount fixo
+ *               do threshold do próximo nível) ou quest_step (½ threshold).
+ *  - hybrid:    combat_kill + skill_challenge + combat_resolved_peacefully
+ *               passam cru; roleplay/exploration ignorados (story XP só em
+ *               quest milestones).
  *
- * STUB M0 — método retorna `failure('not_implemented')`. M4 wira lógica.
+ * Ver `specs/016-play-shell-foundation/spec.md` §7.1.
  */
-export type XpAwardSource =
-  | 'combat_kill'
-  | 'combat_resolved_peacefully'
-  | 'skill_challenge'
-  | 'quest_step'
-  | 'quest_completion'
-  | 'exploration_milestone'
-  | 'roleplay';
-
 export interface XpAwardRequest {
   characterId: string;
   amount: number;
@@ -35,13 +40,19 @@ export interface XpAwardRequest {
   encounterId?: string;
   questStepId?: string;
   narrativeJustification?: string;
+  /** Required: userId pra ownership check em updateXp. */
+  ownerUserId: string;
+  /** Optional: campaignId pra resolver xp_mode. Default 'rules' se não informado. */
+  campaignId?: string;
 }
 
 export interface XpAwardResult {
   awardedXp: number;
   totalXp: number;
-  nextThreshold: number;
+  nextLevelXp: number | null;
   levelUpReady: boolean;
+  eventId: string;
+  modeApplied: 'rules' | 'milestone' | 'hybrid';
 }
 
 @Injectable()
@@ -51,26 +62,111 @@ export class XpAwardService {
     private readonly stateRepo: Repository<CharacterStateEntity>,
     @InjectRepository(CampaignEntity)
     private readonly campaignRepo: Repository<CampaignEntity>,
+    @InjectRepository(XpAwardEventEntity)
+    private readonly xpEventRepo: Repository<XpAwardEventEntity>,
+    private readonly characterStateService: CharacterStateService,
   ) {}
 
   async awardXp(
-    _request: XpAwardRequest,
+    request: XpAwardRequest,
   ): Promise<GameResult<XpAwardResult>> {
-    // TODO M4: respect campaign.xp_mode ('rules' grants raw amount;
-    //         'milestone' coerces to 0 unless source=arc_beat;
-    //         'hybrid' allows combat raw + roleplay 0). Update CharacterState.
-    //         Emit `level_up_ready` event when threshold crossed.
-    return failure('XP award not yet implemented (spec 016 M4).', 'INVALID_ACTION');
+    if (request.amount < 0) {
+      return failure('Amount de XP deve ser positivo.', 'INVALID_ACTION');
+    }
+
+    const mode = await this.resolveXpMode(request.campaignId);
+    const adjusted = this.adjustForMode(request.amount, request.source, mode);
+
+    if (adjusted === 0) {
+      // Mode bloqueia este tipo de award. Ainda registra evento (audit) com 0.
+      const evt = await this.xpEventRepo.save(
+        this.xpEventRepo.create({
+          characterId: request.characterId,
+          amount: 0,
+          source: request.source,
+          reason: request.reason + ' [skipped:' + mode + ']',
+          encounterId: request.encounterId,
+          questStepId: request.questStepId,
+          narrativeJustification: request.narrativeJustification,
+        }),
+      );
+      const xpResult = await this.characterStateService.updateXp(
+        request.ownerUserId,
+        request.characterId,
+        { amount: 0 },
+      );
+      return success({
+        awardedXp: 0,
+        totalXp: xpResult.xp,
+        nextLevelXp: xpResult.nextLevelXp,
+        levelUpReady: xpResult.levelUpAvailable,
+        eventId: evt.id,
+        modeApplied: mode,
+      });
+    }
+
+    const evt = await this.xpEventRepo.save(
+      this.xpEventRepo.create({
+        characterId: request.characterId,
+        amount: adjusted,
+        source: request.source,
+        reason: request.reason,
+        encounterId: request.encounterId,
+        questStepId: request.questStepId,
+        narrativeJustification: request.narrativeJustification,
+      }),
+    );
+
+    const xpResult = await this.characterStateService.updateXp(
+      request.ownerUserId,
+      request.characterId,
+      { amount: adjusted },
+    );
+
+    return success({
+      awardedXp: adjusted,
+      totalXp: xpResult.xp,
+      nextLevelXp: xpResult.nextLevelXp,
+      levelUpReady: xpResult.levelUpAvailable,
+      eventId: evt.id,
+      modeApplied: mode,
+    });
   }
 
-  /**
-   * BG3 parity rule: encounter resolved peacefully = XP igual ao kill.
-   * Anti-exploit: encounter XP só pago 1× independente do método.
-   */
-  protected async getEncounterXpParity(
-    _encounterId: string,
-  ): Promise<number> {
-    // TODO M4: lookup encounter budget, compute total XP that combat would have awarded.
+  private async resolveXpMode(
+    campaignId?: string,
+  ): Promise<'rules' | 'milestone' | 'hybrid'> {
+    if (!campaignId) return 'rules';
+    const campaign = (await this.campaignRepo.findOne({
+      where: { id: campaignId },
+    })) as (CampaignEntity & { xpMode?: string }) | null;
+    const mode = (campaign as any)?.xp_mode ?? (campaign as any)?.xpMode ?? 'rules';
+    if (mode === 'milestone' || mode === 'hybrid') return mode;
+    return 'rules';
+  }
+
+  private adjustForMode(
+    amount: number,
+    source: XpAwardSource,
+    mode: 'rules' | 'milestone' | 'hybrid',
+  ): number {
+    if (mode === 'rules') return amount;
+    if (mode === 'milestone') {
+      // Só quest_step e quest_completion contam. Outros skip.
+      return source === 'quest_step' || source === 'quest_completion'
+        ? amount
+        : 0;
+    }
+    // hybrid: combat + skill_challenge passam; roleplay/exploration skip.
+    if (
+      source === 'combat_kill' ||
+      source === 'combat_resolved_peacefully' ||
+      source === 'skill_challenge' ||
+      source === 'quest_step' ||
+      source === 'quest_completion'
+    ) {
+      return amount;
+    }
     return 0;
   }
 }

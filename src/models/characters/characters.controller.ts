@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ConflictException,
   Delete,
   Get,
   Param,
@@ -41,7 +42,12 @@ import {
   type SetHandDto,
 } from './services/inventory.service';
 import { ActionsService } from './services/actions.service';
+import { ReactionPrefsService } from './services/reaction-prefs.service';
 import { CombatActionRegistry } from '../game-engine/services/combat-action-registry.service';
+import type { ReactionState } from 'src/entities/reaction-default.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Not, IsNull } from 'typeorm';
+import { EncounterParticipantEntity, EncounterEntity } from 'src/entities';
 import type {
   ParticipantContext,
   ResolverSheetSlice,
@@ -77,6 +83,12 @@ export class CharactersController {
     private readonly inventoryService: InventoryService,
     private readonly actionsService: ActionsService,
     private readonly combatActionRegistry: CombatActionRegistry,
+    // Spec 016 — Play Shell Foundation
+    private readonly reactionPrefsService: ReactionPrefsService,
+    @InjectRepository(EncounterParticipantEntity)
+    private readonly participantRepo: Repository<EncounterParticipantEntity>,
+    @InjectRepository(EncounterEntity)
+    private readonly encounterRepo: Repository<EncounterEntity>,
   ) {}
 
   @Get()
@@ -230,7 +242,44 @@ export class CharactersController {
     @Body() body: LevelUpDto,
   ) {
     const userId = getUserId(req);
+
+    // Spec 016 M4 — gate level-up durante o turn ativo do char em combate.
+    // Permitido entre turns (turn de outro participant) ou fora de combate.
+    await this.ensureNotPcOwnTurn(id);
+
     return this.levelUpService.execute(userId, id, body);
+  }
+
+  /**
+   * Spec 016 M4 — bloqueia operações se o char tem participant em encounter
+   * ativo E é o turno dele agora. Throws 409 com code LEVEL_UP_BLOCKED_IN_COMBAT.
+   */
+  private async ensureNotPcOwnTurn(characterId: string): Promise<void> {
+    const participants = await this.participantRepo.find({
+      where: { characterId, type: 'pc' },
+    });
+    if (participants.length === 0) return;
+
+    const encounterIds = participants.map((p) => p.encounterId);
+    const activeEncounters = await this.encounterRepo
+      .createQueryBuilder('e')
+      .where('e.id IN (:...ids)', { ids: encounterIds })
+      .andWhere('e.status = :status', { status: 'active' })
+      .getMany();
+
+    for (const enc of activeEncounters) {
+      const currentPid = enc.turnOrder?.[enc.currentTurnIndex];
+      if (!currentPid) continue;
+      const myParticipant = participants.find((p) => p.encounterId === enc.id);
+      if (myParticipant && myParticipant.id === currentPid) {
+        throw new ConflictException({
+          ok: false,
+          code: 'LEVEL_UP_BLOCKED_IN_COMBAT',
+          message:
+            'Aguarde o fim do turno para subir de nível em combate ativo.',
+        });
+      }
+    }
   }
 
   @Get(':id/available-spells')
@@ -460,5 +509,67 @@ export class CharactersController {
   ) {
     const userId = getUserId(req);
     return this.inventoryService.toggleAttune(userId, id, itemId, body);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Spec 016 — Play Shell Foundation (M5)
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Lista reaction prefs (defaults da classe + overrides do PC).
+   * Cada entry: { reactionName, state, consumesSpellSlot, source }.
+   */
+  @Get(':id/reactions')
+  async getReactions(@Req() req: AuthRequest, @Param('id') id: string) {
+    const userId = getUserId(req);
+    return this.reactionPrefsService.getPrefs(userId, id);
+  }
+
+  /**
+   * Atualiza override de uma reaction. Body: { mode: 'auto'|'ask'|'off' }.
+   */
+  @Patch(':id/reactions/:reactionName')
+  async setReactionPref(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('reactionName') reactionName: string,
+    @Body() body: { mode: ReactionState },
+  ) {
+    const userId = getUserId(req);
+    return this.reactionPrefsService.setPref(userId, id, reactionName, body.mode);
+  }
+
+  /**
+   * Drop concentration RAW free action — limpa concentratingOn no(s)
+   * participant(s) ativo(s) do PC. Out-of-encounter retorna no-op idempotent.
+   *
+   * Não emite event aqui (concentration service trata cascade quando há
+   * dano ou sleep; drop voluntário é silencioso pelo flow do jogo).
+   */
+  @Post(':id/drop-concentration')
+  async dropConcentration(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
+    const userId = getUserId(req);
+    // Ownership check (lança 403/404 se não pertence ao user).
+    await this.charactersService.getById(userId, id);
+    const participants = await this.participantRepo.find({
+      where: {
+        characterId: id,
+        isConcentrating: true,
+        concentratingOn: Not(IsNull()),
+      } as any,
+    });
+    if (participants.length === 0) {
+      return { ok: true, droppedSlug: null, note: 'no_active_concentration' };
+    }
+    const droppedSlug = participants[0].concentratingOn ?? null;
+    for (const p of participants) {
+      p.isConcentrating = false;
+      p.concentratingOn = undefined;
+      await this.participantRepo.save(p);
+    }
+    return { ok: true, droppedSlug };
   }
 }

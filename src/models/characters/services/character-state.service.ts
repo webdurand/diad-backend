@@ -16,6 +16,13 @@ export interface HpUpdateDto {
   damage?: number;
   healing?: number;
   tempHp?: number;
+  /**
+   * Spec 016 M3 — Nonlethal damage flag (RAW 2024 PHB).
+   * Se true e o dano levaria HP a 0, em vez de aplicar morte/death-saves
+   * o PC fica a 1 HP e ganha condition Unconscious. Acordável com ação
+   * (qualquer aliado adjacente) ou short rest.
+   */
+  nonlethal?: boolean;
 }
 
 export interface XpUpdateDto {
@@ -54,6 +61,8 @@ export interface HpResult {
   maxHp: number;
   isDown: boolean;
   instantDeath: boolean;
+  /** Spec 016 M3 — true se nonlethal flag levou PC a 1 HP + Unconscious. */
+  knockedOut?: boolean;
   deathSaves: { successes: number; failures: number };
 }
 
@@ -201,6 +210,7 @@ export class CharacterStateService {
     const maxHp = await this.computeMaxHp(characterId);
 
     let instantDeath = false;
+    let knockedOut = false;
 
     // Apply temp HP update
     if (dto.tempHp !== undefined) {
@@ -218,13 +228,25 @@ export class CharacterStateService {
       }
 
       const hpBeforeDamage = state.current_hp;
-      state.current_hp = Math.max(0, state.current_hp - remaining);
 
-      // Massive damage: if excess damage after reaching 0 HP >= maxHp, instant death
-      if (state.current_hp === 0 && remaining > hpBeforeDamage) {
-        const excessDamage = remaining - hpBeforeDamage;
-        if (excessDamage >= maxHp) {
-          instantDeath = true;
+      // Spec 016 M3 — Nonlethal 2024: se dano levaria a 0 HP, fica a 1 HP +
+      // Unconscious; não dispara massive damage / death-saves.
+      if (dto.nonlethal && remaining >= hpBeforeDamage && hpBeforeDamage > 0) {
+        state.current_hp = 1;
+        knockedOut = true;
+        const conds = Array.isArray(state.conditions) ? state.conditions : [];
+        if (!conds.includes('unconscious')) {
+          state.conditions = [...conds, 'unconscious'];
+        }
+      } else {
+        state.current_hp = Math.max(0, state.current_hp - remaining);
+
+        // Massive damage 2024: excess damage >= maxHp → instant death
+        if (state.current_hp === 0 && remaining > hpBeforeDamage) {
+          const excessDamage = remaining - hpBeforeDamage;
+          if (excessDamage >= maxHp) {
+            instantDeath = true;
+          }
         }
       }
     }
@@ -249,6 +271,7 @@ export class CharacterStateService {
       maxHp,
       isDown,
       instantDeath,
+      knockedOut,
       deathSaves: {
         successes: state.death_saves_success,
         failures: state.death_saves_fail,

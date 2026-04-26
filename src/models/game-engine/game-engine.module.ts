@@ -101,15 +101,19 @@ import { JoinRequestService } from './services/join-request.service';
 // Spec 003 — Combat Action Registry (módulo extraído para evitar circular)
 import { CombatActionsModule } from '../combat-actions/combat-actions.module';
 import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
-// Spec 016 — Play Shell Foundation (M0 stubs; M3/M4 implement)
+// Spec 016 — Play Shell Foundation (M0 stubs; M3/M4/M5 implement)
 import {
   RestSessionEntity,
   RestEventTemplateEntity,
   ReactionDefaultEntity,
+  XpAwardEventEntity,
 } from 'src/entities';
 import { RestService } from './services/rest.service';
 import { XpAwardService } from './services/xp-award.service';
 import { FateLadderService } from './services/fate-ladder.service';
+import { RestEventPickerService } from './services/rest-event-picker.service';
+// Spec 016 M2 — Dice request lifecycle (active checks via SSE)
+import { DiceRollService } from './services/dice-roll.service';
 
 @Module({
   imports: [
@@ -135,6 +139,7 @@ import { FateLadderService } from './services/fate-ladder.service';
       RestSessionEntity,
       RestEventTemplateEntity,
       ReactionDefaultEntity,
+      XpAwardEventEntity,
     ]),
     AuthModule,
     CharactersModule,
@@ -219,10 +224,13 @@ import { FateLadderService } from './services/fate-ladder.service';
     EncounterRoomAuthorizer,
     // Spec 003 Fatia 7 — class features executor
     ClassFeatureExecutorService,
-    // Spec 016 — Play Shell Foundation (M0 stubs)
+    // Spec 016 — Play Shell Foundation (M0 stubs; M3/M4/M5 wire)
     RestService,
     XpAwardService,
     FateLadderService,
+    RestEventPickerService,
+    // Spec 016 M2 — Dice request lifecycle
+    DiceRollService,
   ],
   exports: [
     DiceService,
@@ -282,6 +290,13 @@ import { FateLadderService } from './services/fate-ladder.service';
     CapstonesService,
     // Spec 002
     JoinRequestService,
+    // Spec 016 — Play Shell Foundation
+    FateLadderService,
+    XpAwardService,
+    RestEventPickerService,
+    RestService,
+    // Spec 016 M2 — Dice request lifecycle
+    DiceRollService,
   ],
 })
 export class GameEngineModule implements OnModuleInit {

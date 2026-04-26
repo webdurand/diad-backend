@@ -33,6 +33,10 @@ import {
   ClassStartingEquipmentEntity,
   EquipmentCategoryItemEntity,
   CompSourceEntity,
+  // Spec 016 — Play Shell Foundation
+  ReactionDefaultEntity,
+  EncounterParticipantEntity,
+  EncounterEntity,
 } from 'src/entities';
 import { AuthModule } from '../auth/auth.module';
 import { CombatActionsModule } from '../combat-actions/combat-actions.module';
@@ -44,6 +48,7 @@ import { LevelUpService } from './services/level-up.service';
 import { SpellService } from './services/spell.service';
 import { InventoryService } from './services/inventory.service';
 import { ActionsService } from './services/actions.service';
+import { ReactionPrefsService } from './services/reaction-prefs.service';
 
 @Module({
   imports: [
@@ -80,6 +85,10 @@ import { ActionsService } from './services/actions.service';
       ClassStartingEquipmentEntity,
       EquipmentCategoryItemEntity,
       CompSourceEntity,
+      // Spec 016 — Play Shell Foundation
+      ReactionDefaultEntity,
+      EncounterParticipantEntity,
+      EncounterEntity,
     ]),
     AuthModule,
     CombatActionsModule,
@@ -93,6 +102,8 @@ import { ActionsService } from './services/actions.service';
     SpellService,
     InventoryService,
     ActionsService,
+    // Spec 016 — Play Shell Foundation
+    ReactionPrefsService,
   ],
   exports: [
     CharactersService,
@@ -101,6 +112,8 @@ import { ActionsService } from './services/actions.service';
     ActionsService,
     SpellService,
     InventoryService,
+    // Spec 016 — Play Shell Foundation
+    ReactionPrefsService,
   ],
 })
 export class CharactersModule {}

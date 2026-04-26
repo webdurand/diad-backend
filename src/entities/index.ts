@@ -90,6 +90,7 @@ import { AiUsageLogEntity } from './ai-usage-log.entity';
 import { RestSessionEntity } from './rest-session.entity';
 import { RestEventTemplateEntity } from './rest-event-template.entity';
 import { ReactionDefaultEntity } from './reaction-default.entity';
+import { XpAwardEventEntity } from './xp-award-event.entity';
 
 export {
   AbilityScoreEntity,
@@ -183,6 +184,7 @@ export {
   RestSessionEntity,
   RestEventTemplateEntity,
   ReactionDefaultEntity,
+  XpAwardEventEntity,
 };
 
 export const ENTITIES = [
@@ -277,6 +279,7 @@ export const ENTITIES = [
   RestSessionEntity,
   RestEventTemplateEntity,
   ReactionDefaultEntity,
+  XpAwardEventEntity,
 ];
 
 export * from './enums';
