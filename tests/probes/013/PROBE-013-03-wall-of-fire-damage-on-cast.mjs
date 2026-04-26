@@ -60,6 +60,10 @@ const wiz = chars.find((c) => c.name?.startsWith('wizard-L7-')) ??
             chars.find((c) => c.name?.startsWith('wizard-L20-')) ??
             chars.find((c) => c.name?.includes('wizard'));
 if (!wiz) { console.error('No wizard'); process.exit(1); }
+
+// Spec 013 — long rest reset pra evitar slot exhaustion entre runs.
+await api(`/characters/${wiz.id}/rest`, { method: "POST", body: JSON.stringify({ type: "long" }) }).catch(() => {});
+
 line(`wizard=${wiz.name?.slice(0,24)}`);
 
 const lib = (await api('/library/monsters?name=goblin&limit=5')).body;

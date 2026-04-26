@@ -2151,11 +2151,19 @@ export class GameEngineController {
     @Param('id') id: string,
     @Query() query: GetEventsQueryDto,
   ) {
-    // Validar tipos de evento se fornecidos
+    // Validar tipos de evento se fornecidos.
+    // Spec 013 — aceita tanto camelCase ('tileEffectCreated') quanto
+    // snake_case ('tile_effect_created') pra compat com probes/harness.
+    // Normaliza pra camelCase antes de validar contra whitelist.
     let eventTypes: string[] | undefined;
     if (query.type) {
+      const snakeToCamel = (s: string): string =>
+        s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
       const requestedTypes = query.type.split(',').map((t) => t.trim());
-      const invalidTypes = requestedTypes.filter(
+      const normalizedTypes = requestedTypes.map((t) =>
+        t.includes('_') ? snakeToCamel(t) : t,
+      );
+      const invalidTypes = normalizedTypes.filter(
         (t) => !(VALID_EVENT_TYPES as readonly string[]).includes(t),
       );
       if (invalidTypes.length > 0) {
@@ -2165,7 +2173,7 @@ export class GameEngineController {
         );
       }
       // Converter camelCase → snake_case para filtrar no DB
-      eventTypes = requestedTypes.map(camelToSnakeCase);
+      eventTypes = normalizedTypes.map(camelToSnakeCase);
     }
 
     const { events, total } = await this.eventService.getEncounterTimelineFiltered(

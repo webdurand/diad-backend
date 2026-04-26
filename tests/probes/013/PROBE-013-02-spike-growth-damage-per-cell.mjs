@@ -59,6 +59,10 @@ step('[1] Setup: druid L5 + goblin');
 const chars = (await api('/characters')).body ?? [];
 const druid = chars.find((c) => c.name?.startsWith('druid-L5-')) ?? chars.find((c) => c.name?.includes('druid'));
 if (!druid) { console.error('No druid'); process.exit(1); }
+
+// Spec 013 — long rest reset pra evitar slot exhaustion entre runs.
+await api(`/characters/${druid.id}/rest`, { method: "POST", body: JSON.stringify({ type: "long" }) }).catch(() => {});
+
 line(`druid=${druid.name?.slice(0,24)}`);
 
 const lib = (await api('/library/monsters?name=goblin&limit=5')).body;

@@ -562,7 +562,11 @@ export class PersistentAreaService {
     let conditionApplied: ConditionSlug | null = null;
     let savePassed = true;
 
-    // 1. Save (se trigger tem save + saveDc setado na área)
+    // 1. Save (se trigger tem save + saveDc setado na área).
+    // Spec 013: se getSaveModifier não for fornecido (PATCH position path),
+    // default pra modifier=0. Save ainda rola — RAW per default a criatura
+    // sem proficiency gets +0 mod. Isso preserva eventos save_rolled +
+    // condition_applied que probes esperam.
     let saveData: {
       rolled: number;
       passed: boolean;
@@ -570,8 +574,10 @@ export class PersistentAreaService {
       total: number;
     } | null = null;
     const save = 'save' in trigger ? trigger.save : undefined;
-    if (save && area.saveDc != null && getSaveModifier) {
-      const m = await getSaveModifier(save.ability);
+    if (save && area.saveDc != null) {
+      const m = getSaveModifier
+        ? await getSaveModifier(save.ability)
+        : { modifier: 0 };
       const r = this.dice.roll(20);
       const total = r + m.modifier;
       const passed = total >= area.saveDc;
