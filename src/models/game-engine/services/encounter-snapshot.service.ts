@@ -88,6 +88,8 @@ export class EncounterSnapshotService {
             x: p.positionX ?? 0,
             y: p.positionY ?? 0,
           },
+          positionX: p.positionX ?? 0,
+          positionY: p.positionY ?? 0,
           hp: {
             current: p.currentHp ?? 0,
             max: p.maxHp ?? 0,
@@ -107,6 +109,8 @@ export class EncounterSnapshotService {
           helpingTargetParticipantId: p.helpingTargetParticipantId,
           readiedAction: p.readiedAction,
           hidden: (p.conditions ?? []).includes('hidden'),
+          isConcentrating: p.isConcentrating ?? false,
+          concentratingOn: p.concentratingOn ?? null,
           statblockRef:
             p.type === 'monster' && p.monster
               ? { monsterSlug: p.monster.slug ?? p.monster.name ?? '' }
@@ -155,6 +159,7 @@ export class EncounterSnapshotService {
         isDifficultTerrain: a.isDifficultTerrain,
         speedMultiplier: a.speedMultiplier,
         sourceConcentration: a.sourceConcentration,
+        auraFollowsCaster: a.auraFollowsCaster ?? false,
         narrativeDescriptor: a.narrativeDescriptor,
         tactical: a.tacticalMetadata,
         cells,

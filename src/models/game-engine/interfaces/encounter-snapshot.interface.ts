@@ -40,6 +40,7 @@ export interface TileEffectSnapshot {
   isDifficultTerrain: boolean;
   speedMultiplier: number | null;
   sourceConcentration: boolean;
+  auraFollowsCaster: boolean;
   narrativeDescriptor: string | null;
   /** Camada 2 (Princípio X) — tags + tacticalValue + beneficiaryFaction. */
   tactical: unknown | null;
@@ -55,6 +56,9 @@ export interface SnapshotParticipant {
   displayName: string;
   controlledBy: 'pc' | 'ai' | 'dm';
   position: { x: number; y: number };
+  /** Spec 013 — flat aliases pra harness/probes que esperam shape simples. */
+  positionX: number;
+  positionY: number;
   hp: { current: number; max: number; tempHp?: number };
   dyingState: 'none' | 'dying' | 'stable' | 'dead';
   conditions: string[];
@@ -70,6 +74,9 @@ export interface SnapshotParticipant {
   helpingTargetParticipantId: string | null;
   readiedAction: ReadiedAction | null;
   hidden: boolean;
+  /** Spec 013 — concentração ativa (probes/AI consomem). */
+  isConcentrating: boolean;
+  concentratingOn: string | null;
   statblockRef?: { monsterSlug: string };
   availableActions: TurnActionBlock[];
   /** id → distância em pés (tiles × 5ft). */

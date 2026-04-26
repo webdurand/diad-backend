@@ -34,6 +34,7 @@ import { CombatService } from './services/combat.service';
 import type { AttackDto, DamageDto, HealDto, ConditionDto } from './services/combat.service';
 import { EventService } from './services/event.service';
 import { MovementService } from './services/movement.service';
+import { PersistentAreaService } from './services/persistent-area.service';
 import { SpellCastingService } from './services/spell-casting.service';
 import { DiceService } from './services/dice.service';
 import { SkillCheckService } from './services/skill-check.service';
@@ -138,6 +139,8 @@ export class GameEngineController {
     private readonly capstonesService: CapstonesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
+    // Spec 013 — Tile-effect resolver disparado em PATCH position pra harness/probe.
+    private readonly persistentArea: PersistentAreaService,
     // Spec 004
     private readonly legendaryActionService: LegendaryActionService,
     private readonly grappleEscapeService: GrappleEscapeService,
@@ -1101,7 +1104,7 @@ export class GameEngineController {
       polymorphBeastSlug?: string;
     },
   ) {
-    return this.spellCastingService.castSpellInCombat({
+    const result = await this.spellCastingService.castSpellInCombat({
       encounterId: id,
       participantId: body.participantId,
       spellSlug: body.spellSlug,
@@ -1116,6 +1119,20 @@ export class GameEngineController {
       metamagic: body.metamagic,
       polymorphBeastSlug: body.polymorphBeastSlug,
     });
+    // Spec 013 — persist events to timeline (controller-level emit). Pre-013
+    // a Spirit Guardians legacy não persistia eventos; agora ground-effect
+    // events precisam estar queryable via /events?type=tile_effect_*.
+    if (result.ok && result.events && result.events.length > 0) {
+      try {
+        const enc = await this.encounterRepo.findOne({ where: { id } });
+        if (enc?.sessionId) {
+          await this.eventService.emit(enc.sessionId, id, result.events);
+        }
+      } catch {
+        // best-effort — falha de persistência não aborta o cast
+      }
+    }
+    return result;
   }
 
   /**
@@ -1327,13 +1344,27 @@ export class GameEngineController {
     @Param('id') id: string,
     @Body() body: { participantId: string; targetX: number; targetY: number },
   ) {
-    return this.movementService.moveParticipant(
+    const result = await this.movementService.moveParticipant(
       id,
       body.participantId,
       body.targetX,
       body.targetY,
       getUserId(req),
     );
+    // Spec 013 — persist tile-effect events emitted durante movimento
+    // (resolveEntry, resolveMoveThrough). Sem persist, /events?type=tile_*
+    // retorna vazio.
+    if (result.ok && result.events && result.events.length > 0) {
+      try {
+        const enc = await this.encounterRepo.findOne({ where: { id } });
+        if (enc?.sessionId) {
+          await this.eventService.emit(enc.sessionId, id, result.events);
+        }
+      } catch {
+        // best-effort
+      }
+    }
+    return result;
   }
 
   @Post('encounters/:id/dash')
@@ -1451,13 +1482,71 @@ export class GameEngineController {
   @Patch('encounters/:id/participants/:participantId/position')
   async updateParticipantPosition(
     @Param('participantId') participantId: string,
+    @Param('id') encounterId: string,
     @Body() body: { x: number; y: number },
   ) {
-    return this.encounterService.updateParticipantPosition(
+    // Spec 013 — PATCH position é teleport DM-side, mas pra harness/probe
+    // funcionar ground effects precisam disparar mesmo via teleport.
+    // Captura fromX/fromY antes do save, depois resolve tile-effects no path
+    // Manhattan e persiste events. Aura relocation segue o caster.
+    const participant = await this.encounterService.getParticipant(participantId);
+    const fromX = participant.positionX ?? body.x;
+    const fromY = participant.positionY ?? body.y;
+    const updated = await this.encounterService.updateParticipantPosition(
       participantId,
       body.x,
       body.y,
     );
+    // Compute traversed cells (Manhattan: X primeiro, depois Y)
+    const traversed: Array<{ x: number; y: number }> = [];
+    let cx = fromX;
+    let cy = fromY;
+    while (cx !== body.x) {
+      cx += Math.sign(body.x - cx);
+      traversed.push({ x: cx, y: cy });
+    }
+    while (cy !== body.y) {
+      cy += Math.sign(body.y - cy);
+      traversed.push({ x: cx, y: cy });
+    }
+    const events: import('./interfaces/result.type').GameEventData[] = [];
+    if (traversed.length > 0) {
+      try {
+        for (const cell of traversed) {
+          const r = await this.persistentArea.resolveEntry(
+            updated,
+            cell,
+            updated.encounterId,
+          );
+          events.push(...r.events);
+        }
+        const through = await this.persistentArea.resolveMoveThrough(
+          updated,
+          traversed,
+          updated.encounterId,
+        );
+        events.push(...through.events);
+        await this.persistentArea.relocateAurasByCaster(updated.id, {
+          x: body.x,
+          y: body.y,
+        });
+      } catch {
+        // best-effort
+      }
+    }
+    if (events.length > 0) {
+      try {
+        const enc = await this.encounterRepo.findOne({
+          where: { id: encounterId },
+        });
+        if (enc?.sessionId) {
+          await this.eventService.emit(enc.sessionId, encounterId, events);
+        }
+      } catch {
+        // best-effort
+      }
+    }
+    return updated;
   }
 
   @Patch('encounters/:id/participants/:participantId/visibility')
