@@ -72,6 +72,15 @@ import { LairActionService } from './services/lair-action.service';
 import { ConditionLifecycleService } from './services/condition-lifecycle.service';
 // Spec 002 — join-request loop
 import { JoinRequestService } from './services/join-request.service';
+// Spec 016 — Play Shell Foundation
+import { FateLadderService } from './services/fate-ladder.service';
+import type {
+  FateLadderTrigger,
+  FateLadderOption,
+} from './services/fate-ladder.service';
+import { XpAwardService } from './services/xp-award.service';
+import { DiceRollService } from './services/dice-roll.service';
+import type { XpAwardSource } from 'src/entities/xp-award-event.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
@@ -140,6 +149,11 @@ export class GameEngineController {
     private readonly encounterRepo: Repository<EncounterEntity>,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
+    // Spec 016 — Play Shell Foundation
+    private readonly fateLadderService: FateLadderService,
+    private readonly xpAwardService: XpAwardService,
+    // Spec 016 M2 — Dice request lifecycle (active checks via SSE)
+    private readonly diceRollService: DiceRollService,
   ) {}
 
   // ==================== SESSIONS ====================
@@ -405,6 +419,221 @@ export class GameEngineController {
   @Post('encounters/:id/end')
   async endEncounter(@Param('id') id: string) {
     return this.encounterService.endEncounter(id);
+  }
+
+  /**
+   * Spec 016 P3 (M2) — Talk-down: tentativa narrativa pré-iniciativa.
+   * Player resolve um skill check (Persuasion/Deception/Intimidation/Insight)
+   * vs DC alto (default 18 T1). Sucesso → encounter ends sem combate (no XP);
+   * falha → caller proceeds para roll initiative com disadvantage NPCs.
+   *
+   * Body: { skill, dc, totalModifier, rawD20, advantage? }
+   * RawD20 vem do frontend (player rolagem visual). Server resolve verdict.
+   *
+   * NOTA M2: outcome 'talked_down' não persiste em status enum (evita migration).
+   * M3 adiciona CombatResolutionCard storage com outcome_kind explícito.
+   */
+  @Post('encounters/:id/talk-down')
+  async talkDownEncounter(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      skill: 'Persuasion' | 'Deception' | 'Intimidation' | 'Insight';
+      dc: number;
+      totalModifier: number;
+      rawD20: number;
+      rawD20Disadv?: number | null;
+    },
+  ) {
+    const resolved = this.diceService.resolveDiceRoll({
+      rollId: '00000000-0000-0000-0000-000000000000',
+      rawD20: body.rawD20,
+      rawD20Disadv: body.rawD20Disadv ?? null,
+      totalModifier: body.totalModifier,
+      dc: body.dc,
+      kind: 'ability_check',
+    });
+
+    const succeeded =
+      resolved.verdict === 'success' || resolved.verdict === 'crit_success';
+
+    // Spec 016 §7.1 / Task BG3 parity — sucesso narrativo concede XP igual
+    // ao kill (anti-grind). Compute amount = soma de XP de todos os monsters
+    // hostis do encounter. Award per-PC. Source 'combat_resolved_peacefully'.
+    const xpAwards: Array<{
+      characterId: string;
+      awardedXp: number;
+      eventId: string;
+    }> = [];
+
+    if (succeeded) {
+      const encounter = await this.encounterService.getById(id);
+
+      const totalXp = (encounter.participants ?? [])
+        .filter(
+          (p) =>
+            p.type === 'monster' &&
+            p.faction === 'enemy' &&
+            p.monster,
+        )
+        .reduce((sum, p) => sum + (p.monster?.xp ?? 0), 0);
+
+      const pcParticipants = (encounter.participants ?? []).filter(
+        (p) => p.type === 'pc' && p.characterId,
+      );
+
+      if (totalXp > 0 && pcParticipants.length > 0) {
+        const session = await this.sessionService
+          .getById(encounter.sessionId)
+          .catch(() => null);
+        const ownerUserId = getUserId(req);
+        const campaignId = session?.campaignId ?? undefined;
+
+        for (const pc of pcParticipants) {
+          const result = await this.xpAwardService
+            .awardXp({
+              characterId: pc.characterId!,
+              amount: totalXp,
+              source: 'combat_resolved_peacefully',
+              reason: `Talk-down (${body.skill}) DC ${body.dc} success`,
+              encounterId: id,
+              ownerUserId,
+              campaignId,
+              narrativeJustification: `Combate resolvido pacificamente via ${body.skill} check.`,
+            })
+            .catch(() => null);
+          if (result?.ok) {
+            xpAwards.push({
+              characterId: pc.characterId!,
+              awardedXp: result.value.awardedXp,
+              eventId: result.value.eventId,
+            });
+          }
+        }
+      }
+
+      if (encounter.status === 'preparing') {
+        await this.encounterService.endEncounter(id).catch(() => {
+          // endEncounter pode falhar com 0 monsters; ok pra talk-down narrativo
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      value: {
+        encounterId: id,
+        skill: body.skill,
+        dc: body.dc,
+        verdict: resolved.verdict,
+        succeeded,
+        outcome: succeeded ? 'talked_down' : 'failed_initiative_will_roll',
+        roll: {
+          rawD20: resolved.rawD20,
+          rawD20Disadv: resolved.rawD20Disadv,
+          total: resolved.total,
+        },
+        xpAwards,
+      },
+    };
+  }
+
+  /**
+   * Spec 016 M2 — Pre-combat briefing: dados pra UI renderizar
+   * `<PreCombatBriefingCard>` antes do roll initiative. Inclui talkDown
+   * eligibility (humanoid OR INT >= 8, sem condições enraged/summoned).
+   *
+   * talkDownDc = 10 + party_level (clamp 5-20).
+   */
+  @Get('encounters/:id/pre-combat-briefing')
+  async preCombatBriefing(@Param('id') encounterId: string) {
+    const encounter = await this.encounterService.getById(encounterId);
+
+    const monsterParticipants = (encounter.participants ?? []).filter(
+      (p) =>
+        p.type === 'monster' &&
+        p.faction === 'enemy' &&
+        p.monster,
+    );
+
+    const monsters = monsterParticipants.map((p) => {
+      const ac =
+        typeof (p.monster as any)?.armor_class === 'object'
+          ? Number(
+              ((p.monster as any).armor_class.value ??
+                (p.monster as any).armor_class.ac ??
+                0) as number,
+            )
+          : Number((p.monster as any).armor_class ?? 0);
+      return {
+        name: p.monster!.name,
+        cr: p.monster!.challenge_rating,
+        hpMax: p.monster!.hit_points,
+        ac,
+      };
+    });
+
+    const totalXp = monsterParticipants.reduce(
+      (sum, p) => sum + (p.monster?.xp ?? 0),
+      0,
+    );
+
+    // Tier (DMG 2024): tier1 = lvl 1-4, tier2 = 5-10, tier3 = 11-16, tier4 = 17-20.
+    const pcParticipants = (encounter.participants ?? []).filter(
+      (p) => p.type === 'pc' && p.characterId,
+    );
+    let partyLevel = 1;
+    if (pcParticipants.length > 0) {
+      // Tenta usar enrichment (currentHp/maxHp setado em getById). Fallback a 1.
+      // Lookup de level real via CharacterClass somatório fica caro aqui;
+      // approximação por participants.length não-zero. Spec 016 M2 default = 1.
+      const levels = pcParticipants
+        .map((p) => Number((p as any).level ?? (p as any).characterLevel ?? 0))
+        .filter((l) => l > 0);
+      if (levels.length > 0) {
+        partyLevel = Math.round(
+          levels.reduce((a, b) => a + b, 0) / levels.length,
+        );
+      }
+    }
+    const tier =
+      partyLevel >= 17
+        ? 'tier4'
+        : partyLevel >= 11
+          ? 'tier3'
+          : partyLevel >= 5
+            ? 'tier2'
+            : 'tier1';
+
+    // Talk-down eligibility: monsters humanoid OR INT >= 8, sem 'enraged'
+    // ou 'summoned' status. linkedCasterParticipantId != null = summoned.
+    const talkDownAvailable =
+      monsterParticipants.length > 0 &&
+      monsterParticipants.every((p) => {
+        const m = p.monster!;
+        const isHumanoid = m.type?.toLowerCase().includes('humanoid') ?? false;
+        const isIntelligent = (m.intelligence ?? 0) >= 8;
+        const isEligible = isHumanoid || isIntelligent;
+        const isEnraged = (p.conditionInstances ?? []).some(
+          (c) => c.slug === ('enraged' as any) || c.slug === ('frenzied' as any),
+        );
+        const isSummoned = !!p.linkedCasterParticipantId;
+        return isEligible && !isEnraged && !isSummoned;
+      });
+
+    const rawDc = 10 + partyLevel;
+    const talkDownDc = Math.max(5, Math.min(20, rawDc));
+
+    return {
+      encounterId,
+      monsters,
+      totalXp,
+      tier,
+      talkDownAvailable,
+      talkDownDc,
+      talkDownSkill: 'persuasion',
+    };
   }
 
   @Post('encounters/:id/resolve')
@@ -1958,6 +2187,68 @@ export class GameEngineController {
   }
 
   /**
+   * Spec 016 M2 — Active dice check request (frontend SSE).
+   * Body: { characterId, kind, ability, skill?, dc, advantage?, modifiers }
+   * Retorna { rollId, targetD20, totalModifier } pro frontend renderizar
+   * `<DiceRollCard>`. Storage in-memory (TTL 1h).
+   */
+  @Post('dice/request')
+  @HttpCode(HttpStatus.OK)
+  async requestDiceRoll(
+    @Body()
+    body: {
+      characterId?: string;
+      kind: 'ability_check' | 'saving_throw' | 'attack_roll' | 'death_save';
+      ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
+      skill?: string | null;
+      dc: number;
+      advantage?: 'normal' | 'advantage' | 'disadvantage';
+      modifiers: Array<{ label: string; value: number }>;
+      narrativeFraming?: string;
+    },
+  ) {
+    const result = this.diceRollService.requestRoll({
+      characterId: body.characterId,
+      kind: body.kind,
+      ability: body.ability,
+      skill: body.skill,
+      dc: body.dc,
+      advantage: body.advantage,
+      modifiers: body.modifiers ?? [],
+      narrativeFraming: body.narrativeFraming,
+    });
+    return {
+      rollId: result.rollId,
+      targetD20: result.targetD20,
+      totalModifier: result.totalModifier,
+    };
+  }
+
+  /**
+   * Spec 016 M2 — Resolve um active dice check.
+   * Body: { raw1: 1-20, raw2?: 1-20 }. raw2 ignorado se advantage='normal'.
+   */
+  @Post('dice/:rollId/resolve')
+  @HttpCode(HttpStatus.OK)
+  async resolveDiceRoll(
+    @Param('rollId') rollId: string,
+    @Body() body: { raw1: number; raw2?: number },
+  ) {
+    const result = this.diceRollService.resolveRoll(
+      rollId,
+      body.raw1,
+      body.raw2,
+    );
+    return {
+      rollId: result.rollId,
+      total: result.total,
+      verdict: result.verdict,
+      rawD20: result.rawD20,
+      rawD20Disadv: result.rawD20Disadv ?? null,
+    };
+  }
+
+  /**
    * Ativa seed determinístico no DiceService (spec 012).
    * Admin-only, bloqueado em produção (exceto com ALLOW_TEST_ENDPOINTS=true).
    */
@@ -2166,5 +2457,91 @@ export class GameEngineController {
         faction: s.faction,
       })),
     };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Spec 016 — Play Shell Foundation
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Fate Ladder — abre modal narrativo ao 3º death save fail ou massive damage.
+   * Triggers válidos: three_failed_death_saves | massive_damage_2024 | instant_kill_effect.
+   */
+  @Post('fate-ladder/:characterId/open')
+  async openFateLadder(
+    @Param('characterId') characterId: string,
+    @Body()
+    body: {
+      trigger: FateLadderTrigger;
+      campaignId?: string;
+      casterPartyHasSpell?: Array<
+        'Revivify' | 'Raise Dead' | 'Resurrection' | 'True Resurrection'
+      >;
+      diamondsAvailableGp?: number;
+      minutesSinceDeath?: number;
+    },
+  ) {
+    return this.fateLadderService.openLadder(characterId, body.trigger, {
+      campaignId: body.campaignId,
+      casterPartyHasSpell: body.casterPartyHasSpell,
+      diamondsAvailableGp: body.diamondsAvailableGp,
+      minutesSinceDeath: body.minutesSinceDeath,
+    });
+  }
+
+  /**
+   * Resolve opção do Fate Ladder. Retorna stateChanges descritivos pro
+   * Coordinator narrar via DM agent. Body: { ladderId, chosenOption,
+   * sacrificeDescription? }.
+   */
+  @Post('fate-ladder/:characterId/resolve')
+  async resolveFateLadder(
+    @Param('characterId') characterId: string,
+    @Body()
+    body: {
+      ladderId: string;
+      chosenOption: FateLadderOption;
+      sacrificeDescription?: string;
+    },
+  ) {
+    return this.fateLadderService.resolveLadder({
+      characterId,
+      ladderId: body.ladderId,
+      chosenOption: body.chosenOption,
+      sacrificeDescription: body.sacrificeDescription,
+    });
+  }
+
+  /**
+   * Granular XP award. Source enum granular (combat_kill | quest_step | ...);
+   * respeita campaign.xp_mode (rules|milestone|hybrid). Audit log em
+   * `xp_award_events` consumido por Director memory L4.
+   */
+  @Post('characters/:characterId/xp-award')
+  async awardCharacterXp(
+    @Req() req: AuthRequest,
+    @Param('characterId') characterId: string,
+    @Body()
+    body: {
+      amount: number;
+      source: XpAwardSource;
+      reason: string;
+      encounterId?: string;
+      questStepId?: string;
+      narrativeJustification?: string;
+      campaignId?: string;
+    },
+  ) {
+    return this.xpAwardService.awardXp({
+      ownerUserId: getUserId(req),
+      characterId,
+      amount: body.amount,
+      source: body.source,
+      reason: body.reason,
+      encounterId: body.encounterId,
+      questStepId: body.questStepId,
+      narrativeJustification: body.narrativeJustification,
+      campaignId: body.campaignId,
+    });
   }
 }

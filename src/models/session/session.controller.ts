@@ -133,6 +133,47 @@ export class SessionController {
     return this.eventLogService.logEvent({ ...body, sessionId });
   }
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Spec 016 — Play Shell Foundation (M5)
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Slash command audit endpoint. Frontend dispatcher (PlayShell sidebar)
+   * já mapeia: short, long, hp-adjust, xp-award, level-up, save, clear,
+   * pray, me. Este endpoint apenas loga o comando + retorna ack — comandos
+   * mutáveis (HP/XP/rest) chamam endpoints dedicados em paralelo.
+   *
+   * Ver `specs/016-play-shell-foundation/spec.md` §8.5.
+   */
+  @Post(':sessionId/command')
+  async logCommand(
+    @Param('sessionId') sessionId: string,
+    @Body() body: { cmd: string; args?: Record<string, unknown> },
+  ) {
+    const allowed = new Set([
+      'short',
+      'long',
+      'hp-adjust',
+      'xp-award',
+      'level-up',
+      'save',
+      'clear',
+      'pray',
+      'me',
+    ]);
+    if (!body?.cmd || !allowed.has(body.cmd)) {
+      return { ok: false, error: 'unknown_command', cmd: body?.cmd ?? null };
+    }
+    await this.eventLogService.logEvent({
+      sessionId,
+      eventType: 'slash_command',
+      summary: `Slash command: /${body.cmd}`,
+      details: { cmd: body.cmd, args: body.args ?? {} },
+      isVisibleToPlayers: false,
+    });
+    return { ok: true, cmd: body.cmd };
+  }
+
   // ==================== CONTEXT (for AI) ====================
 
   @Get(':sessionId/context')

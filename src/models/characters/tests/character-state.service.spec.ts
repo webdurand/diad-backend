@@ -111,6 +111,41 @@ describe('CharacterStateService', () => {
       expect(result.instantDeath).toBe(true);
     });
 
+    it('Spec 016 — nonlethal damage knocks out at 1 HP + Unconscious', async () => {
+      setupOwnership();
+      const state = makeCharacterState({ current_hp: 5, conditions: [] });
+      stateRepo.findOne!.mockResolvedValue(state);
+      setupMaxHp(10, 10);
+      stateRepo.findOne!.mockResolvedValue(state);
+
+      const result = await service.updateHp('user-1', 'char-1', {
+        damage: 12,
+        nonlethal: true,
+      });
+      expect(result.currentHp).toBe(1);
+      expect(result.knockedOut).toBe(true);
+      expect(result.instantDeath).toBe(false);
+      expect(state.conditions).toContain('unconscious');
+    });
+
+    it('Spec 016 — nonlethal flag does NOT trigger massive damage', async () => {
+      setupOwnership();
+      const state = makeCharacterState({ current_hp: 5, conditions: [] });
+      stateRepo.findOne!.mockResolvedValue(state);
+      setupMaxHp(10, 10);
+      stateRepo.findOne!.mockResolvedValue(state);
+
+      // Sem nonlethal, 30 dmg em 5 HP com maxHp 10 = instant death.
+      // Com nonlethal, knocks out a 1 HP.
+      const result = await service.updateHp('user-1', 'char-1', {
+        damage: 30,
+        nonlethal: true,
+      });
+      expect(result.instantDeath).toBe(false);
+      expect(result.knockedOut).toBe(true);
+      expect(result.currentHp).toBe(1);
+    });
+
     it('should apply simple healing', async () => {
       setupOwnership();
       const state = makeCharacterState({ current_hp: 5 });
