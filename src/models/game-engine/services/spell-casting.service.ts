@@ -43,6 +43,10 @@ import { getSpellCondition } from './spell-condition-catalog';
 import { ConditionLifecycleService } from './condition-lifecycle.service';
 import { SummoningService } from './summoning.service';
 import { PersistentAreaService } from './persistent-area.service';
+import {
+  TILE_EFFECT_CATALOG,
+  type TileEffectKind,
+} from './tile-effect-catalog';
 import { TransformationService } from './transformation.service';
 
 // --- Result interfaces ---
@@ -1108,52 +1112,99 @@ export class SpellCastingService {
       events.push(...effectEvents);
     }
 
-    // Spec 012 — Persistent area spawn (Spirit Guardians etc). Aura centrada
-    // no caster com raio 15ft, 3d8 radiant/necrotic, WIS save half. Spell de
-    // concentração — cascade em break via PersistentAreaService.removeBy...
+    // Spec 013 — Tile-effect spawn via catalog (OCP-aligned).
+    // Cobre Grease, Web, Spike Growth, Wall of Fire, Cloud of Daggers,
+    // Sleet Storm, Spirit Guardians (refactor de hardcode pré-013).
+    // Adicionar magia futura = nova entry no tile-effect-catalog.ts. ZERO
+    // edit aqui. Princípio X: snapshot tactical metadata + narrativeDescriptor
+    // na entity, consumido por CombatAgent (L2/L3) e Narrator (3 camada).
     const slugNorm = dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, '');
+    const tileDef = TILE_EFFECT_CATALOG[slugNorm as TileEffectKind];
     if (
-      slugNorm === 'spirit-guardians' &&
+      tileDef &&
       participant.positionX != null &&
       participant.positionY != null
     ) {
-      let saveDc: number | null = null;
+      // Origin: aoeOriginCell quando fornecido (Wall of Fire/Grease/Web/Sleet);
+      // posição do caster (Spirit Guardians + auras que seguem).
+      const originCell = tileDef.auraFollowsCaster
+        ? { x: participant.positionX, y: participant.positionY }
+        : (dto.aoeOriginCell ?? {
+            x: participant.positionX,
+            y: participant.positionY,
+          });
+
+      // Save DC do caster (RAW: spell save DC = 8 + prof + spellcasting mod).
+      let saveDc = 13; // fallback razoável (DC L5 caster)
       if (participant.type === 'pc' && participant.characterId) {
         try {
-          const s = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
-          const casterClass = (s as any).classes?.find((c: any) => c.spellSaveDc != null);
-          saveDc = casterClass?.spellSaveDc ?? null;
+          const s = await this.sheetService.computeSheet(
+            dto.ownerUserId,
+            participant.characterId,
+          );
+          const casterClass = (s as { classes?: Array<{ spellSaveDc?: number }> })
+            .classes?.find((c) => c.spellSaveDc != null);
+          if (casterClass?.spellSaveDc != null) saveDc = casterClass.spellSaveDc;
         } catch {
-          saveDc = null;
+          /* fallback DC=13 */
         }
       }
-      const area = await this.persistentArea.create({
+
+      const area = await this.persistentArea.createFromCatalog({
         encounterId: dto.encounterId,
         casterParticipantId: participant.id,
-        sourceSpell: 'spirit-guardians',
-        shapeKind: 'sphere',
-        originCell: { x: participant.positionX, y: participant.positionY },
-        radiusCells: 3, // 15ft = 3 cells
-        damageDice: '3d8',
-        damageType: 'radiant',
-        saveAbility: 'wis',
+        spellSlug: slugNorm as TileEffectKind,
+        slotLevel: dto.slotLevel ?? 1,
+        originCell,
         saveDc,
-        halfOnSave: true,
-        durationRoundsRemaining: 100, // 10 min = concentration-gated
-        sourceConcentration: true,
       });
+
       events.push({
-        event_type: 'persistent_area_created',
+        event_type: 'tile_effect_created',
         actor_participant_id: participant.id,
         data: {
           areaId: area.id,
-          sourceSpell: 'spirit-guardians',
+          sourceSpell: slugNorm,
+          effectKind: area.effectKind,
           originCell: area.originCell,
+          shapeKind: area.shapeKind,
           radiusCells: area.radiusCells,
-          damageDice: area.damageDice,
-          damageType: area.damageType,
+          durationRoundsRemaining: area.durationRoundsRemaining,
+          isDifficultTerrain: area.isDifficultTerrain,
+          speedMultiplier: area.speedMultiplier,
+          saveDc: area.saveDc,
+          saveAbility: area.saveAbility,
+          narrativeDescriptor: area.narrativeDescriptor,
+          tactical: area.tacticalMetadata,
         },
       });
+
+      // Resolve `on-cast` triggers — Grease save em adjacents dentro da área,
+      // Wall of Fire 5d8 fire (DEX half) em participants no path,
+      // Cloud of Daggers 4d4 slashing (RAW 2024 mudança).
+      const allParticipants = await this.participantRepo.find({
+        where: { encounterId: dto.encounterId, isDefeated: false },
+      });
+      const inArea = allParticipants.filter(
+        (p) =>
+          p.positionX != null &&
+          p.positionY != null &&
+          this.persistentArea.cellInArea(p.positionX, p.positionY, area),
+      );
+      const onCastRes = await this.persistentArea.resolveOnCast(
+        area,
+        inArea,
+        // Save modifier: usa rollMonsterOrPcSave-style. MVP: modifier=0 fallback.
+        // Refator futuro injeta saveModifier real do target sheet.
+        async () => ({ modifier: 0 }),
+      );
+      events.push(...onCastRes.events);
+
+      // Concentration cascade: tile-effects com sourceConcentration=true são
+      // cleaned-up automaticamente por ConcentrationService.break() via query
+      // direta `where: { casterParticipantId, sourceConcentration: true }`.
+      // (Cascade extension feita em concentration.service.ts; sem dependency
+      // injection aqui pra evitar ciclo.)
     }
 
     // Spec 012 Lote B — Polymorph wire (RAW 2024 XPHB).

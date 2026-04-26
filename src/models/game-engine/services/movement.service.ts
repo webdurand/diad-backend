@@ -188,9 +188,15 @@ export class MovementService {
     // Spec 012 Lote B — Difficult terrain + Land's Stride (RAW 2024 XPHB).
     // Cells marcadas como difficult terrain custam 10ft em vez de 5ft. Land's
     // Stride bypasses isso pra beast-aligned PCs (Druid L6 / Ranger L8+).
-    const difficultCells = new Set(
+    // Spec 013: merge overlay dinâmico (Grease/Web/Spike Growth/etc).
+    const staticDifficult = new Set(
       (encounter.mapData?.difficultTerrainCells ?? []).map((c) => `${c.x},${c.y}`),
     );
+    const tileOverlay = await this.persistentArea.getDifficultTerrainOverlay(
+      encounterId,
+    );
+    const difficultCells = new Set(staticDifficult);
+    for (const key of tileOverlay.keys()) difficultCells.add(key);
     let hasLandsStride = false;
     if (participant.type === 'pc' && participant.characterId && ownerUserId) {
       try {
@@ -200,9 +206,10 @@ export class MovementService {
     }
 
     const distanceCells = Math.abs(targetX - fromX) + Math.abs(targetY - fromY);
-    const { costFt: distanceFt, difficultCellsCrossed } = this.computeMoveCost(
-      fromX, fromY, targetX, targetY, difficultCells, hasLandsStride,
-    );
+    const { costFt: distanceFt, difficultCellsCrossed, traversedCells } =
+      this.computeMoveCost(
+        fromX, fromY, targetX, targetY, difficultCells, hasLandsStride,
+      );
 
     // Initialize movement if not set
     const speed = await this.getSpeed(participant, ownerUserId);
@@ -228,16 +235,58 @@ export class MovementService {
           encounterId,
         );
 
-    // Apply movement
-    participant.positionX = targetX;
-    participant.positionY = targetY;
-    participant.movementRemaining -= distanceFt;
+    // Spec 013 — Tile-effect resolution per traversed cell:
+    //   on-enter (Grease/Web/Sleet Storm save+condition); on-move-through
+    //   (Spike Growth damage per cell). stopMovement (Web speedMultiplier=0
+    //   + save fail) interrompe o move e ancora o participant na cell atual.
+    // Damage events apenas — HP application = caller (alinhado com pattern
+    // legado de tickDamageFor; full HP wiring fica pra spec orchestrator).
+    const tileEvents: GameEventData[] = [];
+    let stopAtCell: { x: number; y: number } | null = null;
+    let cellsConsumed = 0;
+    for (const cell of traversedCells) {
+      const entryRes = await this.persistentArea.resolveEntry(
+        participant,
+        cell,
+        encounterId,
+        // No save modifier injected nesta iteração — caller via API
+        // específica (cast-spell) fornece. Movement-triggered saves usam
+        // modifier=0 (DEX implícito do participant pode ser injetado em
+        // refator futuro). MVP: aceita save modifier=0.
+      );
+      tileEvents.push(...entryRes.events);
+      cellsConsumed++;
+      if (entryRes.stopMovement) {
+        stopAtCell = cell;
+        break;
+      }
+    }
+    const traversedUpToStop = traversedCells.slice(0, cellsConsumed);
+    const moveThroughRes = await this.persistentArea.resolveMoveThrough(
+      participant,
+      traversedUpToStop,
+      encounterId,
+    );
+    tileEvents.push(...moveThroughRes.events);
+
+    // Apply movement (final position = stopAtCell se Web bloqueou).
+    const finalX = stopAtCell?.x ?? targetX;
+    const finalY = stopAtCell?.y ?? targetY;
+    participant.positionX = finalX;
+    participant.positionY = finalY;
+    // Cost proporcional: se parou cedo, debita só o que foi consumido.
+    const finalCostFt = stopAtCell
+      ? this.computeMoveCost(
+          fromX, fromY, finalX, finalY, difficultCells, hasLandsStride,
+        ).costFt
+      : distanceFt;
+    participant.movementRemaining -= finalCostFt;
     await this.participantRepo.save(participant);
 
     // Spec 012 — mover auras (Spirit Guardians) junto com o caster.
     await this.persistentArea.relocateAurasByCaster(participant.id, {
-      x: targetX,
-      y: targetY,
+      x: finalX,
+      y: finalY,
     });
 
     const events: GameEventData[] = [
@@ -247,15 +296,20 @@ export class MovementService {
         data: {
           fromX,
           fromY,
-          toX: targetX,
-          toY: targetY,
+          toX: finalX,
+          toY: finalY,
+          requestedX: targetX,
+          requestedY: targetY,
           distanceCells,
-          distanceFt,
+          distanceFt: finalCostFt,
           difficultCellsCrossed,
           hasLandsStride,
           remainingMovement: participant.movementRemaining,
+          stoppedByTileEffect: stopAtCell != null,
         },
       },
+      // Spec 013 — tile-effect events (save/condition/damage/stop).
+      ...tileEvents,
     ];
     if (difficultCellsCrossed > 0) {
       events.push({
@@ -293,9 +347,9 @@ export class MovementService {
         participantId,
         fromX,
         fromY,
-        toX: targetX,
-        toY: targetY,
-        distanceFt,
+        toX: finalX,
+        toY: finalY,
+        distanceFt: finalCostFt,
         remainingMovement: participant.movementRemaining,
         opportunityAttacks,
       },
@@ -307,6 +361,10 @@ export class MovementService {
    * Spec 012 Lote B — Custo de movimento considerando difficult terrain.
    * Path Manhattan: anda primeiro X até alinhar, depois Y. Cada cell visitada
    * (exceto origem) custa 5ft normal, 10ft se difficult (a menos que hasLandsStride).
+   *
+   * Spec 013: também retorna `traversedCells` pra que movement.service possa
+   * disparar `resolveEntry` (save-on-enter) e `resolveMoveThrough` (Spike Growth
+   * damage per cell).
    */
   private computeMoveCost(
     fromX: number,
@@ -315,24 +373,31 @@ export class MovementService {
     toY: number,
     difficultCells: Set<string>,
     hasLandsStride: boolean,
-  ): { costFt: number; difficultCellsCrossed: number } {
+  ): {
+    costFt: number;
+    difficultCellsCrossed: number;
+    traversedCells: Array<{ x: number; y: number }>;
+  } {
     let cost = 0;
     let crossed = 0;
+    const traversed: Array<{ x: number; y: number }> = [];
     let cx = fromX;
     let cy = fromY;
     while (cx !== toX) {
       cx += Math.sign(toX - cx);
+      traversed.push({ x: cx, y: cy });
       const isDiff = difficultCells.has(`${cx},${cy}`);
       if (isDiff) crossed++;
       cost += isDiff && !hasLandsStride ? 10 : 5;
     }
     while (cy !== toY) {
       cy += Math.sign(toY - cy);
+      traversed.push({ x: cx, y: cy });
       const isDiff = difficultCells.has(`${cx},${cy}`);
       if (isDiff) crossed++;
       cost += isDiff && !hasLandsStride ? 10 : 5;
     }
-    return { costFt: cost, difficultCellsCrossed: crossed };
+    return { costFt: cost, difficultCellsCrossed: crossed, traversedCells: traversed };
   }
 
   /**

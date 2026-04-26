@@ -148,14 +148,60 @@ export class ConcentrationService {
           });
         }
       } else if (eff.kind === 'persistent-area') {
+        // Spec 013 — emite tile_effect_concentration_broken pra registros catalog-aware,
+        // mantém persistent_area_removed pra legacy (Princípio X: Narrator consome
+        // narrativeDescriptor; CombatAgent consome tactical metadata).
+        const area = await this.areas.findOne({ where: { id: eff.refId } });
         await this.areas.delete({ id: eff.refId });
         events.push({
-          event_type: 'persistent_area_removed',
-          data: { areaId: eff.refId, reason: 'concentration_broken' },
+          event_type: area?.effectKind
+            ? 'tile_effect_concentration_broken'
+            : 'persistent_area_removed',
+          data: {
+            areaId: eff.refId,
+            sourceSpell: area?.sourceSpell,
+            effectKind: area?.effectKind,
+            casterId: caster.id,
+            reason: 'concentration_broken',
+            narrativeDescriptor: area?.narrativeDescriptor,
+            tactical: area?.tacticalMetadata,
+          },
         });
       }
     }
     if (targets.length) await this.participants.save(targets);
+
+    // Spec 013 — cleanup órfão: tile-effects criados via createFromCatalog
+    // têm sourceConcentration=true mas NÃO entram em appliedEffects (sem DI
+    // ciclo em spell-casting). Garantia: deletamos áreas que casterParticipantId
+    // mantém via query direta (mesma source-of-truth da entity).
+    const orphanAreas = await this.areas.find({
+      where: { casterParticipantId: caster.id, sourceConcentration: true },
+    });
+    if (orphanAreas.length) {
+      for (const a of orphanAreas) {
+        // Skip se já cleanup-ed acima (kind:'persistent-area' em appliedEffects).
+        const alreadyHandled = effects.some(
+          (e) => e.kind === 'persistent-area' && e.refId === a.id,
+        );
+        if (alreadyHandled) continue;
+        events.push({
+          event_type: a.effectKind
+            ? 'tile_effect_concentration_broken'
+            : 'persistent_area_removed',
+          data: {
+            areaId: a.id,
+            sourceSpell: a.sourceSpell,
+            effectKind: a.effectKind,
+            casterId: caster.id,
+            reason: 'concentration_broken',
+            narrativeDescriptor: a.narrativeDescriptor,
+            tactical: a.tacticalMetadata,
+          },
+        });
+      }
+      await this.areas.delete(orphanAreas.map((a) => a.id));
+    }
 
     // Spec 004 — cascade-remove EffectInstances onde o caster perdeu concentracao.
     // NB: iteramos re-fetched participants, mas o proprio `caster` pode estar no
