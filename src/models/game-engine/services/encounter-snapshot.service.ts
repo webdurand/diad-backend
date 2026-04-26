@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EncounterEntity } from 'src/entities/encounter.entity';
 import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { PersistentAreaEffectEntity } from 'src/entities/persistent-area-effect.entity';
 import {
   failure,
   GameErrorCode,
@@ -12,8 +13,10 @@ import {
 import type {
   EncounterSnapshot,
   SnapshotParticipant,
+  TileEffectSnapshot,
 } from '../interfaces/encounter-snapshot.interface';
 import { CombatService } from './combat.service';
+import { PersistentAreaService } from './persistent-area.service';
 import type { TurnActionBlock } from '../interfaces/combat.interfaces';
 
 /**
@@ -30,7 +33,10 @@ export class EncounterSnapshotService {
     private readonly encounterRepo: Repository<EncounterEntity>,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
+    @InjectRepository(PersistentAreaEffectEntity)
+    private readonly areaRepo: Repository<PersistentAreaEffectEntity>,
     private readonly combatService: CombatService,
+    private readonly persistentArea: PersistentAreaService,
   ) {}
 
   async build(
@@ -112,6 +118,50 @@ export class EncounterSnapshotService {
       }),
     );
 
+    // Spec 013 — tile-effects ativos com cells expandidas + affecting participants.
+    const areas = await this.areaRepo.find({
+      where: { encounterId: encounter.id },
+    });
+    const tileEffects: TileEffectSnapshot[] = areas.map((a) => {
+      const cells: Array<{ x: number; y: number }> = [];
+      const r = a.radiusCells;
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dy = -r; dy <= r; dy++) {
+          const x = a.originCell.x + dx;
+          const y = a.originCell.y + dy;
+          if (this.persistentArea.cellInArea(x, y, a)) cells.push({ x, y });
+        }
+      }
+      const affecting = participants
+        .filter(
+          (p) =>
+            p.positionX != null &&
+            p.positionY != null &&
+            this.persistentArea.cellInArea(p.positionX, p.positionY, a),
+        )
+        .map((p) => p.id);
+      return {
+        id: a.id,
+        encounterId: a.encounterId,
+        sourceSpellSlug: a.sourceSpell,
+        sourceParticipantId: a.casterParticipantId,
+        effectKind: a.effectKind,
+        shapeKind: a.shapeKind,
+        originCell: a.originCell,
+        radiusCells: a.radiusCells,
+        durationRoundsRemaining: a.durationRoundsRemaining,
+        saveDc: a.saveDc,
+        saveAbility: a.saveAbility,
+        isDifficultTerrain: a.isDifficultTerrain,
+        speedMultiplier: a.speedMultiplier,
+        sourceConcentration: a.sourceConcentration,
+        narrativeDescriptor: a.narrativeDescriptor,
+        tactical: a.tacticalMetadata,
+        cells,
+        affectingParticipantIds: affecting,
+      };
+    });
+
     return success({
       encounterId: encounter.id,
       round: encounter.currentRound,
@@ -131,6 +181,7 @@ export class EncounterSnapshotService {
               20,
           }
         : undefined,
+      tileEffects,
       generatedAt: new Date().toISOString(),
     });
   }

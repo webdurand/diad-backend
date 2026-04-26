@@ -14,7 +14,38 @@ export interface EncounterSnapshot {
   currentTurnParticipantId: string;
   participants: SnapshotParticipant[];
   map?: EncounterMapSnapshot;
+  /** Spec 013 — efeitos de chão ativos (Grease, Wall of Fire, Spike Growth, etc.). */
+  tileEffects?: TileEffectSnapshot[];
   generatedAt: string;
+}
+
+/**
+ * Spec 013 — snapshot de tile-effect ativo.
+ *
+ * Princípio X 3 camadas: RAW (kind/triggers/saveDc), tactical (consumido por
+ * CombatAgent influence-map), narrativeDescriptor (consumido por Narrator).
+ */
+export interface TileEffectSnapshot {
+  id: string;
+  encounterId: string;
+  sourceSpellSlug: string;
+  sourceParticipantId: string | null;
+  effectKind: string | null;
+  shapeKind: 'sphere' | 'cube' | 'cylinder' | 'line' | 'cone';
+  originCell: { x: number; y: number };
+  radiusCells: number;
+  durationRoundsRemaining: number | null;
+  saveDc: number | null;
+  saveAbility: string | null;
+  isDifficultTerrain: boolean;
+  speedMultiplier: number | null;
+  sourceConcentration: boolean;
+  narrativeDescriptor: string | null;
+  /** Camada 2 (Princípio X) — tags + tacticalValue + beneficiaryFaction. */
+  tactical: unknown | null;
+  /** Cells expandidas pela geometria (frontend renderer). */
+  cells: Array<{ x: number; y: number }>;
+  affectingParticipantIds: string[];
 }
 
 export interface SnapshotParticipant {

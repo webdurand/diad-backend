@@ -81,11 +81,27 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
   },
   cleric: {
     cantrips: ['sacred-flame', 'guidance', 'light'],
-    preparedSpells: ['cure-wounds', 'bless', 'healing-word', 'guiding-bolt'],
+    // Spec 013 — adiciona 'spirit-guardians' (L3) pra ground effects via catalog.
+    preparedSpells: [
+      'cure-wounds',
+      'bless',
+      'healing-word',
+      'guiding-bolt',
+      'spirit-guardians',
+    ],
   },
   druid: {
     cantrips: ['druidcraft', 'produce-flame'],
-    preparedSpells: ['cure-wounds', 'entangle', 'healing-word', 'thunderwave'],
+    // Spec 013 — adiciona 'spike-growth' (L2), 'sleet-storm' (L3), 'wall-of-fire' (L4).
+    preparedSpells: [
+      'cure-wounds',
+      'entangle',
+      'healing-word',
+      'thunderwave',
+      'spike-growth',
+      'sleet-storm',
+      'wall-of-fire',
+    ],
   },
   fighter: {},
   monk: {},
@@ -93,7 +109,8 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
     preparedSpells: ['bless', 'cure-wounds'], // Paladin L1 tem spells só a partir de L2 mas seed não quebra
   },
   ranger: {
-    preparedSpells: ['hunters-mark', 'cure-wounds'], // idem Paladin
+    // Spec 013 — adiciona 'spike-growth' (L2 ranger) pra ground effects.
+    preparedSpells: ['hunters-mark', 'cure-wounds', 'spike-growth'],
   },
   rogue: {},
   sorcerer: {
@@ -112,6 +129,8 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
     // Spec 012 Gap 4 — cantrips incluem ray-of-frost (debuff) e minor-illusion
     // (utility). Spellbook inclui witch-bolt (concentration multi-turn) e
     // burning-hands (AoE cone), alinhado ao starter pack RAW 2024 XPHB.
+    // Spec 013 — adiciona 'grease' (L1), 'web' (L2), 'cloud-of-daggers' (L2),
+    // 'sleet-storm' (L3), 'wall-of-fire' (L4) pra ground effects via catalog.
     cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand', 'prestidigitation', 'minor-illusion', 'light'],
     spellbook: [
       'mage-armor',
@@ -122,8 +141,23 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
       'feather-fall',
       'witch-bolt',
       'burning-hands',
+      'grease',
+      'web',
+      'cloud-of-daggers',
+      'sleet-storm',
+      'wall-of-fire',
     ],
-    preparedSpells: ['mage-armor', 'magic-missile', 'shield', 'sleep'],
+    preparedSpells: [
+      'mage-armor',
+      'magic-missile',
+      'shield',
+      'sleep',
+      'grease',
+      'web',
+      'cloud-of-daggers',
+      'sleet-storm',
+      'wall-of-fire',
+    ],
   },
 };
 
