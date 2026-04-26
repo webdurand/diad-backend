@@ -10,6 +10,11 @@ import {
 } from 'typeorm';
 import { EncounterEntity } from './encounter.entity';
 import type { SaveAbility } from '../models/game-engine/interfaces/combat.interfaces';
+import type {
+  TileEffectKind,
+  TileEffectTrigger,
+  TileEffectTactical,
+} from '../models/game-engine/services/tile-effect-catalog';
 
 /**
  * Spec 004 — PersistentAreaEffect.
@@ -81,6 +86,44 @@ export class PersistentAreaEffectEntity {
   /** True se a área existe enquanto o caster mantém concentração. */
   @Column({ name: 'source_concentration', type: 'boolean', default: false })
   sourceConcentration: boolean;
+
+  // ── Spec 013 (aditivo) ──────────────────────────────────────────────────
+  // Campos novos pra ground effects. Nullable pra preservar registros legacy
+  // (Spirit Guardians criados antes da migration). Quando `effectKind` está
+  // setado, o resolver usa `triggers[]` como fonte de verdade. Quando null,
+  // mantém o caminho legado de `tickDamageFor` (top-level damage/save).
+
+  /** Discriminator do catalog. Null = registro legacy Spec 004. */
+  @Column({ name: 'effect_kind', type: 'varchar', length: 32, nullable: true })
+  effectKind: TileEffectKind | null;
+
+  /** Lista de triggers (on-cast/on-enter/on-move-through/etc.) — Strategy. */
+  @Column({ name: 'triggers', type: 'jsonb', nullable: true })
+  triggers: TileEffectTrigger[] | null;
+
+  /** Marca tile como difficult terrain (custo ×2 ou stop on fail save). */
+  @Column({ name: 'is_difficult_terrain', type: 'boolean', default: false })
+  isDifficultTerrain: boolean;
+
+  /** Speed multiplier: null=default 0.5; 0=stop on fail save (Web). */
+  @Column({ name: 'speed_multiplier', type: 'real', nullable: true })
+  speedMultiplier: number | null;
+
+  /** Princípio X camada 2 — metadata tática consumida por CombatAgent L2/L3. */
+  @Column({ name: 'tactical_metadata', type: 'jsonb', nullable: true })
+  tacticalMetadata: TileEffectTactical | null;
+
+  /** Princípio X camada 3 — prosa curta PT-BR (≤120 chars) consumida pelo Narrator. */
+  @Column({ name: 'narrative_descriptor', type: 'varchar', length: 120, nullable: true })
+  narrativeDescriptor: string | null;
+
+  /** Slot usado no cast — usado pra recalcular damage scaling em tick/passthrough. */
+  @Column({ name: 'slot_level', type: 'int', nullable: true })
+  slotLevel: number | null;
+
+  /** Spec 004 legacy → spec 013: aura segue o caster (Spirit Guardians). */
+  @Column({ name: 'aura_follows_caster', type: 'boolean', default: false })
+  auraFollowsCaster: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
