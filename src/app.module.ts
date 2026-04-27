@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TypeOrmConfig } from "./config/typeorm.config";
 import { ObservabilityModule } from "./common/observability/observability.module";
+import { EventBusModule } from "./common/event-bus/event-bus.module";
 import { AdminModule } from "./models/admin/admin.module";
 import { LibraryModule } from "./models/library/library.module";
 import { AuthModule } from "./models/auth/auth.module";
@@ -13,6 +14,7 @@ import { SessionModule } from "./models/session/session.module";
 import { AiProxyModule } from "./models/ai-proxy/ai-proxy.module";
 import { AiDmModule } from "./models/ai-dm/ai-dm.module";
 import { RealtimeModule } from "./realtime/realtime.module";
+import { EventBusHttpModule } from "./models/event-bus/event-bus.module";
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { RealtimeModule } from "./realtime/realtime.module";
     }),
     ObservabilityModule,
     TypeOrmModule.forRootAsync(TypeOrmConfig),
+    EventBusModule,
     AdminModule,
     LibraryModule,
     AuthModule,
@@ -32,6 +35,7 @@ import { RealtimeModule } from "./realtime/realtime.module";
     AiProxyModule,
     AiDmModule,
     RealtimeModule,
+    EventBusHttpModule,
   ],
   controllers: [],
   providers: [],

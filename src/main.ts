@@ -41,15 +41,26 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       exceptionFactory: (errors) => {
-        const messages = errors.flatMap((e) =>
-          Object.values(e.constraints ?? {}),
-        );
+        const fieldErrors: { path: string; message: string }[] = [];
+        const flatten = (errs: typeof errors, prefix = ""): void => {
+          for (const e of errs) {
+            const path = prefix ? `${prefix}.${e.property}` : e.property;
+            if (e.constraints) {
+              for (const message of Object.values(e.constraints)) {
+                fieldErrors.push({ path: path || "body", message });
+              }
+            }
+            if (e.children?.length) flatten(e.children, path);
+          }
+        };
+        flatten(errors);
+        const summary =
+          fieldErrors.map((f) => `${f.path}: ${f.message}`).join("; ") ||
+          "Payload inválido.";
         return new ValidationException(
           ErrorCode.VALIDATION_INVALID_PAYLOAD,
-          messages.join("; ") || "Payload inválido.",
-          {
-            errors: messages.map((m) => ({ path: "body", message: m })),
-          },
+          summary,
+          { errors: fieldErrors },
         );
       },
     }),

@@ -10,8 +10,9 @@ import {
 } from "../errors/error-codes.metadata";
 
 describe("Error Codes Catalog", () => {
-  it("contém os 27 codes do catálogo canônico", () => {
-    expect(ALL_ERROR_CODES.length).toBe(27);
+  it("contém os 29 codes do catálogo canônico", () => {
+    // Spec 017 adicionou EVENT_TYPE_NOT_REGISTERED + TRACE_ID_INVALID.
+    expect(ALL_ERROR_CODES.length).toBe(29);
   });
 
   it("todos os codes seguem o regex SCREAMING_SNAKE", () => {

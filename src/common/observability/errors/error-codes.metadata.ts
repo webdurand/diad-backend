@@ -192,6 +192,22 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Erro desconhecido.",
     domain: "system",
   },
+
+  // event bus (spec 017)
+  [ErrorCode.EVENT_TYPE_NOT_REGISTERED]: {
+    httpStatus: 422,
+    defaultTitle: "Event type not registered",
+    defaultHint:
+      "Adicione este eventType ao catálogo (event-categories.json) antes de emitir.",
+    domain: "event-bus",
+  },
+  [ErrorCode.TRACE_ID_INVALID]: {
+    httpStatus: 400,
+    defaultTitle: "Trace id invalid",
+    defaultHint:
+      "O header traceparent precisa seguir o formato W3C 00-{32hex}-{16hex}-{2hex}.",
+    domain: "event-bus",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {

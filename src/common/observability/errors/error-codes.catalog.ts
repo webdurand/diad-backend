@@ -49,6 +49,10 @@ export const ErrorCode = {
   SYSTEM_UNAVAILABLE: "SYSTEM_UNAVAILABLE",
   SYSTEM_RATE_LIMITED: "SYSTEM_RATE_LIMITED",
   UNKNOWN_ERROR: "UNKNOWN_ERROR",
+
+  // event bus (spec 017)
+  EVENT_TYPE_NOT_REGISTERED: "EVENT_TYPE_NOT_REGISTERED",
+  TRACE_ID_INVALID: "TRACE_ID_INVALID",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

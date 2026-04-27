@@ -1,0 +1,95 @@
+import type { EventCategory, EventEnvelope } from "./event-envelope.types";
+
+/**
+ * Spec 017 — Interface de listener cross-domain.
+ *
+ * Cada listener declara nome único (idempotência por listener_name + event_id),
+ * categorias que assina, e implementa `handle(envelope)` async. Bus chama
+ * `handle` com try/catch — falha NÃO rollback do publish (best-effort).
+ *
+ * Listeners DEVEM ser idempotentes — usar `event_listener_processed` table
+ * via guard antes de side-effect (ADR-017 prática 4).
+ */
+export interface EventListener {
+  readonly name: string;
+  readonly categories: readonly EventCategory[];
+  handle(envelope: EventEnvelope): Promise<void>;
+}
+
+/**
+ * Catálogo formal de eventTypes por categoria — espelha
+ * specs/017-world-encounter-bridge/contracts/event-categories.json.
+ *
+ * Manter sincronizado é responsabilidade do reviewer; PR a ambos arquivos
+ * cresce o catálogo. Bus rejeita publish() com type fora desta lista
+ * (EVENT_TYPE_NOT_REGISTERED).
+ */
+export const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
+  EncounterEvent: new Set([
+    "damage_applied",
+    "condition_added",
+    "condition_removed",
+    "participant_died",
+    "spell_cast",
+    "attack_resolved",
+    "concentration_broken",
+    "tile_effect_triggered",
+    "encounter_started",
+    "encounter_ended",
+    "encounter_started_from_narrative",
+    "morale_check_failed",
+    "dying_state_changed",
+    "event_bus_overflow",
+  ]),
+  WorldEvent: new Set([
+    "weather_changed",
+    "chaos_factor_changed",
+    "time_advanced",
+    "period_changed",
+    "location_revealed",
+    "location_visited",
+    "lighting_changed",
+    "terrain_modified",
+    "audience_map_changed",
+    "event_bus_listener_failed",
+  ]),
+  NarrativeEvent: new Set([
+    "dialog_chosen",
+    "lore_revealed",
+    "quest_objective_completed",
+    "persona_invoked",
+    "narrative_decision_made",
+    "voice_drift_detected",
+    "tool_intent_rejected",
+    "npc_moved",
+    "npc_created",
+    "revivify_eligibility_checked",
+    "event_bus_listener_registered",
+  ]),
+  SocialEvent: new Set([
+    "companion_approval_changed",
+    "companion_approval_threshold_crossed",
+    "companion_recruited",
+    "companion_dismissed",
+    "companion_spoke",
+    "companion_disagreement",
+    "companion_relationship_phase_changed",
+    "companion_romance_milestone",
+    "disposition_changed",
+    "reputation_shift",
+    "companion_dialogue_unlocked",
+    "bond_formed",
+    "bond_broken",
+    "item_lost",
+    "currency_changed",
+    "loot_rolled",
+  ]),
+};
+
+export function isEventTypeRegistered(
+  category: EventCategory,
+  eventType: string,
+): boolean {
+  const set = EVENT_TYPE_CATALOG[category];
+  return set ? set.has(eventType) : false;
+}

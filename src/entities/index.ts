@@ -92,6 +92,11 @@ import { RestSessionEntity } from "./rest-session.entity";
 import { RestEventTemplateEntity } from "./rest-event-template.entity";
 import { ReactionDefaultEntity } from "./reaction-default.entity";
 import { XpAwardEventEntity } from "./xp-award-event.entity";
+// Spec 017 — World–Encounter–Narrative Bridge Foundation
+import { AudienceRoutingEntity } from "./audience-routing.entity";
+import { CampaignAudienceOverrideEntity } from "./campaign-audience-override.entity";
+import { EventSubscriberEntity } from "./event-subscriber.entity";
+import { EventListenerProcessedEntity } from "./event-listener-processed.entity";
 
 export {
   AbilityScoreEntity,
@@ -187,6 +192,10 @@ export {
   RestEventTemplateEntity,
   ReactionDefaultEntity,
   XpAwardEventEntity,
+  AudienceRoutingEntity,
+  CampaignAudienceOverrideEntity,
+  EventSubscriberEntity,
+  EventListenerProcessedEntity,
 };
 
 export const ENTITIES = [
@@ -283,6 +292,10 @@ export const ENTITIES = [
   RestEventTemplateEntity,
   ReactionDefaultEntity,
   XpAwardEventEntity,
+  AudienceRoutingEntity,
+  CampaignAudienceOverrideEntity,
+  EventSubscriberEntity,
+  EventListenerProcessedEntity,
 ];
 
 export * from "./enums";

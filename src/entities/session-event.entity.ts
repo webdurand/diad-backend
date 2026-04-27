@@ -56,4 +56,55 @@ export class SessionEventEntity {
 
   @Column({ name: "created_at", type: "timestamptz", default: () => "now()" })
   createdAt: Date;
+
+  // ========== Spec 017 — Event Bus Foundation ==========
+  // Colunas adicionadas pela migration 1782000000000-CreateEventBusFoundation.
+  // Convivem com o caminho legado (eventType / details / summary) por 1 sprint.
+
+  @Column({
+    name: "event_category",
+    type: "varchar",
+    length: 20,
+    nullable: true,
+  })
+  eventCategory?:
+    | "EncounterEvent"
+    | "WorldEvent"
+    | "NarrativeEvent"
+    | "SocialEvent"
+    | null;
+
+  @Column({ name: "event_payload", type: "jsonb", default: () => "'{}'::jsonb" })
+  eventPayload: Record<string, unknown>;
+
+  @Column({
+    name: "audiences",
+    type: "text",
+    array: true,
+    default: () => "'{}'::text[]",
+  })
+  audiences: string[];
+
+  @Column({ name: "trace_id", type: "varchar", length: 32, nullable: true })
+  traceId?: string | null;
+
+  @Column({ name: "span_id", type: "varchar", length: 16, nullable: true })
+  spanId?: string | null;
+
+  @Column({
+    name: "narrative_descriptor",
+    type: "varchar",
+    length: 120,
+    nullable: true,
+  })
+  narrativeDescriptor?: string | null;
+
+  @Column({ name: "metadata", type: "jsonb", default: () => "'{}'::jsonb" })
+  metadata: Record<string, unknown>;
+
+  @Column({ name: "version", type: "int", default: 1 })
+  version: number;
+
+  @Column({ name: "aggregate_id", type: "uuid", nullable: true })
+  aggregateId?: string | null;
 }
