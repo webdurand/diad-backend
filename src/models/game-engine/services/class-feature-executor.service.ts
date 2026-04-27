@@ -1,26 +1,26 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { CharacterStateService } from 'src/models/characters/services/character-state.service';
-import { EncounterService } from './encounter.service';
-import { EventService } from './event.service';
-import { DiceService } from './dice.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import { EncounterService } from "./encounter.service";
+import { EventService } from "./event.service";
+import { DiceService } from "./dice.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 import {
   CLASS_FEATURE_CATALOG,
   matchesClass,
   type FeatureSpec,
-} from './action-resolvers/class-feature-catalog';
-import { GenericActionsService } from './generic-actions.service';
-import { ClassFeatureResolverService } from './class-feature-resolver.service';
+} from "./action-resolvers/class-feature-catalog";
+import { GenericActionsService } from "./generic-actions.service";
+import { ClassFeatureResolverService } from "./class-feature-resolver.service";
 
 /**
  * Spec 003 Fatia 7/8 — executor de class features ativáveis.
@@ -64,28 +64,25 @@ export class ClassFeatureExecutorService {
     if (!spec) {
       return failure(
         `Feature '${featureSlug}' nao esta catalogada.`,
-        'FEATURE_NOT_AVAILABLE',
+        "FEATURE_NOT_AVAILABLE",
       );
     }
 
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter || encounter.status !== 'active') {
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
     }
 
     const participant = await this.encounterService
       .getParticipant(participantId)
       .catch(() => null);
     if (!participant) {
-      return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+      return failure("Participante nao encontrado.", "PARTICIPANT_NOT_FOUND");
     }
-    if (participant.type !== 'pc' || !participant.characterId) {
-      return failure(
-        'Feature ativavel apenas para PC.',
-        'INVALID_PARTICIPANT',
-      );
+    if (participant.type !== "pc" || !participant.characterId) {
+      return failure("Feature ativavel apenas para PC.", "INVALID_PARTICIPANT");
     }
 
     const pcOwnerId = await this.resolveOwner(participant, ownerUserId);
@@ -102,35 +99,32 @@ export class ClassFeatureExecutorService {
     if (!matches) {
       return failure(
         `Feature '${featureSlug}' exige classe ${spec.classSlug}.`,
-        'WRONG_CLASS',
+        "WRONG_CLASS",
       );
     }
     if (classLevel < spec.requiredLevel) {
       return failure(
         `Feature '${featureSlug}' exige nivel ${spec.requiredLevel} (atual ${classLevel}).`,
-        'BELOW_REQUIRED_LEVEL',
+        "BELOW_REQUIRED_LEVEL",
       );
     }
 
     // Action economy: turno + custo disponível.
-    if (spec.actionCost === 'reaction') {
+    if (spec.actionCost === "reaction") {
       if (participant.reactionsUsed > 0) {
-        return failure('Reacao ja utilizada.', 'REACTION_ALREADY_USED');
+        return failure("Reacao ja utilizada.", "REACTION_ALREADY_USED");
       }
     } else {
       const isOnTurn =
         encounter.turnOrder[encounter.currentTurnIndex] === participant.id;
       if (!isOnTurn) {
-        return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+        return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
       }
-      if (spec.actionCost === 'action' && participant.actionUsed) {
-        return failure('Acao ja utilizada.', 'ACTION_ALREADY_USED');
+      if (spec.actionCost === "action" && participant.actionUsed) {
+        return failure("Acao ja utilizada.", "ACTION_ALREADY_USED");
       }
-      if (spec.actionCost === 'bonus' && participant.bonusActionUsed) {
-        return failure(
-          'Acao bonus ja utilizada.',
-          'BONUS_ACTION_ALREADY_USED',
-        );
+      if (spec.actionCost === "bonus" && participant.bonusActionUsed) {
+        return failure("Acao bonus ja utilizada.", "BONUS_ACTION_ALREADY_USED");
       }
     }
 
@@ -154,37 +148,39 @@ export class ClassFeatureExecutorService {
 
     // Spec 015 — overrides de maxUses que dependem de ability score (não vivem
     // no catalog, porque o catalog só recebe classLevel). Curado por slug.
-    if (usesKey === 'bardic-inspiration') {
+    if (usesKey === "bardic-inspiration") {
       // RAW: CHA modifier (min 1) uses. L1-4 LR, L5+ SR (Font of Inspiration).
       const chaMod =
-        sheet.abilityScores.find((a: { slug: string; modifier: number }) => a.slug === 'cha')?.modifier ?? 0;
+        sheet.abilityScores.find(
+          (a: { slug: string; modifier: number }) => a.slug === "cha",
+        )?.modifier ?? 0;
       maxUses = Math.max(1, chaMod);
     }
 
     // Pool-based (lay-on-hands): validação feita no handler FULL.
-    if (spec.slug !== 'lay-on-hands' && used >= maxUses) {
+    if (spec.slug !== "lay-on-hands" && used >= maxUses) {
       return failure(
         `Sem usos restantes de '${usesKey}' (${used}/${maxUses}).`,
-        'NO_USES_REMAINING',
+        "NO_USES_REMAINING",
       );
     }
 
     // Dispatch — FULL resolution ou STUB emission.
     switch (spec.slug) {
-      case 'second-wind':
+      case "second-wind":
         return this.handleSecondWind(
           participant,
           classLevel,
           encounter,
           pcOwnerId,
         );
-      case 'action-surge':
+      case "action-surge":
         return this.handleActionSurge(participant, encounter);
-      case 'indomitable':
+      case "indomitable":
         return this.handleIndomitable(participant, classLevel, encounter);
-      case 'reckless-attack':
+      case "reckless-attack":
         return this.handleRecklessAttack(participant, encounter);
-      case 'lay-on-hands':
+      case "lay-on-hands":
         return this.handleLayOnHands(
           participant,
           body,
@@ -192,7 +188,7 @@ export class ClassFeatureExecutorService {
           encounter,
           ownerUserId,
         );
-      case 'cunning-action':
+      case "cunning-action":
         return this.handleCunningAction(
           participant,
           body,
@@ -201,13 +197,7 @@ export class ClassFeatureExecutorService {
         );
       default:
         // STUB: emite evento e consome custo.
-        return this.handleStub(
-          spec,
-          participant,
-          body,
-          sheet,
-          encounter,
-        );
+        return this.handleStub(spec, participant, body, sheet, encounter);
     }
   }
 
@@ -220,7 +210,7 @@ export class ClassFeatureExecutorService {
     pcOwnerId: string,
   ): Promise<GameResult<unknown>> {
     // RAW: heal = 1d10 + fighterLevel.
-    const roll = this.diceService.rollExpression('1d10');
+    const roll = this.diceService.rollExpression("1d10");
     const healAmount = roll.total + fighterLevel;
     const prevHp = participant.currentHp ?? 0;
 
@@ -242,13 +232,20 @@ export class ClassFeatureExecutorService {
         pcOwnerId,
         participant.characterId!,
       );
-      const hasShift = ((sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [])
+      const hasShift = (
+        (
+          sheet as unknown as {
+            features?: Array<{ slug: string; active?: boolean }>;
+          }
+        ).features ?? []
+      )
         .filter((f) => f.active !== false)
-        .some((f) => f.slug.startsWith('tactical-shift'));
+        .some((f) => f.slug.startsWith("tactical-shift"));
       if (hasShift) {
         tacticalShiftMoveFt = Math.floor((sheet.speed ?? 30) / 2);
         // Some um bônus de movement pro turno atual (não persistente fora do turno).
-        participant.movementRemaining = (participant.movementRemaining ?? 0) + tacticalShiftMoveFt;
+        participant.movementRemaining =
+          (participant.movementRemaining ?? 0) + tacticalShiftMoveFt;
       }
     }
 
@@ -260,15 +257,15 @@ export class ClassFeatureExecutorService {
 
     await this.stateService.incrementFeatureUses(
       participant.characterId!,
-      'second-wind',
+      "second-wind",
       1,
     );
 
     const event: GameEventData = {
-      event_type: 'class_feature_used',
+      event_type: "class_feature_used",
       actor_participant_id: participant.id,
       data: {
-        featureSlug: 'second-wind',
+        featureSlug: "second-wind",
         healRoll: roll,
         healAmount,
         hpBefore: prevHp,
@@ -276,15 +273,11 @@ export class ClassFeatureExecutorService {
         tacticalShiftMoveFt,
       },
     };
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounter.id,
-      [event],
-    );
+    await this.eventService.emit(encounter.sessionId, encounter.id, [event]);
 
     return success(
       {
-        featureSlug: 'second-wind',
+        featureSlug: "second-wind",
         healRoll: roll,
         healAmount,
         hpBefore: prevHp,
@@ -306,28 +299,24 @@ export class ClassFeatureExecutorService {
 
     await this.stateService.incrementFeatureUses(
       participant.characterId!,
-      'action-surge',
+      "action-surge",
       1,
     );
 
     const event: GameEventData = {
-      event_type: 'class_feature_used',
+      event_type: "class_feature_used",
       actor_participant_id: participant.id,
       data: {
-        featureSlug: 'action-surge',
+        featureSlug: "action-surge",
         actionReset: true,
         attacksReset: participant.attacksMaxThisTurn,
       },
     };
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounter.id,
-      [event],
-    );
+    await this.eventService.emit(encounter.sessionId, encounter.id, [event]);
 
     return success(
       {
-        featureSlug: 'action-surge',
+        featureSlug: "action-surge",
         actionReset: true,
         attacksAvailableAgain: participant.attacksMaxThisTurn,
       },
@@ -352,15 +341,15 @@ export class ClassFeatureExecutorService {
 
     await this.stateService.incrementFeatureUses(
       participant.characterId!,
-      'indomitable',
+      "indomitable",
       1,
     );
 
     const event: GameEventData = {
-      event_type: 'class_feature_used',
+      event_type: "class_feature_used",
       actor_participant_id: participant.id,
       data: {
-        featureSlug: 'indomitable',
+        featureSlug: "indomitable",
         armed: true,
         fighterLevelBonus: fighterLevel,
       },
@@ -369,7 +358,7 @@ export class ClassFeatureExecutorService {
 
     return success(
       {
-        featureSlug: 'indomitable',
+        featureSlug: "indomitable",
         armed: true,
         fighterLevelBonus: fighterLevel,
       },
@@ -385,21 +374,17 @@ export class ClassFeatureExecutorService {
     await this.participantRepo.save(participant);
 
     const event: GameEventData = {
-      event_type: 'class_feature_used',
+      event_type: "class_feature_used",
       actor_participant_id: participant.id,
       data: {
-        featureSlug: 'reckless-attack',
+        featureSlug: "reckless-attack",
         recklessAttackActive: true,
       },
     };
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounter.id,
-      [event],
-    );
+    await this.eventService.emit(encounter.sessionId, encounter.id, [event]);
 
     return success(
-      { featureSlug: 'reckless-attack', recklessAttackActive: true },
+      { featureSlug: "reckless-attack", recklessAttackActive: true },
       [event],
     );
   }
@@ -416,18 +401,18 @@ export class ClassFeatureExecutorService {
     if (!targetId || !Number.isFinite(hpAmount) || hpAmount < 1) {
       return failure(
         "Lay on Hands exige 'targetParticipantId' e 'hpAmount' >= 1.",
-        'INVALID_PAYLOAD',
+        "INVALID_PAYLOAD",
       );
     }
     const poolMax = paladinLevel * 5;
     const featureUses = await this.stateService.getFeatureUsesUsed(
       paladin.characterId!,
     );
-    const used = featureUses['lay-on-hands'] ?? 0;
+    const used = featureUses["lay-on-hands"] ?? 0;
     if (used + hpAmount > poolMax) {
       return failure(
         `Pool insuficiente: ${poolMax - used}/${poolMax} restantes.`,
-        'LAY_ON_HANDS_INSUFFICIENT_POOL',
+        "LAY_ON_HANDS_INSUFFICIENT_POOL",
       );
     }
 
@@ -435,7 +420,7 @@ export class ClassFeatureExecutorService {
       .getParticipant(targetId)
       .catch(() => null);
     if (!target) {
-      return failure('Alvo nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+      return failure("Alvo nao encontrado.", "PARTICIPANT_NOT_FOUND");
     }
 
     const prevHp = target.currentHp ?? 0;
@@ -449,16 +434,16 @@ export class ClassFeatureExecutorService {
 
     await this.stateService.incrementFeatureUses(
       paladin.characterId!,
-      'lay-on-hands',
+      "lay-on-hands",
       hpAmount,
     );
 
     const event: GameEventData = {
-      event_type: 'class_feature_used',
+      event_type: "class_feature_used",
       actor_participant_id: paladin.id,
       target_participant_id: targetId,
       data: {
-        featureSlug: 'lay-on-hands',
+        featureSlug: "lay-on-hands",
         hpApplied: hpAmount,
         hpBefore: prevHp,
         hpAfter: newHp,
@@ -469,7 +454,7 @@ export class ClassFeatureExecutorService {
 
     return success(
       {
-        featureSlug: 'lay-on-hands',
+        featureSlug: "lay-on-hands",
         target: targetId,
         hpApplied: hpAmount,
         hpBefore: prevHp,
@@ -487,20 +472,14 @@ export class ClassFeatureExecutorService {
     ownerUserId: string,
   ): Promise<GameResult<unknown>> {
     const subAction = body.subAction as string | undefined;
-    if (
-      !subAction ||
-      !['dash', 'disengage', 'hide'].includes(subAction)
-    ) {
+    if (!subAction || !["dash", "disengage", "hide"].includes(subAction)) {
       return failure(
         "Cunning Action exige subAction='dash'|'disengage'|'hide'.",
-        'ACTION_SUBOPTION_REQUIRED',
+        "ACTION_SUBOPTION_REQUIRED",
       );
     }
     if (rogue.bonusActionUsed) {
-      return failure(
-        'Acao bonus ja utilizada.',
-        'BONUS_ACTION_ALREADY_USED',
-      );
+      return failure("Acao bonus ja utilizada.", "BONUS_ACTION_ALREADY_USED");
     }
 
     // Delega o sub-kind ao GenericActionsService, mas marca bonusActionUsed
@@ -530,7 +509,7 @@ export class ClassFeatureExecutorService {
 
     return success(
       {
-        featureSlug: 'cunning-action',
+        featureSlug: "cunning-action",
         subAction,
         innerResult: result.value,
       },
@@ -544,15 +523,15 @@ export class ClassFeatureExecutorService {
     spec: FeatureSpec,
     participant: EncounterParticipantEntity,
     body: Record<string, unknown>,
-    sheet: Awaited<ReturnType<CharacterSheetService['computeSheet']>>,
+    sheet: Awaited<ReturnType<CharacterSheetService["computeSheet"]>>,
     encounter: EncounterEntity,
   ): Promise<GameResult<unknown>> {
     // Consome action economy.
-    if (spec.actionCost === 'reaction') {
+    if (spec.actionCost === "reaction") {
       participant.reactionsUsed = participant.reactionsUsed + 1;
-    } else if (spec.actionCost === 'action') {
+    } else if (spec.actionCost === "action") {
       participant.actionUsed = true;
-    } else if (spec.actionCost === 'bonus') {
+    } else if (spec.actionCost === "bonus") {
       participant.bonusActionUsed = true;
     }
     await this.participantRepo.save(participant);
@@ -584,17 +563,18 @@ export class ClassFeatureExecutorService {
     );
 
     // Save DC = 8 + profBonus + primary-casting-ability mod (heurística por classe).
-    const primaryMod = this.primaryAbilityModForClass(spec.classSlug, abilityMods);
+    const primaryMod = this.primaryAbilityModForClass(
+      spec.classSlug,
+      abilityMods,
+    );
     const saveDc = 8 + (sheet.proficiencyBonus ?? 2) + primaryMod;
 
     const targets =
       (body.targets as string[] | undefined) ??
-      (body.targetParticipantId
-        ? [body.targetParticipantId as string]
-        : []);
+      (body.targetParticipantId ? [body.targetParticipantId as string] : []);
 
     const event: GameEventData = {
-      event_type: 'class_feature_invoked',
+      event_type: "class_feature_invoked",
       actor_participant_id: participant.id,
       data: {
         featureSlug: spec.slug,
@@ -608,7 +588,7 @@ export class ClassFeatureExecutorService {
           profBonus: sheet.proficiencyBonus ?? 2,
           classSlug: spec.classSlug,
         },
-        status: 'emitted_pending_resolution',
+        status: "emitted_pending_resolution",
       },
     };
     await this.eventService.emit(encounter.sessionId, encounter.id, [event]);
@@ -646,9 +626,7 @@ export class ClassFeatureExecutorService {
         deferred: !resolution.resolved,
         resolved: resolution.resolved,
         saveDc,
-        status: resolution.resolved
-          ? 'resolved'
-          : 'emitted_pending_resolution',
+        status: resolution.resolved ? "resolved" : "emitted_pending_resolution",
         resolutionPayload: resolution.resolutionPayload,
       },
       [event, ...resolution.events],
@@ -658,8 +636,10 @@ export class ClassFeatureExecutorService {
   /** Extrai classLevel para a classe owner da feature (ex: barbarian 3). */
   private getClassLevel(sheet: any, classSlug?: string): number {
     if (!classSlug || !sheet?.classes) return 1;
-    const cls = sheet.classes.find(
-      (c: any) => (c.slug ?? c.name ?? '').toLowerCase().startsWith(classSlug.toLowerCase()),
+    const cls = sheet.classes.find((c: any) =>
+      (c.slug ?? c.name ?? "")
+        .toLowerCase()
+        .startsWith(classSlug.toLowerCase()),
     );
     return cls?.level ?? 1;
   }
@@ -679,7 +659,9 @@ export class ClassFeatureExecutorService {
     return ownerUserId;
   }
 
-  private extractOptions(body: Record<string, unknown>): Record<string, unknown> {
+  private extractOptions(
+    body: Record<string, unknown>,
+  ): Record<string, unknown> {
     // Clone sem chaves estruturais (participantId, kind).
     const { participantId, kind, ownerUserId, ...rest } = body as any;
     return rest;
@@ -690,29 +672,29 @@ export class ClassFeatureExecutorService {
     mods: Record<string, number>,
   ): number {
     const map: Record<string, string> = {
-      cleric: 'wis',
-      druid: 'wis',
-      ranger: 'wis',
-      bard: 'cha',
-      paladin: 'cha',
-      sorcerer: 'cha',
-      warlock: 'cha',
-      wizard: 'int',
-      rogue: 'dex',
-      fighter: 'str',
-      barbarian: 'str',
-      monk: 'dex',
+      cleric: "wis",
+      druid: "wis",
+      ranger: "wis",
+      bard: "cha",
+      paladin: "cha",
+      sorcerer: "cha",
+      warlock: "cha",
+      wizard: "int",
+      rogue: "dex",
+      fighter: "str",
+      barbarian: "str",
+      monk: "dex",
     };
-    const ability = map[classSlug] ?? 'str';
+    const ability = map[classSlug] ?? "str";
     return mods[ability] ?? 0;
   }
 
   private saveAbilityForFeature(slug: string): string | undefined {
     const map: Record<string, string> = {
-      'channel-divinity': 'wis', // Turn Undead default
-      'wild-shape': 'wis',
-      'bardic-inspiration': undefined as unknown as string,
-      'cunning-strike': 'con',
+      "channel-divinity": "wis", // Turn Undead default
+      "wild-shape": "wis",
+      "bardic-inspiration": undefined as unknown as string,
+      "cunning-strike": "con",
     };
     return map[slug];
   }

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — Narrator voice presets + SPR (System Prompt Repetition).
@@ -11,7 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * e emotional_triggers pra keying em beats narrativos específicos.
  */
 export class CreateVoiceProfile1778070000000 implements MigrationInterface {
-  name = 'CreateVoiceProfile1778070000000';
+  name = "CreateVoiceProfile1778070000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

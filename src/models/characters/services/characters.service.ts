@@ -1,6 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, IsNull, Repository } from 'typeorm';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { DataSource, IsNull, Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -25,14 +29,14 @@ import {
   AlignmentEntity,
   LevelEntity,
   CompSourceEntity,
-} from 'src/entities';
+} from "src/entities";
 import {
   CharacterProficiencySourceEnum,
   EquipmentSourceEnum,
   SpellSourceEnum,
   SpellStatusEnum,
-} from 'src/entities/enums';
-import { getAbilityModifier } from 'src/shared/srd-utils';
+} from "src/entities/enums";
+import { getAbilityModifier } from "src/shared/srd-utils";
 
 interface CharacterChoicesData {
   sourceCode?: string;
@@ -88,23 +92,23 @@ interface UpdateCharacterInput {
   name?: string;
 }
 
-const ABILITY_SLUGS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
+const ABILITY_SLUGS = ["str", "dex", "con", "int", "wis", "cha"] as const;
 type AbilitySlug = (typeof ABILITY_SLUGS)[number];
 
 // Aceita tanto slugs longos (strength/dexterity/...) quanto curtos (str/dex/...).
 const SLUG_MAP: Record<string, AbilitySlug> = {
-  strength: 'str',
-  dexterity: 'dex',
-  constitution: 'con',
-  intelligence: 'int',
-  wisdom: 'wis',
-  charisma: 'cha',
-  str: 'str',
-  dex: 'dex',
-  con: 'con',
-  int: 'int',
-  wis: 'wis',
-  cha: 'cha',
+  strength: "str",
+  dexterity: "dex",
+  constitution: "con",
+  intelligence: "int",
+  wisdom: "wis",
+  charisma: "cha",
+  str: "str",
+  dex: "dex",
+  con: "con",
+  int: "int",
+  wis: "wis",
+  cha: "cha",
 };
 
 function extractEquipmentOptionLabels(
@@ -126,11 +130,11 @@ function extractEquipmentOptionLabels(
   }
   return candidates
     .map((c) => {
-      if (typeof c === 'string') return c;
-      if (c && typeof c === 'object') {
+      if (typeof c === "string") return c;
+      if (c && typeof c === "object") {
         const obj = c as { label?: unknown; name?: unknown };
-        if (typeof obj.label === 'string') return obj.label;
-        if (typeof obj.name === 'string') return obj.name;
+        if (typeof obj.label === "string") return obj.label;
+        if (typeof obj.name === "string") return obj.name;
       }
       return null;
     })
@@ -148,7 +152,7 @@ function hasStartingEquipmentOptions(
   const defaultData = (raw as { defaultData?: unknown }).defaultData;
   if (Array.isArray(defaultData)) {
     for (const group of defaultData) {
-      if (group && typeof group === 'object' && !Array.isArray(group)) {
+      if (group && typeof group === "object" && !Array.isArray(group)) {
         const choiceKeys = Object.keys(group).filter((k) =>
           /^[A-Za-z]$/.test(k),
         );
@@ -161,8 +165,8 @@ function hasStartingEquipmentOptions(
   if (!Array.isArray(raw) && Object.keys(raw).length > 0) {
     const choiceKeys = Object.keys(raw).filter((k) => /^[A-Za-z]$/.test(k));
     for (const k of choiceKeys) {
-      const v = (raw as Record<string, unknown>)[k];
-      if (v && (Array.isArray(v) || typeof v === 'object')) return true;
+      const v = raw[k];
+      if (v && (Array.isArray(v) || typeof v === "object")) return true;
     }
   }
   return false;
@@ -184,22 +188,22 @@ function validateEquipmentChoices(
 // ─── Spec 008: XPHB letter-based equipment packages ───
 
 const IGNORED_OPTION_KEYS = new Set([
-  'additionalFromBackground',
-  'goldAlternative',
-  'default',
-  'defaultData',
+  "additionalFromBackground",
+  "goldAlternative",
+  "default",
+  "defaultData",
 ]);
 
 type LetterGroup = { letters: string[]; items: Record<string, unknown[]> };
 type LetterOptions =
-  | { type: 'letters'; groups: LetterGroup[] }
-  | { type: 'labels'; labels: string[] }
-  | { type: 'none' };
+  | { type: "letters"; groups: LetterGroup[] }
+  | { type: "labels"; labels: string[] }
+  | { type: "none" };
 
 function extractLetterOptions(
   raw: Record<string, unknown> | null | undefined,
 ): LetterOptions {
-  if (!raw) return { type: 'none' };
+  if (!raw) return { type: "none" };
 
   // Shape XPHB classe: { defaultData: [{ A: [...], B: [...] }, ...] }
   // PHB 2014 classes use lowercase { a: [...], b: [...] } — normalize to uppercase.
@@ -207,7 +211,7 @@ function extractLetterOptions(
   if (Array.isArray(defaultData) && defaultData.length > 0) {
     const groups: LetterGroup[] = [];
     for (const group of defaultData) {
-      if (group && typeof group === 'object' && !Array.isArray(group)) {
+      if (group && typeof group === "object" && !Array.isArray(group)) {
         const letters = Object.keys(group).filter((k) => /^[A-Za-z]$/.test(k));
         if (letters.length > 0) {
           const items: Record<string, unknown[]> = {};
@@ -221,7 +225,7 @@ function extractLetterOptions(
         }
       }
     }
-    if (groups.length > 0) return { type: 'letters', groups };
+    if (groups.length > 0) return { type: "letters", groups };
   }
 
   // Shape XPHB background: top-level keys são letras { A: [...], B: [...] }
@@ -235,7 +239,7 @@ function extractLetterOptions(
         : [];
     }
     return {
-      type: 'letters',
+      type: "letters",
       groups: [
         { letters: letterKeys.map((k) => k.toUpperCase()).sort(), items },
       ],
@@ -244,9 +248,9 @@ function extractLetterOptions(
 
   // Fallback: labels textuais
   const labels = extractEquipmentOptionLabels(raw);
-  if (labels.length > 0) return { type: 'labels', labels };
+  if (labels.length > 0) return { type: "labels", labels };
 
-  return { type: 'none' };
+  return { type: "none" };
 }
 
 function isLetterChoice(s: string): boolean {
@@ -259,7 +263,7 @@ function validateLetterChoicesOrThrow(
   errorCode: string,
   slug: string,
 ): void {
-  if (optionInfo.type !== 'letters') return;
+  if (optionInfo.type !== "letters") return;
   const { groups } = optionInfo;
 
   if (!providedChoices || providedChoices.length === 0) return;
@@ -271,8 +275,8 @@ function validateLetterChoicesOrThrow(
   // Verificar contagem: uma letra por grupo
   if (letters.length !== groups.length) {
     const missingCode = errorCode
-      .replace('INVALID_', 'MISSING_')
-      .replace(/_CHOICE$/, '_CHOICES');
+      .replace("INVALID_", "MISSING_")
+      .replace(/_CHOICE$/, "_CHOICES");
     throw new BadRequestException({
       ok: false,
       code: missingCode,
@@ -307,7 +311,7 @@ function resolveLetterPackageItems(
 ): ResolvedItem[] {
   if (!raw || letters.length === 0) return [];
   const optionInfo = extractLetterOptions(raw);
-  if (optionInfo.type !== 'letters') return [];
+  if (optionInfo.type !== "letters") return [];
 
   const results: ResolvedItem[] = [];
   const { groups } = optionInfo;
@@ -324,70 +328,76 @@ function resolveLetterPackageItems(
 
 function expandItems(items: unknown[], results: ResolvedItem[]): void {
   for (const item of items) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== "object") continue;
     const obj = item as Record<string, unknown>;
 
     // SRD class shape: { option_type: 'counted_reference', count, of: { index, name } }
-    if (obj.option_type === 'counted_reference' && obj.of) {
+    if (obj.option_type === "counted_reference" && obj.of) {
       const of = obj.of as { index?: string; name?: string };
       if (of.index || of.name) {
         results.push({
           slug: String(of.index ?? of.name).toLowerCase(),
           name: String(of.name ?? of.index),
-          quantity: typeof obj.count === 'number' ? obj.count : 1,
+          quantity: typeof obj.count === "number" ? obj.count : 1,
         });
       }
       continue;
     }
 
     // SRD class shape: { option_type: 'money', count, unit }
-    if (obj.option_type === 'money' && typeof obj.count === 'number') {
+    if (obj.option_type === "money" && typeof obj.count === "number") {
       results.push({
         gold: obj.count,
-        unit: typeof obj.unit === 'string' ? obj.unit : 'gp',
+        unit: typeof obj.unit === "string" ? obj.unit : "gp",
       });
       continue;
     }
 
     // SRD class shape: { option_type: 'multiple', items: [...] }
-    if (obj.option_type === 'multiple' && Array.isArray(obj.items)) {
+    if (obj.option_type === "multiple" && Array.isArray(obj.items)) {
       expandItems(obj.items as unknown[], results);
       continue;
     }
 
     // 5etools class shape: { item: "chain mail|xphb", quantity?: N }
-    if (typeof obj.item === 'string') {
-      const raw = obj.item as string;
-      const name = raw.includes('|') ? raw.split('|')[0] : raw;
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (typeof obj.item === "string") {
+      const raw = obj.item;
+      const name = raw.includes("|") ? raw.split("|")[0] : raw;
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
       results.push({
         slug,
         name,
-        quantity: typeof obj.quantity === 'number' ? obj.quantity : 1,
+        quantity: typeof obj.quantity === "number" ? obj.quantity : 1,
       });
       continue;
     }
 
     // 5etools class shape: { value: N } — gold in copper pieces
-    if (typeof obj.value === 'number' && !obj.item && !obj.name) {
-      results.push({ gold: obj.value / 100, unit: 'gp' });
+    if (typeof obj.value === "number" && !obj.item && !obj.name) {
+      results.push({ gold: obj.value / 100, unit: "gp" });
       continue;
     }
 
     // Background shape: { gold: N }
-    if (typeof obj.gold === 'number') {
-      results.push({ gold: obj.gold, unit: 'gp' });
+    if (typeof obj.gold === "number") {
+      results.push({ gold: obj.gold, unit: "gp" });
       continue;
     }
 
     // Background shape: { name, quantity }
-    if (typeof obj.name === 'string') {
+    if (typeof obj.name === "string") {
       const name = obj.name;
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
       results.push({
         slug,
         name,
-        quantity: typeof obj.quantity === 'number' ? obj.quantity : 1,
+        quantity: typeof obj.quantity === "number" ? obj.quantity : 1,
       });
       continue;
     }
@@ -404,24 +414,24 @@ type EquipmentLite = {
 
 function decideEquipSlot(
   eq: EquipmentLite,
-): 'armor' | 'shield' | 'weapon' | null {
-  const slug = (eq.slug ?? '').toLowerCase();
-  const name = (eq.name ?? '').toLowerCase();
-  if (slug === 'shield' || name === 'shield') return 'shield';
-  if (eq.armor_class && Object.keys(eq.armor_class).length > 0) return 'armor';
-  if (eq.weapon_category) return 'weapon';
+): "armor" | "shield" | "weapon" | null {
+  const slug = (eq.slug ?? "").toLowerCase();
+  const name = (eq.name ?? "").toLowerCase();
+  if (slug === "shield" || name === "shield") return "shield";
+  if (eq.armor_class && Object.keys(eq.armor_class).length > 0) return "armor";
+  if (eq.weapon_category) return "weapon";
   return null;
 }
 
 function normalizeAbilityScores(
   raw: Record<string, unknown> | undefined,
 ): Record<AbilitySlug, number> | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
+  if (!raw || typeof raw !== "object") return undefined;
   const out: Partial<Record<AbilitySlug, number>> = {};
   for (const [key, value] of Object.entries(raw)) {
     const slug = SLUG_MAP[key.toLowerCase()];
     if (!slug) continue;
-    if (typeof value !== 'number' || !Number.isInteger(value)) continue;
+    if (typeof value !== "number" || !Number.isInteger(value)) continue;
     out[slug] = value;
   }
   return Object.keys(out).length > 0
@@ -468,12 +478,12 @@ export class CharactersService {
     // so only first-level relations need to be specified
     return this.characterRepository.find({
       where: { userId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
       relations: [
-        'character_classes',
-        'character_origin',
-        'character_ability_scores',
-        'character_skills',
+        "character_classes",
+        "character_origin",
+        "character_ability_scores",
+        "character_skills",
       ],
     });
   }
@@ -483,20 +493,20 @@ export class CharactersService {
       where: { id, userId },
     });
     if (!character) {
-      throw new NotFoundException('Personagem nao encontrado.');
+      throw new NotFoundException("Personagem nao encontrado.");
     }
     return character;
   }
 
   async create(input: CreateCharacterInput): Promise<CharacterEntity> {
     if (!input.name?.trim()) {
-      throw new BadRequestException('Nome do personagem e obrigatorio.');
+      throw new BadRequestException("Nome do personagem e obrigatorio.");
     }
 
     // Normaliza input: aceita abilityScores e equipment choices em data ou choices.
     // Quando ambos presentes, choices vence (shape canônico interno).
-    const rawData = (input.data ?? {}) as Record<string, unknown>;
-    const rawChoices = (input.choices ?? {}) as Record<string, unknown>;
+    const rawData = input.data ?? {};
+    const rawChoices = input.choices ?? {};
     const merged: Record<string, unknown> = { ...rawData, ...rawChoices };
     const normalizedAbilities = normalizeAbilityScores(
       (rawChoices.abilityScores as Record<string, unknown>) ??
@@ -511,15 +521,15 @@ export class CharactersService {
     if (!choices.abilityScores) {
       throw new BadRequestException({
         ok: false,
-        code: 'MISSING_ABILITY_SCORES',
-        error: 'Pontuações de habilidade são obrigatórias.',
+        code: "MISSING_ABILITY_SCORES",
+        error: "Pontuações de habilidade são obrigatórias.",
         expectedShape: {
-          str: 'integer 1-30',
-          dex: 'integer 1-30',
-          con: 'integer 1-30',
-          int: 'integer 1-30',
-          wis: 'integer 1-30',
-          cha: 'integer 1-30',
+          str: "integer 1-30",
+          dex: "integer 1-30",
+          con: "integer 1-30",
+          int: "integer 1-30",
+          wis: "integer 1-30",
+          cha: "integer 1-30",
         },
       });
     }
@@ -529,8 +539,8 @@ export class CharactersService {
     if (missingAbilities.length > 0) {
       throw new BadRequestException({
         ok: false,
-        code: 'INCOMPLETE_ABILITY_SCORES',
-        error: `Pontuações de habilidade incompletas: faltam ${missingAbilities.join(', ')}.`,
+        code: "INCOMPLETE_ABILITY_SCORES",
+        error: `Pontuações de habilidade incompletas: faltam ${missingAbilities.join(", ")}.`,
         missing: missingAbilities,
       });
     }
@@ -559,31 +569,31 @@ export class CharactersService {
         !choices.classStartingGold
       ) {
         const validOptions =
-          classOptionInfo.type === 'letters'
+          classOptionInfo.type === "letters"
             ? classOptionInfo.groups.flatMap((g) => g.letters)
-            : classOptionInfo.type === 'labels'
+            : classOptionInfo.type === "labels"
               ? classOptionInfo.labels
               : [];
         throw new BadRequestException({
           ok: false,
-          code: 'MISSING_CLASS_EQUIPMENT_CHOICES',
+          code: "MISSING_CLASS_EQUIPMENT_CHOICES",
           error:
-            'Esta classe oferece opções de equipamento inicial. Selecione uma ou envie classStartingGold.',
+            "Esta classe oferece opções de equipamento inicial. Selecione uma ou envie classStartingGold.",
           classSlug: classSlugForOptions,
           validOptions,
         });
       }
 
-      if (classOptionInfo.type === 'letters') {
+      if (classOptionInfo.type === "letters") {
         validateLetterChoicesOrThrow(
           providedClassChoices,
           classOptionInfo,
-          'INVALID_CLASS_EQUIPMENT_CHOICE',
+          "INVALID_CLASS_EQUIPMENT_CHOICE",
           classSlugForOptions,
         );
       } else {
         const classOptionLabels =
-          classOptionInfo.type === 'labels' ? classOptionInfo.labels : [];
+          classOptionInfo.type === "labels" ? classOptionInfo.labels : [];
         const invalidClassChoices = validateEquipmentChoices(
           providedClassChoices,
           classOptionLabels,
@@ -591,8 +601,8 @@ export class CharactersService {
         if (invalidClassChoices.length > 0) {
           throw new BadRequestException({
             ok: false,
-            code: 'INVALID_CLASS_EQUIPMENT_CHOICE',
-            error: `Opções inválidas para ${classSlugForOptions}: ${invalidClassChoices.join(', ')}.`,
+            code: "INVALID_CLASS_EQUIPMENT_CHOICE",
+            error: `Opções inválidas para ${classSlugForOptions}: ${invalidClassChoices.join(", ")}.`,
             invalidChoices: invalidClassChoices,
             validOptions: classOptionLabels,
           });
@@ -614,31 +624,31 @@ export class CharactersService {
         (Array.isArray(providedBgChoices) && providedBgChoices.length === 0);
       if (bgHasOptions && noBgChoicesProvided) {
         const validOptions =
-          bgOptionInfo.type === 'letters'
+          bgOptionInfo.type === "letters"
             ? bgOptionInfo.groups.flatMap((g) => g.letters)
-            : bgOptionInfo.type === 'labels'
+            : bgOptionInfo.type === "labels"
               ? bgOptionInfo.labels
               : [];
         throw new BadRequestException({
           ok: false,
-          code: 'MISSING_BACKGROUND_EQUIPMENT_CHOICES',
+          code: "MISSING_BACKGROUND_EQUIPMENT_CHOICES",
           error:
-            'Este background oferece opções de equipamento inicial. Selecione uma.',
+            "Este background oferece opções de equipamento inicial. Selecione uma.",
           backgroundSlug: bgSlugForOptions,
           validOptions,
         });
       }
 
-      if (bgOptionInfo.type === 'letters') {
+      if (bgOptionInfo.type === "letters") {
         validateLetterChoicesOrThrow(
           providedBgChoices,
           bgOptionInfo,
-          'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
+          "INVALID_BACKGROUND_EQUIPMENT_CHOICE",
           bgSlugForOptions,
         );
       } else {
         const bgOptionLabels =
-          bgOptionInfo.type === 'labels' ? bgOptionInfo.labels : [];
+          bgOptionInfo.type === "labels" ? bgOptionInfo.labels : [];
         const invalidBgChoices = validateEquipmentChoices(
           providedBgChoices,
           bgOptionLabels,
@@ -646,8 +656,8 @@ export class CharactersService {
         if (invalidBgChoices.length > 0) {
           throw new BadRequestException({
             ok: false,
-            code: 'INVALID_BACKGROUND_EQUIPMENT_CHOICE',
-            error: `Opções inválidas para background ${bgSlugForOptions}: ${invalidBgChoices.join(', ')}.`,
+            code: "INVALID_BACKGROUND_EQUIPMENT_CHOICE",
+            error: `Opções inválidas para background ${bgSlugForOptions}: ${invalidBgChoices.join(", ")}.`,
             invalidChoices: invalidBgChoices,
             validOptions: bgOptionLabels,
           });
@@ -697,12 +707,12 @@ export class CharactersService {
       if (!classEntity || !raceEntity || !backgroundEntity) {
         throw new BadRequestException(
           `Dados obrigatorios nao encontrados: ${[
-            !classEntity && 'classe',
-            !raceEntity && 'raca',
-            !backgroundEntity && 'passado',
+            !classEntity && "classe",
+            !raceEntity && "raca",
+            !backgroundEntity && "passado",
           ]
             .filter(Boolean)
-            .join(', ')}.`,
+            .join(", ")}.`,
         );
       }
 
@@ -724,15 +734,17 @@ export class CharactersService {
       const raceBonusMap: Record<string, number> = {};
       if (!editionGrantsBgBonuses) {
         const raceBonuses =
-          (raceEntity as unknown as {
-            ability_bonuses?: Array<{
-              ability_score?: { slug?: string };
-              bonus?: number;
-            }>;
-          }).ability_bonuses ?? [];
+          (
+            raceEntity as unknown as {
+              ability_bonuses?: Array<{
+                ability_score?: { slug?: string };
+                bonus?: number;
+              }>;
+            }
+          ).ability_bonuses ?? [];
         for (const rb of raceBonuses) {
           const slug = rb.ability_score?.slug;
-          if (slug && typeof rb.bonus === 'number') {
+          if (slug && typeof rb.bonus === "number") {
             raceBonusMap[slug] = (raceBonusMap[slug] ?? 0) + rb.bonus;
           }
         }
@@ -864,7 +876,7 @@ export class CharactersService {
       // character_state
       const conScore = choices.abilityScores?.con ?? 10;
       const conBonus =
-        bgBonuses.find((b) => b.abilityScoreIndex === 'con')?.bonus ?? 0;
+        bgBonuses.find((b) => b.abilityScoreIndex === "con")?.bonus ?? 0;
       const conMod = getAbilityModifier(conScore + conBonus);
       const startHp = classEntity.hit_die + conMod;
       const gp =
@@ -927,7 +939,7 @@ export class CharactersService {
           level: 1,
           subclass_id: IsNull(),
         },
-        relations: ['level_features', 'level_features.feature'],
+        relations: ["level_features", "level_features.feature"],
       });
 
       if (levelData?.level_features) {
@@ -969,7 +981,7 @@ export class CharactersService {
    * Spec 008: letter choices resolve against defaultData/equipment_options JSONB.
    */
   private async materializeEquipment(
-    manager: import('typeorm').EntityManager,
+    manager: import("typeorm").EntityManager,
     characterId: string,
     classId: string,
     classChoiceLabels: string[],
@@ -983,7 +995,7 @@ export class CharactersService {
     });
 
     const seenEquipIds = new Set<string>();
-    const equippedSlots = new Set<'armor' | 'shield' | 'weapon'>();
+    const equippedSlots = new Set<"armor" | "shield" | "weapon">();
     const shouldEquip = (eq: EquipmentLite | undefined): boolean => {
       if (!eq) return false;
       const slot = decideEquipSlot(eq);
@@ -994,9 +1006,7 @@ export class CharactersService {
 
     for (const cse of classStarting) {
       seenEquipIds.add(cse.equipment_id);
-      const eq = (
-        cse as unknown as { equipment?: EquipmentLite }
-      ).equipment;
+      const eq = (cse as unknown as { equipment?: EquipmentLite }).equipment;
       await manager.save(CharacterEquipmentEntity, {
         character_id: characterId,
         equipment_id: cse.equipment_id,
@@ -1021,12 +1031,12 @@ export class CharactersService {
       ...resolveLetterPackageItems(bgRawOptions, bgLetters),
     ];
     for (const item of letterResolved) {
-      if ('gold' in item) {
+      if ("gold" in item) {
         const unit = item.unit.toLowerCase();
-        if (unit === 'gp') extraGold += item.gold;
-        else if (unit === 'sp') extraGold += item.gold / 10;
-        else if (unit === 'cp') extraGold += item.gold / 100;
-        else if (unit === 'pp') extraGold += item.gold * 10;
+        if (unit === "gp") extraGold += item.gold;
+        else if (unit === "sp") extraGold += item.gold / 10;
+        else if (unit === "cp") extraGold += item.gold / 100;
+        else if (unit === "pp") extraGold += item.gold * 10;
       } else {
         // Push both slug and name for lookup flexibility
         parsedItems.push({ name: item.name, quantity: item.quantity });
@@ -1045,10 +1055,10 @@ export class CharactersService {
         if (goldMatch) {
           const amount = parseInt(goldMatch[1], 10);
           const unit = goldMatch[2].toLowerCase();
-          if (unit === 'gp') extraGold += amount;
-          else if (unit === 'sp') extraGold += amount / 10;
-          else if (unit === 'cp') extraGold += amount / 100;
-          else if (unit === 'pp') extraGold += amount * 10;
+          if (unit === "gp") extraGold += amount;
+          else if (unit === "sp") extraGold += amount / 10;
+          else if (unit === "cp") extraGold += amount / 100;
+          else if (unit === "pp") extraGold += amount * 10;
           continue;
         }
 
@@ -1085,7 +1095,7 @@ export class CharactersService {
             .update(CharacterEquipmentEntity)
             .set({ quantity: () => `quantity + :addQty` })
             .where(
-              'character_id = :characterId AND equipment_id = :equipmentId',
+              "character_id = :characterId AND equipment_id = :equipmentId",
               {
                 characterId,
                 equipmentId: eq.id,
@@ -1110,9 +1120,12 @@ export class CharactersService {
     if (extraGold > 0) {
       await manager
         .createQueryBuilder()
-        .update('character_state')
+        .update("character_state")
         .set({ gp: () => `gp + :addGold` })
-        .where('character_id = :characterId', { characterId, addGold: Math.floor(extraGold) })
+        .where("character_id = :characterId", {
+          characterId,
+          addGold: Math.floor(extraGold),
+        })
         .execute();
     }
   }

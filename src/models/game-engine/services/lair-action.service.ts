@@ -1,23 +1,23 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import {
   failure,
   GameErrorCode,
   GameEventData,
   GameResult,
   success,
-} from '../interfaces/result.type';
-import type { LairAction } from '../interfaces/combat.interfaces';
+} from "../interfaces/result.type";
+import type { LairAction } from "../interfaces/combat.interfaces";
 
 const INCAPACITATING_SLUGS = new Set([
-  'incapacitated',
-  'paralyzed',
-  'petrified',
-  'stunned',
-  'unconscious',
+  "incapacitated",
+  "paralyzed",
+  "petrified",
+  "stunned",
+  "unconscious",
 ]);
 
 /**
@@ -39,9 +39,7 @@ export class LairActionService {
    * Verifica se há lair action para oferecer no início do round.
    * Retorna a lista de monstros lendários vivos com lair_actions populadas.
    */
-  async availableForRound(
-    encounter: EncounterEntity,
-  ): Promise<
+  async availableForRound(encounter: EncounterEntity): Promise<
     Array<{
       participantId: string;
       monsterName: string;
@@ -51,7 +49,7 @@ export class LairActionService {
     if (!encounter.inLair) return [];
     const parts = await this.participants.find({
       where: { encounterId: encounter.id },
-      relations: ['monster'],
+      relations: ["monster"],
     });
     const out: Array<{
       participantId: string;
@@ -59,7 +57,7 @@ export class LairActionService {
       options: LairAction[];
     }> = [];
     for (const p of parts) {
-      if (p.isDefeated || p.dyingState === 'dead') continue;
+      if (p.isDefeated || p.dyingState === "dead") continue;
       const slugs = new Set([
         ...(p.conditions ?? []),
         ...(p.conditionInstances ?? []).map((ci) => ci.slug),
@@ -92,10 +90,11 @@ export class LairActionService {
       action?: LairAction;
     }>
   > {
-    if (!encounter.inLair) return failure(GameErrorCode.LAIR_ACTION_NOT_AVAILABLE);
+    if (!encounter.inLair)
+      return failure(GameErrorCode.LAIR_ACTION_NOT_AVAILABLE);
     const monster = await this.participants.findOne({
       where: { id: monsterParticipantId, encounterId: encounter.id },
-      relations: ['monster'],
+      relations: ["monster"],
     });
     if (!monster) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
 
@@ -115,7 +114,7 @@ export class LairActionService {
     if (actionIndex == null) {
       const events: GameEventData[] = [
         {
-          event_type: 'lair_action_skipped',
+          event_type: "lair_action_skipped",
           actor_participant_id: monster.id,
           data: { round: encounter.currentRound },
         },
@@ -137,7 +136,7 @@ export class LairActionService {
       }),
       events: [
         {
-          event_type: 'lair_action_used',
+          event_type: "lair_action_used",
           actor_participant_id: monster.id,
           data: {
             actionName: action.name,

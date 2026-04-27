@@ -32,16 +32,18 @@ export interface RangeCheckResult {
   maxFt: number;
 }
 
-export function parseRangeString(raw: string | null | undefined): ParsedRange | null {
+export function parseRangeString(
+  raw: string | null | undefined,
+): ParsedRange | null {
   if (!raw) return null;
   const s = raw.trim().toLowerCase();
-  if (s === '') return null;
-  if (s === 'self') return { normal: 0 };
-  if (s === 'touch') return { normal: 5 };
-  if (s.includes('/')) {
-    const [nStr, lStr] = s.split('/');
-    const normal = parseInt(nStr.replace(/[^0-9]/g, ''), 10);
-    const long = parseInt(lStr.replace(/[^0-9]/g, ''), 10);
+  if (s === "") return null;
+  if (s === "self") return { normal: 0 };
+  if (s === "touch") return { normal: 5 };
+  if (s.includes("/")) {
+    const [nStr, lStr] = s.split("/");
+    const normal = parseInt(nStr.replace(/[^0-9]/g, ""), 10);
+    const long = parseInt(lStr.replace(/[^0-9]/g, ""), 10);
     if (Number.isNaN(normal)) return null;
     return Number.isNaN(long) ? { normal } : { normal, long };
   }
@@ -62,7 +64,13 @@ export function checkAttackRange(
   range: ParsedRange | null,
 ): RangeCheckResult {
   if (!attacker || !target) {
-    return { ok: true, skipped: true, disadvantage: false, distanceFt: 0, maxFt: 0 };
+    return {
+      ok: true,
+      skipped: true,
+      disadvantage: false,
+      distanceFt: 0,
+      maxFt: 0,
+    };
   }
   const effective: ParsedRange = range ?? { normal: 5 };
   const distanceFt = chebyshevDistanceFt(attacker, target);

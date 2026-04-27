@@ -3,19 +3,19 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { EffectInstanceService } from './effect-instance.service';
-import type { GameEventData } from '../interfaces/result.type';
-import type { EffectInstance } from '../interfaces/combat.interfaces';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { EffectInstanceService } from "./effect-instance.service";
+import type { GameEventData } from "../interfaces/result.type";
+import type { EffectInstance } from "../interfaces/combat.interfaces";
 
 export interface TransferMarkDto {
   encounterId: string;
   casterParticipantId: string;
   newTargetParticipantId: string;
-  sourceSpellSlug: 'hunters-mark' | 'hex';
+  sourceSpellSlug: "hunters-mark" | "hex";
   ownerUserId: string;
 }
 
@@ -66,12 +66,12 @@ export class MarkTransferService {
     }
     if (caster.encounterId !== dto.encounterId) {
       throw new BadRequestException(
-        'CASTER_NOT_IN_ENCOUNTER: caster não está no encontro informado',
+        "CASTER_NOT_IN_ENCOUNTER: caster não está no encontro informado",
       );
     }
 
     const expectedKind =
-      dto.sourceSpellSlug === 'hunters-mark' ? 'hunter_mark' : 'hex_mark';
+      dto.sourceSpellSlug === "hunters-mark" ? "hunter_mark" : "hex_mark";
 
     // 1. Procurar um effect órfão: sourceCaster=caster, kind=hunter_mark/hex_mark,
     //    ainda aplicado num target (morto ou vivo) dentro do encontro.
@@ -98,7 +98,7 @@ export class MarkTransferService {
     if (!orphanEffect || !previousTarget) {
       return {
         ok: false,
-        code: 'NO_TRANSFERABLE_MARK',
+        code: "NO_TRANSFERABLE_MARK",
         message: `Nenhuma ${dto.sourceSpellSlug} ativa deste caster para transferir.`,
       };
     }
@@ -107,8 +107,8 @@ export class MarkTransferService {
     if (caster.bonusActionUsed) {
       return {
         ok: false,
-        code: 'BONUS_ACTION_UNAVAILABLE',
-        message: 'Bonus action já foi usada neste turno.',
+        code: "BONUS_ACTION_UNAVAILABLE",
+        message: "Bonus action já foi usada neste turno.",
       };
     }
 
@@ -116,8 +116,8 @@ export class MarkTransferService {
     if (dto.newTargetParticipantId === previousTarget.id) {
       return {
         ok: false,
-        code: 'SAME_TARGET',
-        message: 'Novo alvo deve ser diferente do alvo anterior.',
+        code: "SAME_TARGET",
+        message: "Novo alvo deve ser diferente do alvo anterior.",
       };
     }
 
@@ -127,15 +127,15 @@ export class MarkTransferService {
     if (!newTarget) {
       return {
         ok: false,
-        code: 'TARGET_NOT_FOUND',
+        code: "TARGET_NOT_FOUND",
         message: `Participant ${dto.newTargetParticipantId} não existe no encontro.`,
       };
     }
-    if (newTarget.isDefeated || newTarget.dyingState === 'dead') {
+    if (newTarget.isDefeated || newTarget.dyingState === "dead") {
       return {
         ok: false,
-        code: 'TARGET_DEFEATED',
-        message: 'Não é possível marcar um alvo já derrotado.',
+        code: "TARGET_DEFEATED",
+        message: "Não é possível marcar um alvo já derrotado.",
       };
     }
 
@@ -146,7 +146,7 @@ export class MarkTransferService {
     const removed = await this.effects.removeEffect(
       previousTarget,
       orphanEffect.id,
-      'manual',
+      "manual",
     );
 
     // 5. Aplicar no novo alvo (mesmo payload, mesma duração).
@@ -167,7 +167,7 @@ export class MarkTransferService {
       ...removed.events,
       ...applied.events,
       {
-        event_type: 'mark_transferred',
+        event_type: "mark_transferred",
         actor_participant_id: caster.id,
         target_participant_id: newTarget.id,
         data: {

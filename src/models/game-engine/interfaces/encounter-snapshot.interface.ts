@@ -1,4 +1,4 @@
-import type { ReadiedAction, TurnActionBlock } from './combat.interfaces';
+import type { ReadiedAction, TurnActionBlock } from "./combat.interfaces";
 
 /**
  * Spec 003: representação auto-contida do encontro para consumo de IA ou
@@ -31,7 +31,7 @@ export interface TileEffectSnapshot {
   sourceSpellSlug: string;
   sourceParticipantId: string | null;
   effectKind: string | null;
-  shapeKind: 'sphere' | 'cube' | 'cylinder' | 'line' | 'cone';
+  shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
   originCell: { x: number; y: number };
   radiusCells: number;
   durationRoundsRemaining: number | null;
@@ -51,16 +51,16 @@ export interface TileEffectSnapshot {
 
 export interface SnapshotParticipant {
   id: string;
-  type: 'pc' | 'monster' | 'npc';
-  faction: 'ally' | 'enemy' | 'neutral';
+  type: "pc" | "monster" | "npc";
+  faction: "ally" | "enemy" | "neutral";
   displayName: string;
-  controlledBy: 'pc' | 'ai' | 'dm';
+  controlledBy: "pc" | "ai" | "dm";
   position: { x: number; y: number };
   /** Spec 013 — flat aliases pra harness/probes que esperam shape simples. */
   positionX: number;
   positionY: number;
   hp: { current: number; max: number; tempHp?: number };
-  dyingState: 'none' | 'dying' | 'stable' | 'dead';
+  dyingState: "none" | "dying" | "stable" | "dead";
   conditions: string[];
   actionEconomy: {
     actionUsed: boolean;

@@ -10,9 +10,9 @@ import {
   Put,
   Req,
   UseGuards,
-} from '@nestjs/common';
-import { CharactersService } from './services/characters.service';
-import { CharacterSheetService } from './services/character-sheet.service';
+} from "@nestjs/common";
+import { CharactersService } from "./services/characters.service";
+import { CharacterSheetService } from "./services/character-sheet.service";
 import {
   CharacterStateService,
   type HpUpdateDto,
@@ -22,15 +22,15 @@ import {
   type ConditionsDto,
   type ExhaustionDto,
   type InspirationDto,
-} from './services/character-state.service';
-import { LevelUpService, type LevelUpDto } from './services/level-up.service';
+} from "./services/character-state.service";
+import { LevelUpService, type LevelUpDto } from "./services/level-up.service";
 import {
   SpellService,
   type PreparedSpellsDto,
   type SpellSlotUpdateDto,
   type RestDto,
   type LearnSpellDto,
-} from './services/spell.service';
+} from "./services/spell.service";
 import {
   InventoryService,
   type AddItemDto,
@@ -40,21 +40,21 @@ import {
   type AttuneToggleDto,
   type AddMagicItemDto,
   type SetHandDto,
-} from './services/inventory.service';
-import { ActionsService } from './services/actions.service';
-import { ReactionPrefsService } from './services/reaction-prefs.service';
-import { CombatActionRegistry } from '../game-engine/services/combat-action-registry.service';
-import type { ReactionState } from 'src/entities/reaction-default.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, IsNull } from 'typeorm';
-import { EncounterParticipantEntity, EncounterEntity } from 'src/entities';
+} from "./services/inventory.service";
+import { ActionsService } from "./services/actions.service";
+import { ReactionPrefsService } from "./services/reaction-prefs.service";
+import { CombatActionRegistry } from "../game-engine/services/combat-action-registry.service";
+import type { ReactionState } from "src/entities/reaction-default.entity";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, Not, IsNull } from "typeorm";
+import { EncounterParticipantEntity, EncounterEntity } from "src/entities";
 import type {
   ParticipantContext,
   ResolverSheetSlice,
-} from '../game-engine/interfaces/combat-action.interfaces';
-import { AuthGuard } from '../auth/auth.guard';
-import type { AuthRequest } from '../auth/auth.types';
-import { UnauthorizedException } from '@nestjs/common';
+} from "../game-engine/interfaces/combat-action.interfaces";
+import { AuthGuard } from "../auth/auth.guard";
+import type { AuthRequest } from "../auth/auth.types";
+import { UnauthorizedException } from "@nestjs/common";
 
 interface CreateCharacterBody {
   name: string;
@@ -67,11 +67,11 @@ interface UpdateCharacterBody {
 
 function getUserId(req: AuthRequest): string {
   const id = req.user?.id;
-  if (!id) throw new UnauthorizedException('Usuario nao autenticado.');
+  if (!id) throw new UnauthorizedException("Usuario nao autenticado.");
   return id;
 }
 
-@Controller('characters')
+@Controller("characters")
 @UseGuards(AuthGuard)
 export class CharactersController {
   constructor(
@@ -98,14 +98,14 @@ export class CharactersController {
     return this.charactersService.listByUser(userId);
   }
 
-  @Get(':id')
-  async getById(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id")
+  async getById(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.charactersService.getById(userId, id);
   }
 
-  @Get(':id/sheet')
-  async getSheet(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/sheet")
+  async getSheet(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.sheetService.computeSheet(userId, id);
   }
@@ -120,54 +120,54 @@ export class CharactersController {
     });
   }
 
-  @Put(':id')
+  @Put(":id")
   async update(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: UpdateCharacterBody,
   ) {
     const userId = getUserId(req);
     return this.charactersService.update(userId, id, body);
   }
 
-  @Delete(':id')
-  async remove(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Delete(":id")
+  async remove(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.charactersService.remove(userId, id);
   }
 
-  @Patch(':id/hp')
+  @Patch(":id/hp")
   async updateHp(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: HpUpdateDto,
   ) {
     const userId = getUserId(req);
     return this.stateService.updateHp(userId, id, body);
   }
 
-  @Patch(':id/xp')
+  @Patch(":id/xp")
   async updateXp(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: XpUpdateDto,
   ) {
     const userId = getUserId(req);
     return this.stateService.updateXp(userId, id, body);
   }
 
-  @Patch(':id/death-saves')
+  @Patch(":id/death-saves")
   async updateDeathSaves(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: DeathSaveDto,
   ) {
     const userId = getUserId(req);
     return this.stateService.updateDeathSaves(userId, id, body);
   }
 
-  @Get(':id/actions')
-  async getActions(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/actions")
+  async getActions(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.actionsService.getActions(userId, id);
   }
@@ -178,8 +178,8 @@ export class CharactersController {
    * Out-of-encounter: ignora action economy (always available se o PC tem a ação),
    * mas respeita rest state (feature_uses_used, slots, equipment equipado).
    */
-  @Get(':id/combat-actions')
-  async getCombatActions(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/combat-actions")
+  async getCombatActions(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     const [sheet, featureUsesUsed] = await Promise.all([
       this.sheetService.computeSheet(userId, id),
@@ -218,7 +218,7 @@ export class CharactersController {
     };
 
     const ctx: ParticipantContext = {
-      type: 'pc',
+      type: "pc",
       characterId: id,
       conditions: sheet.conditions,
       featureUsesUsed,
@@ -229,16 +229,16 @@ export class CharactersController {
     return this.combatActionRegistry.listActions(ctx);
   }
 
-  @Get(':id/level-up-options')
-  async getLevelUpOptions(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/level-up-options")
+  async getLevelUpOptions(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.levelUpService.getOptions(userId, id);
   }
 
-  @Post(':id/level-up')
+  @Post(":id/level-up")
   async levelUp(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: LevelUpDto,
   ) {
     const userId = getUserId(req);
@@ -256,15 +256,15 @@ export class CharactersController {
    */
   private async ensureNotPcOwnTurn(characterId: string): Promise<void> {
     const participants = await this.participantRepo.find({
-      where: { characterId, type: 'pc' },
+      where: { characterId, type: "pc" },
     });
     if (participants.length === 0) return;
 
     const encounterIds = participants.map((p) => p.encounterId);
     const activeEncounters = await this.encounterRepo
-      .createQueryBuilder('e')
-      .where('e.id IN (:...ids)', { ids: encounterIds })
-      .andWhere('e.status = :status', { status: 'active' })
+      .createQueryBuilder("e")
+      .where("e.id IN (:...ids)", { ids: encounterIds })
+      .andWhere("e.status = :status", { status: "active" })
       .getMany();
 
     for (const enc of activeEncounters) {
@@ -274,80 +274,80 @@ export class CharactersController {
       if (myParticipant && myParticipant.id === currentPid) {
         throw new ConflictException({
           ok: false,
-          code: 'LEVEL_UP_BLOCKED_IN_COMBAT',
+          code: "LEVEL_UP_BLOCKED_IN_COMBAT",
           message:
-            'Aguarde o fim do turno para subir de nível em combate ativo.',
+            "Aguarde o fim do turno para subir de nível em combate ativo.",
         });
       }
     }
   }
 
-  @Get(':id/available-spells')
-  async getAvailableSpells(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/available-spells")
+  async getAvailableSpells(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.spellService.getAvailableSpells(userId, id);
   }
 
-  @Get(':id/manageable-spells')
-  async getManageableSpells(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/manageable-spells")
+  async getManageableSpells(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.spellService.getManageableSpells(userId, id);
   }
 
-  @Post(':id/spells')
+  @Post(":id/spells")
   async learnSpell(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: LearnSpellDto,
   ) {
     const userId = getUserId(req);
     return this.spellService.learnSpell(userId, id, body);
   }
 
-  @Delete(':id/spells/:spellSlug')
+  @Delete(":id/spells/:spellSlug")
   async unlearnSpell(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('spellSlug') spellSlug: string,
+    @Param("id") id: string,
+    @Param("spellSlug") spellSlug: string,
   ) {
     const userId = getUserId(req);
     return this.spellService.unlearnSpell(userId, id, spellSlug);
   }
 
-  @Put(':id/prepared-spells')
+  @Put(":id/prepared-spells")
   async updatePreparedSpells(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: PreparedSpellsDto,
   ) {
     const userId = getUserId(req);
     return this.spellService.updatePreparedSpells(userId, id, body);
   }
 
-  @Patch(':id/spell-slots')
+  @Patch(":id/spell-slots")
   async updateSpellSlots(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: SpellSlotUpdateDto,
   ) {
     const userId = getUserId(req);
     return this.spellService.updateSpellSlots(userId, id, body);
   }
 
-  @Post(':id/rest')
+  @Post(":id/rest")
   async rest(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: RestDto,
   ) {
     const userId = getUserId(req);
     return this.spellService.rest(userId, id, body);
   }
 
-  @Patch(':id/ki-points')
+  @Patch(":id/ki-points")
   async updateKiPoints(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: KiPointsDto,
   ) {
     const userId = getUserId(req);
@@ -356,30 +356,30 @@ export class CharactersController {
 
   // ---- Conditions, Exhaustion, Inspiration ----
 
-  @Patch(':id/conditions')
+  @Patch(":id/conditions")
   async updateConditions(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: ConditionsDto,
   ) {
     const userId = getUserId(req);
     return this.stateService.updateConditions(userId, id, body);
   }
 
-  @Patch(':id/exhaustion')
+  @Patch(":id/exhaustion")
   async updateExhaustion(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: ExhaustionDto,
   ) {
     const userId = getUserId(req);
     return this.stateService.updateExhaustion(userId, id, body);
   }
 
-  @Patch(':id/inspiration')
+  @Patch(":id/inspiration")
   async updateInspiration(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: InspirationDto,
   ) {
     const userId = getUserId(req);
@@ -388,57 +388,57 @@ export class CharactersController {
 
   // ---- Inventory ----
 
-  @Get(':id/inventory')
-  async getInventory(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/inventory")
+  async getInventory(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.inventoryService.getInventory(userId, id);
   }
 
-  @Post(':id/inventory')
+  @Post(":id/inventory")
   async addItem(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: AddItemDto,
   ) {
     const userId = getUserId(req);
     return this.inventoryService.addItem(userId, id, body);
   }
 
-  @Patch(':id/inventory/:itemId')
+  @Patch(":id/inventory/:itemId")
   async updateItem(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
     @Body() body: UpdateItemDto,
   ) {
     const userId = getUserId(req);
     return this.inventoryService.updateItemQuantity(userId, id, itemId, body);
   }
 
-  @Delete(':id/inventory/:itemId')
+  @Delete(":id/inventory/:itemId")
   async removeItem(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
   ) {
     const userId = getUserId(req);
     return this.inventoryService.removeItem(userId, id, itemId);
   }
 
-  @Post(':id/inventory/:itemId/use')
+  @Post(":id/inventory/:itemId/use")
   async useItem(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
   ) {
     const userId = getUserId(req);
     return this.inventoryService.useItem(userId, id, itemId);
   }
 
-  @Patch(':id/gold')
+  @Patch(":id/gold")
   async updateGold(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: GoldUpdateDto,
   ) {
     const userId = getUserId(req);
@@ -447,11 +447,11 @@ export class CharactersController {
 
   // ---- Equip / Attune ----
 
-  @Patch(':id/equipment/:itemId/equip')
+  @Patch(":id/equipment/:itemId/equip")
   async toggleEquip(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
     @Body() body: EquipToggleDto,
   ) {
     const userId = getUserId(req);
@@ -467,11 +467,11 @@ export class CharactersController {
    * disparar esta rota + a `draw-weapon`/`stow-weapon` do encounter pra
    * consumir free object interaction.
    */
-  @Patch(':id/equipment/:itemId/hand')
+  @Patch(":id/equipment/:itemId/hand")
   async setHand(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
     @Body() body: SetHandDto,
   ) {
     const userId = getUserId(req);
@@ -480,31 +480,31 @@ export class CharactersController {
 
   // ---- Magic Items ----
 
-  @Post(':id/magic-items')
+  @Post(":id/magic-items")
   async addMagicItem(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: AddMagicItemDto,
   ) {
     const userId = getUserId(req);
     return this.inventoryService.addMagicItem(userId, id, body);
   }
 
-  @Delete(':id/magic-items/:itemId')
+  @Delete(":id/magic-items/:itemId")
   async removeMagicItem(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
   ) {
     const userId = getUserId(req);
     return this.inventoryService.removeMagicItem(userId, id, itemId);
   }
 
-  @Patch(':id/magic-items/:itemId/attune')
+  @Patch(":id/magic-items/:itemId/attune")
   async toggleAttune(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
     @Body() body: AttuneToggleDto,
   ) {
     const userId = getUserId(req);
@@ -519,8 +519,8 @@ export class CharactersController {
    * Lista reaction prefs (defaults da classe + overrides do PC).
    * Cada entry: { reactionName, state, consumesSpellSlot, source }.
    */
-  @Get(':id/reactions')
-  async getReactions(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Get(":id/reactions")
+  async getReactions(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.reactionPrefsService.getPrefs(userId, id);
   }
@@ -528,15 +528,20 @@ export class CharactersController {
   /**
    * Atualiza override de uma reaction. Body: { mode: 'auto'|'ask'|'off' }.
    */
-  @Patch(':id/reactions/:reactionName')
+  @Patch(":id/reactions/:reactionName")
   async setReactionPref(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('reactionName') reactionName: string,
+    @Param("id") id: string,
+    @Param("reactionName") reactionName: string,
     @Body() body: { mode: ReactionState },
   ) {
     const userId = getUserId(req);
-    return this.reactionPrefsService.setPref(userId, id, reactionName, body.mode);
+    return this.reactionPrefsService.setPref(
+      userId,
+      id,
+      reactionName,
+      body.mode,
+    );
   }
 
   /**
@@ -546,11 +551,8 @@ export class CharactersController {
    * Não emite event aqui (concentration service trata cascade quando há
    * dano ou sleep; drop voluntário é silencioso pelo flow do jogo).
    */
-  @Post(':id/drop-concentration')
-  async dropConcentration(
-    @Req() req: AuthRequest,
-    @Param('id') id: string,
-  ) {
+  @Post(":id/drop-concentration")
+  async dropConcentration(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     // Ownership check (lança 403/404 se não pertence ao user).
     await this.charactersService.getById(userId, id);
@@ -562,7 +564,7 @@ export class CharactersController {
       } as any,
     });
     if (participants.length === 0) {
-      return { ok: true, droppedSlug: null, note: 'no_active_concentration' };
+      return { ok: true, droppedSlug: null, note: "no_active_concentration" };
     }
     const droppedSlug = participants[0].concentratingOn ?? null;
     for (const p of participants) {

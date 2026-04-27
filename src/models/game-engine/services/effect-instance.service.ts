@@ -1,16 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { randomUUID } from 'crypto';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { randomUUID } from "crypto";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import type {
   AppliedEffect,
   EffectInstance,
   EffectInstanceKind,
   EffectInstancePayload,
   EffectExpirationKind,
-} from '../interfaces/combat.interfaces';
-import type { GameEventData } from '../interfaces/result.type';
+} from "../interfaces/combat.interfaces";
+import type { GameEventData } from "../interfaces/result.type";
 
 export interface AddEffectInput {
   kind: EffectInstanceKind;
@@ -66,7 +66,7 @@ export class EffectInstanceService {
 
     const events: GameEventData[] = [
       {
-        event_type: 'effect_applied',
+        event_type: "effect_applied",
         target_participant_id: target.id,
         actor_participant_id: input.sourceCasterParticipantId,
         data: {
@@ -88,10 +88,10 @@ export class EffectInstanceService {
       });
       if (caster) {
         const tracker: AppliedEffect = {
-          kind: 'effect-instance',
+          kind: "effect-instance",
           refId: effect.id,
           targetParticipantId: target.id,
-          description: `${input.sourceSpellSlug ?? input.sourceFeatureSlug ?? 'effect'} → ${effect.kind}`,
+          description: `${input.sourceSpellSlug ?? input.sourceFeatureSlug ?? "effect"} → ${effect.kind}`,
         };
         caster.appliedEffects = [...(caster.appliedEffects ?? []), tracker];
         await this.participants.save(caster);
@@ -105,7 +105,12 @@ export class EffectInstanceService {
   async removeEffect(
     target: EncounterParticipantEntity,
     effectId: string,
-    reason: 'duration' | 'save_succeeded' | 'consumed' | 'concentration_broken' | 'manual',
+    reason:
+      | "duration"
+      | "save_succeeded"
+      | "consumed"
+      | "concentration_broken"
+      | "manual",
   ): Promise<{ removed: boolean; events: GameEventData[] }> {
     const before = target.effectInstances ?? [];
     const removed = before.find((e) => e.id === effectId);
@@ -120,7 +125,7 @@ export class EffectInstanceService {
       });
       if (caster) {
         caster.appliedEffects = (caster.appliedEffects ?? []).filter(
-          (a) => !(a.kind === 'effect-instance' && a.refId === effectId),
+          (a) => !(a.kind === "effect-instance" && a.refId === effectId),
         );
         await this.participants.save(caster);
       }
@@ -130,7 +135,7 @@ export class EffectInstanceService {
       removed: true,
       events: [
         {
-          event_type: 'effect_expired',
+          event_type: "effect_expired",
           target_participant_id: target.id,
           data: { effectId, reason, kind: removed.kind },
         },
@@ -160,9 +165,13 @@ export class EffectInstanceService {
           e.sourceCasterParticipantId === casterId
         ) {
           events.push({
-            event_type: 'effect_expired',
+            event_type: "effect_expired",
             target_participant_id: p.id,
-            data: { effectId: e.id, reason: 'concentration_broken', kind: e.kind },
+            data: {
+              effectId: e.id,
+              reason: "concentration_broken",
+              kind: e.kind,
+            },
           });
           changed = true;
           continue;
@@ -182,9 +191,11 @@ export class EffectInstanceService {
    * Decrementa `expiresAt.value` de effects com kind='rounds'|'turns'|'until_caster_turn';
    * remove quando chega a 0.
    */
-  async tickAtEndOfTurn(
-    participant: EncounterParticipantEntity,
-  ): Promise<{ events: GameEventData[]; ticked: Array<{ effectId: string; newValue: number }>; expired: string[] }> {
+  async tickAtEndOfTurn(participant: EncounterParticipantEntity): Promise<{
+    events: GameEventData[];
+    ticked: Array<{ effectId: string; newValue: number }>;
+    expired: string[];
+  }> {
     const ticked: Array<{ effectId: string; newValue: number }> = [];
     const expired: string[] = [];
     const events: GameEventData[] = [];
@@ -193,18 +204,18 @@ export class EffectInstanceService {
 
     for (const e of participant.effectInstances ?? []) {
       if (
-        (e.expiresAt.kind === 'rounds' ||
-          e.expiresAt.kind === 'turns' ||
-          e.expiresAt.kind === 'until_caster_turn') &&
-        typeof e.expiresAt.value === 'number'
+        (e.expiresAt.kind === "rounds" ||
+          e.expiresAt.kind === "turns" ||
+          e.expiresAt.kind === "until_caster_turn") &&
+        typeof e.expiresAt.value === "number"
       ) {
         const newValue = e.expiresAt.value - 1;
         if (newValue <= 0) {
           expired.push(e.id);
           events.push({
-            event_type: 'effect_expired',
+            event_type: "effect_expired",
             target_participant_id: participant.id,
-            data: { effectId: e.id, reason: 'duration', kind: e.kind },
+            data: { effectId: e.id, reason: "duration", kind: e.kind },
           });
           changed = true;
           continue;

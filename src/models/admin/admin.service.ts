@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
-import * as path from 'path';
-import * as fs from 'fs';
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectDataSource } from "@nestjs/typeorm";
+import { DataSource } from "typeorm";
+import * as path from "path";
+import * as fs from "fs";
 
 import {
   AbilityScoreEntity,
@@ -50,8 +50,8 @@ import {
   FeatTypeEnum,
   ProficiencyTypeEnum,
   AttackTypeEnum,
-} from '../../entities';
-import { ALL_SOURCES } from '../../data/sources';
+} from "../../entities";
+import { ALL_SOURCES } from "../../data/sources";
 import {
   transformConditions,
   transformLanguages,
@@ -75,7 +75,7 @@ import {
   transformMagicItems,
   transformOptionalFeatures,
   transformMonstersByFile,
-} from '../../data/transformers';
+} from "../../data/transformers";
 
 // ────────────────────────────────────────────────────────────────
 // Tipos auxiliares
@@ -95,7 +95,7 @@ type JsonRef = { index: string; name?: string; url?: string };
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
-  private readonly jsonDir = path.resolve(process.cwd(), 'src/data/json');
+  private readonly jsonDir = path.resolve(process.cwd(), "src/data/json");
 
   constructor(@InjectDataSource() private readonly ds: DataSource) {}
 
@@ -103,21 +103,21 @@ export class AdminService {
 
   private loadJson<T = any>(filename: string): T {
     const filePath = path.join(this.jsonDir, filename);
-    const raw = fs.readFileSync(filePath, 'utf-8');
+    const raw = fs.readFileSync(filePath, "utf-8");
     return JSON.parse(raw) as T;
   }
 
   private async getOrCreateSource(): Promise<string> {
     const repo = this.ds.getRepository(CompSourceEntity);
-    let source = await repo.findOne({ where: { code: 'SRD' } });
+    let source = await repo.findOne({ where: { code: "SRD" } });
     if (!source) {
       source = repo.create({
-        code: 'SRD',
-        name: 'System Reference Document 5e',
-        abbreviation: 'SRD',
-        edition: 'classic',
+        code: "SRD",
+        name: "System Reference Document 5e",
+        abbreviation: "SRD",
+        edition: "classic",
         year: 2014,
-        group: 'core',
+        group: "core",
       });
       source = await repo.save(source);
     }
@@ -144,7 +144,7 @@ export class AdminService {
     const row = await this.ds
       .getRepository(entity)
       .findOne({ where: { slug } as any });
-    return row ? (row as any).id : null;
+    return row ? row.id : null;
   }
 
   private async slugToIdMap(
@@ -191,20 +191,20 @@ export class AdminService {
             year: src.year,
             group: src.group,
           },
-          { conflictPaths: ['code'] },
+          { conflictPaths: ["code"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: src.code, message: err.message });
       }
     }
-    return this.result('comp_sources', ALL_SOURCES.length, success, errors);
+    return this.result("comp_sources", ALL_SOURCES.length, success, errors);
   }
 
   // ──────────── Fase 1 — Sem dependências ────────────
 
   async seedAbilityScores(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Ability-Scores.json');
+    const data = this.loadJson<any[]>("5e-SRD-Ability-Scores.json");
     const sourceId = await this.getOrCreateSource();
     const repo = this.ds.getRepository(AbilityScoreEntity);
     const errors: { slug: string; message: string }[] = [];
@@ -221,18 +221,18 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('ability_scores', data.length, success, errors);
+    return this.result("ability_scores", data.length, success, errors);
   }
 
   async seedAlignments(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Alignments.json');
+    const data = this.loadJson<any[]>("5e-SRD-Alignments.json");
     const sourceId = await this.getOrCreateSource();
     const repo = this.ds.getRepository(AlignmentEntity);
     const errors: { slug: string; message: string }[] = [];
@@ -249,14 +249,14 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('alignments', data.length, success, errors);
+    return this.result("alignments", data.length, success, errors);
   }
 
   async seedConditions(): Promise<SeedResult> {
@@ -276,18 +276,18 @@ export class AdminService {
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('conditions', items.length, success, errors);
+    return this.result("conditions", items.length, success, errors);
   }
 
   async seedDamageTypes(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Damage-Types.json');
+    const data = this.loadJson<any[]>("5e-SRD-Damage-Types.json");
     const sourceId = await this.getOrCreateSource();
     const repo = this.ds.getRepository(DamageTypeEntity);
     const errors: { slug: string; message: string }[] = [];
@@ -303,14 +303,14 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('damage_types', data.length, success, errors);
+    return this.result("damage_types", data.length, success, errors);
   }
 
   async seedLanguages(): Promise<SeedResult> {
@@ -331,18 +331,18 @@ export class AdminService {
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('languages', items.length, success, errors);
+    return this.result("languages", items.length, success, errors);
   }
 
   async seedMagicSchools(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Magic-Schools.json');
+    const data = this.loadJson<any[]>("5e-SRD-Magic-Schools.json");
     const sourceId = await this.getOrCreateSource();
     const repo = this.ds.getRepository(MagicSchoolEntity);
     const errors: { slug: string; message: string }[] = [];
@@ -358,14 +358,14 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('magic_schools', data.length, success, errors);
+    return this.result("magic_schools", data.length, success, errors);
   }
 
   async seedWeaponProperties(): Promise<SeedResult> {
@@ -385,14 +385,14 @@ export class AdminService {
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('weapon_properties', items.length, success, errors);
+    return this.result("weapon_properties", items.length, success, errors);
   }
 
   async seedWeaponMasteryProperties(): Promise<SeedResult> {
@@ -412,7 +412,7 @@ export class AdminService {
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
@@ -420,7 +420,7 @@ export class AdminService {
       }
     }
     return this.result(
-      'weapon_mastery_properties',
+      "weapon_mastery_properties",
       items.length,
       success,
       errors,
@@ -428,7 +428,7 @@ export class AdminService {
   }
 
   async seedRuleSections(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Rule-Sections.json');
+    const data = this.loadJson<any[]>("5e-SRD-Rule-Sections.json");
     const sourceId = await this.getOrCreateSource();
     const repo = this.ds.getRepository(RuleSectionEntity);
     const errors: { slug: string; message: string }[] = [];
@@ -444,19 +444,19 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('rule_sections', data.length, success, errors);
+    return this.result("rule_sections", data.length, success, errors);
   }
 
   async seedEquipmentCategories(): Promise<SeedResult> {
     // First: seed existing SRD categories to preserve FK compatibility
-    const srdData = this.loadJson<any[]>('5e-SRD-Equipment-Categories.json');
+    const srdData = this.loadJson<any[]>("5e-SRD-Equipment-Categories.json");
     const sourceId = await this.getOrCreateSource();
     const sourceMap = await this.sourceCodeToIdMap();
     const repo = this.ds.getRepository(EquipmentCategoryEntity);
@@ -472,7 +472,7 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
@@ -490,7 +490,7 @@ export class AdminService {
             name: item.name,
             source_id: sourceMap.get(item.source_code) ?? sourceId,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
@@ -499,11 +499,11 @@ export class AdminService {
     }
 
     const total = srdData.length + fiveToolsCategories.length;
-    return this.result('equipment_categories', total, success, errors);
+    return this.result("equipment_categories", total, success, errors);
   }
 
   async seedProficiencies(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Proficiencies.json');
+    const data = this.loadJson<any[]>("5e-SRD-Proficiencies.json");
     const sourceId = await this.getOrCreateSource();
     const repo = this.ds.getRepository(ProficiencyEntity);
     const errors: { slug: string; message: string }[] = [];
@@ -514,7 +514,7 @@ export class AdminService {
       Weapon: ProficiencyTypeEnum.Weapon,
       Skill: ProficiencyTypeEnum.Skill,
       Tool: ProficiencyTypeEnum.Tool,
-      'Saving Throws': ProficiencyTypeEnum.SavingThrow,
+      "Saving Throws": ProficiencyTypeEnum.SavingThrow,
       Other: ProficiencyTypeEnum.Other,
     };
 
@@ -530,14 +530,14 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('proficiencies', data.length, success, errors);
+    return this.result("proficiencies", data.length, success, errors);
   }
 
   // ──────────── Fase 2 — Dependem da Fase 1 ────────────
@@ -564,14 +564,14 @@ export class AdminService {
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('skills', items.length, success, errors);
+    return this.result("skills", items.length, success, errors);
   }
 
   async seedEquipment(): Promise<SeedResult> {
@@ -589,14 +589,16 @@ export class AdminService {
         const sourceId = sourceMap.get(item.source_code) ?? undefined;
 
         // Build properties as array of { slug, name } for weapon properties
-        const propsJsonb = item.properties.length > 0
-          ? item.properties.map((slug) => ({ slug, name: slug }))
-          : null;
+        const propsJsonb =
+          item.properties.length > 0
+            ? item.properties.map((slug) => ({ slug, name: slug }))
+            : null;
 
         // Build mastery as { slug, name } of first mastery
-        const masteryJsonb = item.mastery_slugs.length > 0
-          ? { slug: item.mastery_slugs[0], name: item.mastery_slugs[0] }
-          : null;
+        const masteryJsonb =
+          item.mastery_slugs.length > 0
+            ? { slug: item.mastery_slugs[0], name: item.mastery_slugs[0] }
+            : null;
 
         await eqRepo.upsert(
           {
@@ -622,7 +624,7 @@ export class AdminService {
             source_id: sourceId,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
 
         // equipment_category_items M2M
@@ -632,7 +634,7 @@ export class AdminService {
           if (!catId) continue;
           await eciRepo.upsert(
             { equipment_id: eqId, category_id: catId },
-            { conflictPaths: ['equipment_id', 'category_id'] },
+            { conflictPaths: ["equipment_id", "category_id"] },
           );
         }
 
@@ -641,7 +643,7 @@ export class AdminService {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('equipments', items.length, success, errors);
+    return this.result("equipments", items.length, success, errors);
   }
 
   async seedFeats(): Promise<SeedResult> {
@@ -676,18 +678,18 @@ export class AdminService {
             source_id: sourceId ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('feats', items.length, success, errors);
+    return this.result("feats", items.length, success, errors);
   }
 
   async seedRules(): Promise<SeedResult> {
-    const data = this.loadJson<any[]>('5e-SRD-Rules.json');
+    const data = this.loadJson<any[]>("5e-SRD-Rules.json");
     const sourceId = await this.getOrCreateSource();
     const ruleRepo = this.ds.getRepository(RuleEntity);
     const linkRepo = this.ds.getRepository(RuleSectionLinkEntity);
@@ -706,7 +708,7 @@ export class AdminService {
             source_id: sourceId,
             raw: item,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
 
         const ruleId = (await this.slugToId(RuleEntity, item.index))!;
@@ -716,7 +718,7 @@ export class AdminService {
           if (!sectionId) continue;
           await linkRepo.upsert(
             { rule_id: ruleId, section_id: sectionId },
-            { conflictPaths: ['rule_id', 'section_id'] },
+            { conflictPaths: ["rule_id", "section_id"] },
           );
         }
 
@@ -725,7 +727,7 @@ export class AdminService {
         errors.push({ slug: item.index, message: err.message });
       }
     }
-    return this.result('rules', data.length, success, errors);
+    return this.result("rules", data.length, success, errors);
   }
 
   // ──────────── Fase 3 — Classes e Races ────────────
@@ -749,21 +751,25 @@ export class AdminService {
             name: item.name,
             hit_die: item.hit_die,
             proficiency_choices: item.proficiency_choices as any,
-            starting_equipment_options: (item.starting_equipment_options ?? undefined) as any,
+            starting_equipment_options: (item.starting_equipment_options ??
+              undefined) as any,
             multi_classing: item.multi_classing as any,
             spellcasting: (item.spellcasting ?? undefined) as any,
             weapon_mastery_count: item.weapon_mastery_count,
-            weapon_mastery_restriction: item.weapon_mastery_restriction ?? undefined,
+            weapon_mastery_restriction:
+              item.weapon_mastery_restriction ?? undefined,
             cantrips_known: item.cantrips_known,
             spells_prepared_count: item.spells_prepared_count,
             spellbook_count: item.spellbook_count,
-            class_features_level_1: (item.class_features_level_1 ?? undefined) as any,
+            class_features_level_1: (item.class_features_level_1 ??
+              undefined) as any,
             tool_choice: (item.tool_choice ?? undefined) as any,
-            always_prepared_spells: (item.always_prepared_spells ?? undefined) as any,
+            always_prepared_spells: (item.always_prepared_spells ??
+              undefined) as any,
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
 
         const classId = (await this.slugToId(ClassEntity, item.slug))!;
@@ -774,7 +780,7 @@ export class AdminService {
           if (!abilityId) continue;
           await csRepo.upsert(
             { class_id: classId, ability_score_id: abilityId },
-            { conflictPaths: ['class_id', 'ability_score_id'] },
+            { conflictPaths: ["class_id", "ability_score_id"] },
           );
         }
 
@@ -784,7 +790,7 @@ export class AdminService {
           if (!profId) continue;
           await cpRepo.upsert(
             { class_id: classId, proficiency_id: profId },
-            { conflictPaths: ['class_id', 'proficiency_id'] },
+            { conflictPaths: ["class_id", "proficiency_id"] },
           );
         }
 
@@ -793,7 +799,7 @@ export class AdminService {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('classes', items.length, success, errors);
+    return this.result("classes", items.length, success, errors);
   }
 
   async seedRaces(): Promise<SeedResult> {
@@ -818,12 +824,13 @@ export class AdminService {
             size_description: item.size_description,
             language_options: (item.language_options ?? undefined) as any,
             language_desc: item.language_desc,
-            ability_bonus_options: (item.ability_bonus_options ?? undefined) as any,
+            ability_bonus_options: (item.ability_bonus_options ??
+              undefined) as any,
             alignment: item.alignment,
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
 
         const raceId = (await this.slugToId(RaceEntity, item.slug))!;
@@ -834,7 +841,7 @@ export class AdminService {
           if (!langId) continue;
           await rlRepo.upsert(
             { race_id: raceId, language_id: langId },
-            { conflictPaths: ['race_id', 'language_id'] },
+            { conflictPaths: ["race_id", "language_id"] },
           );
         }
 
@@ -843,7 +850,7 @@ export class AdminService {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('races', items.length, success, errors);
+    return this.result("races", items.length, success, errors);
   }
 
   // ──────────── Fase 4 — Subclasses, Subraces, Traits, Backgrounds ──────────
@@ -875,15 +882,15 @@ export class AdminService {
           })
           .orUpdate(
             [
-              'name',
-              'subclass_flavor',
-              'description',
-              'spells',
-              'class_id',
-              'source_id',
-              'raw',
+              "name",
+              "subclass_flavor",
+              "description",
+              "spells",
+              "class_id",
+              "source_id",
+              "raw",
             ],
-            ['slug'],
+            ["slug"],
           )
           .execute();
         success++;
@@ -891,7 +898,7 @@ export class AdminService {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('subclasses', items.length, success, errors);
+    return this.result("subclasses", items.length, success, errors);
   }
 
   async seedSubraces(): Promise<SeedResult> {
@@ -915,14 +922,14 @@ export class AdminService {
             source_id: sourceMap.get(item.source_code) ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('subraces', items.length, success, errors);
+    return this.result("subraces", items.length, success, errors);
   }
 
   async seedTraits(): Promise<SeedResult> {
@@ -937,8 +944,21 @@ export class AdminService {
 
     // Collect traits from all races' entries
     const raceItems = transformRaces();
-    const allTraits: Array<{ slug: string; name: string; description: string[]; proficiency_choices: Record<string, unknown> | null; trait_specific: Record<string, unknown> | null; language_options: Record<string, unknown> | null; source_code: string; race_slug: string; raw: Record<string, unknown> }> = [];
-    const subraceTraitLinks: Array<{ trait_slug: string; subrace_slug: string }> = [];
+    const allTraits: Array<{
+      slug: string;
+      name: string;
+      description: string[];
+      proficiency_choices: Record<string, unknown> | null;
+      trait_specific: Record<string, unknown> | null;
+      language_options: Record<string, unknown> | null;
+      source_code: string;
+      race_slug: string;
+      raw: Record<string, unknown>;
+    }> = [];
+    const subraceTraitLinks: Array<{
+      trait_slug: string;
+      subrace_slug: string;
+    }> = [];
 
     for (const race of raceItems) {
       const extracted = extractTraitsFromRace({
@@ -998,15 +1018,15 @@ export class AdminService {
           })
           .orUpdate(
             [
-              'name',
-              'description',
-              'proficiency_choices',
-              'trait_specific',
-              'language_options',
-              'source_id',
-              'raw',
+              "name",
+              "description",
+              "proficiency_choices",
+              "trait_specific",
+              "language_options",
+              "source_id",
+              "raw",
             ],
-            ['slug'],
+            ["slug"],
           )
           .execute();
         success++;
@@ -1024,7 +1044,7 @@ export class AdminService {
       try {
         await rtRepo.upsert(
           { race_id: raceId, trait_id: traitId },
-          { conflictPaths: ['race_id', 'trait_id'] },
+          { conflictPaths: ["race_id", "trait_id"] },
         );
       } catch (err: any) {
         errors.push({
@@ -1042,7 +1062,7 @@ export class AdminService {
       try {
         await stRepo.upsert(
           { subrace_id: subraceId, trait_id: traitId },
-          { conflictPaths: ['subrace_id', 'trait_id'] },
+          { conflictPaths: ["subrace_id", "trait_id"] },
         );
       } catch (err: any) {
         errors.push({
@@ -1052,7 +1072,7 @@ export class AdminService {
       }
     }
 
-    return this.result('traits', totalTraits, success, errors);
+    return this.result("traits", totalTraits, success, errors);
   }
 
   async seedBackgrounds(): Promise<SeedResult> {
@@ -1069,7 +1089,7 @@ export class AdminService {
       try {
         const sourceId = sourceMap.get(item.source_code) ?? null;
         const featId = item.feat_slug
-          ? featMap.get(item.feat_slug) ?? undefined
+          ? (featMap.get(item.feat_slug) ?? undefined)
           : undefined;
 
         await bgRepo.upsert(
@@ -1087,7 +1107,7 @@ export class AdminService {
             source_id: sourceId ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
 
         // Skill + tool proficiencies via junction table
@@ -1101,7 +1121,7 @@ export class AdminService {
           if (!profId) continue;
           await bpRepo.upsert(
             { background_id: bgId, proficiency_id: profId },
-            { conflictPaths: ['background_id', 'proficiency_id'] },
+            { conflictPaths: ["background_id", "proficiency_id"] },
           );
         }
 
@@ -1110,7 +1130,7 @@ export class AdminService {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('backgrounds', items.length, success, errors);
+    return this.result("backgrounds", items.length, success, errors);
   }
 
   async seedOptionalFeatures(): Promise<SeedResult> {
@@ -1138,14 +1158,14 @@ export class AdminService {
             source_id: sourceId ?? undefined,
             raw: item.raw as any,
           },
-          { conflictPaths: ['slug'] },
+          { conflictPaths: ["slug"] },
         );
         success++;
       } catch (err: any) {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('optional_features', items.length, success, errors);
+    return this.result("optional_features", items.length, success, errors);
   }
 
   // ──────────── Fase 5 — Features, Spells, MagicItems, Monsters ─────────────
@@ -1184,18 +1204,18 @@ export class AdminService {
           })
           .orUpdate(
             [
-              'name',
-              'level',
-              'description',
-              'prerequisites',
-              'reference',
-              'feature_specific',
-              'class_id',
-              'subclass_id',
-              'source_id',
-              'raw',
+              "name",
+              "level",
+              "description",
+              "prerequisites",
+              "reference",
+              "feature_specific",
+              "class_id",
+              "subclass_id",
+              "source_id",
+              "raw",
             ],
-            ['slug'],
+            ["slug"],
           )
           .execute();
         success++;
@@ -1204,7 +1224,7 @@ export class AdminService {
       }
     }
 
-    return this.result('features', items.length, success, errors);
+    return this.result("features", items.length, success, errors);
   }
 
   async seedSpells(): Promise<SeedResult> {
@@ -1225,7 +1245,7 @@ export class AdminService {
     for (const item of items) {
       try {
         const schoolId = item.school_slug
-          ? schoolMap.get(item.school_slug) ?? undefined
+          ? (schoolMap.get(item.school_slug) ?? undefined)
           : undefined;
         const sourceId = sourceMap.get(item.source_code) ?? undefined;
 
@@ -1247,7 +1267,7 @@ export class AdminService {
             casting_time: item.casting_time,
             level: item.level,
             attack_type: item.attack_type
-              ? attackMap[item.attack_type] ?? undefined
+              ? (attackMap[item.attack_type] ?? undefined)
               : undefined,
             damage: item.damage ?? undefined,
             dc: item.dc ?? undefined,
@@ -1259,27 +1279,27 @@ export class AdminService {
           } as any)
           .orUpdate(
             [
-              'name',
-              'description',
-              'higher_level',
-              'range',
-              'components',
-              'material',
-              'ritual',
-              'duration',
-              'concentration',
-              'casting_time',
-              'level',
-              'attack_type',
-              'damage',
-              'dc',
-              'heal_at_slot_level',
-              'area_of_effect',
-              'school_id',
-              'source_id',
-              'raw',
+              "name",
+              "description",
+              "higher_level",
+              "range",
+              "components",
+              "material",
+              "ritual",
+              "duration",
+              "concentration",
+              "casting_time",
+              "level",
+              "attack_type",
+              "damage",
+              "dc",
+              "heal_at_slot_level",
+              "area_of_effect",
+              "school_id",
+              "source_id",
+              "raw",
             ],
-            ['slug'],
+            ["slug"],
           )
           .execute();
 
@@ -1302,7 +1322,7 @@ export class AdminService {
 
         await scRepo.upsert(
           { spell_id: spellId, class_id: classId },
-          { conflictPaths: ['spell_id', 'class_id'] },
+          { conflictPaths: ["spell_id", "class_id"] },
         );
         mappingCount++;
       } catch {
@@ -1311,7 +1331,7 @@ export class AdminService {
     }
 
     this.logger.log(`[spell_classes] ${mappingCount} mappings created`);
-    return this.result('spells', items.length, success, errors);
+    return this.result("spells", items.length, success, errors);
   }
 
   async seedMagicItems(): Promise<SeedResult> {
@@ -1325,7 +1345,7 @@ export class AdminService {
       try {
         const sourceId = sourceMap.get(item.source_code) ?? undefined;
         const catId = item.category_slug
-          ? catMap.get(item.category_slug) ?? undefined
+          ? (catMap.get(item.category_slug) ?? undefined)
           : undefined;
 
         await this.ds
@@ -1350,21 +1370,21 @@ export class AdminService {
           })
           .orUpdate(
             [
-              'name',
-              'rarity',
-              'is_variant',
-              'description',
-              'image',
-              'weight',
-              'cost',
-              'attunement',
-              'bonuses',
-              'charges_info',
-              'equipment_category_id',
-              'source_id',
-              'raw',
+              "name",
+              "rarity",
+              "is_variant",
+              "description",
+              "image",
+              "weight",
+              "cost",
+              "attunement",
+              "bonuses",
+              "charges_info",
+              "equipment_category_id",
+              "source_id",
+              "raw",
             ],
-            ['slug'],
+            ["slug"],
           )
           .execute();
         success++;
@@ -1373,7 +1393,7 @@ export class AdminService {
       }
     }
 
-    return this.result('magic_items', items.length, success, errors);
+    return this.result("magic_items", items.length, success, errors);
   }
 
   async seedMonsters(): Promise<SeedResult> {
@@ -1385,7 +1405,9 @@ export class AdminService {
     const BATCH_SIZE = 80;
 
     for (const { file, monsters } of filesets) {
-      this.logger.log(`[monsters] Processing ${file} (${monsters.length} monsters)`);
+      this.logger.log(
+        `[monsters] Processing ${file} (${monsters.length} monsters)`,
+      );
       total += monsters.length;
 
       for (let i = 0; i < monsters.length; i += BATCH_SIZE) {
@@ -1438,42 +1460,42 @@ export class AdminService {
               })
               .orUpdate(
                 [
-                  'name',
-                  'size',
-                  'type',
-                  'subtype',
-                  'alignment',
-                  'armor_class',
-                  'hit_points',
-                  'hit_dice',
-                  'hit_points_roll',
-                  'speed',
-                  'strength',
-                  'dexterity',
-                  'constitution',
-                  'intelligence',
-                  'wisdom',
-                  'charisma',
-                  'proficiencies',
-                  'damage_vulnerabilities',
-                  'damage_resistances',
-                  'damage_immunities',
-                  'condition_immunities',
-                  'senses',
-                  'languages',
-                  'proficiency_bonus',
-                  'xp',
-                  'special_abilities',
-                  'actions',
-                  'legendary_actions',
-                  'reactions',
-                  'image',
-                  'description',
-                  'challenge_rating',
-                  'source_id',
-                  'raw',
+                  "name",
+                  "size",
+                  "type",
+                  "subtype",
+                  "alignment",
+                  "armor_class",
+                  "hit_points",
+                  "hit_dice",
+                  "hit_points_roll",
+                  "speed",
+                  "strength",
+                  "dexterity",
+                  "constitution",
+                  "intelligence",
+                  "wisdom",
+                  "charisma",
+                  "proficiencies",
+                  "damage_vulnerabilities",
+                  "damage_resistances",
+                  "damage_immunities",
+                  "condition_immunities",
+                  "senses",
+                  "languages",
+                  "proficiency_bonus",
+                  "xp",
+                  "special_abilities",
+                  "actions",
+                  "legendary_actions",
+                  "reactions",
+                  "image",
+                  "description",
+                  "challenge_rating",
+                  "source_id",
+                  "raw",
                 ],
-                ['slug'],
+                ["slug"],
               )
               .execute();
             success++;
@@ -1484,8 +1506,10 @@ export class AdminService {
       }
     }
 
-    this.logger.log(`[monsters] Total: ${total}, Success: ${success}, Errors: ${errors.length}`);
-    return this.result('monsters', total, success, errors);
+    this.logger.log(
+      `[monsters] Total: ${total}, Success: ${success}, Errors: ${errors.length}`,
+    );
+    return this.result("monsters", total, success, errors);
   }
 
   // ──────────── Fase 6 — Levels ────────────
@@ -1525,7 +1549,7 @@ export class AdminService {
               source_id: sourceMap.get(item.source_code) ?? undefined,
               raw: item.raw as any,
             })
-            .where('id = :id', { id: existing.id })
+            .where("id = :id", { id: existing.id })
             .execute();
           levelId = existing.id;
         } else {
@@ -1544,7 +1568,7 @@ export class AdminService {
               source_id: sourceMap.get(item.source_code) ?? undefined,
               raw: item.raw as any,
             })
-            .returning('id')
+            .returning("id")
             .execute();
           levelId = result.identifiers[0].id;
         }
@@ -1555,7 +1579,7 @@ export class AdminService {
           if (!featureId) continue;
           await lfRepo.upsert(
             { level_id: levelId, feature_id: featureId },
-            { conflictPaths: ['level_id', 'feature_id'] },
+            { conflictPaths: ["level_id", "feature_id"] },
           );
         }
 
@@ -1564,6 +1588,6 @@ export class AdminService {
         errors.push({ slug: item.slug, message: err.message });
       }
     }
-    return this.result('levels', items.length, success, errors);
+    return this.result("levels", items.length, success, errors);
   }
 }

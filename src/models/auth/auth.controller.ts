@@ -6,11 +6,11 @@ import {
   Req,
   Res,
   UseGuards,
-} from '@nestjs/common';
-import type { Response } from 'express';
-import { AuthService } from './auth.service';
-import { AuthGuard } from './auth.guard';
-import type { AuthRequest } from './auth.types';
+} from "@nestjs/common";
+import type { Response } from "express";
+import { AuthService } from "./auth.service";
+import { AuthGuard } from "./auth.guard";
+import type { AuthRequest } from "./auth.types";
 
 interface AuthBody {
   email: string;
@@ -21,22 +21,29 @@ interface AuthBody {
   phone?: string;
 }
 
-@Controller('auth')
+@Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('register')
-  async register(@Body() body: AuthBody, @Res({ passthrough: true }) res: Response) {
+  @Post("register")
+  async register(
+    @Body() body: AuthBody,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const user = await this.authService.register({
       email: body.email,
       password: body.password,
-      name: body.name ?? '',
-      username: body.username ?? '',
-      birthDate: body.birthDate ?? '',
-      phone: body.phone ?? '',
+      name: body.name ?? "",
+      username: body.username ?? "",
+      birthDate: body.birthDate ?? "",
+      phone: body.phone ?? "",
     });
     const token = this.authService.signToken(user);
-    res.cookie(this.authService.getCookieName(), token, this.authService.getCookieOptions());
+    res.cookie(
+      this.authService.getCookieName(),
+      token,
+      this.authService.getCookieOptions(),
+    );
     return {
       id: user.id,
       email: user.email,
@@ -46,14 +53,21 @@ export class AuthController {
     };
   }
 
-  @Post('login')
-  async login(@Body() body: AuthBody, @Res({ passthrough: true }) res: Response) {
+  @Post("login")
+  async login(
+    @Body() body: AuthBody,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const user = await this.authService.login({
       email: body.email,
       password: body.password,
     });
     const token = this.authService.signToken(user);
-    res.cookie(this.authService.getCookieName(), token, this.authService.getCookieOptions());
+    res.cookie(
+      this.authService.getCookieName(),
+      token,
+      this.authService.getCookieOptions(),
+    );
     return {
       id: user.id,
       email: user.email,
@@ -63,9 +77,9 @@ export class AuthController {
     };
   }
 
-  @Post('logout')
+  @Post("logout")
   async logout(@Res({ passthrough: true }) res: Response) {
-    res.cookie(this.authService.getCookieName(), '', {
+    res.cookie(this.authService.getCookieName(), "", {
       ...this.authService.getCookieOptions(),
       maxAge: 0,
     });
@@ -73,7 +87,7 @@ export class AuthController {
   }
 
   @UseGuards(AuthGuard)
-  @Get('me')
+  @Get("me")
   async me(@Req() req: AuthRequest) {
     const user = req.user;
     return {

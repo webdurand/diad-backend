@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 Global — cost tracking.
@@ -8,7 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * target ≤$0.50/sessão (spec §8 cost-aware model selection).
  */
 export class AddAiUsageLog1778200000000 implements MigrationInterface {
-  name = 'AddAiUsageLog1778200000000';
+  name = "AddAiUsageLog1778200000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
@@ -45,8 +45,12 @@ export class AddAiUsageLog1778200000000 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS idx_ai_usage_role`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_ai_usage_session_created`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_ai_usage_campaign_created`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_ai_usage_session_created`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_ai_usage_campaign_created`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS ai_usage_logs`);
   }
 }

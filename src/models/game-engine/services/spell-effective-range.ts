@@ -1,4 +1,4 @@
-import { parseRangeString } from './combat-range';
+import { parseRangeString } from "./combat-range";
 
 /**
  * Spec 015 Eixo 2 — desambigua o campo `spell.range` quando "Self" pode
@@ -24,32 +24,32 @@ import { parseRangeString } from './combat-range';
 export interface SpellShapeForRange {
   slug: string;
   range: string;
-  attack_type?: 'ranged' | 'melee' | null;
+  attack_type?: "ranged" | "melee" | null;
   area_of_effect?: { type?: string; size?: number } | null;
 }
 
 export type SpellEffectiveRange =
   | {
-      kind: 'self-buff';
+      kind: "self-buff";
       attackRangeFt: null;
       aoeShape: null;
       rejectSelfAsTarget: false;
     }
   | {
-      kind: 'self-aoe';
+      kind: "self-aoe";
       attackRangeFt: null;
       aoeShape: { type: string; size: number };
       rejectSelfAsTarget: false;
     }
   | {
-      kind: 'self-origin-attack';
+      kind: "self-origin-attack";
       attackRangeFt: number;
-      attackType: 'ranged' | 'melee';
+      attackType: "ranged" | "melee";
       rejectSelfAsTarget: true;
       aoeShape: null;
     }
   | {
-      kind: 'normal';
+      kind: "normal";
       attackRangeFt: number;
       rejectSelfAsTarget: boolean;
       aoeShape: null;
@@ -65,14 +65,14 @@ export type SpellEffectiveRange =
  */
 const SELF_ORIGIN_ATTACK_RANGE_OVERRIDES: Record<string, number> = {
   // Produce Flame (PHB 2014 p.269) — "hurl the flame at a creature within 30 feet"
-  'produce-flame': 30,
+  "produce-flame": 30,
   // Flame Blade (PHB 2014 p.241) — "you can make a melee spell attack"
   // melee implícito = 5ft reach
-  'flame-blade': 5,
+  "flame-blade": 5,
 };
 
 function normalizeSlug(slug: string): string {
-  return slug.replace(/-(phb|xphb|tce|xge|fttod)$/, '');
+  return slug.replace(/-(phb|xphb|tce|xge|fttod)$/, "");
 }
 
 /**
@@ -81,21 +81,21 @@ function normalizeSlug(slug: string): string {
  * isso NÃO é shape, é metadata de targeting.
  */
 function hasRealAoeShape(
-  aoe: SpellShapeForRange['area_of_effect'],
+  aoe: SpellShapeForRange["area_of_effect"],
 ): aoe is { type: string; size: number } {
   return (
     aoe != null &&
-    typeof aoe === 'object' &&
-    typeof (aoe as { type?: unknown }).type === 'string' &&
-    typeof (aoe as { size?: unknown }).size === 'number'
+    typeof aoe === "object" &&
+    typeof (aoe as { type?: unknown }).type === "string" &&
+    typeof (aoe as { size?: unknown }).size === "number"
   );
 }
 
 export function getSpellEffectiveRange(
   spell: SpellShapeForRange,
 ): SpellEffectiveRange {
-  const rangeLower = (spell.range ?? '').trim().toLowerCase();
-  const isSelfRange = rangeLower === 'self';
+  const rangeLower = (spell.range ?? "").trim().toLowerCase();
+  const isSelfRange = rangeLower === "self";
   const aoe = hasRealAoeShape(spell.area_of_effect)
     ? spell.area_of_effect
     : null;
@@ -103,7 +103,7 @@ export function getSpellEffectiveRange(
 
   if (isSelfRange && aoe) {
     return {
-      kind: 'self-aoe',
+      kind: "self-aoe",
       attackRangeFt: null,
       aoeShape: aoe,
       rejectSelfAsTarget: false,
@@ -113,9 +113,9 @@ export function getSpellEffectiveRange(
   if (isSelfRange && attackType) {
     const normalized = normalizeSlug(spell.slug);
     const overrideFt = SELF_ORIGIN_ATTACK_RANGE_OVERRIDES[normalized];
-    const defaultFt = attackType === 'melee' ? 5 : 30;
+    const defaultFt = attackType === "melee" ? 5 : 30;
     return {
-      kind: 'self-origin-attack',
+      kind: "self-origin-attack",
       attackRangeFt: overrideFt ?? defaultFt,
       attackType,
       rejectSelfAsTarget: true,
@@ -125,7 +125,7 @@ export function getSpellEffectiveRange(
 
   if (isSelfRange) {
     return {
-      kind: 'self-buff',
+      kind: "self-buff",
       attackRangeFt: null,
       aoeShape: null,
       rejectSelfAsTarget: false,
@@ -134,7 +134,7 @@ export function getSpellEffectiveRange(
 
   const parsed = parseRangeString(spell.range);
   return {
-    kind: 'normal',
+    kind: "normal",
     attackRangeFt: parsed?.normal ?? 0,
     rejectSelfAsTarget: false,
     aoeShape: null,

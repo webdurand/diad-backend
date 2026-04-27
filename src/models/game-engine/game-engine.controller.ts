@@ -14,84 +14,103 @@ import {
   UploadedFile,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
-import { CloudinaryService } from 'src/shared/cloudinary.service';
-import { QuestService } from '../world/services/quest.service';
-import { CharacterStateService } from '../characters/services/character-state.service';
-import { InventoryService } from '../characters/services/inventory.service';
-import { EquipmentSourceEnum } from 'src/entities/enums';
-import { AuthGuard } from '../auth/auth.guard';
-import { AdminGuard } from '../auth/admin.guard';
-import { NonProductionGuard } from '../auth/non-production.guard';
-import { DiceSeedDto } from './dto/dice-seed.dto';
-import { SessionService } from './services/session.service';
-import type { CreateSessionDto, UpdateSessionDto } from './services/session.service';
-import { EncounterService } from './services/encounter.service';
-import type { CreateEncounterDto, AddMonsterDto, BatchPositionDto } from './services/encounter.service';
-import { CombatService } from './services/combat.service';
-import type { AttackDto, DamageDto, HealDto, ConditionDto } from './services/combat.service';
-import { EventService } from './services/event.service';
-import { MovementService } from './services/movement.service';
-import { PersistentAreaService } from './services/persistent-area.service';
-import { SpellCastingService } from './services/spell-casting.service';
-import { DiceService } from './services/dice.service';
-import { SkillCheckService } from './services/skill-check.service';
-import type { SkillCheckDto } from './services/skill-check.service';
-import { SavingThrowService } from './services/saving-throw.service';
-import type { SavingThrowDto } from './services/saving-throw.service';
-import { PermissionResolver } from './services/permission-resolver.service';
-import { DeathSaveDto } from './dto/death-save.dto';
-import { GenericActionDto } from './dto/generic-action.dto';
-import { GenericActionsService } from './services/generic-actions.service';
-import { ClassFeatureExecutorService } from './services/class-feature-executor.service';
-import { FightingStyleReactionsService } from './services/fighting-style-reactions.service';
-import { TacticalFeaturesService } from './services/tactical-features.service';
-import { BattleMasterService } from './services/battle-master.service';
-import { BrutalStrikeService } from './services/brutal-strike.service';
-import { BarbarianFeaturesService } from './services/barbarian-features.service';
-import { BerserkerService } from './services/berserker.service';
-import { ClericFeaturesService } from './services/cleric-features.service';
-import { PaladinFeaturesService } from './services/paladin-features.service';
-import { SorcererFeaturesService } from './services/sorcerer-features.service';
-import { TransformationService } from './services/transformation.service';
-import { SummoningService } from './services/summoning.service';
-import { MarkTransferService } from './services/mark-transfer.service';
-import { OpportunityAttackService } from './services/opportunity-attack.service';
-import { CapstonesService } from './services/capstones.service';
-import { AiTurnService } from './services/ai-turn.service';
-import { EncounterSnapshotService } from './services/encounter-snapshot.service';
-import { UpdateControlDto } from './dto/update-control.dto';
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
+import { CloudinaryService } from "src/shared/cloudinary.service";
+import { QuestService } from "../world/services/quest.service";
+import { CharacterStateService } from "../characters/services/character-state.service";
+import { InventoryService } from "../characters/services/inventory.service";
+import { EquipmentSourceEnum } from "src/entities/enums";
+import { AuthGuard } from "../auth/auth.guard";
+import { AdminGuard } from "../auth/admin.guard";
+import { NonProductionGuard } from "../auth/non-production.guard";
+import { DiceSeedDto } from "./dto/dice-seed.dto";
+import { SessionService } from "./services/session.service";
+import type {
+  CreateSessionDto,
+  UpdateSessionDto,
+} from "./services/session.service";
+import { EncounterService } from "./services/encounter.service";
+import type {
+  CreateEncounterDto,
+  AddMonsterDto,
+  BatchPositionDto,
+} from "./services/encounter.service";
+import { CombatService } from "./services/combat.service";
+import type {
+  AttackDto,
+  DamageDto,
+  HealDto,
+  ConditionDto,
+} from "./services/combat.service";
+import { EventService } from "./services/event.service";
+import { MovementService } from "./services/movement.service";
+import { PersistentAreaService } from "./services/persistent-area.service";
+import { SpellCastingService } from "./services/spell-casting.service";
+import { DiceService } from "./services/dice.service";
+import { SkillCheckService } from "./services/skill-check.service";
+import type { SkillCheckDto } from "./services/skill-check.service";
+import { SavingThrowService } from "./services/saving-throw.service";
+import type { SavingThrowDto } from "./services/saving-throw.service";
+import { PermissionResolver } from "./services/permission-resolver.service";
+import { DeathSaveDto } from "./dto/death-save.dto";
+import { GenericActionDto } from "./dto/generic-action.dto";
+import { GenericActionsService } from "./services/generic-actions.service";
+import { ClassFeatureExecutorService } from "./services/class-feature-executor.service";
+import { FightingStyleReactionsService } from "./services/fighting-style-reactions.service";
+import { TacticalFeaturesService } from "./services/tactical-features.service";
+import { BattleMasterService } from "./services/battle-master.service";
+import { BrutalStrikeService } from "./services/brutal-strike.service";
+import { BarbarianFeaturesService } from "./services/barbarian-features.service";
+import { BerserkerService } from "./services/berserker.service";
+import { ClericFeaturesService } from "./services/cleric-features.service";
+import { PaladinFeaturesService } from "./services/paladin-features.service";
+import { SorcererFeaturesService } from "./services/sorcerer-features.service";
+import { TransformationService } from "./services/transformation.service";
+import { SummoningService } from "./services/summoning.service";
+import { MarkTransferService } from "./services/mark-transfer.service";
+import { OpportunityAttackService } from "./services/opportunity-attack.service";
+import { CapstonesService } from "./services/capstones.service";
+import { AiTurnService } from "./services/ai-turn.service";
+import { EncounterSnapshotService } from "./services/encounter-snapshot.service";
+import { UpdateControlDto } from "./dto/update-control.dto";
 // Spec 004
-import { LegendaryActionDto } from './dto/legendary-action.dto';
-import { GrappleEscapeDto } from './dto/grapple-escape.dto';
-import { LairActionDto } from './dto/lair-action.dto';
-import { LegendaryActionService } from './services/legendary-action.service';
-import { GrappleEscapeService } from './services/grapple-escape.service';
-import { LairActionService } from './services/lair-action.service';
-import { ConditionLifecycleService } from './services/condition-lifecycle.service';
+import { LegendaryActionDto } from "./dto/legendary-action.dto";
+import { GrappleEscapeDto } from "./dto/grapple-escape.dto";
+import { LairActionDto } from "./dto/lair-action.dto";
+import { LegendaryActionService } from "./services/legendary-action.service";
+import { GrappleEscapeService } from "./services/grapple-escape.service";
+import { LairActionService } from "./services/lair-action.service";
+import { ConditionLifecycleService } from "./services/condition-lifecycle.service";
 // Spec 002 — join-request loop
-import { JoinRequestService } from './services/join-request.service';
+import { JoinRequestService } from "./services/join-request.service";
 // Spec 016 — Play Shell Foundation
-import { FateLadderService } from './services/fate-ladder.service';
+import { FateLadderService } from "./services/fate-ladder.service";
 import type {
   FateLadderTrigger,
   FateLadderOption,
-} from './services/fate-ladder.service';
-import { XpAwardService } from './services/xp-award.service';
-import { DiceRollService } from './services/dice-roll.service';
-import type { XpAwardSource } from 'src/entities/xp-award-event.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { failure, GameErrorCode } from './interfaces/result.type';
+} from "./services/fate-ladder.service";
+import { XpAwardService } from "./services/xp-award.service";
+import { DiceRollService } from "./services/dice-roll.service";
+import type { XpAwardSource } from "src/entities/xp-award-event.entity";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { failure, GameErrorCode } from "./interfaces/result.type";
 // Spec 006 — response DTOs
-import { toEnrichedEncounterResponse } from './dto/encounter-response.dto';
-import { toEventResponseDto, buildParticipantsMap, camelToSnakeCase } from './dto/event-response.dto';
-import { GetEventsQueryDto, VALID_EVENT_TYPES } from './dto/get-events-query.dto';
-import { ResolveEncounterDto } from './dto/resolve-encounter.dto';
+import { toEnrichedEncounterResponse } from "./dto/encounter-response.dto";
+import {
+  toEventResponseDto,
+  buildParticipantsMap,
+  camelToSnakeCase,
+} from "./dto/event-response.dto";
+import {
+  GetEventsQueryDto,
+  VALID_EVENT_TYPES,
+} from "./dto/get-events-query.dto";
+import { ResolveEncounterDto } from "./dto/resolve-encounter.dto";
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -99,11 +118,11 @@ interface AuthRequest extends Request {
 
 function getUserId(req: AuthRequest): string {
   const id = req.user?.id;
-  if (!id) throw new UnauthorizedException('Usuario nao autenticado.');
+  if (!id) throw new UnauthorizedException("Usuario nao autenticado.");
   return id;
 }
 
-@Controller('game')
+@Controller("game")
 @UseGuards(AuthGuard)
 export class GameEngineController {
   constructor(
@@ -161,73 +180,67 @@ export class GameEngineController {
 
   // ==================== SESSIONS ====================
 
-  @Post('sessions')
-  async createSession(
-    @Req() req: AuthRequest,
-    @Body() dto: CreateSessionDto,
-  ) {
+  @Post("sessions")
+  async createSession(@Req() req: AuthRequest, @Body() dto: CreateSessionDto) {
     return this.sessionService.create(getUserId(req), dto);
   }
 
-  @Get('sessions/solo')
+  @Get("sessions/solo")
   async listSoloSessions(@Req() req: AuthRequest) {
     const sessions = await this.sessionService.listByUser(getUserId(req));
     return sessions
-      .filter((s) => s.name?.startsWith('Solo:'))
+      .filter((s) => s.name?.startsWith("Solo:"))
       .map((s) => ({
         id: s.id,
-        name: s.name.replace('Solo: ', ''),
+        name: s.name.replace("Solo: ", ""),
         status: s.status,
         updatedAt: s.updatedAt,
         createdAt: s.createdAt,
       }));
   }
 
-  @Get('sessions')
+  @Get("sessions")
   async listSessions(@Req() req: AuthRequest) {
     return this.sessionService.listByUser(getUserId(req));
   }
 
-  @Get('sessions/:id')
-  async getSession(
-    @Req() req: AuthRequest,
-    @Param('id') id: string,
-  ) {
+  @Get("sessions/:id")
+  async getSession(@Req() req: AuthRequest, @Param("id") id: string) {
     await this.sessionService.ensureAccess(id, getUserId(req));
     return this.sessionService.getById(id);
   }
 
-  @Patch('sessions/:id')
+  @Patch("sessions/:id")
   async updateSession(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: UpdateSessionDto,
   ) {
     await this.sessionService.ensureOwnership(id, getUserId(req));
     return this.sessionService.update(id, dto);
   }
 
-  @Delete('sessions/:id')
-  async deleteSession(@Req() req: AuthRequest, @Param('id') id: string) {
+  @Delete("sessions/:id")
+  async deleteSession(@Req() req: AuthRequest, @Param("id") id: string) {
     await this.sessionService.ensureOwnership(id, getUserId(req));
     return this.sessionService.delete(id);
   }
 
-  @Post('sessions/:id/characters')
+  @Post("sessions/:id/characters")
   async addCharacterToSession(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Body('characterId') characterId: string,
+    @Param("id") id: string,
+    @Body("characterId") characterId: string,
   ) {
     await this.sessionService.ensureOwnership(id, getUserId(req));
     return this.sessionService.addCharacter(id, characterId);
   }
 
-  @Delete('sessions/:id/characters/:charId')
+  @Delete("sessions/:id/characters/:charId")
   async removeCharacterFromSession(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('charId') charId: string,
+    @Param("id") id: string,
+    @Param("charId") charId: string,
   ) {
     await this.sessionService.ensureOwnership(id, getUserId(req));
     return this.sessionService.removeCharacter(id, charId);
@@ -235,10 +248,10 @@ export class GameEngineController {
 
   // ==================== ENCOUNTERS ====================
 
-  @Post('sessions/:sessionId/encounters')
+  @Post("sessions/:sessionId/encounters")
   async createEncounter(
     @Req() req: AuthRequest,
-    @Param('sessionId') sessionId: string,
+    @Param("sessionId") sessionId: string,
     @Body() dto: CreateEncounterDto,
   ) {
     const userId = getUserId(req);
@@ -246,17 +259,17 @@ export class GameEngineController {
     return this.encounterService.create(sessionId, dto, userId);
   }
 
-  @Get('sessions/:sessionId/encounters')
+  @Get("sessions/:sessionId/encounters")
   async listEncounters(
     @Req() req: AuthRequest,
-    @Param('sessionId') sessionId: string,
+    @Param("sessionId") sessionId: string,
   ) {
     await this.sessionService.ensureOwnership(sessionId, getUserId(req));
     return this.encounterService.listBySession(sessionId);
   }
 
-  @Get('encounters/:id')
-  async getEncounter(@Param('id') id: string) {
+  @Get("encounters/:id")
+  async getEncounter(@Param("id") id: string) {
     const encounter = await this.encounterService.getById(id);
     return {
       ok: true as const,
@@ -265,43 +278,36 @@ export class GameEngineController {
     };
   }
 
-  @Get('campaigns/:campaignId/encounters')
-  async listEncountersByCampaign(@Param('campaignId') campaignId: string) {
+  @Get("campaigns/:campaignId/encounters")
+  async listEncountersByCampaign(@Param("campaignId") campaignId: string) {
     return this.encounterService.listByCampaign(campaignId);
   }
 
-  @Delete('encounters/:id')
-  async deleteEncounter(@Param('id') id: string) {
+  @Delete("encounters/:id")
+  async deleteEncounter(@Param("id") id: string) {
     await this.encounterService.deleteEncounter(id);
     return { ok: true };
   }
 
-  @Post('encounters/:id/monsters')
-  async addMonster(
-    @Param('id') id: string,
-    @Body() dto: AddMonsterDto,
-  ) {
+  @Post("encounters/:id/monsters")
+  async addMonster(@Param("id") id: string, @Body() dto: AddMonsterDto) {
     return this.encounterService.addMonster(id, dto);
   }
 
-  @Post('encounters/:id/characters')
+  @Post("encounters/:id/characters")
   async addCharacterToEncounter(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Body('characterId') characterId: string,
+    @Param("id") id: string,
+    @Body("characterId") characterId: string,
   ) {
-    return this.encounterService.addCharacter(
-      id,
-      characterId,
-      getUserId(req),
-    );
+    return this.encounterService.addCharacter(id, characterId, getUserId(req));
   }
 
-  @Post('encounters/:id/late-join/character')
+  @Post("encounters/:id/late-join/character")
   async lateJoinCharacter(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Body('characterId') characterId: string,
+    @Param("id") id: string,
+    @Body("characterId") characterId: string,
   ) {
     return this.encounterService.lateJoinCharacter(
       id,
@@ -312,11 +318,11 @@ export class GameEngineController {
 
   // Spec 002 — Join-request loop ------------------------------------------
 
-  @Post('encounters/:id/join-requests')
+  @Post("encounters/:id/join-requests")
   async createJoinRequest(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Body('characterId') characterId: string,
+    @Param("id") id: string,
+    @Body("characterId") characterId: string,
   ) {
     return this.joinRequestService.createRequest(
       id,
@@ -325,42 +331,42 @@ export class GameEngineController {
     );
   }
 
-  @Get('encounters/:id/join-requests')
+  @Get("encounters/:id/join-requests")
   async listJoinRequests(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Query('status') status?: 'pending' | 'approved' | 'rejected' | 'all',
+    @Param("id") id: string,
+    @Query("status") status?: "pending" | "approved" | "rejected" | "all",
   ) {
     return this.joinRequestService.listByEncounter(
       id,
       getUserId(req),
-      status ?? 'pending',
+      status ?? "pending",
     );
   }
 
-  @Post('encounters/:id/join-requests/:reqId/approve')
+  @Post("encounters/:id/join-requests/:reqId/approve")
   async approveJoinRequest(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('reqId') reqId: string,
+    @Param("id") id: string,
+    @Param("reqId") reqId: string,
   ) {
     return this.joinRequestService.approve(id, reqId, getUserId(req));
   }
 
-  @Post('encounters/:id/join-requests/:reqId/reject')
+  @Post("encounters/:id/join-requests/:reqId/reject")
   async rejectJoinRequest(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('reqId') reqId: string,
-    @Body('reason') reason?: string,
+    @Param("id") id: string,
+    @Param("reqId") reqId: string,
+    @Body("reason") reason?: string,
   ) {
     return this.joinRequestService.reject(id, reqId, getUserId(req), reason);
   }
 
-  @Post('encounters/:id/invites')
+  @Post("encounters/:id/invites")
   async inviteToEncounter(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { playerUserIds?: string[]; message?: string } = {},
   ) {
     return this.joinRequestService.createInvites(
@@ -371,43 +377,38 @@ export class GameEngineController {
     );
   }
 
-  @Post('encounters/:id/late-join/monster')
-  async lateJoinMonster(
-    @Param('id') id: string,
-    @Body() dto: AddMonsterDto,
-  ) {
+  @Post("encounters/:id/late-join/monster")
+  async lateJoinMonster(@Param("id") id: string, @Body() dto: AddMonsterDto) {
     return this.encounterService.lateJoinMonster(id, dto);
   }
 
-  @Delete('encounters/:id/participants/:participantId')
-  async removeParticipant(
-    @Param('participantId') participantId: string,
-  ) {
+  @Delete("encounters/:id/participants/:participantId")
+  async removeParticipant(@Param("participantId") participantId: string) {
     return this.encounterService.removeParticipant(participantId);
   }
 
-  @Post('encounters/:id/roll-initiative')
-  async rollInitiative(@Param('id') id: string) {
+  @Post("encounters/:id/roll-initiative")
+  async rollInitiative(@Param("id") id: string) {
     return this.encounterService.rollAllInitiative(id);
   }
 
-  @Patch('encounters/:id/initiative/:participantId')
+  @Patch("encounters/:id/initiative/:participantId")
   async setManualInitiative(
-    @Param('participantId') participantId: string,
-    @Body('total') total: number,
+    @Param("participantId") participantId: string,
+    @Body("total") total: number,
   ) {
     return this.encounterService.setManualInitiative(participantId, total);
   }
 
-  @Post('encounters/:id/start')
-  async startCombat(@Param('id') id: string, @Req() req: AuthRequest) {
+  @Post("encounters/:id/start")
+  async startCombat(@Param("id") id: string, @Req() req: AuthRequest) {
     const encounter = await this.encounterService.startCombat(id);
     const firstId = encounter.turnOrder?.[0];
     if (firstId) {
       const first = await this.encounterService.getParticipant(firstId);
       const session = await this.sessionService.getById(encounter.sessionId);
       const ownerId =
-        first.type === 'pc' && first.characterId
+        first.type === "pc" && first.characterId
           ? await this.encounterService.resolveCharacterOwner(
               first.characterId,
               getUserId(req),
@@ -419,8 +420,8 @@ export class GameEngineController {
     return this.encounterService.getById(id);
   }
 
-  @Post('encounters/:id/end')
-  async endEncounter(@Param('id') id: string) {
+  @Post("encounters/:id/end")
+  async endEncounter(@Param("id") id: string) {
     return this.encounterService.endEncounter(id);
   }
 
@@ -436,13 +437,13 @@ export class GameEngineController {
    * NOTA M2: outcome 'talked_down' não persiste em status enum (evita migration).
    * M3 adiciona CombatResolutionCard storage com outcome_kind explícito.
    */
-  @Post('encounters/:id/talk-down')
+  @Post("encounters/:id/talk-down")
   async talkDownEncounter(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body()
     body: {
-      skill: 'Persuasion' | 'Deception' | 'Intimidation' | 'Insight';
+      skill: "Persuasion" | "Deception" | "Intimidation" | "Insight";
       dc: number;
       totalModifier: number;
       rawD20: number;
@@ -450,16 +451,16 @@ export class GameEngineController {
     },
   ) {
     const resolved = this.diceService.resolveDiceRoll({
-      rollId: '00000000-0000-0000-0000-000000000000',
+      rollId: "00000000-0000-0000-0000-000000000000",
       rawD20: body.rawD20,
       rawD20Disadv: body.rawD20Disadv ?? null,
       totalModifier: body.totalModifier,
       dc: body.dc,
-      kind: 'ability_check',
+      kind: "ability_check",
     });
 
     const succeeded =
-      resolved.verdict === 'success' || resolved.verdict === 'crit_success';
+      resolved.verdict === "success" || resolved.verdict === "crit_success";
 
     // Spec 016 §7.1 / Task BG3 parity — sucesso narrativo concede XP igual
     // ao kill (anti-grind). Compute amount = soma de XP de todos os monsters
@@ -475,15 +476,12 @@ export class GameEngineController {
 
       const totalXp = (encounter.participants ?? [])
         .filter(
-          (p) =>
-            p.type === 'monster' &&
-            p.faction === 'enemy' &&
-            p.monster,
+          (p) => p.type === "monster" && p.faction === "enemy" && p.monster,
         )
         .reduce((sum, p) => sum + (p.monster?.xp ?? 0), 0);
 
       const pcParticipants = (encounter.participants ?? []).filter(
-        (p) => p.type === 'pc' && p.characterId,
+        (p) => p.type === "pc" && p.characterId,
       );
 
       if (totalXp > 0 && pcParticipants.length > 0) {
@@ -498,7 +496,7 @@ export class GameEngineController {
             .awardXp({
               characterId: pc.characterId!,
               amount: totalXp,
-              source: 'combat_resolved_peacefully',
+              source: "combat_resolved_peacefully",
               reason: `Talk-down (${body.skill}) DC ${body.dc} success`,
               encounterId: id,
               ownerUserId,
@@ -516,7 +514,7 @@ export class GameEngineController {
         }
       }
 
-      if (encounter.status === 'preparing') {
+      if (encounter.status === "preparing") {
         await this.encounterService.endEncounter(id).catch(() => {
           // endEncounter pode falhar com 0 monsters; ok pra talk-down narrativo
         });
@@ -531,7 +529,7 @@ export class GameEngineController {
         dc: body.dc,
         verdict: resolved.verdict,
         succeeded,
-        outcome: succeeded ? 'talked_down' : 'failed_initiative_will_roll',
+        outcome: succeeded ? "talked_down" : "failed_initiative_will_roll",
         roll: {
           rawD20: resolved.rawD20,
           rawD20Disadv: resolved.rawD20Disadv,
@@ -549,20 +547,17 @@ export class GameEngineController {
    *
    * talkDownDc = 10 + party_level (clamp 5-20).
    */
-  @Get('encounters/:id/pre-combat-briefing')
-  async preCombatBriefing(@Param('id') encounterId: string) {
+  @Get("encounters/:id/pre-combat-briefing")
+  async preCombatBriefing(@Param("id") encounterId: string) {
     const encounter = await this.encounterService.getById(encounterId);
 
     const monsterParticipants = (encounter.participants ?? []).filter(
-      (p) =>
-        p.type === 'monster' &&
-        p.faction === 'enemy' &&
-        p.monster,
+      (p) => p.type === "monster" && p.faction === "enemy" && p.monster,
     );
 
     const monsters = monsterParticipants.map((p) => {
       const ac =
-        typeof (p.monster as any)?.armor_class === 'object'
+        typeof (p.monster as any)?.armor_class === "object"
           ? Number(
               ((p.monster as any).armor_class.value ??
                 (p.monster as any).armor_class.ac ??
@@ -584,7 +579,7 @@ export class GameEngineController {
 
     // Tier (DMG 2024): tier1 = lvl 1-4, tier2 = 5-10, tier3 = 11-16, tier4 = 17-20.
     const pcParticipants = (encounter.participants ?? []).filter(
-      (p) => p.type === 'pc' && p.characterId,
+      (p) => p.type === "pc" && p.characterId,
     );
     let partyLevel = 1;
     if (pcParticipants.length > 0) {
@@ -602,12 +597,12 @@ export class GameEngineController {
     }
     const tier =
       partyLevel >= 17
-        ? 'tier4'
+        ? "tier4"
         : partyLevel >= 11
-          ? 'tier3'
+          ? "tier3"
           : partyLevel >= 5
-            ? 'tier2'
-            : 'tier1';
+            ? "tier2"
+            : "tier1";
 
     // Talk-down eligibility: monsters humanoid OR INT >= 8, sem 'enraged'
     // ou 'summoned' status. linkedCasterParticipantId != null = summoned.
@@ -615,11 +610,12 @@ export class GameEngineController {
       monsterParticipants.length > 0 &&
       monsterParticipants.every((p) => {
         const m = p.monster!;
-        const isHumanoid = m.type?.toLowerCase().includes('humanoid') ?? false;
+        const isHumanoid = m.type?.toLowerCase().includes("humanoid") ?? false;
         const isIntelligent = (m.intelligence ?? 0) >= 8;
         const isEligible = isHumanoid || isIntelligent;
         const isEnraged = (p.conditionInstances ?? []).some(
-          (c) => c.slug === ('enraged' as any) || c.slug === ('frenzied' as any),
+          (c) =>
+            c.slug === ("enraged" as any) || c.slug === ("frenzied" as any),
         );
         const isSummoned = !!p.linkedCasterParticipantId;
         return isEligible && !isEnraged && !isSummoned;
@@ -635,38 +631,38 @@ export class GameEngineController {
       tier,
       talkDownAvailable,
       talkDownDc,
-      talkDownSkill: 'persuasion',
+      talkDownSkill: "persuasion",
     };
   }
 
-  @Post('encounters/:id/resolve')
+  @Post("encounters/:id/resolve")
   async resolveEncounter(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: ResolveEncounterDto,
   ) {
     return this.encounterService.resolveEncounter(id, body, getUserId(req));
   }
 
-  @Post('encounters/:id/difficulty')
+  @Post("encounters/:id/difficulty")
   async calculateDifficulty(
-    @Param('id') id: string,
-    @Body('partyLevels') partyLevels: number[],
+    @Param("id") id: string,
+    @Body("partyLevels") partyLevels: number[],
   ) {
     return this.encounterService.calculateDifficulty(id, partyLevels);
   }
 
   // ==================== COMBAT ====================
 
-  @Get('encounters/:id/turn')
-  async getCurrentTurn(@Param('id') id: string) {
+  @Get("encounters/:id/turn")
+  async getCurrentTurn(@Param("id") id: string) {
     return this.combatService.getCurrentTurn(id);
   }
 
-  @Post('encounters/:id/aoe-action')
+  @Post("encounters/:id/aoe-action")
   async resolveAoeAction(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body()
     body: {
       casterParticipantId: string;
@@ -680,10 +676,10 @@ export class GameEngineController {
     });
   }
 
-  @Post('encounters/:id/attack')
+  @Post("encounters/:id/attack")
   async resolveAttack(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body()
     body: {
       attackerParticipantId: string;
@@ -705,20 +701,17 @@ export class GameEngineController {
         ok: false,
         error:
           "Campo 'actionSlug' e obrigatorio. O shape antigo ('actionName') foi removido em Spec 003.",
-        code: 'MISSING_ACTION_SLUG',
-        hint:
-          'Use actionSlug de GET /characters/:id/combat-actions ou GET /encounters/:id/participants/:pid/actions.',
+        code: "MISSING_ACTION_SLUG",
+        hint: "Use actionSlug de GET /characters/:id/combat-actions ou GET /encounters/:id/participants/:pid/actions.",
       };
     }
     // Shove/Grapple standalone foram removidos — viram sub-opções do Unarmed Strike.
-    if (body.actionSlug === 'shove' || body.actionSlug === 'grapple') {
+    if (body.actionSlug === "shove" || body.actionSlug === "grapple") {
       return {
         ok: false,
-        error:
-          'Shove e Grapple sao sub-opcoes de Unarmed Strike (XPHB 2024).',
-        code: 'USE_UNARMED_STRIKE',
-        hint:
-          `Use actionSlug='unarmed-strike' com options.mode='${body.actionSlug}'.`,
+        error: "Shove e Grapple sao sub-opcoes de Unarmed Strike (XPHB 2024).",
+        code: "USE_UNARMED_STRIKE",
+        hint: `Use actionSlug='unarmed-strike' com options.mode='${body.actionSlug}'.`,
       };
     }
 
@@ -737,7 +730,7 @@ export class GameEngineController {
     if (isMultiattack) {
       return this.combatService.resolveMultiattack(id, {
         attackerParticipantId: body.attackerParticipantId,
-        targetParticipantId: body.targetParticipantId ?? '',
+        targetParticipantId: body.targetParticipantId ?? "",
         targetParticipantIds: body.targetParticipantIds,
         actionName,
         actionSlug: body.actionSlug,
@@ -750,8 +743,8 @@ export class GameEngineController {
     if (!body.targetParticipantId) {
       return {
         ok: false,
-        error: 'targetParticipantId é obrigatório para ataque simples.',
-        code: 'INVALID_PAYLOAD',
+        error: "targetParticipantId é obrigatório para ataque simples.",
+        code: "INVALID_PAYLOAD",
       };
     }
     return this.combatService.resolveAttack(id, {
@@ -766,11 +759,17 @@ export class GameEngineController {
     });
   }
 
-  @Post('encounters/:id/damage')
+  @Post("encounters/:id/damage")
   async applyDamage(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Body() body: { targetParticipantId: string; amount: number; damageType: string; fromCriticalHit?: boolean },
+    @Param("id") id: string,
+    @Body()
+    body: {
+      targetParticipantId: string;
+      amount: number;
+      damageType: string;
+      fromCriticalHit?: boolean;
+    },
   ) {
     const ownerUserId = await this.permissionResolver.resolveMutationOwner(
       body.targetParticipantId,
@@ -780,10 +779,10 @@ export class GameEngineController {
     return this.combatService.applyDamage(id, { ...body, ownerUserId });
   }
 
-  @Post('encounters/:id/heal')
+  @Post("encounters/:id/heal")
   async applyHealing(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { targetParticipantId: string; amount: number },
   ) {
     const ownerUserId = await this.permissionResolver.resolveMutationOwner(
@@ -794,10 +793,10 @@ export class GameEngineController {
     return this.combatService.applyHealing(id, { ...body, ownerUserId });
   }
 
-  @Post('encounters/:id/condition')
+  @Post("encounters/:id/condition")
   async applyCondition(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { participantId: string; condition: string; apply: boolean },
   ) {
     const ownerUserId = await this.permissionResolver.resolveMutationOwner(
@@ -808,17 +807,13 @@ export class GameEngineController {
     return this.combatService.applyCondition(id, { ...body, ownerUserId });
   }
 
-  @Get('encounters/:id/turn-actions/:participantId')
+  @Get("encounters/:id/turn-actions/:participantId")
   async getTurnActions(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('participantId') participantId: string,
+    @Param("id") id: string,
+    @Param("participantId") participantId: string,
   ) {
-    return this.combatService.getTurnActions(
-      id,
-      participantId,
-      getUserId(req),
-    );
+    return this.combatService.getTurnActions(id, participantId, getUserId(req));
   }
 
   /**
@@ -826,11 +821,11 @@ export class GameEngineController {
    * com action economy corrente (turno ativo, actionUsed, attacksUsedThisTurn,
    * reactionUsed) e rest state (feature_uses_used, spell_slots_used) aplicados.
    */
-  @Get('encounters/:id/participants/:participantId/actions')
+  @Get("encounters/:id/participants/:participantId/actions")
   async getParticipantActions(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('participantId') participantId: string,
+    @Param("id") id: string,
+    @Param("participantId") participantId: string,
   ) {
     return this.combatService.getParticipantCombatActions(
       id,
@@ -839,17 +834,17 @@ export class GameEngineController {
     );
   }
 
-  @Post('encounters/:id/end-turn')
-  async endTurn(@Param('id') id: string) {
+  @Post("encounters/:id/end-turn")
+  async endTurn(@Param("id") id: string) {
     return this.combatService.endTurn(id);
   }
 
   // ==================== SPEC 004: RAW COMBAT ENDPOINTS ====================
 
-  @Post('encounters/:id/legendary-action')
+  @Post("encounters/:id/legendary-action")
   async legendaryAction(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: LegendaryActionDto,
   ) {
     const ownerUserId = await this.permissionResolver.resolveMutationOwner(
@@ -859,10 +854,13 @@ export class GameEngineController {
     );
     const monster = await this.participantRepo.findOne({
       where: { id: body.monsterParticipantId, encounterId: id },
-      relations: ['monster'],
+      relations: ["monster"],
     });
     if (!monster) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
-    const can = this.legendaryActionService.canExecute(monster, body.actionName);
+    const can = this.legendaryActionService.canExecute(
+      monster,
+      body.actionName,
+    );
     if (!can.ok) return can;
     const cost = can.value.cost;
     const spent = await this.legendaryActionService.spendPoints(
@@ -874,10 +872,10 @@ export class GameEngineController {
     return { ok: true, value: spent.result, events: spent.events };
   }
 
-  @Post('encounters/:id/grapple-escape')
+  @Post("encounters/:id/grapple-escape")
   async grappleEscape(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: GrappleEscapeDto,
   ) {
     await this.permissionResolver.resolveMutationOwner(
@@ -890,7 +888,7 @@ export class GameEngineController {
     });
     if (!target) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
     // Modificadores simples para v1: usar bonus de proficiência fixo (refinar com character-sheet em iteração futura)
-    const targetMod = body.ability === 'athletics' ? 3 : 3;
+    const targetMod = body.ability === "athletics" ? 3 : 3;
     const grapplerMod = 3;
     return this.grappleEscapeService.attemptEscape(
       target,
@@ -900,10 +898,10 @@ export class GameEngineController {
     );
   }
 
-  @Post('encounters/:id/lair-action')
+  @Post("encounters/:id/lair-action")
   async lairAction(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: LairActionDto,
   ) {
     await this.permissionResolver.resolveMutationOwner(
@@ -920,10 +918,10 @@ export class GameEngineController {
     );
   }
 
-  @Patch('encounters/:id/in-lair')
+  @Patch("encounters/:id/in-lair")
   async setInLair(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { inLair: boolean },
   ) {
     const encounter = await this.encounterRepo.findOne({ where: { id } });
@@ -934,11 +932,11 @@ export class GameEngineController {
     return { ok: true, value: { inLair: encounter.inLair } };
   }
 
-  @Delete('encounters/:id/conditions/:instanceId')
+  @Delete("encounters/:id/conditions/:instanceId")
   async removeConditionInstance(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('instanceId') instanceId: string,
+    @Param("id") id: string,
+    @Param("instanceId") instanceId: string,
   ) {
     void req;
     // Localiza o participante que tem essa instância
@@ -952,18 +950,22 @@ export class GameEngineController {
     const r = await this.conditionLifecycle.removeConditionInstance(
       target,
       instanceId,
-      'manual',
+      "manual",
     );
-    return { ok: true, value: { instanceId, removed: r.removed }, events: r.events };
+    return {
+      ok: true,
+      value: { instanceId, removed: r.removed },
+      events: r.events,
+    };
   }
 
   // ==================== CONTROL TOGGLE (SPEC 003 US4) ====================
 
-  @Patch('encounters/:id/participants/:participantId/control')
+  @Patch("encounters/:id/participants/:participantId/control")
   async updateControlMode(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('participantId') participantId: string,
+    @Param("id") id: string,
+    @Param("participantId") participantId: string,
     @Body() dto: UpdateControlDto,
   ) {
     const authUserId = getUserId(req);
@@ -977,35 +979,28 @@ export class GameEngineController {
 
   // ==================== AI TURN + SNAPSHOT (SPEC 003 US3) ====================
 
-  @Post('encounters/:id/ai-turn')
+  @Post("encounters/:id/ai-turn")
   async executeAiTurn(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { participantId: string },
   ) {
     const authUserId = getUserId(req);
-    return this.aiTurnService.executeAiTurn(
-      id,
-      body.participantId,
-      authUserId,
-    );
+    return this.aiTurnService.executeAiTurn(id, body.participantId, authUserId);
   }
 
-  @Get('encounters/:id/snapshot')
-  async getEncounterSnapshot(
-    @Req() req: AuthRequest,
-    @Param('id') id: string,
-  ) {
+  @Get("encounters/:id/snapshot")
+  async getEncounterSnapshot(@Req() req: AuthRequest, @Param("id") id: string) {
     const authUserId = getUserId(req);
     return this.snapshotService.build(id, authUserId);
   }
 
   // ==================== GENERIC ACTIONS (SPEC 003 US2) ====================
 
-  @Post('encounters/:id/generic-action')
+  @Post("encounters/:id/generic-action")
   async executeGenericAction(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: GenericActionDto,
   ) {
     const authUserId = getUserId(req);
@@ -1028,10 +1023,10 @@ export class GameEngineController {
    * Features FULL resolvem mecanica aqui (heal, flags, pool). Features
    * STUB emitem evento `class_feature_invoked` que a Spec 4 consome.
    */
-  @Post('encounters/:id/class-feature')
+  @Post("encounters/:id/class-feature")
   async invokeClassFeature(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body()
     body: {
       participantId: string;
@@ -1054,11 +1049,11 @@ export class GameEngineController {
     );
   }
 
-  @Post('encounters/:id/death-save/:participantId')
+  @Post("encounters/:id/death-save/:participantId")
   async resolveDeathSave(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('participantId') participantId: string,
+    @Param("id") id: string,
+    @Param("participantId") participantId: string,
     @Body() _body: DeathSaveDto,
   ) {
     const authUserId = getUserId(req);
@@ -1072,10 +1067,10 @@ export class GameEngineController {
 
   // ==================== SPELLCASTING ====================
 
-  @Post('encounters/:id/cast-spell')
+  @Post("encounters/:id/cast-spell")
   async castSpellInCombat(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body()
     body: {
       participantId: string;
@@ -1091,12 +1086,12 @@ export class GameEngineController {
       /** Spec 012 Sorcerer — Metamagic RAW 2024 (6 types). */
       metamagic?: {
         type:
-          | 'twinned'
-          | 'quickened'
-          | 'distant'
-          | 'heightened'
-          | 'extended'
-          | 'subtle';
+          | "twinned"
+          | "quickened"
+          | "distant"
+          | "heightened"
+          | "extended"
+          | "subtle";
         targetExtra?: string;
         heightenedTargetId?: string;
       };
@@ -1140,18 +1135,18 @@ export class GameEngineController {
    * Idempotente: se participant não está transformado, retorna reverted=false.
    * Permissão: owner do participant OU DM do encounter (resolveMutationOwner).
    */
-  @Post('encounters/:id/participants/:participantId/revert-transformation')
+  @Post("encounters/:id/participants/:participantId/revert-transformation")
   async revertTransformation(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body()
     body: {
       reason?:
-        | 'manual'
-        | 'concentration-broken'
-        | 'form-hp-zero'
-        | 'duration-expired';
+        | "manual"
+        | "concentration-broken"
+        | "form-hp-zero"
+        | "duration-expired";
     },
   ) {
     await this.permissionResolver.resolveMutationOwner(
@@ -1160,28 +1155,35 @@ export class GameEngineController {
       encounterId,
     );
 
-    const before = await this.participantRepo.findOne({ where: { id: participantId } });
+    const before = await this.participantRepo.findOne({
+      where: { id: participantId },
+    });
     if (!before) {
-      return { ok: false, code: 'PARTICIPANT_NOT_FOUND', error: 'Participant não encontrado.' };
+      return {
+        ok: false,
+        code: "PARTICIPANT_NOT_FOUND",
+        error: "Participant não encontrado.",
+      };
     }
     if (!before.transformationState) {
       return { ok: true, reverted: false, events: [] };
     }
 
-    const reason = body.reason ?? 'manual';
+    const reason = body.reason ?? "manual";
     // Spec 015 Eixo 4 RAW: reverter Wild Shape voluntariamente custa bonus
     // action (XPHB 2024 p.303). Outras sources (Polymorph via caster dismiss)
     // seguem regra da própria spell — não bloqueia aqui. Auto-revert (hp-zero,
     // duration-expired, concentration-broken) é grátis.
     if (
-      reason === 'manual' &&
-      before.transformationState.source === 'wild-shape'
+      reason === "manual" &&
+      before.transformationState.source === "wild-shape"
     ) {
       if (before.bonusActionUsed) {
         return {
           ok: false,
-          code: 'BONUS_ACTION_ALREADY_USED',
-          error: 'Bonus action já foi usada neste turno. Reverter Wild Shape custa bonus action (RAW 2024).',
+          code: "BONUS_ACTION_ALREADY_USED",
+          error:
+            "Bonus action já foi usada neste turno. Reverter Wild Shape custa bonus action (RAW 2024).",
         };
       }
       before.bonusActionUsed = true;
@@ -1189,13 +1191,13 @@ export class GameEngineController {
     }
 
     const serviceReason =
-      reason === 'manual'
-        ? 'player-dismiss'
-        : reason === 'form-hp-zero'
-        ? 'hp-zero'
-        : reason === 'duration-expired'
-        ? 'duration-end'
-        : 'concentration-broken';
+      reason === "manual"
+        ? "player-dismiss"
+        : reason === "form-hp-zero"
+          ? "hp-zero"
+          : reason === "duration-expired"
+            ? "duration-end"
+            : "concentration-broken";
 
     const formSlug = before.transformationState.form.monsterSlug ?? null;
     const formName = before.transformationState.form.formName;
@@ -1204,20 +1206,23 @@ export class GameEngineController {
     await this.transformationService.revertForm(participantId, serviceReason);
 
     const hpFromState = before.characterId
-      ? await this.stateService.getCurrentHp(before.characterId).catch(() => null)
+      ? await this.stateService
+          .getCurrentHp(before.characterId)
+          .catch(() => null)
       : null;
     const hpAfter = hpFromState ?? before.currentHp ?? 0;
 
     const events: Array<{ eventType: string; narrativeDescriptor?: string }> = [
       {
-        eventType: 'transformation_reverted',
+        eventType: "transformation_reverted",
         narrativeDescriptor: `${formName} encolhe de volta à forma de ${originalDisplay}.`,
       },
     ];
-    if (reason === 'concentration-broken') {
+    if (reason === "concentration-broken") {
       events.unshift({
-        eventType: 'concentration_broken',
-        narrativeDescriptor: 'A concentração do caster se rompe; a forma se desfaz.',
+        eventType: "concentration_broken",
+        narrativeDescriptor:
+          "A concentração do caster se rompe; a forma se desfaz.",
       });
     }
 
@@ -1233,31 +1238,39 @@ export class GameEngineController {
   /**
    * Spec 012 Lote D — Rogue L20 Stroke of Luck: arm 1/SR auto-hit OU d20=20.
    */
-  @Post('encounters/:id/participants/:participantId/stroke-of-luck/arm')
+  @Post("encounters/:id/participants/:participantId/stroke-of-luck/arm")
   async strokeOfLuckArm(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: { kind: 'attack' | 'check' },
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body() body: { kind: "attack" | "check" },
   ) {
     const userId = getUserId(req);
-    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
-    if (!participant) return { ok: false, code: 'PARTICIPANT_NOT_FOUND' };
-    return this.capstonesService.strokeOfLuckArm(participant, userId, body.kind);
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId },
+    });
+    if (!participant) return { ok: false, code: "PARTICIPANT_NOT_FOUND" };
+    return this.capstonesService.strokeOfLuckArm(
+      participant,
+      userId,
+      body.kind,
+    );
   }
 
   /**
    * Spec 012 Lote D — Paladin L20 Devotion Holy Nimbus: cast aura 30ft 1min.
    */
-  @Post('encounters/:id/participants/:participantId/holy-nimbus')
+  @Post("encounters/:id/participants/:participantId/holy-nimbus")
   async holyNimbus(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
   ) {
     const userId = getUserId(req);
-    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
-    if (!participant) return { ok: false, code: 'PARTICIPANT_NOT_FOUND' };
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId },
+    });
+    if (!participant) return { ok: false, code: "PARTICIPANT_NOT_FOUND" };
     return this.capstonesService.holyNimbusCast(participant, userId);
   }
 
@@ -1265,16 +1278,18 @@ export class GameEngineController {
    * Spec 012 Lote C — Warlock L20 Eldritch Master.
    * 1/LR meditação 1min regain all pact slots.
    */
-  @Post('encounters/:id/participants/:participantId/eldritch-master')
+  @Post("encounters/:id/participants/:participantId/eldritch-master")
   async eldritchMaster(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
   ) {
     const userId = getUserId(req);
-    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId },
+    });
     if (!participant) {
-      return { ok: false, code: 'PARTICIPANT_NOT_FOUND' };
+      return { ok: false, code: "PARTICIPANT_NOT_FOUND" };
     }
     return this.capstonesService.eldritchMaster(participant, userId);
   }
@@ -1286,10 +1301,10 @@ export class GameEngineController {
    * Movement.service emite `opportunity_attack_available`; este endpoint
    * executa a reação (1 weapon attack) e consome reactionsUsed.
    */
-  @Post('encounters/:id/opportunity-attack')
+  @Post("encounters/:id/opportunity-attack")
   async opportunityAttack(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body()
     body: {
       attackerParticipantId: string;
@@ -1316,15 +1331,15 @@ export class GameEngineController {
    * turno subsequente, SEM gastar novo spell slot. A concentração continua
    * ativa (só muda o alvo).
    */
-  @Post('encounters/:id/transfer-mark')
+  @Post("encounters/:id/transfer-mark")
   async transferMark(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body()
     body: {
       casterParticipantId: string;
       newTargetParticipantId: string;
-      sourceSpellSlug: 'hunters-mark' | 'hex';
+      sourceSpellSlug: "hunters-mark" | "hex";
     },
   ) {
     return this.markTransferService.transferMark({
@@ -1338,10 +1353,10 @@ export class GameEngineController {
 
   // ==================== MOVEMENT ====================
 
-  @Post('encounters/:id/move')
+  @Post("encounters/:id/move")
   async moveParticipant(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { participantId: string; targetX: number; targetY: number },
   ) {
     const result = await this.movementService.moveParticipant(
@@ -1367,10 +1382,10 @@ export class GameEngineController {
     return result;
   }
 
-  @Post('encounters/:id/dash')
+  @Post("encounters/:id/dash")
   async dashAction(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { participantId: string },
   ) {
     return this.movementService.dashAction(
@@ -1380,9 +1395,9 @@ export class GameEngineController {
     );
   }
 
-  @Post('encounters/:id/disengage')
+  @Post("encounters/:id/disengage")
   async disengageAction(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { participantId: string },
   ) {
     return this.movementService.disengageAction(id, body.participantId);
@@ -1393,14 +1408,14 @@ export class GameEngineController {
    * Substitui o array inteiro; cada cell em `cells` custa 10ft ao mover
    * (bypassed por Land's Stride).
    */
-  @Patch('encounters/:id/difficult-terrain')
+  @Patch("encounters/:id/difficult-terrain")
   async setDifficultTerrain(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { cells: Array<{ x: number; y: number }> },
   ) {
     const encounter = await this.encounterRepo.findOne({ where: { id } });
     if (!encounter) {
-      return { ok: false, code: 'ENCOUNTER_NOT_FOUND' };
+      return { ok: false, code: "ENCOUNTER_NOT_FOUND" };
     }
     encounter.mapData = {
       ...(encounter.mapData ?? {}),
@@ -1415,11 +1430,11 @@ export class GameEngineController {
     };
   }
 
-  @Get('encounters/:id/movement/:participantId')
+  @Get("encounters/:id/movement/:participantId")
   async getMovementState(
     @Req() req: AuthRequest,
-    @Param('id') id: string,
-    @Param('participantId') participantId: string,
+    @Param("id") id: string,
+    @Param("participantId") participantId: string,
   ) {
     return this.movementService.getMovementState(
       id,
@@ -1430,37 +1445,38 @@ export class GameEngineController {
 
   // ==================== MAP ====================
 
-  @Post('encounters/:id/map/upload')
+  @Post("encounters/:id/map/upload")
   @UseInterceptors(
-    FileInterceptor('file', {
+    FileInterceptor("file", {
       storage: memoryStorage(),
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
       fileFilter: (_req, file, cb) => {
         if (/\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname)) {
           cb(null, true);
         } else {
-          cb(new Error('Apenas imagens (jpg, png, webp, gif)'), false);
+          cb(new Error("Apenas imagens (jpg, png, webp, gif)"), false);
         }
       },
     }),
   )
   async uploadMapBackground(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     const result = await this.cloudinaryService.uploadBuffer(
       file.buffer,
-      'maps',
+      "maps",
     );
     return this.encounterService.updateMapData(id, {
       backgroundUrl: result.secure_url,
     });
   }
 
-  @Patch('encounters/:id/map')
+  @Patch("encounters/:id/map")
   async updateMapData(
-    @Param('id') id: string,
-    @Body() body: {
+    @Param("id") id: string,
+    @Body()
+    body: {
       gridSize?: number;
       gridColumns?: number;
       gridRows?: number;
@@ -1471,25 +1487,26 @@ export class GameEngineController {
     return this.encounterService.updateMapData(id, body);
   }
 
-  @Patch('encounters/:id/participants/positions')
+  @Patch("encounters/:id/participants/positions")
   async batchUpdatePositions(
-    @Param('id') id: string,
-    @Body('positions') positions: BatchPositionDto[],
+    @Param("id") id: string,
+    @Body("positions") positions: BatchPositionDto[],
   ) {
     return this.encounterService.batchUpdatePositions(id, positions);
   }
 
-  @Patch('encounters/:id/participants/:participantId/position')
+  @Patch("encounters/:id/participants/:participantId/position")
   async updateParticipantPosition(
-    @Param('participantId') participantId: string,
-    @Param('id') encounterId: string,
+    @Param("participantId") participantId: string,
+    @Param("id") encounterId: string,
     @Body() body: { x: number; y: number },
   ) {
     // Spec 013 — PATCH position é teleport DM-side, mas pra harness/probe
     // funcionar ground effects precisam disparar mesmo via teleport.
     // Captura fromX/fromY antes do save, depois resolve tile-effects no path
     // Manhattan e persiste events. Aura relocation segue o caster.
-    const participant = await this.encounterService.getParticipant(participantId);
+    const participant =
+      await this.encounterService.getParticipant(participantId);
     const fromX = participant.positionX ?? body.x;
     const fromY = participant.positionY ?? body.y;
     const updated = await this.encounterService.updateParticipantPosition(
@@ -1509,7 +1526,7 @@ export class GameEngineController {
       cy += Math.sign(body.y - cy);
       traversed.push({ x: cx, y: cy });
     }
-    const events: import('./interfaces/result.type').GameEventData[] = [];
+    const events: import("./interfaces/result.type").GameEventData[] = [];
     if (traversed.length > 0) {
       try {
         for (const cell of traversed) {
@@ -1549,9 +1566,9 @@ export class GameEngineController {
     return updated;
   }
 
-  @Patch('encounters/:id/participants/:participantId/visibility')
+  @Patch("encounters/:id/participants/:participantId/visibility")
   async updateParticipantVisibility(
-    @Param('participantId') participantId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { visible: boolean },
   ) {
     return this.encounterService.updateParticipantVisibility(
@@ -1569,17 +1586,17 @@ export class GameEngineController {
    * endpoint diferenciado pelo guard (futuro TODO — por enquanto qualquer
    * authenticated user pode chamar grant, mas combat session é privado).
    */
-  @Post('encounters/:id/participants/:participantId/arm-inspiration')
+  @Post("encounters/:id/participants/:participantId/arm-inspiration")
   async armInspiration(
-    @Param('participantId') participantId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { arm: boolean },
   ) {
     return this.encounterService.armInspiration(participantId, body.arm);
   }
 
-  @Post('encounters/:id/participants/:participantId/grant-inspiration')
+  @Post("encounters/:id/participants/:participantId/grant-inspiration")
   async grantInspiration(
-    @Param('participantId') participantId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { grant: boolean },
   ) {
     return this.encounterService.grantInspiration(participantId, body.grant);
@@ -1589,11 +1606,13 @@ export class GameEngineController {
    * Fighting Style Interception (RAW 2024) — reação reduz dano de aliado
    * adjacente em 1d10+PB. Consome reaction.
    */
-  @Post('encounters/:id/participants/:participantId/fighting-style/interception')
+  @Post(
+    "encounters/:id/participants/:participantId/fighting-style/interception",
+  )
   async fsInterception(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') fighterParticipantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") fighterParticipantId: string,
     @Body() body: { allyParticipantId: string; damageAmount: number },
   ) {
     const userId = getUserId(req);
@@ -1604,7 +1623,8 @@ export class GameEngineController {
       body.allyParticipantId,
       body.damageAmount,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1612,11 +1632,11 @@ export class GameEngineController {
    * Fighting Style Protection (RAW 2024) — reação impõe disadvantage no
    * próximo attack contra aliado adjacente. Requer shield. Consome reaction.
    */
-  @Post('encounters/:id/participants/:participantId/fighting-style/protection')
+  @Post("encounters/:id/participants/:participantId/fighting-style/protection")
   async fsProtection(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') fighterParticipantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") fighterParticipantId: string,
     @Body() body: { allyParticipantId: string },
   ) {
     const userId = getUserId(req);
@@ -1626,7 +1646,8 @@ export class GameEngineController {
       fighterParticipantId,
       body.allyParticipantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1635,11 +1656,11 @@ export class GameEngineController {
    * failed ability check. Input: total original + DC. Rola 1d10 + soma.
    * Consome Second Wind use só se passou.
    */
-  @Post('encounters/:id/participants/:participantId/tactical-mind')
+  @Post("encounters/:id/participants/:participantId/tactical-mind")
   async tacticalMind(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { originalCheckTotal: number; dc: number },
   ) {
     const userId = getUserId(req);
@@ -1650,7 +1671,8 @@ export class GameEngineController {
       body.originalCheckTotal,
       body.dc,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1658,11 +1680,11 @@ export class GameEngineController {
    * Battle Master Trip Attack (RAW 2024) — hit → spend superiority die,
    * target STR save, falha = Prone.
    */
-  @Post('encounters/:id/participants/:participantId/maneuver/trip-attack')
+  @Post("encounters/:id/participants/:participantId/maneuver/trip-attack")
   async maneuverTripAttack(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantId: string },
   ) {
     const userId = getUserId(req);
@@ -1672,7 +1694,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1680,11 +1703,11 @@ export class GameEngineController {
    * Battle Master Precision Attack (RAW 2024) — adiciona superiority die ao
    * attack roll total. Chamado após attack falhar; backend retorna newTotal.
    */
-  @Post('encounters/:id/participants/:participantId/maneuver/precision-attack')
+  @Post("encounters/:id/participants/:participantId/maneuver/precision-attack")
   async maneuverPrecisionAttack(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { originalAttackTotal: number },
   ) {
     const userId = getUserId(req);
@@ -1694,7 +1717,8 @@ export class GameEngineController {
       participantId,
       body.originalAttackTotal,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1702,11 +1726,11 @@ export class GameEngineController {
    * Cleric L5 Sear Undead (RAW 2024) — CD + Magic action. Undead 30ft CON
    * save DC 8+WIS+PB. Falha = 10+5×(L-5) radiant; sucesso half.
    */
-  @Post('encounters/:id/participants/:participantId/cleric/sear-undead')
+  @Post("encounters/:id/participants/:participantId/cleric/sear-undead")
   async clericSearUndead(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantIds: string[] },
   ) {
     const userId = getUserId(req);
@@ -1716,7 +1740,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantIds,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1725,16 +1750,17 @@ export class GameEngineController {
    * Base 2d8 + (slotLevel-1)×1d8 radiant (cap 5d8 em slot 4+). +1d8 se Fiend/Undead.
    * Crit dobra. freeCast=true usa Paladin's Smite L2 (sem slot).
    */
-  @Post('encounters/:id/participants/:participantId/paladin/divine-smite')
+  @Post("encounters/:id/participants/:participantId/paladin/divine-smite")
   async paladinDivineSmite(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: {
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body()
+    body: {
       targetParticipantId: string;
       slotLevel: number;
       hitWasCritical: boolean;
-      targetType: 'fiend' | 'undead' | null;
+      targetType: "fiend" | "undead" | null;
       freeCast: boolean;
     },
   ) {
@@ -1749,18 +1775,19 @@ export class GameEngineController {
       body.targetType,
       body.freeCast,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
   /**
    * Paladin L11 Radiant Strikes (RAW 2024) — +1d8 radiant passive em melee/unarmed hit.
    */
-  @Post('encounters/:id/participants/:participantId/paladin/radiant-strikes')
+  @Post("encounters/:id/participants/:participantId/paladin/radiant-strikes")
   async paladinRadiantStrikes(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantId: string },
   ) {
     const userId = getUserId(req);
@@ -1770,7 +1797,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1778,10 +1806,10 @@ export class GameEngineController {
    * Sorcerer L2+ Font of Magic — pool de Sorcery Points.
    * GET retorna {total, used, remaining}.
    */
-  @Get('encounters/:id/participants/:participantId/sorcerer/sorcery-points')
+  @Get("encounters/:id/participants/:participantId/sorcerer/sorcery-points")
   async sorcererGetSorceryPoints(
     @Req() req: AuthRequest,
-    @Param('participantId') participantId: string,
+    @Param("participantId") participantId: string,
   ) {
     const userId = getUserId(req);
     const state = await this.sorcererFeatures.getSorceryPointsState(
@@ -1794,10 +1822,12 @@ export class GameEngineController {
   /**
    * Sorcerer L2+ Font of Magic — converte 1 spell slot em N SP (N = slotLevel).
    */
-  @Post('encounters/:id/participants/:participantId/sorcerer/convert-slot-to-sp')
+  @Post(
+    "encounters/:id/participants/:participantId/sorcerer/convert-slot-to-sp",
+  )
   async sorcererConvertSlotToSp(
     @Req() req: AuthRequest,
-    @Param('participantId') participantId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { slotLevel: number },
   ) {
     const userId = getUserId(req);
@@ -1806,17 +1836,20 @@ export class GameEngineController {
       body.slotLevel,
       userId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value, events: result.events };
   }
 
   /**
    * Sorcerer L2+ Font of Magic — converte SP em 1 spell slot (RAW: L1=2/L2=3/L3=5/L4=6/L5=7).
    */
-  @Post('encounters/:id/participants/:participantId/sorcerer/convert-sp-to-slot')
+  @Post(
+    "encounters/:id/participants/:participantId/sorcerer/convert-sp-to-slot",
+  )
   async sorcererConvertSpToSlot(
     @Req() req: AuthRequest,
-    @Param('participantId') participantId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetSlotLevel: number },
   ) {
     const userId = getUserId(req);
@@ -1825,7 +1858,8 @@ export class GameEngineController {
       body.targetSlotLevel,
       userId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value, events: result.events };
   }
 
@@ -1833,17 +1867,20 @@ export class GameEngineController {
    * Sorcerer L5+ Sorcerous Restoration — 1/LR uso em SR recupera
    * floor(classLevel/2) SP.
    */
-  @Post('encounters/:id/participants/:participantId/sorcerer/sorcerous-restoration')
+  @Post(
+    "encounters/:id/participants/:participantId/sorcerer/sorcerous-restoration",
+  )
   async sorcererSorcerousRestoration(
     @Req() req: AuthRequest,
-    @Param('participantId') participantId: string,
+    @Param("participantId") participantId: string,
   ) {
     const userId = getUserId(req);
     const result = await this.sorcererFeatures.sorcerousRestoration(
       participantId,
       userId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value, events: result.events };
   }
 
@@ -1851,11 +1888,11 @@ export class GameEngineController {
    * Paladin Devotion L3 Sacred Weapon (RAW 2024 CD) — arma +CHA attack + radiant
    * damage + luz 20ft por 1 min (10 rounds).
    */
-  @Post('encounters/:id/participants/:participantId/paladin/sacred-weapon')
+  @Post("encounters/:id/participants/:participantId/paladin/sacred-weapon")
   async paladinSacredWeapon(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
   ) {
     const userId = getUserId(req);
     const result = await this.paladinFeatures.sacredWeapon(
@@ -1863,7 +1900,8 @@ export class GameEngineController {
       encounterId,
       participantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1871,12 +1909,13 @@ export class GameEngineController {
    * Cleric Life Domain L3 Preserve Life (RAW 2024 CD) — distribui pool 5×level
    * HP entre aliados 30ft, cap individual = pool/2.
    */
-  @Post('encounters/:id/participants/:participantId/cleric/preserve-life')
+  @Post("encounters/:id/participants/:participantId/cleric/preserve-life")
   async clericPreserveLife(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: { allocations: Array<{ targetParticipantId: string; hp: number }> },
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body()
+    body: { allocations: Array<{ targetParticipantId: string; hp: number }> },
   ) {
     const userId = getUserId(req);
     const result = await this.clericFeatures.preserveLife(
@@ -1885,7 +1924,8 @@ export class GameEngineController {
       participantId,
       body.allocations,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1893,12 +1933,16 @@ export class GameEngineController {
    * Cleric L7 Blessed Strikes (RAW 2024) — 1/turn melee hit OR cantrip save-fail
    * → +1d8 radiant (+2d8 em L14 Improved).
    */
-  @Post('encounters/:id/participants/:participantId/cleric/blessed-strikes')
+  @Post("encounters/:id/participants/:participantId/cleric/blessed-strikes")
   async clericBlessedStrikes(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: { targetParticipantId: string; trigger: 'melee-hit' | 'cantrip-save-failed' },
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body()
+    body: {
+      targetParticipantId: string;
+      trigger: "melee-hit" | "cantrip-save-failed";
+    },
   ) {
     const userId = getUserId(req);
     const result = await this.clericFeatures.blessedStrikes(
@@ -1908,7 +1952,8 @@ export class GameEngineController {
       body.targetParticipantId,
       body.trigger,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1916,11 +1961,11 @@ export class GameEngineController {
    * Cleric L10 Divine Intervention (RAW 2024) — Magic action, auto-sucesso.
    * Cap slot L5 em L10-L19, L9 em L20 (Greater).
    */
-  @Post('encounters/:id/participants/:participantId/cleric/divine-intervention')
+  @Post("encounters/:id/participants/:participantId/cleric/divine-intervention")
   async clericDivineIntervention(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { spellSlug: string; slotLevel: number },
   ) {
     const userId = getUserId(req);
@@ -1931,7 +1976,8 @@ export class GameEngineController {
       body.spellSlug,
       body.slotLevel,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1939,11 +1985,11 @@ export class GameEngineController {
    * Berserker L3 Frenzy (RAW 2024) — primeiro hit do turno em rage+reckless
    * ganha +Nd6 damage. Chamado após hit confirmado.
    */
-  @Post('encounters/:id/participants/:participantId/berserker/frenzy')
+  @Post("encounters/:id/participants/:participantId/berserker/frenzy")
   async berserkerFrenzy(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantId: string },
   ) {
     const userId = getUserId(req);
@@ -1953,7 +1999,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1961,11 +2008,11 @@ export class GameEngineController {
    * Berserker L10 Retaliation (RAW 2024) — reaction melee attack contra
    * atacante adjacente que causou dano.
    */
-  @Post('encounters/:id/participants/:participantId/berserker/retaliation')
+  @Post("encounters/:id/participants/:participantId/berserker/retaliation")
   async berserkerRetaliation(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantId: string },
   ) {
     const userId = getUserId(req);
@@ -1975,7 +2022,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -1983,11 +2031,13 @@ export class GameEngineController {
    * Berserker L14 Intimidating Presence (RAW 2024) — Bonus action, 30ft
    * emanation, cada target WIS save DC 8+STR+PB. Falha = Frightened 1min.
    */
-  @Post('encounters/:id/participants/:participantId/berserker/intimidating-presence')
+  @Post(
+    "encounters/:id/participants/:participantId/berserker/intimidating-presence",
+  )
   async berserkerIntimidatingPresence(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantIds: string[] },
   ) {
     const userId = getUserId(req);
@@ -1997,7 +2047,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantIds,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -2005,11 +2056,11 @@ export class GameEngineController {
    * Barbarian L11 Relentless Rage (RAW 2024) — PC em rage caiu a 0 HP.
    * CON save DC 10+5×uses. Passa: volta 1 HP + consome use.
    */
-  @Post('encounters/:id/participants/:participantId/relentless-rage')
+  @Post("encounters/:id/participants/:participantId/relentless-rage")
   async barbarianRelentlessRage(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
   ) {
     const userId = getUserId(req);
     const result = await this.barbarianFeatures.relentlessRage(
@@ -2017,19 +2068,24 @@ export class GameEngineController {
       encounterId,
       participantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
   /**
    * Barbarian L18 Indomitable Might (RAW 2024) — STR check < score, usa score.
    */
-  @Post('encounters/:id/participants/:participantId/indomitable-might')
+  @Post("encounters/:id/participants/:participantId/indomitable-might")
   async barbarianIndomitableMight(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: { rawCheckTotal: number; abilitySlug: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha' },
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body()
+    body: {
+      rawCheckTotal: number;
+      abilitySlug: "str" | "dex" | "con" | "int" | "wis" | "cha";
+    },
   ) {
     const userId = getUserId(req);
     const result = await this.barbarianFeatures.indomitableMight(
@@ -2039,7 +2095,8 @@ export class GameEngineController {
       body.rawCheckTotal,
       body.abilitySlug,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -2047,11 +2104,13 @@ export class GameEngineController {
    * Barbarian L9 Brutal Strike (RAW 2024) — Forceful Blow: +Nd10 damage +
    * target push 10ft + attacker move ½ speed. Exige Rage ativo.
    */
-  @Post('encounters/:id/participants/:participantId/brutal-strike/forceful-blow')
+  @Post(
+    "encounters/:id/participants/:participantId/brutal-strike/forceful-blow",
+  )
   async brutalStrikeForcefulBlow(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantId: string },
   ) {
     const userId = getUserId(req);
@@ -2061,7 +2120,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -2069,11 +2129,13 @@ export class GameEngineController {
    * Barbarian L9 Brutal Strike (RAW 2024) — Hamstring Blow: +Nd10 damage +
    * target speed -15ft até fim do próximo turno. Exige Rage ativo.
    */
-  @Post('encounters/:id/participants/:participantId/brutal-strike/hamstring-blow')
+  @Post(
+    "encounters/:id/participants/:participantId/brutal-strike/hamstring-blow",
+  )
   async brutalStrikeHamstringBlow(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { targetParticipantId: string },
   ) {
     const userId = getUserId(req);
@@ -2083,7 +2145,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantId,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -2091,12 +2154,12 @@ export class GameEngineController {
    * Fighter L9 Tactical Master (RAW 2024) — arma mastery alternativa
    * (push/sap/slow) pro próximo attack. Combat.service consome o override.
    */
-  @Post('encounters/:id/participants/:participantId/tactical-master/arm')
+  @Post("encounters/:id/participants/:participantId/tactical-master/arm")
   async tacticalMasterArm(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: { masteryOverride: 'push' | 'sap' | 'slow' },
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body() body: { masteryOverride: "push" | "sap" | "slow" },
   ) {
     const userId = getUserId(req);
     const result = await this.tacticalFeatures.tacticalMasterArm(
@@ -2105,7 +2168,8 @@ export class GameEngineController {
       participantId,
       body.masteryOverride,
     );
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     return { ok: true, value: result.value };
   }
 
@@ -2114,12 +2178,12 @@ export class GameEngineController {
    * Consome 1× free object interaction por turno (RAW 2024). Delega pro
    * inventory.service pra aplicar o swap + valida limite no participant.
    */
-  @Post('encounters/:id/participants/:participantId/swap-hand')
+  @Post("encounters/:id/participants/:participantId/swap-hand")
   async swapHand(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: { equipmentId: string; hand: 'main' | 'off' | null },
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body() body: { equipmentId: string; hand: "main" | "off" | null },
   ) {
     const userId = getUserId(req);
     return this.encounterService.swapHand(
@@ -2133,11 +2197,11 @@ export class GameEngineController {
 
   // ==================== EVENTS ====================
 
-  @Get('sessions/:id/events')
+  @Get("sessions/:id/events")
   async getSessionEvents(
-    @Param('id') id: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
+    @Param("id") id: string,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
   ) {
     return this.eventService.getSessionTimeline(
       id,
@@ -2146,9 +2210,9 @@ export class GameEngineController {
     );
   }
 
-  @Get('encounters/:id/events')
+  @Get("encounters/:id/events")
   async getEncounterEvents(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Query() query: GetEventsQueryDto,
   ) {
     // Validar tipos de evento se fornecidos.
@@ -2159,32 +2223,30 @@ export class GameEngineController {
     if (query.type) {
       const snakeToCamel = (s: string): string =>
         s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-      const requestedTypes = query.type.split(',').map((t) => t.trim());
+      const requestedTypes = query.type.split(",").map((t) => t.trim());
       const normalizedTypes = requestedTypes.map((t) =>
-        t.includes('_') ? snakeToCamel(t) : t,
+        t.includes("_") ? snakeToCamel(t) : t,
       );
       const invalidTypes = normalizedTypes.filter(
         (t) => !(VALID_EVENT_TYPES as readonly string[]).includes(t),
       );
       if (invalidTypes.length > 0) {
         return failure(
-          `Tipo de evento invalido: '${invalidTypes.join("', '")}'. Tipos validos: ${VALID_EVENT_TYPES.slice(0, 10).join(', ')}, ...`,
-          'INVALID_PAYLOAD' as GameErrorCode,
+          `Tipo de evento invalido: '${invalidTypes.join("', '")}'. Tipos validos: ${VALID_EVENT_TYPES.slice(0, 10).join(", ")}, ...`,
+          "INVALID_PAYLOAD" as GameErrorCode,
         );
       }
       // Converter camelCase → snake_case para filtrar no DB
       eventTypes = normalizedTypes.map(camelToSnakeCase);
     }
 
-    const { events, total } = await this.eventService.getEncounterTimelineFiltered(
-      id,
-      {
+    const { events, total } =
+      await this.eventService.getEncounterTimelineFiltered(id, {
         since: query.since,
         eventTypes,
         limit: query.limit ?? 50,
         offset: query.offset ?? 0,
-      },
-    );
+      });
 
     // Buscar participants para popular actorName/targetName
     const encounter = await this.encounterService.getById(id);
@@ -2206,15 +2268,20 @@ export class GameEngineController {
 
   // ==================== QUEST REWARDS ====================
 
-  @Post('quests/:questId/resolve')
+  @Post("quests/:questId/resolve")
   async resolveQuest(
     @Req() req: AuthRequest,
-    @Param('questId') questId: string,
-    @Body() body: {
-      status: 'completed' | 'failed';
+    @Param("questId") questId: string,
+    @Body()
+    body: {
+      status: "completed" | "failed";
       xpRewards: Array<{ characterId: string; xp: number }>;
       goldRewards: Array<{ characterId: string; gp: number }>;
-      itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string }>;
+      itemRewards: Array<{
+        characterId: string;
+        equipmentId?: string;
+        magicItemId?: string;
+      }>;
     },
   ) {
     const userId = getUserId(req);
@@ -2223,12 +2290,26 @@ export class GameEngineController {
     await this.questService.update(questId, { status: body.status });
 
     // Apply XP
-    const xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }> = [];
+    const xpApplied: Array<{
+      characterId: string;
+      xp: number;
+      newTotal: number;
+      levelUpAvailable: boolean;
+    }> = [];
     for (const reward of body.xpRewards) {
       if (reward.xp <= 0) continue;
       try {
-        const result = await this.stateService.updateXp(userId, reward.characterId, { amount: reward.xp });
-        xpApplied.push({ characterId: reward.characterId, xp: reward.xp, newTotal: result.xp, levelUpAvailable: result.levelUpAvailable });
+        const result = await this.stateService.updateXp(
+          userId,
+          reward.characterId,
+          { amount: reward.xp },
+        );
+        xpApplied.push({
+          characterId: reward.characterId,
+          xp: reward.xp,
+          newTotal: result.xp,
+          levelUpAvailable: result.levelUpAvailable,
+        });
       } catch {}
     }
 
@@ -2237,7 +2318,9 @@ export class GameEngineController {
     for (const reward of body.goldRewards) {
       if (reward.gp <= 0) continue;
       try {
-        await this.inventoryService.updateGold(userId, reward.characterId, { gp: reward.gp });
+        await this.inventoryService.updateGold(userId, reward.characterId, {
+          gp: reward.gp,
+        });
         goldApplied.push({ characterId: reward.characterId, gp: reward.gp });
       } catch {}
     }
@@ -2247,15 +2330,27 @@ export class GameEngineController {
     for (const reward of body.itemRewards) {
       try {
         if (reward.equipmentId) {
-          const result = await this.inventoryService.addItem(userId, reward.characterId, {
-            equipmentId: reward.equipmentId,
-            source: EquipmentSourceEnum.Loot,
+          const result = await this.inventoryService.addItem(
+            userId,
+            reward.characterId,
+            {
+              equipmentId: reward.equipmentId,
+              source: EquipmentSourceEnum.Loot,
+            },
+          );
+          itemsApplied.push({
+            characterId: reward.characterId,
+            itemName: (result as any).equipment?.name ?? "Item",
           });
-          itemsApplied.push({ characterId: reward.characterId, itemName: (result as any).equipment?.name ?? 'Item' });
         }
         if (reward.magicItemId) {
-          await this.inventoryService.addMagicItem(userId, reward.characterId, { magicItemId: reward.magicItemId });
-          itemsApplied.push({ characterId: reward.characterId, itemName: 'Magic Item' });
+          await this.inventoryService.addMagicItem(userId, reward.characterId, {
+            magicItemId: reward.magicItemId,
+          });
+          itemsApplied.push({
+            characterId: reward.characterId,
+            itemName: "Magic Item",
+          });
         }
       } catch {}
     }
@@ -2265,7 +2360,7 @@ export class GameEngineController {
 
   // ==================== ENCOUNTERS BY USER ====================
 
-  @Get('encounters/mine')
+  @Get("encounters/mine")
   async listMyEncounters(@Req() req: AuthRequest) {
     const sessions = await this.sessionService.listByUser(getUserId(req));
     const allEncounters: any[] = [];
@@ -2278,8 +2373,8 @@ export class GameEngineController {
 
   // ==================== DICE ====================
 
-  @Post('dice/roll')
-  async rollDice(@Body('expression') expression: string) {
+  @Post("dice/roll")
+  async rollDice(@Body("expression") expression: string) {
     return this.diceService.rollExpression(expression);
   }
 
@@ -2289,17 +2384,17 @@ export class GameEngineController {
    * Retorna { rollId, targetD20, totalModifier } pro frontend renderizar
    * `<DiceRollCard>`. Storage in-memory (TTL 1h).
    */
-  @Post('dice/request')
+  @Post("dice/request")
   @HttpCode(HttpStatus.OK)
   async requestDiceRoll(
     @Body()
     body: {
       characterId?: string;
-      kind: 'ability_check' | 'saving_throw' | 'attack_roll' | 'death_save';
-      ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
+      kind: "ability_check" | "saving_throw" | "attack_roll" | "death_save";
+      ability: "STR" | "DEX" | "CON" | "INT" | "WIS" | "CHA";
       skill?: string | null;
       dc: number;
-      advantage?: 'normal' | 'advantage' | 'disadvantage';
+      advantage?: "normal" | "advantage" | "disadvantage";
       modifiers: Array<{ label: string; value: number }>;
       narrativeFraming?: string;
     },
@@ -2325,10 +2420,10 @@ export class GameEngineController {
    * Spec 016 M2 — Resolve um active dice check.
    * Body: { raw1: 1-20, raw2?: 1-20 }. raw2 ignorado se advantage='normal'.
    */
-  @Post('dice/:rollId/resolve')
+  @Post("dice/:rollId/resolve")
   @HttpCode(HttpStatus.OK)
   async resolveDiceRoll(
-    @Param('rollId') rollId: string,
+    @Param("rollId") rollId: string,
     @Body() body: { raw1: number; raw2?: number },
   ) {
     const result = this.diceRollService.resolveRoll(
@@ -2349,7 +2444,7 @@ export class GameEngineController {
    * Ativa seed determinístico no DiceService (spec 012).
    * Admin-only, bloqueado em produção (exceto com ALLOW_TEST_ENDPOINTS=true).
    */
-  @Post('dice/seed')
+  @Post("dice/seed")
   @HttpCode(HttpStatus.OK)
   @UseGuards(AdminGuard, NonProductionGuard)
   async setDiceSeed(@Body() dto: DiceSeedDto) {
@@ -2360,7 +2455,7 @@ export class GameEngineController {
   /**
    * Desativa seed, volta a Math.random (spec 012).
    */
-  @Post('dice/seed/clear')
+  @Post("dice/seed/clear")
   @HttpCode(HttpStatus.OK)
   @UseGuards(AdminGuard, NonProductionGuard)
   async clearDiceSeed() {
@@ -2370,30 +2465,40 @@ export class GameEngineController {
 
   // ==================== SKILL CHECKS ====================
 
-  @Post('skill-check')
+  @Post("skill-check")
   async rollSkillCheck(@Body() dto: SkillCheckDto, @Req() req: AuthRequest) {
     const result = await this.skillCheckService.rollAbilityCheck({
       ...dto,
       userId: getUserId(req),
     });
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     if (dto.sessionId) {
-      await this.eventService.emit(dto.sessionId, dto.encounterId ?? null, result.events);
+      await this.eventService.emit(
+        dto.sessionId,
+        dto.encounterId ?? null,
+        result.events,
+      );
     }
     return { ok: true, value: result.value };
   }
 
   // ==================== SAVING THROWS ====================
 
-  @Post('saving-throw')
+  @Post("saving-throw")
   async rollSavingThrow(@Body() dto: SavingThrowDto, @Req() req: AuthRequest) {
     const result = await this.savingThrowService.rollSavingThrow({
       ...dto,
       userId: getUserId(req),
     });
-    if (!result.ok) return { ok: false, error: result.error, code: result.code };
+    if (!result.ok)
+      return { ok: false, error: result.error, code: result.code };
     if (dto.sessionId) {
-      await this.eventService.emit(dto.sessionId, dto.encounterId ?? null, result.events);
+      await this.eventService.emit(
+        dto.sessionId,
+        dto.encounterId ?? null,
+        result.events,
+      );
     }
     return { ok: true, value: result.value };
   }
@@ -2407,11 +2512,11 @@ export class GameEngineController {
    * RAW 2024 XPHB: CR max = 1/4 L2 (no fly/swim), 1/2 L4 (no fly), 1 L8+ (any).
    * Duração: 1h por uso (não concentração). HP separado. Reverte em HP 0.
    */
-  @Post('encounters/:id/participants/:participantId/wild-shape/enter')
+  @Post("encounters/:id/participants/:participantId/wild-shape/enter")
   async wildShapeEnter(
     @Req() req: AuthRequest,
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
     @Body() body: { monsterSlug: string; formDisplayName?: string },
   ) {
     const userId = getUserId(req);
@@ -2419,30 +2524,51 @@ export class GameEngineController {
       // RAW 2024 XPHB: Wild Shape \u00e9 bonus action, uses = PB/SR.
       // Valida uses + bonus action antes de enterForm.
       const part = await this.encounterService.getParticipant(participantId);
-      if (part.type !== 'pc' || !part.characterId) {
-        return { ok: false, error: 'Wild Shape s\u00f3 pra PC Druid.', code: 'INVALID_CASTER' };
+      if (part.type !== "pc" || !part.characterId) {
+        return {
+          ok: false,
+          error: "Wild Shape s\u00f3 pra PC Druid.",
+          code: "INVALID_CASTER",
+        };
       }
       if (part.bonusActionUsed) {
-        return { ok: false, error: 'Bonus action j\u00e1 usada neste turno.', code: 'NO_BONUS_ACTION' };
+        return {
+          ok: false,
+          error: "Bonus action j\u00e1 usada neste turno.",
+          code: "NO_BONUS_ACTION",
+        };
       }
-      const usesUsedMap = await this.stateService.getFeatureUsesUsed(part.characterId);
-      const usesUsed = usesUsedMap?.['wild-shape'] ?? 0;
+      const usesUsedMap = await this.stateService.getFeatureUsesUsed(
+        part.characterId,
+      );
+      const usesUsed = usesUsedMap?.["wild-shape"] ?? 0;
       // PB-based uses: L2-4=2, L5-8=3, L9-12=4, L13-16=5, L17+=6
       // (simplified; frontend can query state.feature_uses_used if needed)
       // Use a reasonable cap of 6 as hard ceiling since we don't easily have the druid level here.
 
-      const updated = await this.transformationService.enterForm(participantId, {
-        source: 'wild-shape',
-        monsterSlug: body.monsterSlug,
-        formDisplayName: body.formDisplayName,
-        durationRoundsTotal: 600, // 1h RAW = 600 rounds (6 seg cada)
-        retainedAbilities: ['mental-stats', 'speech', 'class-features'],
-        equipmentHandling: 'merge',
-        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: false },
-      });
+      const updated = await this.transformationService.enterForm(
+        participantId,
+        {
+          source: "wild-shape",
+          monsterSlug: body.monsterSlug,
+          formDisplayName: body.formDisplayName,
+          durationRoundsTotal: 600, // 1h RAW = 600 rounds (6 seg cada)
+          retainedAbilities: ["mental-stats", "speech", "class-features"],
+          equipmentHandling: "merge",
+          revertTriggers: {
+            hpZero: true,
+            durationEnd: true,
+            playerDismiss: true,
+            concentrationBroken: false,
+          },
+        },
+      );
 
       // Bonus action consumida pelo service. Incrementa uses na ficha.
-      await this.stateService.incrementFeatureUses(part.characterId, 'wild-shape');
+      await this.stateService.incrementFeatureUses(
+        part.characterId,
+        "wild-shape",
+      );
 
       return {
         ok: true,
@@ -2455,21 +2581,25 @@ export class GameEngineController {
       };
     } catch (err) {
       const e = err as { message?: string };
-      return { ok: false, error: e.message ?? 'UNKNOWN', code: 'WILD_SHAPE_ERROR' };
+      return {
+        ok: false,
+        error: e.message ?? "UNKNOWN",
+        code: "WILD_SHAPE_ERROR",
+      };
     }
   }
 
   /**
    * Reverte transformação (Wild Shape, Polymorph, etc). Player dismiss manual.
    */
-  @Post('encounters/:id/participants/:participantId/wild-shape/revert')
+  @Post("encounters/:id/participants/:participantId/wild-shape/revert")
   async wildShapeRevert(
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
   ) {
     const updated = await this.transformationService.revertForm(
       participantId,
-      'player-dismiss',
+      "player-dismiss",
     );
     return {
       ok: true,
@@ -2485,15 +2615,16 @@ export class GameEngineController {
   // Spec 012 — Summoning pipeline (Summon Beast, Conjure Animals, Familiar, ...)
   // ─────────────────────────────────────────────────────────────────────
 
-  @Post('encounters/:id/participants/:participantId/summon/spawn')
+  @Post("encounters/:id/participants/:participantId/summon/spawn")
   async summonSpawn(
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
-    @Body() body: {
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+    @Body()
+    body: {
       monsterSlug: string;
       displayName?: string;
       position?: { x: number; y: number };
-      faction?: 'ally' | 'enemy' | 'neutral';
+      faction?: "ally" | "enemy" | "neutral";
       durationRoundsTotal?: number | null;
       concentrationLinked?: boolean;
       source?: string;
@@ -2505,10 +2636,10 @@ export class GameEngineController {
         monsterSlug: body.monsterSlug,
         displayName: body.displayName,
         position: body.position,
-        faction: body.faction ?? 'ally',
+        faction: body.faction ?? "ally",
         durationRoundsTotal: body.durationRoundsTotal,
         concentrationLinked: body.concentrationLinked,
-        source: (body.source as 'summon-beast-spell') ?? 'summon-beast-spell',
+        source: (body.source as "summon-beast-spell") ?? "summon-beast-spell",
       });
       return {
         ok: true,
@@ -2524,23 +2655,23 @@ export class GameEngineController {
       };
     } catch (err) {
       const e = err as { message?: string };
-      return { ok: false, error: e.message ?? 'UNKNOWN', code: 'SUMMON_ERROR' };
+      return { ok: false, error: e.message ?? "UNKNOWN", code: "SUMMON_ERROR" };
     }
   }
 
-  @Post('encounters/:id/summons/:summonId/dismiss')
+  @Post("encounters/:id/summons/:summonId/dismiss")
   async summonDismiss(
-    @Param('id') encounterId: string,
-    @Param('summonId') summonId: string,
+    @Param("id") encounterId: string,
+    @Param("summonId") summonId: string,
   ) {
-    await this.summoningService.dismissSummon(summonId, 'player-dismiss');
+    await this.summoningService.dismissSummon(summonId, "player-dismiss");
     return { ok: true, value: { summonId, dismissed: true } };
   }
 
-  @Get('encounters/:id/participants/:participantId/summons')
+  @Get("encounters/:id/participants/:participantId/summons")
   async getSummonsOf(
-    @Param('id') encounterId: string,
-    @Param('participantId') participantId: string,
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
   ) {
     const list = await this.summoningService.getSummonsOf(participantId);
     return {
@@ -2564,15 +2695,15 @@ export class GameEngineController {
    * Fate Ladder — abre modal narrativo ao 3º death save fail ou massive damage.
    * Triggers válidos: three_failed_death_saves | massive_damage_2024 | instant_kill_effect.
    */
-  @Post('fate-ladder/:characterId/open')
+  @Post("fate-ladder/:characterId/open")
   async openFateLadder(
-    @Param('characterId') characterId: string,
+    @Param("characterId") characterId: string,
     @Body()
     body: {
       trigger: FateLadderTrigger;
       campaignId?: string;
       casterPartyHasSpell?: Array<
-        'Revivify' | 'Raise Dead' | 'Resurrection' | 'True Resurrection'
+        "Revivify" | "Raise Dead" | "Resurrection" | "True Resurrection"
       >;
       diamondsAvailableGp?: number;
       minutesSinceDeath?: number;
@@ -2591,9 +2722,9 @@ export class GameEngineController {
    * Coordinator narrar via DM agent. Body: { ladderId, chosenOption,
    * sacrificeDescription? }.
    */
-  @Post('fate-ladder/:characterId/resolve')
+  @Post("fate-ladder/:characterId/resolve")
   async resolveFateLadder(
-    @Param('characterId') characterId: string,
+    @Param("characterId") characterId: string,
     @Body()
     body: {
       ladderId: string;
@@ -2614,10 +2745,10 @@ export class GameEngineController {
    * respeita campaign.xp_mode (rules|milestone|hybrid). Audit log em
    * `xp_award_events` consumido por Director memory L4.
    */
-  @Post('characters/:characterId/xp-award')
+  @Post("characters/:characterId/xp-award")
   async awardCharacterXp(
     @Req() req: AuthRequest,
-    @Param('characterId') characterId: string,
+    @Param("characterId") characterId: string,
     @Body()
     body: {
       amount: number;

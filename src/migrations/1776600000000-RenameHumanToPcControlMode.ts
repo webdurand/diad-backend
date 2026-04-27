@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 006 — Combat State Exposure.
@@ -9,10 +9,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Precisa dropar e recriar a check constraint `chk_controlled_by`.
  */
-export class RenameHumanToPcControlMode1776600000000
-  implements MigrationInterface
-{
-  name = 'RenameHumanToPcControlMode1776600000000';
+export class RenameHumanToPcControlMode1776600000000 implements MigrationInterface {
+  name = "RenameHumanToPcControlMode1776600000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Drop existing check constraint

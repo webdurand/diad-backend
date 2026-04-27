@@ -1,8 +1,8 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntriesAsText } from './entries-parser';
-import { OPT_FEATURE_TYPE_MAP } from './code-maps';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntriesAsText } from "./entries-parser";
+import { OPT_FEATURE_TYPE_MAP } from "./code-maps";
 
 interface FiveToolsOptionalFeature {
   name: string;
@@ -33,9 +33,10 @@ export interface TransformedOptionalFeature {
 
 const RELEVANT_TYPES = new Set(Object.keys(OPT_FEATURE_TYPE_MAP));
 
-function convertPrerequisites(
-  prereqs?: Record<string, unknown>[],
-): { prerequisite: Record<string, unknown> | null; minLevel: number | null } {
+function convertPrerequisites(prereqs?: Record<string, unknown>[]): {
+  prerequisite: Record<string, unknown> | null;
+  minLevel: number | null;
+} {
   if (!prereqs?.length) return { prerequisite: null, minLevel: null };
 
   const result: Record<string, unknown> = {};
@@ -43,7 +44,7 @@ function convertPrerequisites(
 
   for (const prereq of prereqs) {
     // Level requirement
-    if (prereq.level && typeof prereq.level === 'object') {
+    if (prereq.level && typeof prereq.level === "object") {
       const levelObj = prereq.level as Record<string, unknown>;
       const level = levelObj.level as number | undefined;
       if (level) {
@@ -66,8 +67,8 @@ function convertPrerequisites(
       )[];
       const spellReqs: string[] = [];
       for (const spell of spells) {
-        if (typeof spell === 'string') {
-          spellReqs.push(spell.split('|')[0]);
+        if (typeof spell === "string") {
+          spellReqs.push(spell.split("|")[0]);
         } else if (spell.entrySummary) {
           spellReqs.push(spell.entrySummary);
         } else if (spell.entry) {
@@ -80,7 +81,7 @@ function convertPrerequisites(
     // Other optional feature requirement (e.g. Pact of the Blade)
     if (prereq.optionalfeature) {
       const optFeats = prereq.optionalfeature as string[];
-      result.optional_features = optFeats.map((f) => f.split('|')[0]);
+      result.optional_features = optFeats.map((f) => f.split("|")[0]);
     }
 
     // Item requirement
@@ -91,7 +92,7 @@ function convertPrerequisites(
     // Other summary text
     if (prereq.otherSummary) {
       const summary = prereq.otherSummary as { entrySummary?: string };
-      result.other = summary.entrySummary ?? 'Special';
+      result.other = summary.entrySummary ?? "Special";
     }
   }
 
@@ -110,7 +111,7 @@ function detectSubChoices(entry: FiveToolsOptionalFeature): {
   if (entry.additionalSpells?.length) {
     return {
       hasSubChoices: true,
-      subChoiceType: 'spell',
+      subChoiceType: "spell",
       subChoiceOptions: { additional_spells: entry.additionalSpells },
     };
   }
@@ -134,9 +135,9 @@ function detectSubChoices(entry: FiveToolsOptionalFeature): {
 export function transformOptionalFeatures(): TransformedOptionalFeature[] {
   const filePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/optionalfeatures.json',
+    "../5etools-src/data/optionalfeatures.json",
   );
-  const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const raw = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const all: FiveToolsOptionalFeature[] = raw.optionalfeature ?? [];
 
   const srd52Items = all.filter(
@@ -151,9 +152,7 @@ export function transformOptionalFeatures(): TransformedOptionalFeature[] {
       OPT_FEATURE_TYPE_MAP[featureTypeCode] ?? featureTypeCode.toLowerCase();
     const slug = generateSlug(item.name, item.source, item.srd52);
     const description = parseEntriesAsText((item.entries ?? []) as any[]);
-    const { prerequisite, minLevel } = convertPrerequisites(
-      item.prerequisite,
-    );
+    const { prerequisite, minLevel } = convertPrerequisites(item.prerequisite);
     const { hasSubChoices, subChoiceType, subChoiceOptions } =
       detectSubChoices(item);
 

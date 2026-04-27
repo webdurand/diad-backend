@@ -1,10 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
-import type { ActionResolver } from './action-resolvers/action-resolver.interface';
-import { ACTION_RESOLVERS } from './action-resolvers/action-resolver.interface';
+import { Inject, Injectable } from "@nestjs/common";
+import type { ActionResolver } from "./action-resolvers/action-resolver.interface";
+import { ACTION_RESOLVERS } from "./action-resolvers/action-resolver.interface";
 import type {
   ActionDescriptor,
   ParticipantContext,
-} from '../interfaces/combat-action.interfaces';
+} from "../interfaces/combat-action.interfaces";
 
 /**
  * Spec 003 — Central Combat Action Registry.
@@ -60,14 +60,14 @@ export class CombatActionRegistry {
     const kindOrder: Record<string, number> = {
       attack: 0,
       spell: 1,
-      'class-feature': 2,
+      "class-feature": 2,
       item: 3,
       generic: 4,
     };
     return [...descriptors].sort((a, b) => {
       const dk = (kindOrder[a.kind] ?? 9) - (kindOrder[b.kind] ?? 9);
       if (dk !== 0) return dk;
-      return a.displayName.localeCompare(b.displayName, 'pt-BR');
+      return a.displayName.localeCompare(b.displayName, "pt-BR");
     });
   }
 }

@@ -1,17 +1,17 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { SceneEntity } from 'src/entities/scene.entity';
-import { SceneNpcEntity } from 'src/entities/scene-npc.entity';
-import { LocationEntity } from 'src/entities/location.entity';
-import { CampaignEntity } from 'src/entities/campaign.entity';
-import { GameSessionEntity } from 'src/entities/game-session.entity';
-import { StoryArcEntity } from 'src/entities/story-arc.entity';
-import { NpcEntity } from 'src/entities/npc.entity';
-import { NpcRelationshipEntity } from 'src/entities/npc-relationship.entity';
-import { QuestEntity } from 'src/entities/quest.entity';
-import { EventLogService } from './event-log.service';
-import { ChronicleService } from './chronicle.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { SceneEntity } from "src/entities/scene.entity";
+import { SceneNpcEntity } from "src/entities/scene-npc.entity";
+import { LocationEntity } from "src/entities/location.entity";
+import { CampaignEntity } from "src/entities/campaign.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
+import { StoryArcEntity } from "src/entities/story-arc.entity";
+import { NpcEntity } from "src/entities/npc.entity";
+import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
+import { QuestEntity } from "src/entities/quest.entity";
+import { EventLogService } from "./event-log.service";
+import { ChronicleService } from "./chronicle.service";
 
 /**
  * Assembles the 5-tier context for AI integration.
@@ -102,7 +102,7 @@ export class SceneContextService {
   async assembleContext(sceneId: string): Promise<SceneContext> {
     const scene = await this.sceneRepo.findOne({
       where: { id: sceneId },
-      relations: ['location', 'session'],
+      relations: ["location", "session"],
     });
     if (!scene) {
       return this.emptyContext();
@@ -119,7 +119,7 @@ export class SceneContextService {
     // Tier 1: Scene + NPCs
     const sceneNpcs = await this.sceneNpcRepo.find({
       where: { sceneId },
-      relations: ['npc'],
+      relations: ["npc"],
     });
 
     const npcsPresent = sceneNpcs
@@ -147,7 +147,7 @@ export class SceneContextService {
     }));
 
     // Tier 3: Party knowledge
-    let partyKnowledge: SceneContext['partyKnowledge'] = [];
+    let partyKnowledge: SceneContext["partyKnowledge"] = [];
     if (campaignId) {
       const npcIds = sceneNpcs.map((sn) => sn.npcId);
       const knowledge = await this.chronicleService.getRelevantKnowledge(
@@ -172,7 +172,7 @@ export class SceneContextService {
     }
 
     // Tier 5: Chronicles
-    let recentChronicles: SceneContext['recentChronicles'] = [];
+    let recentChronicles: SceneContext["recentChronicles"] = [];
     if (campaignId) {
       const chronicles = await this.chronicleService.getChronicles(
         campaignId,
@@ -187,7 +187,7 @@ export class SceneContextService {
     }
 
     // Story arc
-    let storyArc: SceneContext['storyArc'];
+    let storyArc: SceneContext["storyArc"];
     if (campaignId) {
       const arc = await this.arcRepo.findOne({
         where: { campaignId, isActive: true, isMainArc: true },
@@ -230,7 +230,8 @@ export class SceneContextService {
   ): Promise<Array<{ name: string; type: string; description?: string }>> {
     if (!locationId) return [];
 
-    const chain: Array<{ name: string; type: string; description?: string }> = [];
+    const chain: Array<{ name: string; type: string; description?: string }> =
+      [];
     let currentId: string | undefined = locationId;
 
     while (currentId) {

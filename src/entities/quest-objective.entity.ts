@@ -4,37 +4,37 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-} from 'typeorm';
-import { QuestEntity } from './quest.entity';
+} from "typeorm";
+import { QuestEntity } from "./quest.entity";
 
-@Entity('quest_objectives')
+@Entity("quest_objectives")
 export class QuestObjectiveEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ name: 'quest_id', type: 'uuid' })
+  @Column({ name: "quest_id", type: "uuid" })
   questId: string;
 
-  @ManyToOne(() => QuestEntity, (q) => q.objectives, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'quest_id' })
+  @ManyToOne(() => QuestEntity, (q) => q.objectives, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "quest_id" })
   quest: QuestEntity;
 
-  @Column({ type: 'text' })
+  @Column({ type: "text" })
   description: string;
 
-  @Column({ type: 'varchar', default: 'locked' })
-  status: 'locked' | 'active' | 'completed' | 'failed' | 'optional';
+  @Column({ type: "varchar", default: "locked" })
+  status: "locked" | "active" | "completed" | "failed" | "optional";
 
   // Objectives with same path_group are alternative paths
-  @Column({ name: 'path_group', type: 'varchar', nullable: true })
+  @Column({ name: "path_group", type: "varchar", nullable: true })
   pathGroup?: string;
 
-  @Column({ name: 'sort_order', type: 'int', default: 0 })
+  @Column({ name: "sort_order", type: "int", default: 0 })
   sortOrder: number;
 
-  @Column({ name: 'is_optional', type: 'boolean', default: false })
+  @Column({ name: "is_optional", type: "boolean", default: false })
   isOptional: boolean;
 
-  @Column({ name: 'completion_conditions', type: 'jsonb', default: {} })
+  @Column({ name: "completion_conditions", type: "jsonb", default: {} })
   completionConditions: Record<string, any>;
 }

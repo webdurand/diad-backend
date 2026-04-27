@@ -4,24 +4,24 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { DataSource, In, Repository } from "typeorm";
 import {
   EncounterJoinRequestEntity,
   JoinRequestStatus,
-} from 'src/entities/encounter-join-request.entity';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CharacterEntity } from 'src/entities/character.entity';
-import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
-import { UserEntity } from 'src/entities/user.entity';
-import { CampaignService } from 'src/models/world/services/campaign.service';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { RealtimeService } from 'src/realtime/realtime.service';
-import { DiceService } from './dice.service';
-import { EventService } from './event.service';
-import { SessionService } from './session.service';
+} from "src/entities/encounter-join-request.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterEntity } from "src/entities/character.entity";
+import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import { UserEntity } from "src/entities/user.entity";
+import { CampaignService } from "src/models/world/services/campaign.service";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { RealtimeService } from "src/realtime/realtime.service";
+import { DiceService } from "./dice.service";
+import { EventService } from "./event.service";
+import { SessionService } from "./session.service";
 
 export interface JoinRequestSummary {
   requestId: string;
@@ -38,7 +38,7 @@ export interface JoinRequestSummary {
 
 export interface ApproveResult {
   requestId: string;
-  status: 'approved';
+  status: "approved";
   participantId: string;
   turnOrderPosition: number;
   initiativeRoll: number;
@@ -47,7 +47,7 @@ export interface ApproveResult {
 
 export interface RejectResult {
   requestId: string;
-  status: 'rejected';
+  status: "rejected";
   rejectionReason?: string | null;
 }
 
@@ -83,12 +83,12 @@ export class JoinRequestService {
     callerUserId: string,
   ): Promise<JoinRequestSummary> {
     const encounter = await this.loadEncounter(encounterId);
-    if (encounter.status !== 'active') {
+    if (encounter.status !== "active") {
       throw new ConflictException({
         ok: false,
-        code: 'ENCOUNTER_NOT_ACTIVE',
-        error: 'So e possivel solicitar entrada em combate em andamento.',
-        hint: 'Para encounter em preparing use POST /game/encounters/:id/characters.',
+        code: "ENCOUNTER_NOT_ACTIVE",
+        error: "So e possivel solicitar entrada em combate em andamento.",
+        hint: "Para encounter em preparing use POST /game/encounters/:id/characters.",
       });
     }
 
@@ -96,33 +96,36 @@ export class JoinRequestService {
     if (character.userId !== callerUserId) {
       throw new ForbiddenException({
         ok: false,
-        code: 'FORBIDDEN',
-        error: 'Voce nao e dono deste personagem.',
+        code: "FORBIDDEN",
+        error: "Voce nao e dono deste personagem.",
       });
     }
 
     const session = await this.sessionService.getById(encounter.sessionId);
-    await this.assertPcCampaignMembership(character, session.campaignId ?? undefined);
+    await this.assertPcCampaignMembership(
+      character,
+      session.campaignId ?? undefined,
+    );
 
     const dup = (encounter.participants ?? []).find(
-      (p) => p.type === 'pc' && p.characterId === characterId,
+      (p) => p.type === "pc" && p.characterId === characterId,
     );
     if (dup) {
       throw new ConflictException({
         ok: false,
-        code: 'CHARACTER_ALREADY_IN_ENCOUNTER',
-        error: 'Este personagem ja participa deste encontro.',
+        code: "CHARACTER_ALREADY_IN_ENCOUNTER",
+        error: "Este personagem ja participa deste encontro.",
       });
     }
 
     const existingPending = await this.requestRepo.findOne({
-      where: { encounterId, characterId, status: 'pending' },
+      where: { encounterId, characterId, status: "pending" },
     });
     if (existingPending) {
       throw new ConflictException({
         ok: false,
-        code: 'JOIN_REQUEST_ALREADY_PENDING',
-        error: 'Ja existe uma solicitacao pendente para este personagem.',
+        code: "JOIN_REQUEST_ALREADY_PENDING",
+        error: "Ja existe uma solicitacao pendente para este personagem.",
         requestId: existingPending.id,
       });
     }
@@ -131,18 +134,20 @@ export class JoinRequestService {
       encounterId,
       characterId,
       requestedByUserId: callerUserId,
-      status: 'pending',
+      status: "pending",
     });
     const saved = await this.requestRepo.save(entity);
 
-    const dmUserId = await this.resolveDmUserId(session.campaignId ?? undefined);
+    const dmUserId = await this.resolveDmUserId(
+      session.campaignId ?? undefined,
+    );
     const requester = await this.userRepo.findOne({
       where: { id: callerUserId },
-      select: ['id', 'name', 'username'],
+      select: ["id", "name", "username"],
     });
 
     if (dmUserId) {
-      this.realtime.emitToUser(dmUserId, 'encounter:join_requested', {
+      this.realtime.emitToUser(dmUserId, "encounter:join_requested", {
         requestId: saved.id,
         encounterId,
         characterId,
@@ -156,7 +161,7 @@ export class JoinRequestService {
     await this.eventService
       .emit(encounter.sessionId, encounterId, [
         {
-          event_type: 'join_requested',
+          event_type: "join_requested",
           data: {
             request_id: saved.id,
             character_id: characterId,
@@ -170,7 +175,11 @@ export class JoinRequestService {
         ),
       );
 
-    return this.toSummary(saved, character.name, requester?.name ?? requester?.username ?? null);
+    return this.toSummary(
+      saved,
+      character.name,
+      requester?.name ?? requester?.username ?? null,
+    );
   }
 
   // ----- list --------------------------------------------------------------
@@ -178,18 +187,17 @@ export class JoinRequestService {
   async listByEncounter(
     encounterId: string,
     callerUserId: string,
-    status: 'pending' | 'approved' | 'rejected' | 'all',
+    status: "pending" | "approved" | "rejected" | "all",
   ): Promise<JoinRequestSummary[]> {
     const encounter = await this.loadEncounter(encounterId);
     const session = await this.sessionService.getById(encounter.sessionId);
     await this.assertDmOrOwner(callerUserId, session);
 
     const whereBase = { encounterId };
-    const where =
-      status === 'all' ? whereBase : { ...whereBase, status };
+    const where = status === "all" ? whereBase : { ...whereBase, status };
     const requests = await this.requestRepo.find({
       where,
-      order: { createdAt: 'ASC' },
+      order: { createdAt: "ASC" },
     });
 
     const charIds = [...new Set(requests.map((r) => r.characterId))];
@@ -201,7 +209,7 @@ export class JoinRequestService {
       userIds.length > 0
         ? this.userRepo.find({
             where: { id: In(userIds) },
-            select: ['id', 'name', 'username'],
+            select: ["id", "name", "username"],
           })
         : Promise.resolve([] as UserEntity[]),
     ]);
@@ -232,23 +240,23 @@ export class JoinRequestService {
     const session = await this.sessionService.getById(encounter.sessionId);
     await this.assertDmOrOwner(callerUserId, session);
 
-    if (encounter.status !== 'active') {
+    if (encounter.status !== "active") {
       throw new ConflictException({
         ok: false,
-        code: 'ENCOUNTER_NOT_ACTIVE',
-        error: 'O combate nao esta ativo.',
+        code: "ENCOUNTER_NOT_ACTIVE",
+        error: "O combate nao esta ativo.",
       });
     }
 
     const character = await this.loadCharacter(request.characterId);
     const dup = (encounter.participants ?? []).find(
-      (p) => p.type === 'pc' && p.characterId === character.id,
+      (p) => p.type === "pc" && p.characterId === character.id,
     );
     if (dup) {
       throw new ConflictException({
         ok: false,
-        code: 'CHARACTER_ALREADY_IN_ENCOUNTER',
-        error: 'Este personagem ja participa deste encontro.',
+        code: "CHARACTER_ALREADY_IN_ENCOUNTER",
+        error: "Este personagem ja participa deste encontro.",
       });
     }
 
@@ -265,7 +273,7 @@ export class JoinRequestService {
 
     const participant = this.participantRepo.create({
       encounterId,
-      type: 'pc',
+      type: "pc",
       characterId: character.id,
       displayName: sheet.name,
       initiativeModifier: sheet.initiative,
@@ -274,7 +282,7 @@ export class JoinRequestService {
       tempHp: 0,
       conditions: [],
       isDefeated: false,
-      faction: 'ally',
+      faction: "ally",
     });
 
     // Transaction: save participant + update encounter.turnOrder + resolve request.
@@ -293,7 +301,7 @@ export class JoinRequestService {
         );
         finalTurnOrder = nextTurnOrder;
 
-        request.status = 'approved';
+        request.status = "approved";
         request.resolvedByUserId = callerUserId;
         request.resolvedAt = new Date();
         await em.save(request);
@@ -309,26 +317,30 @@ export class JoinRequestService {
     }
 
     // Emit WS events.
-    this.realtime.emitToRoom(`encounter:${encounterId}`, 'encounter:participant_added', {
-      encounterId,
-      participant: {
-        id: participant.id,
-        type: 'pc',
-        characterId: character.id,
-        displayName: sheet.name,
-        currentHp: sheet.currentHp,
-        maxHp: sheet.maxHp,
-        armorClass: sheet.armorClass,
-        initiativeModifier: sheet.initiative,
-        initiativeRoll: init.roll,
-        initiativeTotal: init.total,
-        faction: 'ally',
+    this.realtime.emitToRoom(
+      `encounter:${encounterId}`,
+      "encounter:participant_added",
+      {
+        encounterId,
+        participant: {
+          id: participant.id,
+          type: "pc",
+          characterId: character.id,
+          displayName: sheet.name,
+          currentHp: sheet.currentHp,
+          maxHp: sheet.maxHp,
+          armorClass: sheet.armorClass,
+          initiativeModifier: sheet.initiative,
+          initiativeRoll: init.roll,
+          initiativeTotal: init.total,
+          faction: "ally",
+        },
+        turnOrder: finalTurnOrder,
       },
-      turnOrder: finalTurnOrder,
-    });
+    );
     this.realtime.emitToUser(
       request.requestedByUserId,
-      'encounter:join_approved',
+      "encounter:join_approved",
       {
         requestId,
         encounterId,
@@ -341,7 +353,7 @@ export class JoinRequestService {
     await this.eventService
       .emit(encounter.sessionId, encounterId, [
         {
-          event_type: 'participant_joined',
+          event_type: "participant_joined",
           actor_participant_id: participant.id,
           data: {
             request_id: requestId,
@@ -354,7 +366,7 @@ export class JoinRequestService {
 
     return {
       requestId,
-      status: 'approved',
+      status: "approved",
       participantId: participant.id,
       turnOrderPosition,
       initiativeRoll: init.roll,
@@ -375,7 +387,7 @@ export class JoinRequestService {
     const session = await this.sessionService.getById(encounter.sessionId);
     await this.assertDmOrOwner(callerUserId, session);
 
-    request.status = 'rejected';
+    request.status = "rejected";
     request.rejectionReason = reason ?? null;
     request.resolvedByUserId = callerUserId;
     request.resolvedAt = new Date();
@@ -383,7 +395,7 @@ export class JoinRequestService {
 
     this.realtime.emitToUser(
       request.requestedByUserId,
-      'encounter:join_rejected',
+      "encounter:join_rejected",
       {
         requestId,
         encounterId,
@@ -393,7 +405,7 @@ export class JoinRequestService {
 
     return {
       requestId,
-      status: 'rejected',
+      status: "rejected",
       rejectionReason: reason ?? null,
     };
   }
@@ -412,11 +424,11 @@ export class JoinRequestService {
     skippedUserIds: Array<{ userId: string; reason: string }>;
   }> {
     const encounter = await this.loadEncounter(encounterId);
-    if (encounter.status === 'completed') {
+    if (encounter.status === "completed") {
       throw new ConflictException({
         ok: false,
-        code: 'ENCOUNTER_COMPLETED',
-        error: 'Nao e possivel convocar players para um combate encerrado.',
+        code: "ENCOUNTER_COMPLETED",
+        error: "Nao e possivel convocar players para um combate encerrado.",
       });
     }
     const session = await this.sessionService.getById(encounter.sessionId);
@@ -426,8 +438,8 @@ export class JoinRequestService {
       if (session.ownerId !== callerUserId) {
         throw new ForbiddenException({
           ok: false,
-          code: 'FORBIDDEN',
-          error: 'Apenas o dono da sessao pode convocar.',
+          code: "FORBIDDEN",
+          error: "Apenas o dono da sessao pode convocar.",
         });
       }
     } else {
@@ -437,8 +449,8 @@ export class JoinRequestService {
       if (!campaign || campaign.dmUserId !== callerUserId) {
         throw new ForbiddenException({
           ok: false,
-          code: 'FORBIDDEN',
-          error: 'Apenas o DM da campanha pode convocar players.',
+          code: "FORBIDDEN",
+          error: "Apenas o DM da campanha pode convocar players.",
         });
       }
     }
@@ -463,30 +475,31 @@ export class JoinRequestService {
     for (const userId of targets) {
       const p = eligibleByUserId.get(userId);
       if (!p) {
-        skipped.push({ userId, reason: 'not_member' });
+        skipped.push({ userId, reason: "not_member" });
         continue;
       }
       if (!p.isActive) {
-        skipped.push({ userId, reason: 'inactive' });
+        skipped.push({ userId, reason: "inactive" });
         continue;
       }
       if (!p.characterId) {
-        skipped.push({ userId, reason: 'no_character' });
+        skipped.push({ userId, reason: "no_character" });
         continue;
       }
       invited.push(userId);
     }
 
     const invitedAt = new Date();
-    const campaignName =
-      session.campaignId
-        ? (await this.campaignService
+    const campaignName = session.campaignId
+      ? ((
+          await this.campaignService
             .getById(session.campaignId)
-            .catch(() => null))?.name ?? null
-        : null;
+            .catch(() => null)
+        )?.name ?? null)
+      : null;
 
     for (const userId of invited) {
-      this.realtime.emitToUser(userId, 'encounter:invited', {
+      this.realtime.emitToUser(userId, "encounter:invited", {
         encounterId,
         sessionId: encounter.sessionId,
         campaignId: session.campaignId ?? null,
@@ -501,7 +514,7 @@ export class JoinRequestService {
     await this.eventService
       .emit(encounter.sessionId, encounterId, [
         {
-          event_type: 'player_invited',
+          event_type: "player_invited",
           data: {
             invited_user_ids: invited,
             skipped_user_ids: skipped,
@@ -524,21 +537,21 @@ export class JoinRequestService {
 
   async autoRejectPendingOnEncounterEnd(encounterId: string): Promise<number> {
     const pending = await this.requestRepo.find({
-      where: { encounterId, status: 'pending' },
+      where: { encounterId, status: "pending" },
     });
     if (pending.length === 0) return 0;
     const now = new Date();
     for (const r of pending) {
-      r.status = 'rejected';
-      r.rejectionReason = 'encounter_ended';
+      r.status = "rejected";
+      r.rejectionReason = "encounter_ended";
       r.resolvedAt = now;
     }
     await this.requestRepo.save(pending);
     for (const r of pending) {
-      this.realtime.emitToUser(r.requestedByUserId, 'encounter:join_rejected', {
+      this.realtime.emitToUser(r.requestedByUserId, "encounter:join_rejected", {
         requestId: r.id,
         encounterId,
-        reason: 'encounter_ended',
+        reason: "encounter_ended",
       });
     }
     return pending.length;
@@ -549,13 +562,13 @@ export class JoinRequestService {
   private async loadEncounter(encounterId: string): Promise<EncounterEntity> {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
-      relations: ['participants'],
+      relations: ["participants"],
     });
     if (!encounter) {
       throw new NotFoundException({
         ok: false,
-        code: 'ENCOUNTER_NOT_FOUND',
-        error: 'Encontro nao encontrado.',
+        code: "ENCOUNTER_NOT_FOUND",
+        error: "Encontro nao encontrado.",
       });
     }
     return encounter;
@@ -568,8 +581,8 @@ export class JoinRequestService {
     if (!character) {
       throw new NotFoundException({
         ok: false,
-        code: 'CHARACTER_NOT_FOUND',
-        error: 'Personagem nao encontrado.',
+        code: "CHARACTER_NOT_FOUND",
+        error: "Personagem nao encontrado.",
       });
     }
     return character;
@@ -585,15 +598,15 @@ export class JoinRequestService {
     if (!request) {
       throw new NotFoundException({
         ok: false,
-        code: 'JOIN_REQUEST_NOT_FOUND',
-        error: 'Solicitacao nao encontrada.',
+        code: "JOIN_REQUEST_NOT_FOUND",
+        error: "Solicitacao nao encontrada.",
       });
     }
-    if (request.status !== 'pending') {
+    if (request.status !== "pending") {
       throw new ConflictException({
         ok: false,
-        code: 'JOIN_REQUEST_ALREADY_RESOLVED',
-        error: 'Esta solicitacao ja foi resolvida.',
+        code: "JOIN_REQUEST_ALREADY_RESOLVED",
+        error: "Esta solicitacao ja foi resolvida.",
         currentStatus: request.status,
       });
     }
@@ -614,8 +627,8 @@ export class JoinRequestService {
     if (!match) {
       throw new ForbiddenException({
         ok: false,
-        code: 'FORBIDDEN_CAMPAIGN_MEMBER',
-        error: 'O personagem nao pertence a um jogador ativo da campanha.',
+        code: "FORBIDDEN_CAMPAIGN_MEMBER",
+        error: "O personagem nao pertence a um jogador ativo da campanha.",
       });
     }
   }
@@ -633,8 +646,8 @@ export class JoinRequestService {
     }
     throw new ForbiddenException({
       ok: false,
-      code: 'FORBIDDEN',
-      error: 'Apenas o DM da campanha pode gerenciar solicitacoes.',
+      code: "FORBIDDEN",
+      error: "Apenas o DM da campanha pode gerenciar solicitacoes.",
     });
   }
 

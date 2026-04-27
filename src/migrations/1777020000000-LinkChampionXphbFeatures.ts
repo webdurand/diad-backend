@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Fighter 100% — Data gap: features XPHB da subclass Champion existem
@@ -9,14 +9,14 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Esta migration insere os links faltantes. Idempotente via WHERE NOT EXISTS.
  */
 export class LinkChampionXphbFeatures1777020000000 implements MigrationInterface {
-  name = 'LinkChampionXphbFeatures1777020000000';
+  name = "LinkChampionXphbFeatures1777020000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     // Para cada feature XPHB Champion, insere em level_features se ainda não existe
     const featureToLevel: Array<{ slug: string; level: number }> = [
-      { slug: 'remarkable-athlete-fighter-champion-3', level: 3 },
-      { slug: 'heroic-warrior-fighter-champion-10', level: 10 },
-      { slug: 'survivor-fighter-champion-18', level: 18 },
+      { slug: "remarkable-athlete-fighter-champion-3", level: 3 },
+      { slug: "heroic-warrior-fighter-champion-10", level: 10 },
+      { slug: "survivor-fighter-champion-18", level: 18 },
     ];
 
     // As features XPHB estão registradas em `features` com subclass_id da
@@ -42,9 +42,9 @@ export class LinkChampionXphbFeatures1777020000000 implements MigrationInterface
 
   async down(queryRunner: QueryRunner): Promise<void> {
     const featureToLevel: Array<{ slug: string; level: number }> = [
-      { slug: 'remarkable-athlete-fighter-champion-3', level: 3 },
-      { slug: 'heroic-warrior-fighter-champion-10', level: 10 },
-      { slug: 'survivor-fighter-champion-18', level: 18 },
+      { slug: "remarkable-athlete-fighter-champion-3", level: 3 },
+      { slug: "heroic-warrior-fighter-champion-10", level: 10 },
+      { slug: "survivor-fighter-champion-18", level: 18 },
     ];
 
     for (const ft of featureToLevel) {

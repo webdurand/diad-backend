@@ -1,15 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { LootTableEntity } from 'src/entities/loot-table.entity';
-import { LootTableItemEntity } from 'src/entities/loot-table-item.entity';
-import { DiceService } from './dice.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { LootTableEntity } from "src/entities/loot-table.entity";
+import { LootTableItemEntity } from "src/entities/loot-table-item.entity";
+import { DiceService } from "./dice.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 
 export interface LootItem {
   equipmentId?: string;
@@ -37,15 +37,15 @@ export class LootService {
   async rollLoot(lootTableId: string): Promise<GameResult<LootResult>> {
     const table = await this.lootTableRepo.findOne({
       where: { id: lootTableId },
-      relations: ['items', 'items.equipment', 'items.magicItem'],
+      relations: ["items", "items.equipment", "items.magicItem"],
     });
 
     if (!table) {
-      return failure('Loot table nao encontrada.', 'ENCOUNTER_NOT_FOUND');
+      return failure("Loot table nao encontrada.", "ENCOUNTER_NOT_FOUND");
     }
 
     if (table.isLooted) {
-      return failure('Este tesouro ja foi saqueado.', 'INVALID_ACTION');
+      return failure("Este tesouro ja foi saqueado.", "INVALID_ACTION");
     }
 
     const droppedItems: LootItem[] = [];
@@ -57,9 +57,7 @@ export class LootService {
       if (roll > item.dropChance) continue;
 
       const name =
-        item.equipment?.name ??
-        item.magicItem?.name ??
-        'Item desconhecido';
+        item.equipment?.name ?? item.magicItem?.name ?? "Item desconhecido";
 
       droppedItems.push({
         equipmentId: item.equipmentId ?? undefined,
@@ -73,7 +71,7 @@ export class LootService {
     await this.lootTableRepo.update(lootTableId, { isLooted: true });
 
     const events: GameEventData[] = droppedItems.map((item) => ({
-      event_type: 'loot_dropped',
+      event_type: "loot_dropped",
       data: {
         loot_table_id: lootTableId,
         item_name: item.name,
@@ -90,14 +88,16 @@ export class LootService {
   async getLootTable(lootTableId: string): Promise<LootTableEntity | null> {
     return this.lootTableRepo.findOne({
       where: { id: lootTableId },
-      relations: ['items', 'items.equipment', 'items.magicItem'],
+      relations: ["items", "items.equipment", "items.magicItem"],
     });
   }
 
-  async getLootTablesForLocation(locationId: string): Promise<LootTableEntity[]> {
+  async getLootTablesForLocation(
+    locationId: string,
+  ): Promise<LootTableEntity[]> {
     return this.lootTableRepo.find({
       where: { locationId, isLooted: false },
-      relations: ['items', 'items.equipment', 'items.magicItem'],
+      relations: ["items", "items.equipment", "items.magicItem"],
     });
   }
 }

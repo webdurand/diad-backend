@@ -3,13 +3,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { MonsterEntity } from 'src/entities/monster.entity';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { SummonSpawnDto } from '../interfaces/summoning.interfaces';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { MonsterEntity } from "src/entities/monster.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { SummonSpawnDto } from "../interfaces/summoning.interfaces";
 
 /**
  * Spec 012 \u2014 SummoningService.
@@ -52,7 +52,7 @@ export class SummoningService {
     }
     if (caster.encounterId !== encounterId) {
       throw new BadRequestException(
-        'caster participant n\u00e3o pertence a este encounter',
+        "caster participant n\u00e3o pertence a este encounter",
       );
     }
     const monster = await this.monsterRepo.findOne({
@@ -64,11 +64,11 @@ export class SummoningService {
 
     const summon = new EncounterParticipantEntity();
     summon.encounterId = encounterId;
-    summon.type = 'monster';
+    summon.type = "monster";
     summon.monsterId = monster.id;
     summon.monster = monster;
     summon.displayName = dto.displayName ?? monster.name;
-    summon.faction = dto.faction ?? 'ally';
+    summon.faction = dto.faction ?? "ally";
     summon.currentHp = monster.hit_points;
     summon.maxHp = monster.hit_points;
     summon.tempHp = 0;
@@ -76,7 +76,7 @@ export class SummoningService {
     summon.positionY = dto.position?.y ?? caster.positionY ?? 0;
     summon.isVisible = true;
     summon.isDefeated = false;
-    summon.dyingState = 'none';
+    summon.dyingState = "none";
     summon.actionUsed = false;
     summon.bonusActionUsed = false;
     summon.hasDashed = false;
@@ -110,7 +110,7 @@ export class SummoningService {
     summon.readiedAction = null;
     summon.lastAiTurnRound = null;
     summon.lastAiTurnResult = null;
-    summon.controlledBy = dto.controlMode === 'ai-controlled' ? 'ai' : 'dm';
+    summon.controlledBy = dto.controlMode === "ai-controlled" ? "ai" : "dm";
     summon.concentrationRoundsRemaining = null;
     summon.concentrationSaveDc = null;
     summon.isConcentrating = false;
@@ -130,7 +130,11 @@ export class SummoningService {
    */
   async dismissSummon(
     summonParticipantId: string,
-    reason: 'player-dismiss' | 'caster-death' | 'concentration-broken' | 'duration-end',
+    reason:
+      | "player-dismiss"
+      | "caster-death"
+      | "concentration-broken"
+      | "duration-end",
   ): Promise<void> {
     const summon = await this.participantRepo.findOne({
       where: { id: summonParticipantId },
@@ -158,12 +162,10 @@ export class SummoningService {
    */
   async dismissAllOfCaster(
     casterParticipantId: string,
-    reason: 'caster-death' | 'concentration-broken',
+    reason: "caster-death" | "concentration-broken",
   ): Promise<number> {
     const summons = await this.getSummonsOf(casterParticipantId);
-    await Promise.all(
-      summons.map((s) => this.dismissSummon(s.id, reason)),
-    );
+    await Promise.all(summons.map((s) => this.dismissSummon(s.id, reason)));
     return summons.length;
   }
 }

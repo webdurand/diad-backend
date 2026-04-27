@@ -1,20 +1,20 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { ActionsService } from 'src/models/characters/services/actions.service';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { CharacterStateService } from 'src/models/characters/services/character-state.service';
-import { EncounterService } from './encounter.service';
-import { PersistentAreaService } from './persistent-area.service';
-import { ExhaustionService } from './exhaustion.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { ActionsService } from "src/models/characters/services/actions.service";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import { EncounterService } from "./encounter.service";
+import { PersistentAreaService } from "./persistent-area.service";
+import { ExhaustionService } from "./exhaustion.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 
 export interface MovementResult {
   participantId: string;
@@ -64,7 +64,7 @@ export class MovementService {
     ownerUserId?: string,
   ): Promise<number> {
     let baseSpeed = 30;
-    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+    if (participant.type === "pc" && participant.characterId && ownerUserId) {
       try {
         const actions = await this.actionsService.getActions(
           ownerUserId,
@@ -75,7 +75,7 @@ export class MovementService {
         baseSpeed = 30;
       }
     } else if (
-      (participant.type === 'monster' || participant.type === 'npc') &&
+      (participant.type === "monster" || participant.type === "npc") &&
       participant.monster
     ) {
       baseSpeed = this.parseMonsterSpeed(participant.monster.speed);
@@ -83,21 +83,33 @@ export class MovementService {
 
     // Spec 012 Fase 0 — subtrai speed_reduction de effect instances (Slow mastery).
     const reductionTotal = (participant.effectInstances ?? [])
-      .filter((e) => e.kind === 'speed_reduction')
-      .reduce((sum, e) => sum + ((e.payload as { amount?: number })?.amount ?? 0), 0);
+      .filter((e) => e.kind === "speed_reduction")
+      .reduce(
+        (sum, e) => sum + ((e.payload as { amount?: number })?.amount ?? 0),
+        0,
+      );
 
     // Spec 012 Lote B — Exhaustion XPHB 2024: -5×level ft em speed (flat).
     let exhaustionSpeedPenalty = 0;
-    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+    if (participant.type === "pc" && participant.characterId && ownerUserId) {
       try {
-        const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId);
-        const exhLevel = (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+        const sheet = await this.sheetService.computeSheet(
+          ownerUserId,
+          participant.characterId,
+        );
+        const exhLevel =
+          (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
         if (exhLevel > 0) {
-          const mods = this.exhaustion.getModifiers(exhLevel, '2024_ten_levels');
+          const mods = this.exhaustion.getModifiers(
+            exhLevel,
+            "2024_ten_levels",
+          );
           // mods.speedPenaltyFt é negativo (-5×level); somamos como redução.
           exhaustionSpeedPenalty = -(mods.speedPenaltyFt ?? 0);
         }
-      } catch { /* fallback 0 */ }
+      } catch {
+        /* fallback 0 */
+      }
     }
 
     return Math.max(0, baseSpeed - reductionTotal - exhaustionSpeedPenalty);
@@ -109,8 +121,8 @@ export class MovementService {
   private parseMonsterSpeed(speed: Record<string, unknown>): number {
     if (!speed) return 30;
     const walk = speed.walk;
-    if (typeof walk === 'number') return walk;
-    if (typeof walk === 'string') {
+    if (typeof walk === "number") return walk;
+    if (typeof walk === "string") {
       const match = walk.match(/(\d+)/);
       return match ? parseInt(match[1], 10) : 30;
     }
@@ -122,7 +134,8 @@ export class MovementService {
     participantId: string,
     ownerUserId?: string,
   ): Promise<GameResult<MovementState>> {
-    const participant = await this.encounterService.getParticipant(participantId);
+    const participant =
+      await this.encounterService.getParticipant(participantId);
     const speed = await this.getSpeed(participant, ownerUserId);
 
     return success({
@@ -152,64 +165,93 @@ export class MovementService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
     // Validate it's this participant's turn
     const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
     if (currentPid !== participantId)
-      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
-    const participant = await this.encounterService.getParticipant(participantId);
+    const participant =
+      await this.encounterService.getParticipant(participantId);
     if (participant.isDefeated)
-      return failure('Participante derrotado.', 'CONDITION_PREVENTS_ACTION');
+      return failure("Participante derrotado.", "CONDITION_PREVENTS_ACTION");
 
     const fromX = participant.positionX ?? 0;
     const fromY = participant.positionY ?? 0;
 
     // Validate bounds
-    const gridCols = encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
-    const gridRows = encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
-    if (targetX < 0 || targetX >= gridCols || targetY < 0 || targetY >= gridRows)
-      return failure('Posicao fora dos limites do grid.', 'POSITION_OUT_OF_BOUNDS');
+    const gridCols =
+      encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+    const gridRows =
+      encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+    if (
+      targetX < 0 ||
+      targetX >= gridCols ||
+      targetY < 0 ||
+      targetY >= gridRows
+    )
+      return failure(
+        "Posicao fora dos limites do grid.",
+        "POSITION_OUT_OF_BOUNDS",
+      );
 
     // Validate not occupied
     const occupant = await this.participantRepo
-      .createQueryBuilder('p')
-      .where('p.encounter_id = :encounterId', { encounterId })
-      .andWhere('p.position_x = :x', { x: targetX })
-      .andWhere('p.position_y = :y', { y: targetY })
-      .andWhere('p.is_defeated = false')
-      .andWhere('p.id != :pid', { pid: participantId })
+      .createQueryBuilder("p")
+      .where("p.encounter_id = :encounterId", { encounterId })
+      .andWhere("p.position_x = :x", { x: targetX })
+      .andWhere("p.position_y = :y", { y: targetY })
+      .andWhere("p.is_defeated = false")
+      .andWhere("p.id != :pid", { pid: participantId })
       .getOne();
     if (occupant)
-      return failure(`Posicao ocupada por ${occupant.displayName}.`, 'POSITION_OCCUPIED');
+      return failure(
+        `Posicao ocupada por ${occupant.displayName}.`,
+        "POSITION_OCCUPIED",
+      );
 
     // Spec 012 Lote B — Difficult terrain + Land's Stride (RAW 2024 XPHB).
     // Cells marcadas como difficult terrain custam 10ft em vez de 5ft. Land's
     // Stride bypasses isso pra beast-aligned PCs (Druid L6 / Ranger L8+).
     // Spec 013: merge overlay dinâmico (Grease/Web/Spike Growth/etc).
     const staticDifficult = new Set(
-      (encounter.mapData?.difficultTerrainCells ?? []).map((c) => `${c.x},${c.y}`),
+      (encounter.mapData?.difficultTerrainCells ?? []).map(
+        (c) => `${c.x},${c.y}`,
+      ),
     );
-    const tileOverlay = await this.persistentArea.getDifficultTerrainOverlay(
-      encounterId,
-    );
+    const tileOverlay =
+      await this.persistentArea.getDifficultTerrainOverlay(encounterId);
     const difficultCells = new Set(staticDifficult);
     for (const key of tileOverlay.keys()) difficultCells.add(key);
     let hasLandsStride = false;
-    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+    if (participant.type === "pc" && participant.characterId && ownerUserId) {
       try {
-        const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId);
-        hasLandsStride = !!(sheet as { hasLandsStride?: boolean }).hasLandsStride;
-      } catch { /* fallback */ }
+        const sheet = await this.sheetService.computeSheet(
+          ownerUserId,
+          participant.characterId,
+        );
+        hasLandsStride = !!(sheet as { hasLandsStride?: boolean })
+          .hasLandsStride;
+      } catch {
+        /* fallback */
+      }
     }
 
     const distanceCells = Math.abs(targetX - fromX) + Math.abs(targetY - fromY);
-    const { costFt: distanceFt, difficultCellsCrossed, traversedCells } =
-      this.computeMoveCost(
-        fromX, fromY, targetX, targetY, difficultCells, hasLandsStride,
-      );
+    const {
+      costFt: distanceFt,
+      difficultCellsCrossed,
+      traversedCells,
+    } = this.computeMoveCost(
+      fromX,
+      fromY,
+      targetX,
+      targetY,
+      difficultCells,
+      hasLandsStride,
+    );
 
     // Initialize movement if not set
     const speed = await this.getSpeed(participant, ownerUserId);
@@ -220,7 +262,7 @@ export class MovementService {
     if (distanceFt > participant.movementRemaining)
       return failure(
         `Movimento insuficiente: precisa ${distanceFt}ft, tem ${participant.movementRemaining}ft.`,
-        'OUT_OF_RANGE',
+        "OUT_OF_RANGE",
       );
 
     // Check for opportunity attacks (if not disengaged)
@@ -277,7 +319,12 @@ export class MovementService {
     // Cost proporcional: se parou cedo, debita só o que foi consumido.
     const finalCostFt = stopAtCell
       ? this.computeMoveCost(
-          fromX, fromY, finalX, finalY, difficultCells, hasLandsStride,
+          fromX,
+          fromY,
+          finalX,
+          finalY,
+          difficultCells,
+          hasLandsStride,
         ).costFt
       : distanceFt;
     participant.movementRemaining -= finalCostFt;
@@ -291,7 +338,7 @@ export class MovementService {
 
     const events: GameEventData[] = [
       {
-        event_type: 'movement',
+        event_type: "movement",
         actor_participant_id: participantId,
         data: {
           fromX,
@@ -313,7 +360,7 @@ export class MovementService {
     ];
     if (difficultCellsCrossed > 0) {
       events.push({
-        event_type: 'difficult_terrain_traversed',
+        event_type: "difficult_terrain_traversed",
         actor_participant_id: participantId,
         data: {
           cellsCrossed: difficultCellsCrossed,
@@ -328,7 +375,7 @@ export class MovementService {
     // POST /encounters/:id/opportunity-attack (OpportunityAttackService).
     for (const oa of opportunityAttacks) {
       events.push({
-        event_type: 'opportunity_attack_available',
+        event_type: "opportunity_attack_available",
         actor_participant_id: oa.attackerParticipantId,
         target_participant_id: participantId,
         data: {
@@ -397,7 +444,11 @@ export class MovementService {
       if (isDiff) crossed++;
       cost += isDiff && !hasLandsStride ? 10 : 5;
     }
-    return { costFt: cost, difficultCellsCrossed: crossed, traversedCells: traversed };
+    return {
+      costFt: cost,
+      difficultCellsCrossed: crossed,
+      traversedCells: traversed,
+    };
   }
 
   /**
@@ -412,16 +463,17 @@ export class MovementService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
     const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
     if (currentPid !== participantId)
-      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
-    const participant = await this.encounterService.getParticipant(participantId);
+    const participant =
+      await this.encounterService.getParticipant(participantId);
     if (participant.actionUsed)
-      return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+      return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
 
     const speed = await this.getSpeed(participant, ownerUserId);
     if (participant.movementRemaining == null) {
@@ -454,16 +506,17 @@ export class MovementService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
     const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
     if (currentPid !== participantId)
-      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
-    const participant = await this.encounterService.getParticipant(participantId);
+    const participant =
+      await this.encounterService.getParticipant(participantId);
     if (participant.actionUsed)
-      return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+      return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
 
     const speed = await this.getSpeed(participant);
 
@@ -499,7 +552,10 @@ export class MovementService {
       where: { encounterId, isDefeated: false },
     });
 
-    const results: Array<{ attackerParticipantId: string; attackerName: string }> = [];
+    const results: Array<{
+      attackerParticipantId: string;
+      attackerName: string;
+    }> = [];
 
     for (const enemy of enemies) {
       // Skip same faction, self, or enemies without position
@@ -509,8 +565,18 @@ export class MovementService {
       // Skip if reaction already used this round
       if (enemy.reactionsUsed > 0) continue;
 
-      const wasAdjacent = this.isAdjacent(fromX, fromY, enemy.positionX, enemy.positionY);
-      const stillAdjacent = this.isAdjacent(toX, toY, enemy.positionX, enemy.positionY);
+      const wasAdjacent = this.isAdjacent(
+        fromX,
+        fromY,
+        enemy.positionX,
+        enemy.positionY,
+      );
+      const stillAdjacent = this.isAdjacent(
+        toX,
+        toY,
+        enemy.positionX,
+        enemy.positionY,
+      );
 
       // Opportunity attack triggers when leaving melee range (adjacent -> not adjacent)
       if (wasAdjacent && !stillAdjacent) {
@@ -566,7 +632,7 @@ export class MovementService {
     participant.sneakAttackUsedThisTurn = false;
 
     // Champion L10 Heroic Warrior (RAW 2024) + L18 Survivor — triggers start-turn.
-    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+    if (participant.type === "pc" && participant.characterId && ownerUserId) {
       await this.applyChampionStartTurnTriggers(participant, ownerUserId);
     }
 
@@ -583,26 +649,46 @@ export class MovementService {
     ownerUserId: string,
   ): Promise<void> {
     try {
-      const sheet = await this.sheetService.computeSheet(ownerUserId, participant.characterId!);
-      const features = ((sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [])
-        .filter((f) => f.active !== false);
-      const hasHeroicWarrior = features.some((f) => f.slug.startsWith('heroic-warrior'));
-      const hasSurvivor = features.some((f) => f.slug.startsWith('survivor'));
+      const sheet = await this.sheetService.computeSheet(
+        ownerUserId,
+        participant.characterId!,
+      );
+      const features = (
+        (
+          sheet as unknown as {
+            features?: Array<{ slug: string; active?: boolean }>;
+          }
+        ).features ?? []
+      ).filter((f) => f.active !== false);
+      const hasHeroicWarrior = features.some((f) =>
+        f.slug.startsWith("heroic-warrior"),
+      );
+      const hasSurvivor = features.some((f) => f.slug.startsWith("survivor"));
 
       // Heroic Warrior: se não tem inspiration, ganha.
       if (hasHeroicWarrior) {
-        const stateResp = await this.stateService.setInspiration(participant.characterId!, true).catch(() => null);
+        const stateResp = await this.stateService
+          .setInspiration(participant.characterId!, true)
+          .catch(() => null);
         if (stateResp?.inspiration === true) {
           // inspiration armed disponível pro player
         }
       }
 
       // Survivor: regen 5 + CON se Bloodied com > 0 HP.
-      if (hasSurvivor && sheet.currentHp > 0 && sheet.currentHp <= Math.floor(sheet.maxHp / 2)) {
-        const conAbility = sheet.abilityScores.find((a) => a.slug === 'con');
+      if (
+        hasSurvivor &&
+        sheet.currentHp > 0 &&
+        sheet.currentHp <= Math.floor(sheet.maxHp / 2)
+      ) {
+        const conAbility = sheet.abilityScores.find((a) => a.slug === "con");
         const conMod = conAbility?.modifier ?? 0;
         const regen = 5 + conMod;
-        const hpRes = await this.stateService.updateHp(ownerUserId, participant.characterId!, { healing: regen });
+        const hpRes = await this.stateService.updateHp(
+          ownerUserId,
+          participant.characterId!,
+          { healing: regen },
+        );
         participant.currentHp = hpRes.currentHp;
       }
     } catch {
@@ -620,14 +706,14 @@ export class MovementService {
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
   ): Promise<number> {
-    if (participant.type === 'pc' && participant.characterId && ownerUserId) {
+    if (participant.type === "pc" && participant.characterId && ownerUserId) {
       try {
         const actions = await this.actionsService.getActions(
           ownerUserId,
           participant.characterId,
         );
         const count = actions.summary?.attackCount;
-        if (typeof count === 'number' && count > 0) return count;
+        if (typeof count === "number" && count > 0) return count;
       } catch {
         // fallthrough to default
       }

@@ -5,33 +5,33 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
-} from 'typeorm';
-import { CharacterEntity } from './character.entity';
-import { AbilityScoreEntity } from './ability-score.entity';
+} from "typeorm";
+import { CharacterEntity } from "./character.entity";
+import { AbilityScoreEntity } from "./ability-score.entity";
 
-@Entity('character_ability_scores')
+@Entity("character_ability_scores")
 export class CharacterAbilityScoreEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   character_id: string;
 
-  @ManyToOne(() => CharacterEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'character_id' })
+  @ManyToOne(() => CharacterEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "character_id" })
   character: CharacterEntity;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   ability_score_id: string;
 
   @ManyToOne(() => AbilityScoreEntity, { eager: true })
-  @JoinColumn({ name: 'ability_score_id' })
+  @JoinColumn({ name: "ability_score_id" })
   ability_score: AbilityScoreEntity;
 
-  @Column({ type: 'int' })
+  @Column({ type: "int" })
   base_score: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   bonus: number;
 }

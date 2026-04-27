@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddCharacterRelationalTables1772100000000 implements MigrationInterface {
-  name = 'AddCharacterRelationalTables1772100000000';
+  name = "AddCharacterRelationalTables1772100000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- Enums ---
@@ -44,7 +44,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "subclasses"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cc_character" ON "character_classes" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cc_character" ON "character_classes" ("character_id")`,
+    );
 
     // --- character_ability_scores ---
     await queryRunner.query(`
@@ -61,7 +63,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "ability_scores"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cas_character" ON "character_ability_scores" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cas_character" ON "character_ability_scores" ("character_id")`,
+    );
 
     // --- character_skills ---
     await queryRunner.query(`
@@ -77,7 +81,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "skills"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_csk_character" ON "character_skills" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_csk_character" ON "character_skills" ("character_id")`,
+    );
 
     // --- character_proficiencies ---
     await queryRunner.query(`
@@ -93,7 +99,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "proficiencies"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cp_character" ON "character_proficiencies" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cp_character" ON "character_proficiencies" ("character_id")`,
+    );
 
     // --- character_spells ---
     await queryRunner.query(`
@@ -111,7 +119,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "spells"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_csp_character" ON "character_spells" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_csp_character" ON "character_spells" ("character_id")`,
+    );
 
     // --- character_equipment ---
     await queryRunner.query(`
@@ -129,7 +139,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "equipments"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_ce_character" ON "character_equipment" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_ce_character" ON "character_equipment" ("character_id")`,
+    );
 
     // --- character_magic_items ---
     await queryRunner.query(`
@@ -145,7 +157,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "magic_items"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cmi_character" ON "character_magic_items" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cmi_character" ON "character_magic_items" ("character_id")`,
+    );
 
     // --- character_state ---
     await queryRunner.query(`
@@ -189,7 +203,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "classes"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_clu_character" ON "character_level_ups" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_clu_character" ON "character_level_ups" ("character_id")`,
+    );
 
     // --- character_features ---
     await queryRunner.query(`
@@ -209,7 +225,9 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
           REFERENCES "classes"("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cf_character" ON "character_features" ("character_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cf_character" ON "character_features" ("character_id")`,
+    );
 
     // --- character_origins ---
     await queryRunner.query(`
@@ -256,14 +274,18 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
     `);
 
     // --- Make data column nullable (backup) ---
-    await queryRunner.query(`ALTER TABLE "characters" ALTER COLUMN "data" DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "characters" ALTER COLUMN "data" DROP NOT NULL`,
+    );
 
     // --- Migrate existing data ---
     await this.migrateExistingCharacters(queryRunner);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "characters" ALTER COLUMN "data" SET NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "characters" ALTER COLUMN "data" SET NOT NULL`,
+    );
 
     await queryRunner.query(`DROP TABLE IF EXISTS "character_origins"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "character_features"`);
@@ -281,17 +303,21 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
     await queryRunner.query(`DROP TYPE IF EXISTS "equipment_source_enum"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "spell_status_enum"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "spell_source_enum"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "character_proficiency_source_enum"`);
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "character_proficiency_source_enum"`,
+    );
   }
 
-  private async migrateExistingCharacters(queryRunner: QueryRunner): Promise<void> {
+  private async migrateExistingCharacters(
+    queryRunner: QueryRunner,
+  ): Promise<void> {
     const characters = await queryRunner.query(
       `SELECT id, data FROM characters WHERE data IS NOT NULL`,
     );
 
     for (const char of characters) {
       const data = char.data;
-      if (!data || typeof data !== 'object') continue;
+      if (!data || typeof data !== "object") continue;
 
       try {
         await this.migrateOne(queryRunner, char.id, data);
@@ -365,12 +391,12 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
       bonus: number;
     }>;
     const slugMap: Record<string, string> = {
-      strength: 'str',
-      dexterity: 'dex',
-      constitution: 'con',
-      intelligence: 'int',
-      wisdom: 'wis',
-      charisma: 'cha',
+      strength: "str",
+      dexterity: "dex",
+      constitution: "con",
+      intelligence: "int",
+      wisdom: "wis",
+      charisma: "cha",
     };
     if (scores) {
       for (const [key, value] of Object.entries(scores)) {
@@ -506,11 +532,18 @@ export class AddCharacterRelationalTables1772100000000 implements MigrationInter
 
     // character_state — level 1 HP = hit_die + CON mod
     const conScore = scores?.constitution ?? 10;
-    const conMod = Math.floor((conScore + (bgBonuses.find((b) => b.abilityScoreIndex === 'con')?.bonus ?? 0) - 10) / 2);
+    const conMod = Math.floor(
+      (conScore +
+        (bgBonuses.find((b) => b.abilityScoreIndex === "con")?.bonus ?? 0) -
+        10) /
+        2,
+    );
     const startHp = (classRow.hit_die as number) + conMod;
 
     // Starting gold
-    const startingGold = data.classStartingGold as { amount?: number } | undefined;
+    const startingGold = data.classStartingGold as
+      | { amount?: number }
+      | undefined;
     const gp = startingGold?.amount ?? 0;
 
     await queryRunner.query(

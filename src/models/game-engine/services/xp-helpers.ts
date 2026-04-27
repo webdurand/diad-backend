@@ -37,25 +37,25 @@ export const XP_THRESHOLDS_2024 = [
 export const MAX_LEVEL = XP_THRESHOLDS_2024.length;
 
 export type XpAwardSource =
-  | 'combat_kill'
-  | 'combat_resolved_peacefully'
-  | 'skill_challenge'
-  | 'quest_step'
-  | 'quest_completion'
-  | 'exploration_milestone'
-  | 'roleplay';
+  | "combat_kill"
+  | "combat_resolved_peacefully"
+  | "skill_challenge"
+  | "quest_step"
+  | "quest_completion"
+  | "exploration_milestone"
+  | "roleplay";
 
-export type XpMode = 'rules' | 'milestone' | 'hybrid';
+export type XpMode = "rules" | "milestone" | "hybrid";
 
 const COMBAT_SOURCES: XpAwardSource[] = [
-  'combat_kill',
-  'combat_resolved_peacefully',
+  "combat_kill",
+  "combat_resolved_peacefully",
 ];
 
 const MILESTONE_SOURCES: XpAwardSource[] = [
-  'quest_step',
-  'quest_completion',
-  'exploration_milestone',
+  "quest_step",
+  "quest_completion",
+  "exploration_milestone",
 ];
 
 /**
@@ -66,12 +66,12 @@ export function policyAdjustedAward(
   source: XpAwardSource,
   mode: XpMode,
 ): number {
-  if (mode === 'rules') return amount;
-  if (mode === 'milestone') {
+  if (mode === "rules") return amount;
+  if (mode === "milestone") {
     return MILESTONE_SOURCES.includes(source) ? amount : 0;
   }
   // hybrid: combat OK + milestone OK; roleplay/skill_challenge coerced
-  if (mode === 'hybrid') {
+  if (mode === "hybrid") {
     if (COMBAT_SOURCES.includes(source)) return amount;
     if (MILESTONE_SOURCES.includes(source)) return amount;
     return 0;
@@ -170,7 +170,7 @@ export function applyXpAward(input: {
   source: XpAwardSource;
   mode?: XpMode;
 }): XpAwardOutcome {
-  const mode = input.mode ?? 'rules';
+  const mode = input.mode ?? "rules";
   const adjustedAmount = policyAdjustedAward(input.amount, input.source, mode);
   const totalXpAfter = Math.max(0, input.totalXpBefore + adjustedAmount);
   const levelBefore = levelForXp(input.totalXpBefore);

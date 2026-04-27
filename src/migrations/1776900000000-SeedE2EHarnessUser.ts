@@ -1,6 +1,6 @@
-import * as bcrypt from 'bcryptjs';
-import { Logger } from '@nestjs/common';
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import * as bcrypt from "bcryptjs";
+import { Logger } from "@nestjs/common";
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 — Seed do usuário E2E usado pelo game-validation-harness.
@@ -18,35 +18,35 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Idempotente: ON CONFLICT (email) DO NOTHING.
  */
 export class SeedE2EHarnessUser1776900000000 implements MigrationInterface {
-  name = 'SeedE2EHarnessUser1776900000000';
+  name = "SeedE2EHarnessUser1776900000000";
 
   private readonly logger = new Logger(SeedE2EHarnessUser1776900000000.name);
-  private readonly email = 'e2e-harness@diad.local';
-  private readonly username = 'e2e-harness';
-  private readonly displayName = 'E2E Harness';
+  private readonly email = "e2e-harness@diad.local";
+  private readonly username = "e2e-harness";
+  private readonly displayName = "E2E Harness";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const env = process.env.NODE_ENV;
-    const override = process.env.ALLOW_TEST_ENDPOINTS === 'true';
+    const override = process.env.ALLOW_TEST_ENDPOINTS === "true";
     const password = process.env.E2E_HARNESS_PASSWORD;
 
-    if (env === 'production' && !override) {
+    if (env === "production" && !override) {
       this.logger.log(
-        'SKIP: ambiente production sem ALLOW_TEST_ENDPOINTS=true.',
+        "SKIP: ambiente production sem ALLOW_TEST_ENDPOINTS=true.",
       );
       return;
     }
 
     if (!password || password.trim().length === 0) {
       this.logger.warn(
-        'SKIP: E2E_HARNESS_PASSWORD não está definida. Pule essa migration em dev; defina a env var pra rodar o harness 012.',
+        "SKIP: E2E_HARNESS_PASSWORD não está definida. Pule essa migration em dev; defina a env var pra rodar o harness 012.",
       );
       return;
     }
 
     if (password.length < 8) {
       throw new Error(
-        'E2E_HARNESS_PASSWORD muito curta (< 8 caracteres). Use um valor robusto.',
+        "E2E_HARNESS_PASSWORD muito curta (< 8 caracteres). Use um valor robusto.",
       );
     }
 
@@ -58,7 +58,7 @@ export class SeedE2EHarnessUser1776900000000 implements MigrationInterface {
       VALUES ($1, $2, $3, $4, $5, now(), now())
       ON CONFLICT (email) DO NOTHING
       `,
-      [this.email, this.username, this.displayName, passwordHash, 'admin'],
+      [this.email, this.username, this.displayName, passwordHash, "admin"],
     );
 
     this.logger.log(`OK: user ${this.email} criado (ou já existia).`);

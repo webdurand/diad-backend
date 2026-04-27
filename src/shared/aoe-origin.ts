@@ -1,4 +1,4 @@
-import type { AoEOriginType } from 'src/shared/aoe-origin.types';
+import type { AoEOriginType } from "src/shared/aoe-origin.types";
 
 export interface SpellLikeAoeInput {
   range: string;
@@ -17,16 +17,18 @@ export interface SpellLikeAoeInput {
  * Nunca devolve "fixed" — esse valor é atributo de entidade
  * (armadilha/efeito persistente), não derivável do SRD.
  */
-export function deriveOriginType(spell: SpellLikeAoeInput): AoEOriginType | null {
+export function deriveOriginType(
+  spell: SpellLikeAoeInput,
+): AoEOriginType | null {
   if (spell.area_of_effect == null) return null;
 
   const range = spell.range.trim();
-  if (range.toLowerCase().startsWith('self')) return 'self';
+  if (range.toLowerCase().startsWith("self")) return "self";
 
-  if (/^\d/.test(range)) return 'point';
+  if (/^\d/.test(range)) return "point";
 
   // Touch e outros (raro, mas coberto)
-  if (range.toLowerCase() === 'touch') return 'point';
+  if (range.toLowerCase() === "touch") return "point";
 
-  return 'self';
+  return "self";
 }

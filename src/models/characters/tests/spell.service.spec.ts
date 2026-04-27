@@ -1,6 +1,6 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { SpellService } from 'src/models/characters/services/spell.service';
-import { createMockRepository } from 'src/shared/test-utils/mock-repositories';
+import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { SpellService } from "src/models/characters/services/spell.service";
+import { createMockRepository } from "src/shared/test-utils/mock-repositories";
 import {
   makeCharacter,
   makeCharacterClass,
@@ -9,11 +9,11 @@ import {
   makeCharacterSpell,
   makeSpell,
   resetIdCounter,
-} from 'src/shared/test-utils/entity-factories';
-import { SpellStatusEnum, SpellSourceEnum } from 'src/entities/enums';
-import { CASTER_CLASS_TYPE } from 'src/shared/srd-constants';
+} from "src/shared/test-utils/entity-factories";
+import { SpellStatusEnum, SpellSourceEnum } from "src/entities/enums";
+import { CASTER_CLASS_TYPE } from "src/shared/srd-constants";
 
-describe('SpellService', () => {
+describe("SpellService", () => {
   let service: SpellService;
   let repos: Record<string, ReturnType<typeof createMockRepository>>;
 
@@ -42,16 +42,18 @@ describe('SpellService', () => {
     );
   });
 
-  const setupCaster = (opts: {
-    classSlug?: string;
-    level?: number;
-    wis?: number;
-    int?: number;
-    cha?: number;
-    existingSpells?: any[];
-    xp?: number;
-  } = {}) => {
-    const classSlug = opts.classSlug ?? 'cleric';
+  const setupCaster = (
+    opts: {
+      classSlug?: string;
+      level?: number;
+      wis?: number;
+      int?: number;
+      cha?: number;
+      existingSpells?: any[];
+      xp?: number;
+    } = {},
+  ) => {
+    const classSlug = opts.classSlug ?? "cleric";
     const level = opts.level ?? 5;
     const cc = makeCharacterClass(classSlug, level);
     const abilities = makeCharacterAbilityScores({
@@ -72,36 +74,42 @@ describe('SpellService', () => {
     return { cc, abilities, state, spells };
   };
 
-  describe('updatePreparedSpells', () => {
-    it('should reject known-caster classes (bard)', async () => {
-      setupCaster({ classSlug: 'bard', level: 5, cha: 16 });
+  describe("updatePreparedSpells", () => {
+    it("should reject known-caster classes (bard)", async () => {
+      setupCaster({ classSlug: "bard", level: 5, cha: 16 });
 
       await expect(
-        service.updatePreparedSpells('user-1', 'char-1', { spells: ['shield'] }),
+        service.updatePreparedSpells("user-1", "char-1", {
+          spells: ["shield"],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should reject known-caster classes (warlock / pact)', async () => {
-      setupCaster({ classSlug: 'warlock', level: 5, cha: 16 });
+    it("should reject known-caster classes (warlock / pact)", async () => {
+      setupCaster({ classSlug: "warlock", level: 5, cha: 16 });
 
       await expect(
-        service.updatePreparedSpells('user-1', 'char-1', { spells: ['eldritch-blast'] }),
+        service.updatePreparedSpells("user-1", "char-1", {
+          spells: ["eldritch-blast"],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should reject cantrips in the prepared list', async () => {
-      setupCaster({ classSlug: 'cleric', level: 5, wis: 16 });
-      const cantrip = makeSpell('sacred-flame', 0);
+    it("should reject cantrips in the prepared list", async () => {
+      setupCaster({ classSlug: "cleric", level: 5, wis: 16 });
+      const cantrip = makeSpell("sacred-flame", 0);
       repos.spell.find!.mockResolvedValue([cantrip]);
 
       await expect(
-        service.updatePreparedSpells('user-1', 'char-1', { spells: ['sacred-flame'] }),
+        service.updatePreparedSpells("user-1", "char-1", {
+          spells: ["sacred-flame"],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should reject when exceeding max prepared spells', async () => {
+    it("should reject when exceeding max prepared spells", async () => {
       // Cleric level 5, WIS 16 (+3 mod): max = 5 + 3 = 8
-      setupCaster({ classSlug: 'cleric', level: 5, wis: 16 });
+      setupCaster({ classSlug: "cleric", level: 5, wis: 16 });
 
       const tooManySpells = Array.from({ length: 9 }, (_, i) =>
         makeSpell(`spell-${i}`, 1),
@@ -109,129 +117,138 @@ describe('SpellService', () => {
       repos.spell.find!.mockResolvedValue(tooManySpells);
 
       await expect(
-        service.updatePreparedSpells('user-1', 'char-1', {
+        service.updatePreparedSpells("user-1", "char-1", {
           spells: tooManySpells.map((s) => s.slug),
         }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should accept valid prepared spells for total_access caster', async () => {
-      setupCaster({ classSlug: 'cleric', level: 5, wis: 16 });
-      const spell1 = makeSpell('cure-wounds', 1);
-      const spell2 = makeSpell('bless', 1);
+    it("should accept valid prepared spells for total_access caster", async () => {
+      setupCaster({ classSlug: "cleric", level: 5, wis: 16 });
+      const spell1 = makeSpell("cure-wounds", 1);
+      const spell2 = makeSpell("bless", 1);
 
       repos.spell.find!.mockResolvedValue([spell1, spell2]);
       repos.spellClass.find!.mockResolvedValue([
-        { spell_id: spell1.id, class_id: 'class-id' },
-        { spell_id: spell2.id, class_id: 'class-id' },
+        { spell_id: spell1.id, class_id: "class-id" },
+        { spell_id: spell2.id, class_id: "class-id" },
       ]);
       repos.charSpell.remove!.mockResolvedValue([]);
       repos.charSpell.save!.mockResolvedValue({});
 
-      const result = await service.updatePreparedSpells('user-1', 'char-1', {
-        spells: ['cure-wounds', 'bless'],
+      const result = await service.updatePreparedSpells("user-1", "char-1", {
+        spells: ["cure-wounds", "bless"],
       });
 
       expect(result.prepared).toHaveLength(2);
-      expect(result.casterType).toBe('total_access');
+      expect(result.casterType).toBe("total_access");
       expect(result.maxPrepared).toBe(8); // 5 + 3
     });
 
-    it('should reject spellbook spell not in wizard spellbook', async () => {
+    it("should reject spellbook spell not in wizard spellbook", async () => {
       const existingSpellbook = [
-        makeCharacterSpell('magic-missile', 1, SpellStatusEnum.Spellbook),
+        makeCharacterSpell("magic-missile", 1, SpellStatusEnum.Spellbook),
       ];
-      setupCaster({ classSlug: 'wizard', level: 5, int: 16, existingSpells: existingSpellbook });
+      setupCaster({
+        classSlug: "wizard",
+        level: 5,
+        int: 16,
+        existingSpells: existingSpellbook,
+      });
 
       // Request a spell that's not in the spellbook
-      const notInBook = makeSpell('fireball', 3);
+      const notInBook = makeSpell("fireball", 3);
       repos.spell.find!.mockResolvedValue([notInBook]);
 
       await expect(
-        service.updatePreparedSpells('user-1', 'char-1', { spells: ['fireball'] }),
+        service.updatePreparedSpells("user-1", "char-1", {
+          spells: ["fireball"],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw NotFoundException for missing character', async () => {
+    it("should throw NotFoundException for missing character", async () => {
       repos.character.findOne!.mockResolvedValue(null);
       await expect(
-        service.updatePreparedSpells('user-1', 'no-char', { spells: [] }),
+        service.updatePreparedSpells("user-1", "no-char", { spells: [] }),
       ).rejects.toThrow(NotFoundException);
     });
   });
 
-  describe('getAvailableSpells', () => {
+  describe("getAvailableSpells", () => {
     it('cleric/druid prepChangeMode should be "all"', async () => {
-      setupCaster({ classSlug: 'cleric', level: 5, wis: 16 });
+      setupCaster({ classSlug: "cleric", level: 5, wis: 16 });
       repos.spellClass.find!.mockResolvedValue([]);
 
-      const result = await service.getAvailableSpells('user-1', 'char-1');
+      const result = await service.getAvailableSpells("user-1", "char-1");
       expect(result).toHaveLength(1);
-      expect(result[0].prepChangeMode).toBe('all');
+      expect(result[0].prepChangeMode).toBe("all");
     });
 
     it('paladin prepChangeMode should be "one"', async () => {
-      setupCaster({ classSlug: 'paladin', level: 5, cha: 16 });
+      setupCaster({ classSlug: "paladin", level: 5, cha: 16 });
       repos.spellClass.find!.mockResolvedValue([]);
 
-      const result = await service.getAvailableSpells('user-1', 'char-1');
+      const result = await service.getAvailableSpells("user-1", "char-1");
       expect(result).toHaveLength(1);
-      expect(result[0].prepChangeMode).toBe('one');
+      expect(result[0].prepChangeMode).toBe("one");
     });
 
     it('ranger (known caster) prepChangeMode should be "none"', async () => {
-      setupCaster({ classSlug: 'ranger', level: 5, wis: 16 });
+      setupCaster({ classSlug: "ranger", level: 5, wis: 16 });
 
-      const result = await service.getAvailableSpells('user-1', 'char-1');
+      const result = await service.getAvailableSpells("user-1", "char-1");
       expect(result).toHaveLength(1);
-      expect(result[0].prepChangeMode).toBe('none');
+      expect(result[0].prepChangeMode).toBe("none");
     });
 
     it('wizard prepChangeMode should be "all"', async () => {
-      setupCaster({ classSlug: 'wizard', level: 5, int: 16 });
+      setupCaster({ classSlug: "wizard", level: 5, int: 16 });
 
-      const result = await service.getAvailableSpells('user-1', 'char-1');
+      const result = await service.getAvailableSpells("user-1", "char-1");
       expect(result).toHaveLength(1);
-      expect(result[0].prepChangeMode).toBe('all');
+      expect(result[0].prepChangeMode).toBe("all");
     });
 
     it('bard (known caster) prepChangeMode should be "none"', async () => {
-      setupCaster({ classSlug: 'bard', level: 5, cha: 16 });
+      setupCaster({ classSlug: "bard", level: 5, cha: 16 });
 
-      const result = await service.getAvailableSpells('user-1', 'char-1');
+      const result = await service.getAvailableSpells("user-1", "char-1");
       expect(result).toHaveLength(1);
-      expect(result[0].prepChangeMode).toBe('none');
+      expect(result[0].prepChangeMode).toBe("none");
     });
 
-    it('fighter (non-caster) should return empty results', async () => {
-      setupCaster({ classSlug: 'fighter', level: 5 });
+    it("fighter (non-caster) should return empty results", async () => {
+      setupCaster({ classSlug: "fighter", level: 5 });
 
-      const result = await service.getAvailableSpells('user-1', 'char-1');
+      const result = await service.getAvailableSpells("user-1", "char-1");
       expect(result).toEqual([]);
     });
 
-    it('should compute maxPrepared for paladin as floor(level/2) + CHA mod (PHB 2014)', async () => {
+    it("should compute maxPrepared for paladin as floor(level/2) + CHA mod (PHB 2014)", async () => {
       // Paladin level 6, CHA 16 mod +3: floor(6/2) + 3 = 6
-      setupCaster({ classSlug: 'paladin', level: 6, cha: 16 });
+      setupCaster({ classSlug: "paladin", level: 6, cha: 16 });
       // Source with PHB rules so paladin uses halfLevel+mod formula
-      repos.character.findOne!.mockResolvedValue(makeCharacter({
-        source: {
-          code: 'PHB',
-          rules: {
-            preparedFormulas: { paladin: 'halfLevel+mod' },
+      repos.character.findOne!.mockResolvedValue(
+        makeCharacter({
+          source: {
+            code: "PHB",
+            rules: {
+              preparedFormulas: { paladin: "halfLevel+mod" },
+            },
           },
-        },
-      }));
+        }),
+      );
       repos.spellClass.find!.mockResolvedValue([]);
 
-      const result = await service.getAvailableSpells('user-1', 'char-1');
+      const result = await service.getAvailableSpells("user-1", "char-1");
       expect(result[0].maxPrepared).toBe(6);
     });
   });
 
-  describe('updateSpellSlots', () => {
-    it('should update used spell slots', async () => {
-      const cc = makeCharacterClass('wizard', 5);
+  describe("updateSpellSlots", () => {
+    it("should update used spell slots", async () => {
+      const cc = makeCharacterClass("wizard", 5);
       const state = makeCharacterState({ spell_slots_used: {} });
 
       repos.character.findOne!.mockResolvedValue(makeCharacter());
@@ -239,7 +256,7 @@ describe('SpellService', () => {
       repos.state.findOne!.mockResolvedValue(state);
       repos.state.save!.mockResolvedValue(state);
 
-      const result = await service.updateSpellSlots('user-1', 'char-1', {
+      const result = await service.updateSpellSlots("user-1", "char-1", {
         level: 1,
         used: 2,
       });
@@ -249,8 +266,8 @@ describe('SpellService', () => {
       expect(result.total).toBe(4); // wizard 5: 4 first-level slots
     });
 
-    it('should reject invalid slot level', async () => {
-      const cc = makeCharacterClass('fighter', 5); // no spell slots
+    it("should reject invalid slot level", async () => {
+      const cc = makeCharacterClass("fighter", 5); // no spell slots
       const state = makeCharacterState();
 
       repos.character.findOne!.mockResolvedValue(makeCharacter());
@@ -258,12 +275,12 @@ describe('SpellService', () => {
       repos.state.findOne!.mockResolvedValue(state);
 
       await expect(
-        service.updateSpellSlots('user-1', 'char-1', { level: 1, used: 1 }),
+        service.updateSpellSlots("user-1", "char-1", { level: 1, used: 1 }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should reject used > total', async () => {
-      const cc = makeCharacterClass('wizard', 1); // 2 first-level slots
+    it("should reject used > total", async () => {
+      const cc = makeCharacterClass("wizard", 1); // 2 first-level slots
       const state = makeCharacterState();
 
       repos.character.findOne!.mockResolvedValue(makeCharacter());
@@ -271,15 +288,15 @@ describe('SpellService', () => {
       repos.state.findOne!.mockResolvedValue(state);
 
       await expect(
-        service.updateSpellSlots('user-1', 'char-1', { level: 1, used: 5 }),
+        service.updateSpellSlots("user-1", "char-1", { level: 1, used: 5 }),
       ).rejects.toThrow(BadRequestException);
     });
   });
 
-  describe('rest', () => {
-    describe('short rest', () => {
-      it('should recover warlock pact slots', async () => {
-        const cc = makeCharacterClass('warlock', 5);
+  describe("rest", () => {
+    describe("short rest", () => {
+      it("should recover warlock pact slots", async () => {
+        const cc = makeCharacterClass("warlock", 5);
         const state = makeCharacterState({
           spell_slots_used: { pact: 2 },
           current_hp: 30,
@@ -291,14 +308,16 @@ describe('SpellService', () => {
         repos.state.findOne!.mockResolvedValue(state);
         repos.state.save!.mockResolvedValue(state);
 
-        const result = await service.rest('user-1', 'char-1', { type: 'short' });
+        const result = await service.rest("user-1", "char-1", {
+          type: "short",
+        });
 
         expect(result.slotsRestored).toBe(true);
-        expect(result.summary).toContain('Pact Magic slots recuperados.');
+        expect(result.summary).toContain("Pact Magic slots recuperados.");
       });
 
-      it('should spend hit dice to heal on short rest', async () => {
-        const cc = makeCharacterClass('fighter', 5);
+      it("should spend hit dice to heal on short rest", async () => {
+        const cc = makeCharacterClass("fighter", 5);
         const state = makeCharacterState({
           current_hp: 20,
           hit_dice_used: {},
@@ -313,9 +332,9 @@ describe('SpellService', () => {
         repos.charLevelUp.find!.mockResolvedValue([]);
         repos.state.save!.mockResolvedValue(state);
 
-        const result = await service.rest('user-1', 'char-1', {
-          type: 'short',
-          hitDiceToSpend: [{ classSlug: 'fighter', count: 2 }],
+        const result = await service.rest("user-1", "char-1", {
+          type: "short",
+          hitDiceToSpend: [{ classSlug: "fighter", count: 2 }],
         });
 
         // Fighter d10, CON 14 mod +2: fixed heal per die = 5+1+2 = 8; 2 dice = 16
@@ -323,9 +342,9 @@ describe('SpellService', () => {
       });
     });
 
-    describe('long rest', () => {
-      it('should restore HP to max', async () => {
-        const cc = makeCharacterClass('fighter', 3);
+    describe("long rest", () => {
+      it("should restore HP to max", async () => {
+        const cc = makeCharacterClass("fighter", 3);
         const state = makeCharacterState({
           current_hp: 10,
           spell_slots_used: {},
@@ -343,17 +362,17 @@ describe('SpellService', () => {
         repos.charLevelUp.find!.mockResolvedValue([]);
         repos.state.save!.mockResolvedValue(state);
 
-        const result = await service.rest('user-1', 'char-1', { type: 'long' });
+        const result = await service.rest("user-1", "char-1", { type: "long" });
 
         expect(result.currentHp).toBe(10); // maxHp = hit_die(10) + conMod(0) = 10
-        expect(result.type).toBe('long');
+        expect(result.type).toBe("long");
       });
 
-      it('should reset all spell slots', async () => {
-        const cc = makeCharacterClass('wizard', 5);
+      it("should reset all spell slots", async () => {
+        const cc = makeCharacterClass("wizard", 5);
         const state = makeCharacterState({
           current_hp: 30,
-          spell_slots_used: { '1': 4, '2': 2 },
+          spell_slots_used: { "1": 4, "2": 2 },
           hit_dice_used: {},
         });
 
@@ -366,13 +385,13 @@ describe('SpellService', () => {
         repos.charLevelUp.find!.mockResolvedValue([]);
         repos.state.save!.mockResolvedValue(state);
 
-        const result = await service.rest('user-1', 'char-1', { type: 'long' });
+        const result = await service.rest("user-1", "char-1", { type: "long" });
 
         expect(result.slotsRestored).toBe(true);
       });
 
-      it('should recover half hit dice (rounded down, min 1)', async () => {
-        const cc = makeCharacterClass('fighter', 5);
+      it("should recover half hit dice (rounded down, min 1)", async () => {
+        const cc = makeCharacterClass("fighter", 5);
         const state = makeCharacterState({
           current_hp: 50,
           spell_slots_used: {},
@@ -388,14 +407,14 @@ describe('SpellService', () => {
         repos.charLevelUp.find!.mockResolvedValue([]);
         repos.state.save!.mockResolvedValue(state);
 
-        const result = await service.rest('user-1', 'char-1', { type: 'long' });
+        const result = await service.rest("user-1", "char-1", { type: "long" });
 
         // floor(5/2) = 2 dice to recover, but only 4 used, so recovers min(4, 2) = 2
         expect(result.hitDiceRecovered).toBe(2);
       });
 
-      it('should reset death saves', async () => {
-        const cc = makeCharacterClass('fighter', 5);
+      it("should reset death saves", async () => {
+        const cc = makeCharacterClass("fighter", 5);
         const state = makeCharacterState({
           current_hp: 0,
           death_saves_success: 2,
@@ -411,21 +430,21 @@ describe('SpellService', () => {
         repos.charLevelUp.find!.mockResolvedValue([]);
         repos.state.save!.mockResolvedValue(state);
 
-        const result = await service.rest('user-1', 'char-1', { type: 'long' });
+        const result = await service.rest("user-1", "char-1", { type: "long" });
 
         expect(result.deathSavesReset).toBe(true);
       });
     });
 
-    describe('feature uses reset (Spec 011 Phase 1)', () => {
-      it('short rest resets features with rechargeOn: short', async () => {
-        const cc = makeCharacterClass('fighter', 5);
+    describe("feature uses reset (Spec 011 Phase 1)", () => {
+      it("short rest resets features with rechargeOn: short", async () => {
+        const cc = makeCharacterClass("fighter", 5);
         const state = makeCharacterState({
           current_hp: 30,
           // All these are rechargeOn: 'short' features in the catalog.
           feature_uses_used: {
-            'second-wind': 1,
-            'action-surge': 1,
+            "second-wind": 1,
+            "action-surge": 1,
           },
         });
 
@@ -435,21 +454,21 @@ describe('SpellService', () => {
         repos.state.findOne!.mockResolvedValue(state);
         repos.state.save!.mockResolvedValue(state);
 
-        await service.rest('user-1', 'char-1', { type: 'short' });
+        await service.rest("user-1", "char-1", { type: "short" });
 
         // Both short-rest features should be zeroed (or removed).
-        expect(state.feature_uses_used['second-wind'] ?? 0).toBe(0);
-        expect(state.feature_uses_used['action-surge'] ?? 0).toBe(0);
+        expect(state.feature_uses_used["second-wind"] ?? 0).toBe(0);
+        expect(state.feature_uses_used["action-surge"] ?? 0).toBe(0);
       });
 
-      it('short rest does NOT reset features with rechargeOn: long', async () => {
-        const cc = makeCharacterClass('paladin', 3);
+      it("short rest does NOT reset features with rechargeOn: long", async () => {
+        const cc = makeCharacterClass("paladin", 3);
         const state = makeCharacterState({
           current_hp: 30,
           // lay-on-hands has rechargeOn: 'long' — must survive short rest.
           feature_uses_used: {
-            'lay-on-hands': 10,
-            'divine-sense': 2,
+            "lay-on-hands": 10,
+            "divine-sense": 2,
           },
         });
 
@@ -459,21 +478,21 @@ describe('SpellService', () => {
         repos.state.findOne!.mockResolvedValue(state);
         repos.state.save!.mockResolvedValue(state);
 
-        await service.rest('user-1', 'char-1', { type: 'short' });
+        await service.rest("user-1", "char-1", { type: "short" });
 
-        expect(state.feature_uses_used['lay-on-hands']).toBe(10);
-        expect(state.feature_uses_used['divine-sense']).toBe(2);
+        expect(state.feature_uses_used["lay-on-hands"]).toBe(10);
+        expect(state.feature_uses_used["divine-sense"]).toBe(2);
       });
 
-      it('long rest resets all feature uses regardless of recharge', async () => {
-        const cc = makeCharacterClass('paladin', 5);
+      it("long rest resets all feature uses regardless of recharge", async () => {
+        const cc = makeCharacterClass("paladin", 5);
         const state = makeCharacterState({
           current_hp: 30,
           feature_uses_used: {
-            'second-wind': 1,
-            'action-surge': 1,
-            'lay-on-hands': 25,
-            'divine-sense': 3,
+            "second-wind": 1,
+            "action-surge": 1,
+            "lay-on-hands": 25,
+            "divine-sense": 3,
           },
         });
 
@@ -484,10 +503,11 @@ describe('SpellService', () => {
         repos.charLevelUp.find!.mockResolvedValue([]);
         repos.state.save!.mockResolvedValue(state);
 
-        await service.rest('user-1', 'char-1', { type: 'long' });
+        await service.rest("user-1", "char-1", { type: "long" });
 
-        expect(Object.values(state.feature_uses_used).every((v) => v === 0))
-          .toBe(true);
+        expect(
+          Object.values(state.feature_uses_used).every((v) => v === 0),
+        ).toBe(true);
       });
     });
   });

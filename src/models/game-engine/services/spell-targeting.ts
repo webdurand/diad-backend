@@ -1,4 +1,4 @@
-import { SpellEntity } from 'src/entities/spell.entity';
+import { SpellEntity } from "src/entities/spell.entity";
 
 /**
  * Spec 005 US14 — utilitários para decidir quantos alvos uma magia aceita.
@@ -17,7 +17,7 @@ import { SpellEntity } from 'src/entities/spell.entity';
  * para que o catálogo funcione com qualquer fonte do SRD.
  */
 function normalizeSpellSlug(slug: string): string {
-  return slug.replace(/-(phb|xphb|tce|xge|fttod)$/, '');
+  return slug.replace(/-(phb|xphb|tce|xge|fttod)$/, "");
 }
 
 const MULTI_TARGET_CATALOG: Record<
@@ -25,19 +25,20 @@ const MULTI_TARGET_CATALOG: Record<
   (slotLevel: number, casterLevel: number) => number
 > = {
   /** 3 dardos no slot 1; +1 por upcast. Máximo prático 10. */
-  'magic-missile': (slotLevel: number) => Math.min(3 + Math.max(0, slotLevel - 1), 10),
+  "magic-missile": (slotLevel: number) =>
+    Math.min(3 + Math.max(0, slotLevel - 1), 10),
   /** 1 beam a partir do nível 1; +1 a cada múltiplo de 5 (5, 11, 17). */
-  'eldritch-blast': (_slot: number, casterLevel: number) =>
+  "eldritch-blast": (_slot: number, casterLevel: number) =>
     casterLevel >= 17 ? 4 : casterLevel >= 11 ? 3 : casterLevel >= 5 ? 2 : 1,
   /** 3 raios no slot 2; +1 por upcast. */
-  'scorching-ray': (slotLevel: number) => 3 + Math.max(0, slotLevel - 2),
+  "scorching-ray": (slotLevel: number) => 3 + Math.max(0, slotLevel - 2),
   /**
    * Acid Splash (cantrip RAW): "Choose one creature within range, or choose two creatures
    * within range that are within 5 feet of each other". Até 2 alvos. Não é AoE com shape.
    */
-  'acid-splash': () => 2,
+  "acid-splash": () => 2,
   /** Bless (1st lvl): "up to three creatures of your choice". Spec 4. */
-  'bless': () => 3,
+  bless: () => 3,
 };
 
 /** Proxy tolerante a sufixos (`-phb`, `-xphb`, etc.) — retorna a mesma função do canônico. */
@@ -52,7 +53,7 @@ export const MULTI_TARGET_NON_AOE_SPELLS: Record<
     const normalized = normalizeSpellSlug(prop);
     return target[normalized];
   },
-}) as typeof MULTI_TARGET_CATALOG;
+});
 
 /**
  * Verdadeiro AoE tem forma geométrica (cone, sphere, cube, line, cylinder) com tamanho.
@@ -66,12 +67,14 @@ export const MULTI_TARGET_NON_AOE_SPELLS: Record<
  * Só consideramos AoE "real" quando há `type` e `size` numérico.
  */
 export function isAoeSpell(
-  spell: Pick<SpellEntity, 'slug' | 'area_of_effect'>,
+  spell: Pick<SpellEntity, "slug" | "area_of_effect">,
 ): boolean {
   return getAoeShape(spell) !== null;
 }
 
-export function isMultiTargetNonAoeSpell(spell: Pick<SpellEntity, 'slug'>): boolean {
+export function isMultiTargetNonAoeSpell(
+  spell: Pick<SpellEntity, "slug">,
+): boolean {
   return spell.slug in MULTI_TARGET_NON_AOE_SPELLS;
 }
 
@@ -80,7 +83,7 @@ export function isMultiTargetNonAoeSpell(spell: Pick<SpellEntity, 'slug'>): bool
  * `Infinity` para magias de área (a forma é a restrição; backend valida range).
  */
 export function maxTargetsFor(
-  spell: Pick<SpellEntity, 'slug' | 'area_of_effect'>,
+  spell: Pick<SpellEntity, "slug" | "area_of_effect">,
   slotLevel: number,
   casterLevel: number,
 ): number {
@@ -113,18 +116,25 @@ export function getPerHitDamage(
   slotLevel: number,
   casterLevel: number,
 ): PerHitDamage | null {
-  const normalized = slug.replace(/-(phb|xphb|tce|xge|fttod)$/, '');
+  const normalized = slug.replace(/-(phb|xphb|tce|xge|fttod)$/, "");
   switch (normalized) {
-    case 'magic-missile':
-      return { expression: '1d4+1', type: 'force' };
-    case 'scorching-ray':
-      return { expression: '2d6', type: 'fire' };
-    case 'eldritch-blast': {
-      return { expression: '1d10', type: 'force' };
+    case "magic-missile":
+      return { expression: "1d4+1", type: "force" };
+    case "scorching-ray":
+      return { expression: "2d6", type: "fire" };
+    case "eldritch-blast": {
+      return { expression: "1d10", type: "force" };
     }
-    case 'acid-splash': {
-      const tier = casterLevel >= 17 ? 4 : casterLevel >= 11 ? 3 : casterLevel >= 5 ? 2 : 1;
-      return { expression: `${tier}d6`, type: 'acid' };
+    case "acid-splash": {
+      const tier =
+        casterLevel >= 17
+          ? 4
+          : casterLevel >= 11
+            ? 3
+            : casterLevel >= 5
+              ? 2
+              : 1;
+      return { expression: `${tier}d6`, type: "acid" };
     }
     default:
       return null;
@@ -135,7 +145,7 @@ export function getPerHitDamage(
  * Spec 012 Gap 1 — AoE shape extraction.
  * Retorna shape kind + raio em cells (5ft/cell). Retorna null se não é AoE real.
  */
-export type AoeShapeKind = 'sphere' | 'cube' | 'cone' | 'line' | 'cylinder';
+export type AoeShapeKind = "sphere" | "cube" | "cone" | "line" | "cylinder";
 
 export interface AoeShape {
   kind: AoeShapeKind;
@@ -152,50 +162,50 @@ export interface AoeShape {
  */
 const CANONICAL_AOE: Record<string, { kind: AoeShapeKind; sizeFt: number }> = {
   // Sphere
-  fireball: { kind: 'sphere', sizeFt: 20 },
-  'delayed-blast-fireball': { kind: 'sphere', sizeFt: 20 },
-  shatter: { kind: 'sphere', sizeFt: 10 },
-  'vitriolic-sphere': { kind: 'sphere', sizeFt: 20 },
-  'watery-sphere': { kind: 'sphere', sizeFt: 5 },
-  weird: { kind: 'sphere', sizeFt: 30 },
-  'zone-of-truth': { kind: 'sphere', sizeFt: 15 },
-  'spirit-guardians': { kind: 'sphere', sizeFt: 15 },
-  'spike-growth': { kind: 'sphere', sizeFt: 20 },
-  cloudkill: { kind: 'sphere', sizeFt: 20 },
-  'hunger-of-hadar': { kind: 'sphere', sizeFt: 20 },
-  'destructive-wave': { kind: 'sphere', sizeFt: 30 },
-  'earthquake': { kind: 'sphere', sizeFt: 100 },
+  fireball: { kind: "sphere", sizeFt: 20 },
+  "delayed-blast-fireball": { kind: "sphere", sizeFt: 20 },
+  shatter: { kind: "sphere", sizeFt: 10 },
+  "vitriolic-sphere": { kind: "sphere", sizeFt: 20 },
+  "watery-sphere": { kind: "sphere", sizeFt: 5 },
+  weird: { kind: "sphere", sizeFt: 30 },
+  "zone-of-truth": { kind: "sphere", sizeFt: 15 },
+  "spirit-guardians": { kind: "sphere", sizeFt: 15 },
+  "spike-growth": { kind: "sphere", sizeFt: 20 },
+  cloudkill: { kind: "sphere", sizeFt: 20 },
+  "hunger-of-hadar": { kind: "sphere", sizeFt: 20 },
+  "destructive-wave": { kind: "sphere", sizeFt: 30 },
+  earthquake: { kind: "sphere", sizeFt: 100 },
   // Cube
-  thunderwave: { kind: 'cube', sizeFt: 15 },
-  'black-tentacles': { kind: 'cube', sizeFt: 20 },
-  web: { kind: 'cube', sizeFt: 20 },
+  thunderwave: { kind: "cube", sizeFt: 15 },
+  "black-tentacles": { kind: "cube", sizeFt: 20 },
+  web: { kind: "cube", sizeFt: 20 },
   // Cone
-  'burning-hands': { kind: 'cone', sizeFt: 15 },
-  'cone-of-cold': { kind: 'cone', sizeFt: 60 },
-  'color-spray': { kind: 'cone', sizeFt: 15 },
-  'ice-knife': { kind: 'sphere', sizeFt: 5 },
-  'dragons-breath': { kind: 'cone', sizeFt: 15 },
+  "burning-hands": { kind: "cone", sizeFt: 15 },
+  "cone-of-cold": { kind: "cone", sizeFt: 60 },
+  "color-spray": { kind: "cone", sizeFt: 15 },
+  "ice-knife": { kind: "sphere", sizeFt: 5 },
+  "dragons-breath": { kind: "cone", sizeFt: 15 },
   // Line
-  'lightning-bolt': { kind: 'line', sizeFt: 100 },
-  'wall-of-fire': { kind: 'line', sizeFt: 60 },
+  "lightning-bolt": { kind: "line", sizeFt: 100 },
+  "wall-of-fire": { kind: "line", sizeFt: 60 },
 };
 
 export function getAoeShape(
-  spell: Pick<SpellEntity, 'slug' | 'area_of_effect'>,
+  spell: Pick<SpellEntity, "slug" | "area_of_effect">,
 ): AoeShape | null {
   const aoe = spell.area_of_effect as
     | { type?: string; size?: number; tags?: string[] }
     | null
     | undefined;
 
-  if (aoe && typeof aoe.type === 'string' && typeof aoe.size === 'number') {
+  if (aoe && typeof aoe.type === "string" && typeof aoe.size === "number") {
     const kindRaw = aoe.type.toLowerCase();
     if (
-      kindRaw === 'sphere' ||
-      kindRaw === 'cube' ||
-      kindRaw === 'cone' ||
-      kindRaw === 'line' ||
-      kindRaw === 'cylinder'
+      kindRaw === "sphere" ||
+      kindRaw === "cube" ||
+      kindRaw === "cone" ||
+      kindRaw === "line" ||
+      kindRaw === "cylinder"
     ) {
       return {
         kind: kindRaw,
@@ -206,7 +216,7 @@ export function getAoeShape(
   }
 
   // Fallback: consulta tabela canonical por slug quando DB só tem tags.
-  const normalized = normalizeSpellSlug((spell as any).slug ?? '');
+  const normalized = normalizeSpellSlug((spell as any).slug ?? "");
   const canonical = CANONICAL_AOE[normalized];
   if (canonical) {
     return {
@@ -231,10 +241,10 @@ export function cellInAoe(
 ): boolean {
   const dx = cell.x - origin.x;
   const dy = cell.y - origin.y;
-  if (shape.kind === 'sphere' || shape.kind === 'cylinder') {
+  if (shape.kind === "sphere" || shape.kind === "cylinder") {
     return Math.sqrt(dx * dx + dy * dy) <= shape.radiusCells;
   }
-  if (shape.kind === 'cube') {
+  if (shape.kind === "cube") {
     return (
       Math.abs(dx) <= shape.radiusCells && Math.abs(dy) <= shape.radiusCells
     );

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 004 — Data migration.
@@ -11,10 +11,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Grava em `monsters.legendary_action_cost_map = {actionName: cost}`.
  * Idempotente (recria o mapa a cada execução).
  */
-export class PopulateLegendaryActionCosts1776000100000
-  implements MigrationInterface
-{
-  name = 'PopulateLegendaryActionCosts1776000100000';
+export class PopulateLegendaryActionCosts1776000100000 implements MigrationInterface {
+  name = "PopulateLegendaryActionCosts1776000100000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const monsters = await queryRunner.query(`
@@ -26,14 +24,17 @@ export class PopulateLegendaryActionCosts1776000100000
 
     for (const m of monsters) {
       const raw = m.legendary_actions;
-      const list: Array<{ name?: string; desc?: string; description?: string }> =
-        Array.isArray(raw) ? raw : raw?.actions ?? [];
+      const list: Array<{
+        name?: string;
+        desc?: string;
+        description?: string;
+      }> = Array.isArray(raw) ? raw : (raw?.actions ?? []);
 
       const costMap: Record<string, 1 | 2 | 3> = {};
       for (const action of list) {
         const name = action?.name;
         if (!name) continue;
-        const text = `${name} ${action?.desc ?? action?.description ?? ''}`;
+        const text = `${name} ${action?.desc ?? action?.description ?? ""}`;
         if (/\(Costs\s*3\s*Actions?\)/i.test(text)) {
           costMap[name] = 3;
         } else if (/\(Costs\s*2\s*Actions?\)/i.test(text)) {

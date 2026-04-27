@@ -1,8 +1,8 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntriesAsText } from './entries-parser';
-import { WEAPON_PROPERTY_MAP } from './code-maps';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntriesAsText } from "./entries-parser";
+import { WEAPON_PROPERTY_MAP } from "./code-maps";
 
 interface FiveToolsItemProperty {
   abbreviation: string;
@@ -29,20 +29,20 @@ export interface TransformedWeaponMasteryProperty {
 }
 
 function extractName(entries: unknown[]): string {
-  if (!entries?.length) return '';
+  if (!entries?.length) return "";
   const first = entries[0];
-  if (typeof first === 'object' && first !== null && 'name' in first) {
+  if (typeof first === "object" && first !== null && "name" in first) {
     return (first as { name: string }).name;
   }
-  return '';
+  return "";
 }
 
 export function transformWeaponProperties(): TransformedWeaponProperty[] {
   const filePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/items-base.json',
+    "../5etools-src/data/items-base.json",
   );
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const props: FiveToolsItemProperty[] = data.itemProperty ?? [];
 
   // Deduplicate: prefer XPHB version
@@ -56,12 +56,10 @@ export function transformWeaponProperties(): TransformedWeaponProperty[] {
     if (!slugBase) continue;
 
     const name = extractName(p.entries as unknown[]) || slugBase;
-    const description = p.entries
-      ? parseEntriesAsText(p.entries as any[])
-      : '';
+    const description = p.entries ? parseEntriesAsText(p.entries as any[]) : "";
 
     // Prefer XPHB source
-    if (!seen.has(slugBase) || p.source === 'XPHB') {
+    if (!seen.has(slugBase) || p.source === "XPHB") {
       seen.set(slugBase, {
         slug: slugBase,
         name,
@@ -78,9 +76,9 @@ export function transformWeaponProperties(): TransformedWeaponProperty[] {
 export function transformWeaponMasteryProperties(): TransformedWeaponMasteryProperty[] {
   const filePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/items-base.json',
+    "../5etools-src/data/items-base.json",
   );
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const masteries: {
     name: string;
     source: string;
@@ -92,7 +90,7 @@ export function transformWeaponMasteryProperties(): TransformedWeaponMasteryProp
   return masteries.map((m) => ({
     slug: generateSlug(m.name, m.source, m.srd52),
     name: m.name,
-    description: m.entries ? parseEntriesAsText(m.entries as any[]) : '',
+    description: m.entries ? parseEntriesAsText(m.entries as any[]) : "",
     source_code: m.source,
     raw: m as Record<string, unknown>,
   }));

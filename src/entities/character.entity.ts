@@ -9,54 +9,54 @@ import {
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-} from 'typeorm';
-import { UserEntity } from './user.entity';
-import { CharacterClassEntity } from './character-class.entity';
-import { CharacterAbilityScoreEntity } from './character-ability-score.entity';
-import { CharacterSkillEntity } from './character-skill.entity';
-import { CharacterProficiencyEntity } from './character-proficiency.entity';
-import { CharacterSpellEntity } from './character-spell.entity';
-import { CharacterEquipmentEntity } from './character-equipment.entity';
-import { CharacterMagicItemEntity } from './character-magic-item.entity';
-import { CharacterStateEntity } from './character-state.entity';
-import { CharacterLevelUpEntity } from './character-level-up.entity';
-import { CharacterFeatureEntity } from './character-feature.entity';
-import { CharacterOriginEntity } from './character-origin.entity';
-import { CompSourceEntity } from './comp-source.entity';
+} from "typeorm";
+import { UserEntity } from "./user.entity";
+import { CharacterClassEntity } from "./character-class.entity";
+import { CharacterAbilityScoreEntity } from "./character-ability-score.entity";
+import { CharacterSkillEntity } from "./character-skill.entity";
+import { CharacterProficiencyEntity } from "./character-proficiency.entity";
+import { CharacterSpellEntity } from "./character-spell.entity";
+import { CharacterEquipmentEntity } from "./character-equipment.entity";
+import { CharacterMagicItemEntity } from "./character-magic-item.entity";
+import { CharacterStateEntity } from "./character-state.entity";
+import { CharacterLevelUpEntity } from "./character-level-up.entity";
+import { CharacterFeatureEntity } from "./character-feature.entity";
+import { CharacterOriginEntity } from "./character-origin.entity";
+import { CompSourceEntity } from "./comp-source.entity";
 
-@Entity('characters')
+@Entity("characters")
 export class CharacterEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: "varchar" })
   name: string;
 
   /** @deprecated Kept as backup; new data lives in relational tables. */
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   data?: Record<string, unknown>;
 
   @ManyToOne(() => UserEntity, (user) => user.characters, {
-    onDelete: 'CASCADE',
+    onDelete: "CASCADE",
   })
-  @JoinColumn({ name: 'user_id' })
+  @JoinColumn({ name: "user_id" })
   user: UserEntity;
 
   @Index()
-  @Column({ name: 'user_id', type: 'uuid' })
+  @Column({ name: "user_id", type: "uuid" })
   userId: string;
 
   @ManyToOne(() => CompSourceEntity, { nullable: true, eager: true })
-  @JoinColumn({ name: 'source_id' })
+  @JoinColumn({ name: "source_id" })
   source?: CompSourceEntity;
 
-  @Column({ name: 'source_id', type: 'uuid', nullable: true })
+  @Column({ name: "source_id", type: "uuid", nullable: true })
   sourceId?: string;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 
   @OneToMany(() => CharacterClassEntity, (cc) => cc.character)

@@ -1,16 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { DiceService } from './dice.service';
-import { ConditionEffectsService } from './condition-effects.service';
-import { EventService } from './event.service';
-import { InspirationService } from './inspiration.service';
-import { ExhaustionService } from './exhaustion.service';
+import { Injectable } from "@nestjs/common";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { DiceService } from "./dice.service";
+import { ConditionEffectsService } from "./condition-effects.service";
+import { EventService } from "./event.service";
+import { InspirationService } from "./inspiration.service";
+import { ExhaustionService } from "./exhaustion.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 
 // --- Result interfaces ---
 
@@ -54,18 +54,28 @@ export class SkillCheckService {
     private readonly exhaustionService: ExhaustionService,
   ) {}
 
-  async rollAbilityCheck(dto: SkillCheckDto): Promise<GameResult<SkillCheckResult>> {
-    const sheet = await this.sheetService.computeSheet(dto.userId, dto.characterId);
+  async rollAbilityCheck(
+    dto: SkillCheckDto,
+  ): Promise<GameResult<SkillCheckResult>> {
+    const sheet = await this.sheetService.computeSheet(
+      dto.userId,
+      dto.characterId,
+    );
     if (!sheet) {
-      return failure('Personagem nao encontrado.', 'INVALID_PARTICIPANT');
+      return failure("Personagem nao encontrado.", "INVALID_PARTICIPANT");
     }
 
     // Find the ability modifier
     const abilityScore = sheet.abilityScores.find(
-      (a) => a.slug === dto.ability || a.name.toLowerCase() === dto.ability.toLowerCase(),
+      (a) =>
+        a.slug === dto.ability ||
+        a.name.toLowerCase() === dto.ability.toLowerCase(),
     );
     if (!abilityScore) {
-      return failure(`Ability '${dto.ability}' nao encontrada.`, 'INVALID_ACTION');
+      return failure(
+        `Ability '${dto.ability}' nao encontrada.`,
+        "INVALID_ACTION",
+      );
     }
 
     let modifier = abilityScore.modifier;
@@ -75,7 +85,9 @@ export class SkillCheckService {
     // If a skill is specified, use the skill modifier instead
     if (dto.skill) {
       const skillBlock = sheet.skills.find(
-        (s) => s.slug === dto.skill || s.name.toLowerCase() === dto.skill!.toLowerCase(),
+        (s) =>
+          s.slug === dto.skill ||
+          s.name.toLowerCase() === dto.skill!.toLowerCase(),
       );
       if (skillBlock) {
         modifier = skillBlock.bonus;
@@ -90,10 +102,12 @@ export class SkillCheckService {
 
     // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em todos d20 tests.
     // Pra 2024_ten_levels, não há disadvantage — é flat d20 penalty.
-    const exhLevel = (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
-    const exhMods = exhLevel > 0
-      ? this.exhaustionService.getModifiers(exhLevel, '2024_ten_levels')
-      : null;
+    const exhLevel =
+      (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+    const exhMods =
+      exhLevel > 0
+        ? this.exhaustionService.getModifiers(exhLevel, "2024_ten_levels")
+        : null;
     const exhaustionD20Penalty = exhMods?.d20Penalty ?? 0;
 
     // Determine advantage/disadvantage
@@ -107,7 +121,7 @@ export class SkillCheckService {
     if (dto.participantId) {
       const inspResult = await this.inspirationService.consumeIfArmed(
         dto.participantId,
-        'ability_check',
+        "ability_check",
       );
       if (inspResult.consumed && inspResult.eventData) {
         hasAdvantage = true;
@@ -133,7 +147,9 @@ export class SkillCheckService {
 
     // Roll the d20
     let roll: number;
-    let advantageResult: { roll1: number; roll2: number; used: number } | undefined;
+    let advantageResult:
+      | { roll1: number; roll2: number; used: number }
+      | undefined;
 
     if (hasAdvantage && !hasDisadvantage) {
       const r = this.diceService.rollWithAdvantage();
@@ -167,9 +183,9 @@ export class SkillCheckService {
     if (inspirationEvent) events.unshift(inspirationEvent);
     if (exhaustionD20Penalty !== 0) {
       events.push({
-        event_type: 'exhaustion_penalty_applied',
+        event_type: "exhaustion_penalty_applied",
         data: {
-          kind: 'ability_check',
+          kind: "ability_check",
           level: exhLevel,
           d20Penalty: exhaustionD20Penalty,
           rawRoll: roll,
@@ -186,13 +202,13 @@ export class SkillCheckService {
     return {
       // Spec 012 Lote B — exhaustion 2024 é flat d20 penalty, não disadvantage.
       // Só poisoned/frightened seguem RAW 2024 com disadvantage.
-      hasDisadvantage: set.has('poisoned') || set.has('frightened'),
+      hasDisadvantage: set.has("poisoned") || set.has("frightened"),
       autoFail:
-        set.has('incapacitated') ||
-        set.has('stunned') ||
-        set.has('paralyzed') ||
-        set.has('petrified') ||
-        set.has('unconscious'),
+        set.has("incapacitated") ||
+        set.has("stunned") ||
+        set.has("paralyzed") ||
+        set.has("petrified") ||
+        set.has("unconscious"),
     };
   }
 
@@ -205,7 +221,7 @@ export class SkillCheckService {
   ): GameEventData[] {
     return [
       {
-        event_type: 'skill_check',
+        event_type: "skill_check",
         data: {
           character_id: dto.characterId,
           ability: dto.ability,

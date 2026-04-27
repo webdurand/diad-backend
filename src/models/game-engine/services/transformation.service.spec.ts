@@ -1,4 +1,4 @@
-import { TransformationService } from './transformation.service';
+import { TransformationService } from "./transformation.service";
 
 /**
  * Spec 012 \u2014 TransformationService core.
@@ -9,58 +9,66 @@ import { TransformationService } from './transformation.service';
  * - applyDamageToForm: absorbed/overflow + revert em hp zero + overflow vai pro PC
  * - idempot\u00eancia: revert em participant n\u00e3o-transformado \u00e9 no-op
  */
-describe('TransformationService (spec 012)', () => {
+describe("TransformationService (spec 012)", () => {
   function makeWolfMonster() {
     return {
-      slug: 'wolf',
-      name: 'Wolf',
-      size: 'Medium',
+      slug: "wolf",
+      name: "Wolf",
+      size: "Medium",
       hit_points: 11,
       armor_class: [{ value: 13 }],
-      speed: { walk: '40 ft.' },
+      speed: { walk: "40 ft." },
       strength: 12,
       dexterity: 15,
       constitution: 12,
       intelligence: 3,
       wisdom: 12,
       charisma: 6,
-      actions: [{ name: 'Bite', damage: '2d4+2' }],
+      actions: [{ name: "Bite", damage: "2d4+2" }],
       challenge_rating: 0.25,
     };
   }
 
-  function setup(opts: {
-    participantState?: Partial<{
-      transformationState: unknown;
-      characterId: string | null;
-      displayName: string;
-      type: 'pc' | 'monster';
-    }>;
-    characterState?: Partial<{ current_hp: number; temp_hp: number }> | null;
-    monsterExists?: boolean;
-  } = {}) {
+  function setup(
+    opts: {
+      participantState?: Partial<{
+        transformationState: unknown;
+        characterId: string | null;
+        displayName: string;
+        type: "pc" | "monster";
+      }>;
+      characterState?: Partial<{ current_hp: number; temp_hp: number }> | null;
+      monsterExists?: boolean;
+    } = {},
+  ) {
     const participant = {
-      id: 'p1',
-      type: opts.participantState?.type ?? 'pc',
-      characterId: opts.participantState?.characterId === undefined
-        ? 'char-1'
-        : opts.participantState?.characterId,
-      displayName: opts.participantState?.displayName ?? 'Araxis',
+      id: "p1",
+      type: opts.participantState?.type ?? "pc",
+      characterId:
+        opts.participantState?.characterId === undefined
+          ? "char-1"
+          : opts.participantState?.characterId,
+      displayName: opts.participantState?.displayName ?? "Araxis",
       transformationState: opts.participantState?.transformationState ?? null,
       currentHp: 20,
       maxHp: 20,
       tempHp: 0,
     };
     const participantFindOne = jest.fn().mockResolvedValue({ ...participant });
-    const participantSave = jest.fn().mockImplementation(async (p: unknown) => p);
+    const participantSave = jest
+      .fn()
+      .mockImplementation(async (p: unknown) => p);
 
-    const monsterFindOne = jest.fn().mockResolvedValue(
-      opts.monsterExists === false ? null : makeWolfMonster(),
-    );
+    const monsterFindOne = jest
+      .fn()
+      .mockResolvedValue(
+        opts.monsterExists === false ? null : makeWolfMonster(),
+      );
 
-    const charState = opts.characterState === null
-      ? null
-      : { current_hp: 20, temp_hp: 0, ...(opts.characterState ?? {}) };
+    const charState =
+      opts.characterState === null
+        ? null
+        : { current_hp: 20, temp_hp: 0, ...(opts.characterState ?? {}) };
     const stateFindOne = jest.fn().mockResolvedValue(charState);
     const stateSave = jest.fn().mockImplementation(async (s: unknown) => s);
 
@@ -72,25 +80,31 @@ describe('TransformationService (spec 012)', () => {
 
     return {
       svc,
-      mocks: { participantFindOne, participantSave, monsterFindOne, stateFindOne, stateSave },
+      mocks: {
+        participantFindOne,
+        participantSave,
+        monsterFindOne,
+        stateFindOne,
+        stateSave,
+      },
       participant,
     };
   }
 
-  describe('enterForm', () => {
-    it('snapshota original + popula form do monster + altera displayName', async () => {
+  describe("enterForm", () => {
+    it("snapshota original + popula form do monster + altera displayName", async () => {
       const { svc, mocks } = setup();
-      const result = await svc.enterForm('p1', {
-        source: 'wild-shape',
-        monsterSlug: 'wolf',
+      const result = await svc.enterForm("p1", {
+        source: "wild-shape",
+        monsterSlug: "wolf",
         currentEncounterRound: 3,
       });
 
       expect(mocks.participantSave).toHaveBeenCalledTimes(1);
       expect(result.transformationState).toBeDefined();
       const state = result.transformationState!;
-      expect(state.source).toBe('wild-shape');
-      expect(state.form.formName).toBe('Wolf');
+      expect(state.source).toBe("wild-shape");
+      expect(state.form.formName).toBe("Wolf");
       expect(state.form.maxHp).toBe(11);
       expect(state.form.currentHp).toBe(11);
       expect(state.form.ac).toBe(13);
@@ -98,95 +112,110 @@ describe('TransformationService (spec 012)', () => {
       expect(state.form.stats.dex).toBe(15);
       expect(state.enteredAtRound).toBe(3);
       expect(state.original.currentHp).toBe(20);
-      expect(state.original.displayName).toBe('Araxis');
+      expect(state.original.displayName).toBe("Araxis");
       // Spec 015 Eixo 4: displayName passa a ser só o formName (token representa a forma).
-      expect(result.displayName).toBe('Wolf');
+      expect(result.displayName).toBe("Wolf");
     });
 
-    it('rejeita se participant j\u00e1 transformado', async () => {
+    it("rejeita se participant j\u00e1 transformado", async () => {
       const { svc } = setup({
-        participantState: { transformationState: { foo: 'bar' } },
+        participantState: { transformationState: { foo: "bar" } },
       });
       await expect(
-        svc.enterForm('p1', { source: 'wild-shape', monsterSlug: 'wolf' }),
+        svc.enterForm("p1", { source: "wild-shape", monsterSlug: "wolf" }),
       ).rejects.toThrow(/ALREADY_TRANSFORMED/);
     });
 
-    it('rejeita se monster n\u00e3o existe', async () => {
+    it("rejeita se monster n\u00e3o existe", async () => {
       const { svc } = setup({ monsterExists: false });
       await expect(
-        svc.enterForm('p1', { source: 'wild-shape', monsterSlug: 'unicorn-mega' }),
+        svc.enterForm("p1", {
+          source: "wild-shape",
+          monsterSlug: "unicorn-mega",
+        }),
       ).rejects.toThrow(/MONSTER_NOT_FOUND/);
     });
 
-    it('aceita displayName custom', async () => {
+    it("aceita displayName custom", async () => {
       const { svc } = setup();
-      const result = await svc.enterForm('p1', {
-        source: 'polymorph-spell',
-        monsterSlug: 'wolf',
-        formDisplayName: 'Lobo Majestoso',
+      const result = await svc.enterForm("p1", {
+        source: "polymorph-spell",
+        monsterSlug: "wolf",
+        formDisplayName: "Lobo Majestoso",
       });
-      expect(result.displayName).toBe('Lobo Majestoso');
-      expect(result.transformationState!.form.displayName).toBe('Lobo Majestoso');
+      expect(result.displayName).toBe("Lobo Majestoso");
+      expect(result.transformationState!.form.displayName).toBe(
+        "Lobo Majestoso",
+      );
     });
   });
 
-  describe('revertForm', () => {
-    it('restaura displayName original + limpa transformation_state', async () => {
+  describe("revertForm", () => {
+    it("restaura displayName original + limpa transformation_state", async () => {
       const state = {
-        source: 'wild-shape',
-        form: { formName: 'Wolf' },
-        original: { currentHp: 20, displayName: 'Araxis', maxHp: 0, tempHp: 0 },
+        source: "wild-shape",
+        form: { formName: "Wolf" },
+        original: { currentHp: 20, displayName: "Araxis", maxHp: 0, tempHp: 0 },
       };
       const { svc, mocks } = setup({
         participantState: {
           transformationState: state,
-          displayName: 'Araxis (Wolf)',
+          displayName: "Araxis (Wolf)",
         },
       });
-      const result = await svc.revertForm('p1', 'player-dismiss');
-      expect(result.displayName).toBe('Araxis');
+      const result = await svc.revertForm("p1", "player-dismiss");
+      expect(result.displayName).toBe("Araxis");
       expect(result.transformationState).toBeNull();
       expect(mocks.participantSave).toHaveBeenCalledTimes(1);
     });
 
-    it('\u00e9 idempotente quando n\u00e3o-transformado', async () => {
+    it("\u00e9 idempotente quando n\u00e3o-transformado", async () => {
       const { svc, mocks } = setup();
-      const result = await svc.revertForm('p1', 'player-dismiss');
+      const result = await svc.revertForm("p1", "player-dismiss");
       expect(result.transformationState).toBeNull();
       expect(mocks.participantSave).not.toHaveBeenCalled();
     });
   });
 
-  describe('applyDamageToForm', () => {
-    it('absorve dano parcial no form sem reverter', async () => {
+  describe("applyDamageToForm", () => {
+    it("absorve dano parcial no form sem reverter", async () => {
       const state = {
-        source: 'wild-shape',
+        source: "wild-shape",
         form: { currentHp: 11, maxHp: 11 },
-        original: { currentHp: 20, displayName: 'Araxis' },
-        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: false },
+        original: { currentHp: 20, displayName: "Araxis" },
+        revertTriggers: {
+          hpZero: true,
+          durationEnd: true,
+          playerDismiss: true,
+          concentrationBroken: false,
+        },
       };
       const { svc, mocks } = setup({
         participantState: { transformationState: state },
       });
-      const r = await svc.applyDamageToForm('p1', 5);
+      const r = await svc.applyDamageToForm("p1", 5);
       expect(r.absorbedByForm).toBe(5);
       expect(r.overflowToOriginal).toBe(0);
       expect(r.reverted).toBe(false);
       expect(mocks.stateSave).not.toHaveBeenCalled();
     });
 
-    it('reverte quando form chega a 0 + aplica overflow no HP original', async () => {
+    it("reverte quando form chega a 0 + aplica overflow no HP original", async () => {
       const state = {
-        source: 'wild-shape',
-        form: { currentHp: 5, maxHp: 11, formName: 'Wolf' },
-        original: { currentHp: 20, displayName: 'Araxis' },
-        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: false },
+        source: "wild-shape",
+        form: { currentHp: 5, maxHp: 11, formName: "Wolf" },
+        original: { currentHp: 20, displayName: "Araxis" },
+        revertTriggers: {
+          hpZero: true,
+          durationEnd: true,
+          playerDismiss: true,
+          concentrationBroken: false,
+        },
       };
       const { svc, mocks } = setup({
         participantState: { transformationState: state },
       });
-      const r = await svc.applyDamageToForm('p1', 12);
+      const r = await svc.applyDamageToForm("p1", 12);
       expect(r.absorbedByForm).toBe(5);
       expect(r.overflowToOriginal).toBe(7);
       expect(r.reverted).toBe(true);
@@ -196,73 +225,82 @@ describe('TransformationService (spec 012)', () => {
       expect(savedState.current_hp).toBe(20 - 7);
     });
 
-    it('n\u00e3o reverte se revertTriggers.hpZero=false', async () => {
+    it("n\u00e3o reverte se revertTriggers.hpZero=false", async () => {
       const state = {
-        source: 'custom',
-        form: { currentHp: 3, maxHp: 10, formName: 'X' },
-        original: { currentHp: 20, displayName: 'Araxis' },
-        revertTriggers: { hpZero: false, durationEnd: true, playerDismiss: true, concentrationBroken: false },
+        source: "custom",
+        form: { currentHp: 3, maxHp: 10, formName: "X" },
+        original: { currentHp: 20, displayName: "Araxis" },
+        revertTriggers: {
+          hpZero: false,
+          durationEnd: true,
+          playerDismiss: true,
+          concentrationBroken: false,
+        },
       };
       const { svc } = setup({
         participantState: { transformationState: state },
       });
-      const r = await svc.applyDamageToForm('p1', 10);
+      const r = await svc.applyDamageToForm("p1", 10);
       expect(r.reverted).toBe(false);
       expect(r.absorbedByForm).toBe(3);
       expect(r.overflowToOriginal).toBe(7);
     });
 
-    it('retorna zero quando participant n\u00e3o transformado (overflow = amount)', async () => {
+    it("retorna zero quando participant n\u00e3o transformado (overflow = amount)", async () => {
       const { svc } = setup();
-      const r = await svc.applyDamageToForm('p1', 8);
+      const r = await svc.applyDamageToForm("p1", 8);
       expect(r.absorbedByForm).toBe(0);
       expect(r.overflowToOriginal).toBe(8);
       expect(r.reverted).toBe(false);
     });
   });
 
-  describe('helpers', () => {
-    it('getEffectiveSpeed retorna speed do form ou null', () => {
+  describe("helpers", () => {
+    it("getEffectiveSpeed retorna speed do form ou null", () => {
       const { svc } = setup();
       expect(svc.getEffectiveSpeed({} as any)).toBeNull();
       expect(
-        svc.getEffectiveSpeed({ transformationState: { form: { speed: { walk: 40 } } } } as any),
+        svc.getEffectiveSpeed({
+          transformationState: { form: { speed: { walk: 40 } } },
+        } as any),
       ).toEqual({ walk: 40 });
     });
 
-    it('getEffectiveActions retorna actions do form ou null', () => {
+    it("getEffectiveActions retorna actions do form ou null", () => {
       const { svc } = setup();
       expect(svc.getEffectiveActions({} as any)).toBeNull();
       expect(
         svc.getEffectiveActions({
-          transformationState: { form: { actions: [{ name: 'Bite' }] } },
+          transformationState: { form: { actions: [{ name: "Bite" }] } },
         } as any),
-      ).toEqual([{ name: 'Bite' }]);
+      ).toEqual([{ name: "Bite" }]);
     });
 
-    it('isTransformed retorna boolean baseado em transformationState', () => {
+    it("isTransformed retorna boolean baseado em transformationState", () => {
       const { svc } = setup();
-      expect(svc.isTransformed({ transformationState: null } as any)).toBe(false);
+      expect(svc.isTransformed({ transformationState: null } as any)).toBe(
+        false,
+      );
       expect(
-        svc.isTransformed({ transformationState: { source: 'x' } } as any),
+        svc.isTransformed({ transformationState: { source: "x" } } as any),
       ).toBe(true);
     });
   });
 
-  describe('tickDurationOnTurnStart (spec 015 Eixo 4)', () => {
+  describe("tickDurationOnTurnStart (spec 015 Eixo 4)", () => {
     function mkState(overrides: Record<string, unknown> = {}) {
       return {
-        source: 'wild-shape',
+        source: "wild-shape",
         enteredAtRound: 0,
         sourceCasterParticipantId: null,
         durationRoundsTotal: 600,
         durationRoundsRemaining: 600,
-        original: { maxHp: 0, currentHp: 20, tempHp: 0, displayName: 'Araxis' },
+        original: { maxHp: 0, currentHp: 20, tempHp: 0, displayName: "Araxis" },
         form: {
-          monsterSlug: 'wolf',
-          formName: 'Wolf',
-          displayName: 'Wolf',
-          size: 'Medium',
+          monsterSlug: "wolf",
+          formName: "Wolf",
+          displayName: "Wolf",
+          size: "Medium",
           ac: 13,
           maxHp: 11,
           currentHp: 11,
@@ -271,19 +309,24 @@ describe('TransformationService (spec 012)', () => {
           stats: { str: 12, dex: 15, con: 12, int: 3, wis: 12, cha: 6 },
           actions: [],
         },
-        retainedAbilities: ['mental-stats', 'speech'],
-        equipmentHandling: 'merge',
-        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: false },
+        retainedAbilities: ["mental-stats", "speech"],
+        equipmentHandling: "merge",
+        revertTriggers: {
+          hpZero: true,
+          durationEnd: true,
+          playerDismiss: true,
+          concentrationBroken: false,
+        },
         ...overrides,
       };
     }
 
-    it('decrementa duração mas não reverte quando > 0', async () => {
+    it("decrementa duração mas não reverte quando > 0", async () => {
       const state = mkState({ durationRoundsRemaining: 5 });
       const { svc, mocks } = setup({
         participantState: { transformationState: state },
       });
-      const r = await svc.tickDurationOnTurnStart('p1');
+      const r = await svc.tickDurationOnTurnStart("p1");
       expect(r.events).toHaveLength(0);
       // save com duration decrementado pra 4
       const saved = mocks.participantSave.mock.calls[0][0];
@@ -291,74 +334,81 @@ describe('TransformationService (spec 012)', () => {
       expect(saved.transformationState).not.toBeNull();
     });
 
-    it('no-op quando participant não está transformado', async () => {
+    it("no-op quando participant não está transformado", async () => {
       const { svc, mocks } = setup();
-      const r = await svc.tickDurationOnTurnStart('p1');
+      const r = await svc.tickDurationOnTurnStart("p1");
       expect(r.events).toHaveLength(0);
       expect(mocks.participantSave).not.toHaveBeenCalled();
     });
 
-    it('no-op quando durationRoundsRemaining = null (sem prazo)', async () => {
+    it("no-op quando durationRoundsRemaining = null (sem prazo)", async () => {
       const state = mkState({ durationRoundsRemaining: null });
       const { svc, mocks } = setup({
         participantState: { transformationState: state },
       });
-      const r = await svc.tickDurationOnTurnStart('p1');
+      const r = await svc.tickDurationOnTurnStart("p1");
       expect(r.events).toHaveLength(0);
       expect(mocks.participantSave).not.toHaveBeenCalled();
     });
 
-    it('reverte Wild Shape quando duração chega a 0 (emit transformation_reverted)', async () => {
+    it("reverte Wild Shape quando duração chega a 0 (emit transformation_reverted)", async () => {
       const state = mkState({ durationRoundsRemaining: 1 });
       const { svc, mocks } = setup({
-        participantState: { transformationState: state, displayName: 'Wolf' },
+        participantState: { transformationState: state, displayName: "Wolf" },
       });
-      const r = await svc.tickDurationOnTurnStart('p1');
+      const r = await svc.tickDurationOnTurnStart("p1");
       expect(r.events).toHaveLength(1);
-      expect(r.events[0].event_type).toBe('transformation_reverted');
-      expect(r.events[0].data?.reason).toBe('duration-expired');
-      expect(r.events[0].data?.source).toBe('wild-shape');
+      expect(r.events[0].event_type).toBe("transformation_reverted");
+      expect(r.events[0].data?.reason).toBe("duration-expired");
+      expect(r.events[0].data?.source).toBe("wild-shape");
       // displayName restaurado
       const saved = mocks.participantSave.mock.calls[0][0];
-      expect(saved.displayName).toBe('Araxis');
+      expect(saved.displayName).toBe("Araxis");
       expect(saved.transformationState).toBeNull();
     });
 
-    it('reverte Polymorph quando duração expira', async () => {
+    it("reverte Polymorph quando duração expira", async () => {
       const state = mkState({
-        source: 'polymorph-spell',
+        source: "polymorph-spell",
         durationRoundsRemaining: 1,
-        sourceCasterParticipantId: 'caster-1',
+        sourceCasterParticipantId: "caster-1",
       });
       const { svc, mocks } = setup({
-        participantState: { transformationState: state, displayName: 'Wolf' },
+        participantState: { transformationState: state, displayName: "Wolf" },
       });
-      const r = await svc.tickDurationOnTurnStart('p1');
-      expect(r.events[0].event_type).toBe('transformation_reverted');
-      expect(r.events[0].data?.source).toBe('polymorph-spell');
+      const r = await svc.tickDurationOnTurnStart("p1");
+      expect(r.events[0].event_type).toBe("transformation_reverted");
+      expect(r.events[0].data?.source).toBe("polymorph-spell");
       const saved = mocks.participantSave.mock.calls[0][0];
       expect(saved.transformationState).toBeNull();
     });
 
-    it('True Polymorph vira PERMANENTE após 1h (não reverte; remove concentration bind)', async () => {
+    it("True Polymorph vira PERMANENTE após 1h (não reverte; remove concentration bind)", async () => {
       const state = mkState({
-        source: 'true-polymorph-spell',
+        source: "true-polymorph-spell",
         durationRoundsRemaining: 1,
-        sourceCasterParticipantId: 'caster-1',
-        revertTriggers: { hpZero: true, durationEnd: true, playerDismiss: true, concentrationBroken: true },
+        sourceCasterParticipantId: "caster-1",
+        revertTriggers: {
+          hpZero: true,
+          durationEnd: true,
+          playerDismiss: true,
+          concentrationBroken: true,
+        },
       });
       const { svc, mocks } = setup({
-        participantState: { transformationState: state, displayName: 'Wolf' },
+        participantState: { transformationState: state, displayName: "Wolf" },
       });
-      const r = await svc.tickDurationOnTurnStart('p1');
+      const r = await svc.tickDurationOnTurnStart("p1");
       expect(r.events).toHaveLength(1);
-      expect(r.events[0].event_type).toBe('true_polymorph_became_permanent');
+      expect(r.events[0].event_type).toBe("true_polymorph_became_permanent");
       const saved = mocks.participantSave.mock.calls[0][0];
       // Forma permanece
       expect(saved.transformationState).not.toBeNull();
       // Concentration bind removido
       expect(saved.transformationState.sourceCasterParticipantId).toBeNull();
-      expect(saved.transformationState.revertTriggers.concentrationBroken).toBe(false);
+      expect(saved.transformationState.revertTriggers.concentrationBroken).toBe(
+        false,
+      );
       expect(saved.transformationState.revertTriggers.durationEnd).toBe(false);
       // Duração zerada (sem prazo)
       expect(saved.transformationState.durationRoundsTotal).toBeNull();

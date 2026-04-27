@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Fighter L9 Indomitable (RAW 2024 XPHB) — player arma preventivamente;
@@ -7,10 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Flag `indomitable_armed` vive só dentro do encounter; reset em desarmar
  * manual, consumo após failed save, OU saída do encontro.
  */
-export class AddIndomitableArmedToParticipant1776990000000
-  implements MigrationInterface
-{
-  name = 'AddIndomitableArmedToParticipant1776990000000';
+export class AddIndomitableArmedToParticipant1776990000000 implements MigrationInterface {
+  name = "AddIndomitableArmedToParticipant1776990000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

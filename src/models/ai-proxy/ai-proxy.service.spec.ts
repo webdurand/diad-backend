@@ -1,10 +1,10 @@
-import { EventEmitter } from 'events';
-import { AiProxyService } from './ai-proxy.service';
+import { EventEmitter } from "events";
+import { AiProxyService } from "./ai-proxy.service";
 
 // Mock estável do `http` Node nativo. O serviço usa `http.request(...)`
 // e nós substituímos por uma factory controlada pelos testes.
 const mockHttpRequestFn: jest.Mock = jest.fn();
-jest.mock('http', () => ({
+jest.mock("http", () => ({
   request: (...args: unknown[]) => mockHttpRequestFn(...args),
 }));
 
@@ -19,9 +19,30 @@ jest.mock('http', () => ({
  * `dice_roll_resolved` (Spec 014) DEVEM atravessar sem qualquer
  * intervenção do backend NestJS.
  */
-describe('AiProxyService.pipeStream — SSE passthrough', () => {
+describe("AiProxyService.pipeStream — SSE passthrough", () => {
   function makeConfig(): any {
-    return { get: () => 'http://localhost:9003' };
+    return { get: () => "http://localhost:9003" };
+  }
+
+  function makeOutbound(): any {
+    return { request: jest.fn() };
+  }
+
+  function makeLogger(): any {
+    return {
+      setContext: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    };
+  }
+
+  function makeCls(): any {
+    return {
+      isActive: () => true,
+      get: () => "a".repeat(32),
+    };
   }
 
   function makeFakeRes() {
@@ -29,7 +50,9 @@ describe('AiProxyService.pipeStream — SSE passthrough', () => {
     let ended = false;
     const res: any = {
       write: jest.fn((chunk: any) => {
-        writes.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        writes.push(
+          Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)),
+        );
         return true;
       }),
       end: jest.fn(() => {
@@ -41,7 +64,7 @@ describe('AiProxyService.pipeStream — SSE passthrough', () => {
       res,
       writes,
       isEnded: () => ended,
-      joinedOutput: () => Buffer.concat(writes).toString('utf-8'),
+      joinedOutput: () => Buffer.concat(writes).toString("utf-8"),
     };
   }
 
@@ -49,10 +72,7 @@ describe('AiProxyService.pipeStream — SSE passthrough', () => {
    * Cria um fake `http.request` que entrega `chunks` em sequência via
    * o callback `(proxyRes) => …` e finaliza o stream.
    */
-  function mockHttpRequest(opts: {
-    statusCode?: number;
-    chunks: string[];
-  }) {
+  function mockHttpRequest(opts: { statusCode?: number; chunks: string[] }) {
     const proxyRes: any = new EventEmitter();
     proxyRes.statusCode = opts.statusCode ?? 200;
 
@@ -65,9 +85,9 @@ describe('AiProxyService.pipeStream — SSE passthrough', () => {
       setImmediate(() => {
         cb(proxyRes);
         for (const c of opts.chunks) {
-          proxyRes.emit('data', Buffer.from(c, 'utf-8'));
+          proxyRes.emit("data", Buffer.from(c, "utf-8"));
         }
-        proxyRes.emit('end');
+        proxyRes.emit("end");
       });
       return clientReq;
     });
@@ -79,7 +99,7 @@ describe('AiProxyService.pipeStream — SSE passthrough', () => {
     mockHttpRequestFn.mockReset();
   });
 
-  it('encaminha cada chunk SSE idêntico — incluindo state_delta e dice_roll_*', async () => {
+  it("encaminha cada chunk SSE idêntico — incluindo state_delta e dice_roll_*", async () => {
     const stateDeltaChunk =
       'data: {"type":"state_delta","characterId":"x","deltas":{"hpCurrent":5}}\n\n';
     const diceRequestChunk =
@@ -98,10 +118,15 @@ describe('AiProxyService.pipeStream — SSE passthrough', () => {
       ],
     });
 
-    const svc = new AiProxyService(makeConfig());
+    const svc = new AiProxyService(
+      makeConfig(),
+      makeOutbound(),
+      makeLogger(),
+      makeCls(),
+    );
     const fake = makeFakeRes();
 
-    await svc.pipeStream('/solo/abc/message', { message: 'hi' }, fake.res);
+    await svc.pipeStream("/solo/abc/message", { message: "hi" }, fake.res);
 
     // Cada chunk vira EXATAMENTE uma chamada a res.write — sem merge, sem split.
     expect(fake.res.write).toHaveBeenCalledTimes(4);
@@ -124,35 +149,45 @@ describe('AiProxyService.pipeStream — SSE passthrough', () => {
     expect(fake.isEnded()).toBe(true);
   });
 
-  it('não muta payload de tipos desconhecidos — proxy é totalmente cego', async () => {
+  it("não muta payload de tipos desconhecidos — proxy é totalmente cego", async () => {
     const customChunk =
       'data: {"type":"future_unknown_event_type_xyz","payload":{"foo":"bar","n":42}}\n\n';
 
     mockHttpRequest({ chunks: [customChunk] });
 
-    const svc = new AiProxyService(makeConfig());
+    const svc = new AiProxyService(
+      makeConfig(),
+      makeOutbound(),
+      makeLogger(),
+      makeCls(),
+    );
     const fake = makeFakeRes();
 
-    await svc.pipeStream('/solo/abc/message', { message: 'hi' }, fake.res);
+    await svc.pipeStream("/solo/abc/message", { message: "hi" }, fake.res);
 
     expect(fake.res.write).toHaveBeenCalledTimes(1);
     expect(fake.joinedOutput()).toBe(customChunk);
   });
 
-  it('em statusCode != 200, emite chunk de erro e encerra', async () => {
+  it("em statusCode != 200, emite chunk de erro e encerra", async () => {
     mockHttpRequest({
       statusCode: 500,
-      chunks: ['internal agent failure'],
+      chunks: ["internal agent failure"],
     });
 
-    const svc = new AiProxyService(makeConfig());
+    const svc = new AiProxyService(
+      makeConfig(),
+      makeOutbound(),
+      makeLogger(),
+      makeCls(),
+    );
     const fake = makeFakeRes();
 
-    await svc.pipeStream('/solo/abc/message', { message: 'hi' }, fake.res);
+    await svc.pipeStream("/solo/abc/message", { message: "hi" }, fake.res);
 
     const out = fake.joinedOutput();
     expect(out).toContain('"type":"error"');
-    expect(out).toContain('internal agent failure');
+    expect(out).toContain("internal agent failure");
     expect(fake.isEnded()).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Cleric — Fix data XPHB 2024:
@@ -15,16 +15,16 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Escopo similar ao migration 1777050000000 (Barbarian Brutal Critical).
  */
 export class FixClericXphb1777080000000 implements MigrationInterface {
-  name = 'FixClericXphb1777080000000';
+  name = "FixClericXphb1777080000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     const slugsToUnlink = [
-      'destroy-undead-cr-1-2-or-below',
-      'destroy-undead-cr-1-or-below',
-      'destroy-undead-cr-2-or-below',
-      'destroy-undead-cr-3-or-below',
-      'destroy-undead-cr-4-or-below',
-      'divine-intervention-improvement',
+      "destroy-undead-cr-1-2-or-below",
+      "destroy-undead-cr-1-or-below",
+      "destroy-undead-cr-2-or-below",
+      "destroy-undead-cr-3-or-below",
+      "destroy-undead-cr-4-or-below",
+      "divine-intervention-improvement",
     ];
 
     await queryRunner.query(
@@ -43,12 +43,12 @@ export class FixClericXphb1777080000000 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     const mapping: Array<{ slug: string; level: number }> = [
-      { slug: 'destroy-undead-cr-1-2-or-below', level: 5 },
-      { slug: 'destroy-undead-cr-1-or-below', level: 8 },
-      { slug: 'destroy-undead-cr-2-or-below', level: 11 },
-      { slug: 'destroy-undead-cr-3-or-below', level: 14 },
-      { slug: 'destroy-undead-cr-4-or-below', level: 17 },
-      { slug: 'divine-intervention-improvement', level: 20 },
+      { slug: "destroy-undead-cr-1-2-or-below", level: 5 },
+      { slug: "destroy-undead-cr-1-or-below", level: 8 },
+      { slug: "destroy-undead-cr-2-or-below", level: 11 },
+      { slug: "destroy-undead-cr-3-or-below", level: 14 },
+      { slug: "destroy-undead-cr-4-or-below", level: 17 },
+      { slug: "divine-intervention-improvement", level: 20 },
     ];
     for (const m of mapping) {
       await queryRunner.query(

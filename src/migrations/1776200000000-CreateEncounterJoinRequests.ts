@@ -1,14 +1,12 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 002 — Creates `encounter_join_requests` for the late-join approval
  * flow. Player requests entry in an active encounter; DM approves (rolls
  * initiative + inserts into turnOrder) or rejects (player may retry).
  */
-export class CreateEncounterJoinRequests1776200000000
-  implements MigrationInterface
-{
-  name = 'CreateEncounterJoinRequests1776200000000';
+export class CreateEncounterJoinRequests1776200000000 implements MigrationInterface {
+  name = "CreateEncounterJoinRequests1776200000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -48,7 +46,9 @@ export class CreateEncounterJoinRequests1776200000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_ejr_encounter_character_pending"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_ejr_encounter_character_pending"`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_ejr_character"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_ejr_encounter"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "encounter_join_requests"`);

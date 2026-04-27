@@ -1,22 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { GameSessionEntity } from 'src/entities/game-session.entity';
-import { CampaignEntity } from 'src/entities/campaign.entity';
-import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { GameSessionEntity } from "src/entities/game-session.entity";
+import { CampaignEntity } from "src/entities/campaign.entity";
+import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 
 export interface CreateSessionDto {
   name: string;
   campaignId?: string;
   config?: {
     dice_seed?: number;
-    critical_variant?: 'double_dice' | 'double_damage';
+    critical_variant?: "double_dice" | "double_damage";
   };
 }
 
 export interface UpdateSessionDto {
   name?: string;
-  status?: 'lobby' | 'active' | 'paused' | 'completed';
+  status?: "lobby" | "active" | "paused" | "completed";
   activeEncounterId?: string | null;
   scene?: {
     name?: string;
@@ -44,7 +44,7 @@ export class SessionService {
       name: dto.name,
       ownerId,
       campaignId: dto.campaignId ?? undefined,
-      status: 'lobby',
+      status: "lobby",
       characterIds: [],
       scene: {},
       config: dto.config ?? {},
@@ -56,14 +56,14 @@ export class SessionService {
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
     });
-    if (!session) throw new NotFoundException('Sessao nao encontrada.');
+    if (!session) throw new NotFoundException("Sessao nao encontrada.");
     return session;
   }
 
   async listByUser(userId: string): Promise<GameSessionEntity[]> {
     return this.sessionRepo.find({
       where: { ownerId: userId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
   }
 
@@ -74,7 +74,8 @@ export class SessionService {
     const session = await this.getById(sessionId);
     if (dto.name !== undefined) session.name = dto.name;
     if (dto.status !== undefined) session.status = dto.status;
-    if (dto.activeEncounterId !== undefined) session.activeEncounterId = dto.activeEncounterId ?? undefined;
+    if (dto.activeEncounterId !== undefined)
+      session.activeEncounterId = dto.activeEncounterId ?? undefined;
     if (dto.scene !== undefined) session.scene = dto.scene;
     return this.sessionRepo.save(session);
   }
@@ -91,7 +92,9 @@ export class SessionService {
   }
 
   async delete(sessionId: string): Promise<void> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+    });
     const campaignId = session?.campaignId;
 
     await this.sessionRepo.delete(sessionId);
@@ -128,7 +131,7 @@ export class SessionService {
   ): Promise<GameSessionEntity> {
     const session = await this.getById(sessionId);
     if (session.ownerId !== userId) {
-      throw new NotFoundException('Sessao nao encontrada.');
+      throw new NotFoundException("Sessao nao encontrada.");
     }
     return session;
   }
@@ -145,6 +148,6 @@ export class SessionService {
       });
       if (player) return session;
     }
-    throw new NotFoundException('Sessao nao encontrada.');
+    throw new NotFoundException("Sessao nao encontrada.");
   }
 }

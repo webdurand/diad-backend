@@ -13,32 +13,32 @@
  */
 
 export type SummonSource =
-  | 'summon-beast-spell'
-  | 'summon-fey-spell'
-  | 'summon-elemental-spell'
-  | 'summon-undead-spell'
-  | 'summon-aberration-spell'
-  | 'summon-celestial-spell'
-  | 'summon-construct-spell'
-  | 'summon-dragon-spell'
-  | 'conjure-animals-spell'
-  | 'conjure-woodland-beings-spell'
-  | 'conjure-minor-elementals-spell'
-  | 'find-familiar-spell'
-  | 'find-steed-spell'
-  | 'spiritual-weapon-spell'
-  | 'flaming-sphere-spell'
-  | 'animate-dead-spell'
-  | 'beast-master-companion'
-  | 'echo-knight-echo';
+  | "summon-beast-spell"
+  | "summon-fey-spell"
+  | "summon-elemental-spell"
+  | "summon-undead-spell"
+  | "summon-aberration-spell"
+  | "summon-celestial-spell"
+  | "summon-construct-spell"
+  | "summon-dragon-spell"
+  | "conjure-animals-spell"
+  | "conjure-woodland-beings-spell"
+  | "conjure-minor-elementals-spell"
+  | "find-familiar-spell"
+  | "find-steed-spell"
+  | "spiritual-weapon-spell"
+  | "flaming-sphere-spell"
+  | "animate-dead-spell"
+  | "beast-master-companion"
+  | "echo-knight-echo";
 
 export type SummonControlMode =
   /** Summon age no turno do caster (Summon Beast, Spiritual Weapon). */
-  | 'shared-turn'
+  | "shared-turn"
   /** Summon tem initiative pr\u00f3pria (Find Familiar, Conjure Animals RAW). */
-  | 'own-initiative'
+  | "own-initiative"
   /** Controlado pela IA (DM/NPC). */
-  | 'ai-controlled';
+  | "ai-controlled";
 
 export interface SummonSpawnDto {
   /** Participant id do caster. */
@@ -50,7 +50,7 @@ export interface SummonSpawnDto {
   /** Display name customizado ("Celestial Panther"). Default: monster.name. */
   displayName?: string;
   /** Fa\u00e7\u00e3o \u2014 default 'ally' (summons do caster). */
-  faction?: 'ally' | 'enemy' | 'neutral';
+  faction?: "ally" | "enemy" | "neutral";
   controlMode?: SummonControlMode;
   /** Dura\u00e7\u00e3o em rounds (null = indefinido). */
   durationRoundsTotal?: number | null;

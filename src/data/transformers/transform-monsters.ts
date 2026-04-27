@@ -1,87 +1,87 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntries } from './entries-parser';
-import { stripTags } from './tag-stripper';
-import { SIZE_MAP, ALIGNMENT_MAP } from './code-maps';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntries } from "./entries-parser";
+import { stripTags } from "./tag-stripper";
+import { SIZE_MAP, ALIGNMENT_MAP } from "./code-maps";
 
 // ────────────────────────────────────────────────────────────────
 // CR → XP lookup
 // ────────────────────────────────────────────────────────────────
 
 const CR_XP_MAP: Record<string, number> = {
-  '0': 10,
-  '1/8': 25,
-  '1/4': 50,
-  '1/2': 100,
-  '1': 200,
-  '2': 450,
-  '3': 700,
-  '4': 1100,
-  '5': 1800,
-  '6': 2300,
-  '7': 2900,
-  '8': 3900,
-  '9': 5000,
-  '10': 5900,
-  '11': 7200,
-  '12': 8400,
-  '13': 10000,
-  '14': 11500,
-  '15': 13000,
-  '16': 15000,
-  '17': 18000,
-  '18': 20000,
-  '19': 22000,
-  '20': 25000,
-  '21': 33000,
-  '22': 41000,
-  '23': 50000,
-  '24': 62000,
-  '25': 75000,
-  '26': 90000,
-  '27': 105000,
-  '28': 120000,
-  '29': 135000,
-  '30': 155000,
+  "0": 10,
+  "1/8": 25,
+  "1/4": 50,
+  "1/2": 100,
+  "1": 200,
+  "2": 450,
+  "3": 700,
+  "4": 1100,
+  "5": 1800,
+  "6": 2300,
+  "7": 2900,
+  "8": 3900,
+  "9": 5000,
+  "10": 5900,
+  "11": 7200,
+  "12": 8400,
+  "13": 10000,
+  "14": 11500,
+  "15": 13000,
+  "16": 15000,
+  "17": 18000,
+  "18": 20000,
+  "19": 22000,
+  "20": 25000,
+  "21": 33000,
+  "22": 41000,
+  "23": 50000,
+  "24": 62000,
+  "25": 75000,
+  "26": 90000,
+  "27": 105000,
+  "28": 120000,
+  "29": 135000,
+  "30": 155000,
 };
 
 // CR → Proficiency Bonus
 const CR_PROF_BONUS: Record<string, number> = {
-  '0': 2,
-  '1/8': 2,
-  '1/4': 2,
-  '1/2': 2,
-  '1': 2,
-  '2': 2,
-  '3': 2,
-  '4': 2,
-  '5': 3,
-  '6': 3,
-  '7': 3,
-  '8': 3,
-  '9': 4,
-  '10': 4,
-  '11': 4,
-  '12': 4,
-  '13': 5,
-  '14': 5,
-  '15': 5,
-  '16': 5,
-  '17': 6,
-  '18': 6,
-  '19': 6,
-  '20': 6,
-  '21': 7,
-  '22': 7,
-  '23': 7,
-  '24': 7,
-  '25': 8,
-  '26': 8,
-  '27': 8,
-  '28': 8,
-  '29': 9,
-  '30': 9,
+  "0": 2,
+  "1/8": 2,
+  "1/4": 2,
+  "1/2": 2,
+  "1": 2,
+  "2": 2,
+  "3": 2,
+  "4": 2,
+  "5": 3,
+  "6": 3,
+  "7": 3,
+  "8": 3,
+  "9": 4,
+  "10": 4,
+  "11": 4,
+  "12": 4,
+  "13": 5,
+  "14": 5,
+  "15": 5,
+  "16": 5,
+  "17": 6,
+  "18": 6,
+  "19": 6,
+  "20": 6,
+  "21": 7,
+  "22": 7,
+  "23": 7,
+  "24": 7,
+  "25": 8,
+  "26": 8,
+  "27": 8,
+  "28": 8,
+  "29": 9,
+  "30": 9,
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -95,7 +95,9 @@ interface FiveToolsMonster {
   srd?: boolean;
   srd52?: boolean;
   size?: string[];
-  type?: string | { type: string; tags?: (string | { tag: string; prefix?: string })[] };
+  type?:
+    | string
+    | { type: string; tags?: (string | { tag: string; prefix?: string })[] };
   alignment?: string[];
   ac?: (number | { ac?: number; from?: string[]; special?: string })[];
   hp?: { average?: number; formula?: string; special?: string };
@@ -113,8 +115,14 @@ interface FiveToolsMonster {
   languages?: string[];
   cr?: string | { cr: string; lair?: string; coven?: string };
   immune?: (string | { immune: string[]; note?: string; cond?: boolean })[];
-  resist?: (string | { resist: string[]; note?: string; cond?: boolean; preNote?: string })[];
-  vulnerable?: (string | { vulnerable: string[]; note?: string; cond?: boolean })[];
+  resist?: (
+    | string
+    | { resist: string[]; note?: string; cond?: boolean; preNote?: string }
+  )[];
+  vulnerable?: (
+    | string
+    | { vulnerable: string[]; note?: string; cond?: boolean }
+  )[];
   conditionImmune?: (string | { conditionImmune: string[]; note?: string })[];
   trait?: { name: string; entries: unknown[] }[];
   action?: { name: string; entries: unknown[] }[];
@@ -190,28 +198,31 @@ export interface TransformedMonster {
 // ────────────────────────────────────────────────────────────────
 
 function convertSize(size?: string[]): string {
-  if (!size || size.length === 0) return 'Medium';
+  if (!size || size.length === 0) return "Medium";
   return SIZE_MAP[size[0]] ?? size[0];
 }
 
-function convertType(type?: FiveToolsMonster['type']): { type: string; subtype: string | null } {
-  if (!type) return { type: 'unknown', subtype: null };
-  if (typeof type === 'string') return { type, subtype: null };
+function convertType(type?: FiveToolsMonster["type"]): {
+  type: string;
+  subtype: string | null;
+} {
+  if (!type) return { type: "unknown", subtype: null };
+  if (typeof type === "string") return { type, subtype: null };
   const tags = type.tags ?? [];
-  const subtypeParts = tags.map((t) => (typeof t === 'string' ? t : t.tag));
+  const subtypeParts = tags.map((t) => (typeof t === "string" ? t : t.tag));
   return {
     type: type.type,
-    subtype: subtypeParts.length > 0 ? subtypeParts.join(', ') : null,
+    subtype: subtypeParts.length > 0 ? subtypeParts.join(", ") : null,
   };
 }
 
 function convertAlignment(alignment?: unknown[]): string {
-  if (!alignment || alignment.length === 0) return 'Unaligned';
+  if (!alignment || alignment.length === 0) return "Unaligned";
   const parts: string[] = [];
   for (const a of alignment) {
-    if (typeof a === 'string') {
+    if (typeof a === "string") {
       parts.push(ALIGNMENT_MAP[a] ?? a);
-    } else if (typeof a === 'object' && a !== null) {
+    } else if (typeof a === "object" && a !== null) {
       const obj = a as Record<string, unknown>;
       if (obj.special) {
         return String(obj.special);
@@ -222,18 +233,22 @@ function convertAlignment(alignment?: unknown[]): string {
       }
     }
   }
-  if (parts.length === 0) return 'Unaligned';
-  if (parts.length === 1 && parts[0] === 'any') return 'Any Alignment';
-  if (parts.length === 1 && parts[0] === 'unaligned') return 'Unaligned';
+  if (parts.length === 0) return "Unaligned";
+  if (parts.length === 1 && parts[0] === "any") return "Any Alignment";
+  if (parts.length === 1 && parts[0] === "unaligned") return "Unaligned";
   return parts
-    .map((p) => (typeof p === 'string' && p.length > 0) ? p.charAt(0).toUpperCase() + p.slice(1) : p)
-    .join(' ');
+    .map((p) =>
+      typeof p === "string" && p.length > 0
+        ? p.charAt(0).toUpperCase() + p.slice(1)
+        : p,
+    )
+    .join(" ");
 }
 
-function convertAc(ac?: FiveToolsMonster['ac']): unknown {
+function convertAc(ac?: FiveToolsMonster["ac"]): unknown {
   if (!ac || ac.length === 0) return [{ value: 10 }];
   return ac.map((entry) => {
-    if (typeof entry === 'number') return { value: entry };
+    if (typeof entry === "number") return { value: entry };
     if (entry.special) return { value: 0, note: stripTags(entry.special) };
     return {
       value: entry.ac ?? 0,
@@ -242,12 +257,20 @@ function convertAc(ac?: FiveToolsMonster['ac']): unknown {
   });
 }
 
-function convertHp(hp?: FiveToolsMonster['hp']): { hit_points: number; hit_dice: string; hit_points_roll: string } {
-  if (!hp) return { hit_points: 0, hit_dice: '', hit_points_roll: '' };
+function convertHp(hp?: FiveToolsMonster["hp"]): {
+  hit_points: number;
+  hit_dice: string;
+  hit_points_roll: string;
+} {
+  if (!hp) return { hit_points: 0, hit_dice: "", hit_points_roll: "" };
   if (hp.special) {
-    return { hit_points: 0, hit_dice: '', hit_points_roll: stripTags(hp.special) };
+    return {
+      hit_points: 0,
+      hit_dice: "",
+      hit_points_roll: stripTags(hp.special),
+    };
   }
-  const formula = hp.formula ?? '';
+  const formula = hp.formula ?? "";
   // Extract dice portion (e.g. "18d10" from "18d10 + 36")
   const diceMatch = formula.match(/^\d+d\d+/);
   return {
@@ -257,35 +280,42 @@ function convertHp(hp?: FiveToolsMonster['hp']): { hit_points: number; hit_dice:
   };
 }
 
-function convertSpeed(speed?: Record<string, unknown>): Record<string, unknown> {
+function convertSpeed(
+  speed?: Record<string, unknown>,
+): Record<string, unknown> {
   if (!speed) return {};
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(speed)) {
-    if (key === 'canHover') {
+    if (key === "canHover") {
       result.canHover = true;
       continue;
     }
-    if (typeof val === 'number') {
+    if (typeof val === "number") {
       result[key] = val;
-    } else if (typeof val === 'object' && val !== null) {
+    } else if (typeof val === "object" && val !== null) {
       const obj = val as Record<string, unknown>;
       result[key] = obj.number ?? obj;
       if (obj.condition) {
         result[`${key}Note`] = stripTags(String(obj.condition));
       }
-    } else if (typeof val === 'boolean') {
+    } else if (typeof val === "boolean") {
       result[key] = val;
     }
   }
   return result;
 }
 
-function convertCr(cr?: FiveToolsMonster['cr']): { crString: string; crNumeric: number; xp: number; profBonus: number } {
-  if (!cr) return { crString: '0', crNumeric: 0, xp: 10, profBonus: 2 };
-  const crStr = typeof cr === 'string' ? cr : cr.cr;
+function convertCr(cr?: FiveToolsMonster["cr"]): {
+  crString: string;
+  crNumeric: number;
+  xp: number;
+  profBonus: number;
+} {
+  if (!cr) return { crString: "0", crNumeric: 0, xp: 10, profBonus: 2 };
+  const crStr = typeof cr === "string" ? cr : cr.cr;
   let crNumeric: number;
-  if (crStr.includes('/')) {
-    const [num, den] = crStr.split('/').map(Number);
+  if (crStr.includes("/")) {
+    const [num, den] = crStr.split("/").map(Number);
     crNumeric = num / den;
   } else {
     crNumeric = Number(crStr);
@@ -305,28 +335,44 @@ function convertProficiencies(
   const result: { type: string; name: string; value: string }[] = [];
   if (saves) {
     for (const [ability, bonus] of Object.entries(saves)) {
-      result.push({ type: 'saving-throw', name: ability, value: bonus });
+      result.push({ type: "saving-throw", name: ability, value: bonus });
     }
   }
   if (skills) {
     for (const [skill, bonus] of Object.entries(skills)) {
-      result.push({ type: 'skill', name: skill, value: bonus });
+      result.push({ type: "skill", name: skill, value: bonus });
     }
   }
   return result;
 }
 
 function convertDamageList(
-  list?: (string | { immune?: string[]; resist?: string[]; vulnerable?: string[]; note?: string; preNote?: string; cond?: boolean })[],
+  list?: (
+    | string
+    | {
+        immune?: string[];
+        resist?: string[];
+        vulnerable?: string[];
+        note?: string;
+        preNote?: string;
+        cond?: boolean;
+      }
+  )[],
   key?: string,
 ): unknown {
   if (!list || list.length === 0) return [];
   return list.map((entry) => {
-    if (typeof entry === 'string') return entry;
-    const items = (entry as any)[key ?? 'immune'] ?? (entry as any).resist ?? (entry as any).vulnerable ?? [];
-    const note = entry.note ? ` (${stripTags(entry.note)})` : '';
-    const preNote = (entry as any).preNote ? `${stripTags((entry as any).preNote)} ` : '';
-    return `${preNote}${items.join(', ')}${note}`;
+    if (typeof entry === "string") return entry;
+    const items =
+      (entry as any)[key ?? "immune"] ??
+      (entry as any).resist ??
+      (entry as any).vulnerable ??
+      [];
+    const note = entry.note ? ` (${stripTags(entry.note)})` : "";
+    const preNote = (entry as any).preNote
+      ? `${stripTags((entry as any).preNote)} `
+      : "";
+    return `${preNote}${items.join(", ")}${note}`;
   });
 }
 
@@ -335,9 +381,9 @@ function convertConditionImmunities(
 ): unknown {
   if (!list || list.length === 0) return [];
   return list.map((entry) => {
-    if (typeof entry === 'string') return entry;
-    const note = entry.note ? ` (${stripTags(entry.note)})` : '';
-    return `${entry.conditionImmune.join(', ')}${note}`;
+    if (typeof entry === "string") return entry;
+    const note = entry.note ? ` (${stripTags(entry.note)})` : "";
+    return `${entry.conditionImmune.join(", ")}${note}`;
   });
 }
 
@@ -358,12 +404,12 @@ function convertEntryBlock(
   if (!entries || entries.length === 0) return null;
   return entries.map((entry) => ({
     name: entry.name,
-    desc: parseEntries(entry.entries as any[]).join('\n'),
+    desc: parseEntries(entry.entries as any[]).join("\n"),
   }));
 }
 
 function convertSpellcasting(
-  spellcasting?: FiveToolsMonster['spellcasting'],
+  spellcasting?: FiveToolsMonster["spellcasting"],
 ): { name: string; desc: string }[] | null {
   if (!spellcasting || spellcasting.length === 0) return null;
   return spellcasting.map((sc) => {
@@ -374,15 +420,21 @@ function convertSpellcasting(
     }
 
     if (sc.will && sc.will.length > 0) {
-      const spells = sc.will.map((s) => (typeof s === 'string' ? stripTags(s) : String(s)));
-      parts.push(`At will: ${spells.join(', ')}`);
+      const spells = sc.will.map((s) =>
+        typeof s === "string" ? stripTags(s) : String(s),
+      );
+      parts.push(`At will: ${spells.join(", ")}`);
     }
 
     if (sc.daily) {
       for (const [freq, spells] of Object.entries(sc.daily)) {
-        const names = (spells as unknown[]).map((s) => (typeof s === 'string' ? stripTags(s) : String(s)));
-        const label = freq.endsWith('e') ? `${freq.charAt(0)}/day each` : `${freq.charAt(0)}/day`;
-        parts.push(`${label}: ${names.join(', ')}`);
+        const names = spells.map((s) =>
+          typeof s === "string" ? stripTags(s) : String(s),
+        );
+        const label = freq.endsWith("e")
+          ? `${freq.charAt(0)}/day each`
+          : `${freq.charAt(0)}/day`;
+        parts.push(`${label}: ${names.join(", ")}`);
       }
     }
 
@@ -390,9 +442,13 @@ function convertSpellcasting(
       for (const [level, data] of Object.entries(sc.spells)) {
         const spellData = data as { spells: string[]; slots?: number };
         const names = spellData.spells.map(stripTags);
-        const slotInfo = spellData.slots !== undefined ? ` (${spellData.slots} slots)` : '';
-        const lvlLabel = level === '0' ? 'Cantrips (at will)' : `${level}${ordinalSuffix(Number(level))} level${slotInfo}`;
-        parts.push(`${lvlLabel}: ${names.join(', ')}`);
+        const slotInfo =
+          spellData.slots !== undefined ? ` (${spellData.slots} slots)` : "";
+        const lvlLabel =
+          level === "0"
+            ? "Cantrips (at will)"
+            : `${level}${ordinalSuffix(Number(level))} level${slotInfo}`;
+        parts.push(`${lvlLabel}: ${names.join(", ")}`);
       }
     }
 
@@ -400,12 +456,12 @@ function convertSpellcasting(
       parts.push(...parseEntries(sc.footerEntries as any[]));
     }
 
-    return { name: sc.name, desc: parts.join('\n') };
+    return { name: sc.name, desc: parts.join("\n") };
   });
 }
 
 function ordinalSuffix(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
+  const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
   return s[(v - 20) % 10] || s[v] || s[0];
 }
@@ -414,30 +470,41 @@ function ordinalSuffix(n: number): string {
 // Main transformer
 // ────────────────────────────────────────────────────────────────
 
-const BESTIARY_DIR = path.resolve(__dirname, '../../../../5etools-src/data/bestiary');
+const BESTIARY_DIR = path.resolve(
+  __dirname,
+  "../../../../5etools-src/data/bestiary",
+);
 
 function loadBestiaryFiles(): { file: string; monsters: FiveToolsMonster[] }[] {
   if (!fs.existsSync(BESTIARY_DIR)) return [];
-  const files = fs.readdirSync(BESTIARY_DIR)
-    .filter((f) => f.startsWith('bestiary-') && f.endsWith('.json'));
+  const files = fs
+    .readdirSync(BESTIARY_DIR)
+    .filter((f) => f.startsWith("bestiary-") && f.endsWith(".json"));
 
   return files.map((file) => {
     const filePath = path.join(BESTIARY_DIR, file);
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const monsters: FiveToolsMonster[] = (data.monster ?? [])
-      .filter((m: FiveToolsMonster) => !m._copy);
+    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    const monsters: FiveToolsMonster[] = (data.monster ?? []).filter(
+      (m: FiveToolsMonster) => !m._copy,
+    );
     return { file, monsters };
   });
 }
 
 function transformOneMonster(monster: FiveToolsMonster): TransformedMonster {
-  const slug = generateSlug(monster.name, monster.source, monster.srd52 ?? monster.srd);
+  const slug = generateSlug(
+    monster.name,
+    monster.source,
+    monster.srd52 ?? monster.srd,
+  );
   const { type, subtype } = convertType(monster.type);
   const { hit_points, hit_dice, hit_points_roll } = convertHp(monster.hp);
   const { crNumeric, xp, profBonus } = convertCr(monster.cr);
 
   // Merge spellcasting into special_abilities
-  const traits = convertEntryBlock(monster.trait) as { name: string; desc: string }[] | null;
+  const traits = convertEntryBlock(monster.trait) as
+    | { name: string; desc: string }[]
+    | null;
   const spellcastingAbilities = convertSpellcasting(monster.spellcasting);
   let specialAbilities: unknown | null = null;
   if (traits || spellcastingAbilities) {
@@ -463,12 +530,12 @@ function transformOneMonster(monster: FiveToolsMonster): TransformedMonster {
     wisdom: monster.wis ?? 10,
     charisma: monster.cha ?? 10,
     proficiencies: convertProficiencies(monster.save, monster.skill),
-    damage_vulnerabilities: convertDamageList(monster.vulnerable, 'vulnerable'),
-    damage_resistances: convertDamageList(monster.resist, 'resist'),
-    damage_immunities: convertDamageList(monster.immune, 'immune'),
+    damage_vulnerabilities: convertDamageList(monster.vulnerable, "vulnerable"),
+    damage_resistances: convertDamageList(monster.resist, "resist"),
+    damage_immunities: convertDamageList(monster.immune, "immune"),
     condition_immunities: convertConditionImmunities(monster.conditionImmune),
     senses: convertSenses(monster.senses, monster.passive),
-    languages: (monster.languages ?? []).join(', '),
+    languages: (monster.languages ?? []).join(", "),
     proficiency_bonus: profBonus,
     xp,
     special_abilities: specialAbilities,
@@ -500,7 +567,10 @@ export function transformMonsters(): TransformedMonster[] {
   return all;
 }
 
-export function transformMonstersByFile(): { file: string; monsters: TransformedMonster[] }[] {
+export function transformMonstersByFile(): {
+  file: string;
+  monsters: TransformedMonster[];
+}[] {
   const filesets = loadBestiaryFiles();
   const seen = new Set<string>();
 

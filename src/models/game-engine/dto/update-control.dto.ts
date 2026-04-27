@@ -1,4 +1,4 @@
-import { IsIn } from 'class-validator';
+import { IsIn } from "class-validator";
 
 /**
  * Spec 006 — DTO para `PATCH /participants/:pid/control`.
@@ -6,6 +6,6 @@ import { IsIn } from 'class-validator';
  * Apenas DM da sessão pode mudar; enforcement no EncounterService.
  */
 export class UpdateControlDto {
-  @IsIn(['pc', 'ai', 'dm', 'human'])
-  mode: 'pc' | 'ai' | 'dm' | 'human';
+  @IsIn(["pc", "ai", "dm", "human"])
+  mode: "pc" | "ai" | "dm" | "human";
 }

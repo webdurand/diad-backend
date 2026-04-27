@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 003 — Combat Action Registry foundation.
@@ -14,10 +14,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *     `attacks_max_this_turn` computado a partir de classes (Fighter L5+=2, L11+=3,
  *     L20=4; Monk L5+=2; Paladin/Barb/Ranger L5+=2; default 1).
  */
-export class AddCombatActionRegistryFields1776300000000
-  implements MigrationInterface
-{
-  name = 'AddCombatActionRegistryFields1776300000000';
+export class AddCombatActionRegistryFields1776300000000 implements MigrationInterface {
+  name = "AddCombatActionRegistryFields1776300000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

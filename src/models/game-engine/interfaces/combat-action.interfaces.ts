@@ -7,40 +7,35 @@
  */
 
 export type ActionKind =
-  | 'attack'
-  | 'special'
-  | 'spell'
-  | 'class-feature'
-  | 'item'
-  | 'generic';
+  | "attack"
+  | "special"
+  | "spell"
+  | "class-feature"
+  | "item"
+  | "generic";
 
-export type ActionCost =
-  | 'action'
-  | 'bonus'
-  | 'reaction'
-  | 'free'
-  | 'legendary';
+export type ActionCost = "action" | "bonus" | "reaction" | "free" | "legendary";
 
 export type TargetShape =
-  | 'self'
-  | 'single-creature'
-  | 'multiple-creatures'
-  | 'area-burst'
-  | 'area-line'
-  | 'none';
+  | "self"
+  | "single-creature"
+  | "multiple-creatures"
+  | "area-burst"
+  | "area-line"
+  | "none";
 
 export type DisabledReason =
-  | 'ACTION_ALREADY_USED'
-  | 'BONUS_ACTION_ALREADY_USED'
-  | 'REACTION_ALREADY_USED'
-  | 'NO_USES_REMAINING'
-  | 'NO_SLOT_AVAILABLE'
-  | 'NOT_EQUIPPED'
-  | 'WRONG_CLASS'
-  | 'BELOW_REQUIRED_LEVEL'
-  | 'NOT_YOUR_TURN'
-  | 'PREREQUISITE_NOT_MET'
-  | 'STEADY_AIM_MOVEMENT_USED';
+  | "ACTION_ALREADY_USED"
+  | "BONUS_ACTION_ALREADY_USED"
+  | "REACTION_ALREADY_USED"
+  | "NO_USES_REMAINING"
+  | "NO_SLOT_AVAILABLE"
+  | "NOT_EQUIPPED"
+  | "WRONG_CLASS"
+  | "BELOW_REQUIRED_LEVEL"
+  | "NOT_YOUR_TURN"
+  | "PREREQUISITE_NOT_MET"
+  | "STEADY_AIM_MOVEMENT_USED";
 
 export interface ActionCostMetadata {
   spellSlot?: { level: number };
@@ -111,7 +106,12 @@ export interface ResolverSheetSlice {
   /** Classes com slug normalizado e level — para class-feature resolver. */
   classes: Array<{ slug: string; name?: string; level: number }>;
   /** Features (ativáveis) — lista com slug + nível. */
-  features?: Array<{ slug: string; name: string; level?: number; active?: boolean }>;
+  features?: Array<{
+    slug: string;
+    name: string;
+    level?: number;
+    active?: boolean;
+  }>;
   /** Ability modifiers normalizados (str/dex/con/int/wis/cha → int). */
   abilityMods?: Partial<Record<string, number>>;
   /** Proficiency bonus do PC (para calcular attack bonus em descritores). */
@@ -126,7 +126,7 @@ export interface ResolverSheetSlice {
  */
 export interface ParticipantContext {
   participantId?: string; // absent em contexto character-only
-  type: 'pc' | 'monster' | 'npc';
+  type: "pc" | "monster" | "npc";
   /** PC: id do CharacterEntity. Monster: id do MonsterEntity. */
   characterId?: string;
   monsterId?: string;
@@ -147,6 +147,12 @@ export interface ParticipantContext {
   /** Sheet slice do PC (carregado uma vez pelo caller e compartilhado entre resolvers). */
   sheet?: ResolverSheetSlice;
   /** Monster statblock (para monster-action resolver). */
-  monsterActions?: Array<{ name: string; desc?: string; attackBonus?: number; damageDice?: string; damageType?: string }>;
+  monsterActions?: Array<{
+    name: string;
+    desc?: string;
+    attackBonus?: number;
+    damageDice?: string;
+    damageType?: string;
+  }>;
   monsterSlug?: string;
 }

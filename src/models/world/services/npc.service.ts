@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { NpcEntity } from 'src/entities/npc.entity';
-import { NpcRelationshipEntity } from 'src/entities/npc-relationship.entity';
-import { randomBytes } from 'crypto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { NpcEntity } from "src/entities/npc.entity";
+import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
+import { randomBytes } from "crypto";
 
 export interface CreateNpcDto {
   name: string;
@@ -11,7 +11,7 @@ export interface CreateNpcDto {
   race?: string;
   description?: string;
   descriptionHidden?: string;
-  disposition?: 'friendly' | 'neutral' | 'hostile' | 'indifferent';
+  disposition?: "friendly" | "neutral" | "hostile" | "indifferent";
   currentLocationId?: string;
   monsterId?: string;
   personalityBig5?: Record<string, number>;
@@ -40,10 +40,7 @@ export class NpcService {
     private readonly relationRepo: Repository<NpcRelationshipEntity>,
   ) {}
 
-  async create(
-    campaignId: string,
-    dto: CreateNpcDto,
-  ): Promise<NpcEntity> {
+  async create(campaignId: string, dto: CreateNpcDto): Promise<NpcEntity> {
     const slug = this.generateSlug(dto.name);
     const npc = this.npcRepo.create({
       campaignId,
@@ -53,7 +50,7 @@ export class NpcService {
       race: dto.race,
       description: dto.description,
       descriptionHidden: dto.descriptionHidden,
-      disposition: dto.disposition ?? 'neutral',
+      disposition: dto.disposition ?? "neutral",
       currentLocationId: dto.currentLocationId,
       monsterId: dto.monsterId,
       personalityBig5: dto.personalityBig5 ?? {},
@@ -69,17 +66,17 @@ export class NpcService {
   async getById(npcId: string): Promise<NpcEntity> {
     const npc = await this.npcRepo.findOne({
       where: { id: npcId },
-      relations: ['currentLocation', 'monster'],
+      relations: ["currentLocation", "monster"],
     });
-    if (!npc) throw new NotFoundException('NPC nao encontrado.');
+    if (!npc) throw new NotFoundException("NPC nao encontrado.");
     return npc;
   }
 
   async listByCampaign(campaignId: string): Promise<NpcEntity[]> {
     return this.npcRepo.find({
       where: { campaignId },
-      relations: ['currentLocation'],
-      order: { name: 'ASC' },
+      relations: ["currentLocation"],
+      order: { name: "ASC" },
     });
   }
 
@@ -102,7 +99,7 @@ export class NpcService {
   async getNpcsAtLocation(locationId: string): Promise<NpcEntity[]> {
     return this.npcRepo.find({
       where: { currentLocationId: locationId },
-      order: { name: 'ASC' },
+      order: { name: "ASC" },
     });
   }
 
@@ -125,7 +122,7 @@ export class NpcService {
   async getRelationships(npcId: string): Promise<NpcRelationshipEntity[]> {
     return this.relationRepo.find({
       where: [{ sourceNpcId: npcId }, { targetNpcId: npcId }],
-      relations: ['sourceNpc', 'targetNpc', 'targetFaction'],
+      relations: ["sourceNpc", "targetNpc", "targetFaction"],
     });
   }
 
@@ -136,9 +133,9 @@ export class NpcService {
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    const suffix = randomBytes(3).toString('hex');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const suffix = randomBytes(3).toString("hex");
     return `${base}-${suffix}`;
   }
 }

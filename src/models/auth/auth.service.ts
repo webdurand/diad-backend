@@ -2,14 +2,14 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import * as bcrypt from 'bcryptjs';
-import { UserEntity } from 'src/entities';
-import { AuthUserPayload } from './auth.types';
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import * as bcrypt from "bcryptjs";
+import { UserEntity } from "src/entities";
+import { AuthUserPayload } from "./auth.types";
 
 interface RegisterInput {
   email: string;
@@ -27,7 +27,7 @@ interface LoginInput {
 
 @Injectable()
 export class AuthService {
-  private readonly cookieName = 'diad_session';
+  private readonly cookieName = "diad_session";
   private readonly cookieMaxAgeMs = 7 * 24 * 60 * 60 * 1000;
 
   constructor(
@@ -47,14 +47,14 @@ export class AuthService {
 
     const existing = await this.userRepository.findOne({ where: { email } });
     if (existing) {
-      throw new BadRequestException('Email ja cadastrado.');
+      throw new BadRequestException("Email ja cadastrado.");
     }
 
     const existingUsername = await this.userRepository.findOne({
       where: { username },
     });
     if (existingUsername) {
-      throw new BadRequestException('Nome de usuario ja cadastrado.');
+      throw new BadRequestException("Nome de usuario ja cadastrado.");
     }
 
     const passwordHash = await bcrypt.hash(input.password, 10);
@@ -75,12 +75,12 @@ export class AuthService {
 
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new UnauthorizedException('Credenciais invalidas.');
+      throw new UnauthorizedException("Credenciais invalidas.");
     }
 
     const matches = await bcrypt.compare(input.password, user.passwordHash);
     if (!matches) {
-      throw new UnauthorizedException('Credenciais invalidas.');
+      throw new UnauthorizedException("Credenciais invalidas.");
     }
 
     return user;
@@ -100,7 +100,7 @@ export class AuthService {
         secret: this.getJwtSecret(),
       });
     } catch {
-      throw new UnauthorizedException('Sessao expirada.');
+      throw new UnauthorizedException("Sessao expirada.");
     }
   }
 
@@ -110,7 +110,7 @@ export class AuthService {
       where: { id: payload.id },
     });
     if (!user) {
-      throw new UnauthorizedException('Usuario nao encontrado.');
+      throw new UnauthorizedException("Usuario nao encontrado.");
     }
     return user;
   }
@@ -122,18 +122,18 @@ export class AuthService {
   getCookieOptions() {
     return {
       httpOnly: true,
-      sameSite: 'none' as const,
+      sameSite: "none" as const,
       secure: true,
       maxAge: this.cookieMaxAgeMs,
     };
   }
 
   private getJwtSecret(): string {
-    return this.configService.get<string>('JWT_SECRET') ?? 'dev-secret';
+    return this.configService.get<string>("JWT_SECRET") ?? "dev-secret";
   }
 
   private getJwtExpiresInSeconds(): number {
-    const raw = this.configService.get<string>('JWT_EXPIRES_IN_SECONDS');
+    const raw = this.configService.get<string>("JWT_EXPIRES_IN_SECONDS");
     const parsed = raw ? Number(raw) : 0;
     if (Number.isFinite(parsed) && parsed > 0) {
       return parsed;
@@ -150,7 +150,7 @@ export class AuthService {
   }
 
   private normalizePhone(value: string): string {
-    return value.replace(/\D/g, '');
+    return value.replace(/\D/g, "");
   }
 
   private normalizeBirthDate(value: string): string {
@@ -158,11 +158,11 @@ export class AuthService {
   }
 
   private ensureValidCredentials(email: string, password: string) {
-    if (!email || !email.includes('@')) {
-      throw new BadRequestException('Email invalido.');
+    if (!email || !email.includes("@")) {
+      throw new BadRequestException("Email invalido.");
     }
     if (!password || password.length < 6) {
-      throw new BadRequestException('Senha deve ter 6 caracteres ou mais.');
+      throw new BadRequestException("Senha deve ter 6 caracteres ou mais.");
     }
   }
 
@@ -174,22 +174,22 @@ export class AuthService {
   ) {
     const usernamePattern = /^[a-z0-9._-]+$/;
     if (!name || name.trim().length < 2) {
-      throw new BadRequestException('Nome invalido.');
+      throw new BadRequestException("Nome invalido.");
     }
     if (!username || username.length < 3 || !usernamePattern.test(username)) {
-      throw new BadRequestException('Nome de usuario invalido.');
+      throw new BadRequestException("Nome de usuario invalido.");
     }
     const parsedDate = new Date(birthDate);
-    const earliest = new Date('1900-01-01');
+    const earliest = new Date("1900-01-01");
     const today = new Date();
     if (!birthDate || Number.isNaN(parsedDate.getTime())) {
-      throw new BadRequestException('Data de nascimento invalida.');
+      throw new BadRequestException("Data de nascimento invalida.");
     }
     if (parsedDate < earliest || parsedDate > today) {
-      throw new BadRequestException('Data de nascimento invalida.');
+      throw new BadRequestException("Data de nascimento invalida.");
     }
     if (phone.length < 10 || phone.length > 11) {
-      throw new BadRequestException('Telefone invalido.');
+      throw new BadRequestException("Telefone invalido.");
     }
   }
 }

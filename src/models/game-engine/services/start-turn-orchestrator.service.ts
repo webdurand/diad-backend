@@ -1,16 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { DiceService } from './dice.service';
-import { ConcentrationService } from './concentration.service';
-import { ConditionLifecycleService } from './condition-lifecycle.service';
-import { LegendaryActionService } from './legendary-action.service';
-import { PersistentAreaService } from './persistent-area.service';
-import { CapstonesService } from './capstones.service';
-import { TransformationService } from './transformation.service';
-import type { GameEventData } from '../interfaces/result.type';
-import type { SaveAbility } from '../interfaces/combat.interfaces';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { DiceService } from "./dice.service";
+import { ConcentrationService } from "./concentration.service";
+import { ConditionLifecycleService } from "./condition-lifecycle.service";
+import { LegendaryActionService } from "./legendary-action.service";
+import { PersistentAreaService } from "./persistent-area.service";
+import { CapstonesService } from "./capstones.service";
+import { TransformationService } from "./transformation.service";
+import type { GameEventData } from "../interfaces/result.type";
+import type { SaveAbility } from "../interfaces/combat.interfaces";
 
 /**
  * Spec 004 — Orquestra os ticks do início do turno (ordem RAW):
@@ -46,9 +46,11 @@ export class StartTurnOrchestratorService {
     opts?: {
       isStartOfRound?: boolean;
       allParticipantsInRound?: EncounterParticipantEntity[];
-      getSaveModifier?: (
-        ability: SaveAbility,
-      ) => Promise<{ modifier: number; advantage: boolean; disadvantage: boolean }>;
+      getSaveModifier?: (ability: SaveAbility) => Promise<{
+        modifier: number;
+        advantage: boolean;
+        disadvantage: boolean;
+      }>;
       ownerUserId?: string;
     },
   ): Promise<{ events: GameEventData[] }> {
@@ -57,7 +59,10 @@ export class StartTurnOrchestratorService {
     // 0. Spec 012 Lote C — Capstones start-of-combat (Perfect Self, Arcane
     // Apotheosis, Superior Inspiration). CapstonesService skip se já processou
     // via marker effectInstance 'capstone_start_combat_done'.
-    const capRes = await this.capstones.runStartOfCombat(participant, opts?.ownerUserId);
+    const capRes = await this.capstones.runStartOfCombat(
+      participant,
+      opts?.ownerUserId,
+    );
     events.push(...capRes.events);
 
     // 1. Recharge
@@ -88,7 +93,9 @@ export class StartTurnOrchestratorService {
     // 3.5 Spec 015 Eixo 4 — tick de duração da transformação ativa (Wild
     // Shape, Polymorph, True Polymorph). Reverte quando expira OU torna
     // permanente no caso de True Polymorph.
-    const tRes = await this.transformation.tickDurationOnTurnStart(participant.id);
+    const tRes = await this.transformation.tickDurationOnTurnStart(
+      participant.id,
+    );
     events.push(...tRes.events);
 
     // 4. Reset legendary pool
@@ -125,29 +132,38 @@ export class StartTurnOrchestratorService {
     const state = participant.rechargeState ?? {};
     let changed = false;
     for (const action of allActions) {
-      if (!action || typeof action !== 'object') continue;
+      if (!action || typeof action !== "object") continue;
       const a = action as Record<string, unknown>;
       const recharge = (a.recharge ?? null) as string | null;
-      if (recharge !== '5-6' && recharge !== '6') continue;
-      const name = String(a.name ?? '');
+      if (recharge !== "5-6" && recharge !== "6") continue;
+      const name = String(a.name ?? "");
       if (!name) continue;
-      if (state[name] === 'used' || state[name] === undefined) {
+      if (state[name] === "used" || state[name] === undefined) {
         const roll = this.dice.roll(6);
-        const recharged =
-          recharge === '5-6' ? roll >= 5 : roll === 6;
+        const recharged = recharge === "5-6" ? roll >= 5 : roll === 6;
         if (recharged) {
-          state[name] = 'available';
+          state[name] = "available";
           changed = true;
           events.push({
-            event_type: 'recharge_rolled',
+            event_type: "recharge_rolled",
             actor_participant_id: participant.id,
-            data: { actionName: name, rolled: roll, recharged: true, range: recharge },
+            data: {
+              actionName: name,
+              rolled: roll,
+              recharged: true,
+              range: recharge,
+            },
           });
-        } else if (state[name] === 'used') {
+        } else if (state[name] === "used") {
           events.push({
-            event_type: 'recharge_rolled',
+            event_type: "recharge_rolled",
             actor_participant_id: participant.id,
-            data: { actionName: name, rolled: roll, recharged: false, range: recharge },
+            data: {
+              actionName: name,
+              rolled: roll,
+              recharged: false,
+              range: recharge,
+            },
           });
         }
       }
@@ -162,7 +178,8 @@ export class StartTurnOrchestratorService {
   private toArray(raw: unknown): unknown[] | null {
     if (!raw) return null;
     if (Array.isArray(raw)) return raw;
-    if (typeof raw === 'object') return Object.values(raw as Record<string, unknown>);
+    if (typeof raw === "object")
+      return Object.values(raw as Record<string, unknown>);
     return null;
   }
 }

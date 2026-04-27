@@ -4,7 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   InternalServerErrorException,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   EntityManager,
   EntityTarget,
@@ -15,9 +15,9 @@ import {
   QueryFailedError,
   ObjectLiteral,
   SelectQueryBuilder,
-} from 'typeorm';
-import { LibraryQueryDto } from './dto/library-query.dto';
-import { MonsterEntity } from 'src/entities/monster.entity';
+} from "typeorm";
+import { LibraryQueryDto } from "./dto/library-query.dto";
+import { MonsterEntity } from "src/entities/monster.entity";
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -33,7 +33,7 @@ export class LibraryService {
   private validateEntity(entityClass: EntityTarget<any>) {
     if (!entityClass) {
       throw new BadRequestException(
-        'A entidade fornecida é inválida ou não foi mapeada corretamente.',
+        "A entidade fornecida é inválida ou não foi mapeada corretamente.",
       );
     }
   }
@@ -65,11 +65,11 @@ export class LibraryService {
     const offset = query.offset ?? 0;
 
     try {
-      const qb = this.entityManager.createQueryBuilder(entityClass, 'entity');
+      const qb = this.entityManager.createQueryBuilder(entityClass, "entity");
 
       // Load relations via leftJoinAndSelect
       for (const rel of relations) {
-        const parts = rel.split('.');
+        const parts = rel.split(".");
         if (parts.length === 1) {
           qb.leftJoinAndSelect(`entity.${parts[0]}`, parts[0]);
         } else {
@@ -87,7 +87,7 @@ export class LibraryService {
       // Also add standalone parent joins for dotted relations
       const standaloneParents = new Set<string>();
       for (const rel of relations) {
-        const parts = rel.split('.');
+        const parts = rel.split(".");
         if (parts.length > 1 && !relations.includes(parts[0])) {
           standaloneParents.add(parts[0]);
         }
@@ -98,26 +98,28 @@ export class LibraryService {
 
       // Strict source filter via INNER JOIN
       if (query.source) {
-        if (entityName === 'comp_sources') {
-          qb.andWhere('entity.code = :sourceCode', { sourceCode: query.source });
+        if (entityName === "comp_sources") {
+          qb.andWhere("entity.code = :sourceCode", {
+            sourceCode: query.source,
+          });
         } else {
           // Use innerJoin to ensure strict filtering — only entries matching the source
-          qb.innerJoin('entity.source', 'source_filter')
-            .andWhere('source_filter.code = :sourceCode', { sourceCode: query.source });
+          qb.innerJoin("entity.source", "source_filter").andWhere(
+            "source_filter.code = :sourceCode",
+            { sourceCode: query.source },
+          );
         }
       }
 
       // Name filter (ILIKE) — available for all entities
       if (query.name) {
-        qb.andWhere('entity.name ILIKE :name', { name: `%${query.name}%` });
+        qb.andWhere("entity.name ILIKE :name", { name: `%${query.name}%` });
       }
 
       // Entity-specific filters
       this.applyEntityFilters(qb, entityName, query);
 
-      qb.orderBy('entity.name', 'ASC')
-        .skip(offset)
-        .take(limit);
+      qb.orderBy("entity.name", "ASC").skip(offset).take(limit);
 
       const [data, total] = await qb.getManyAndCount();
       return { data, total, limit, offset };
@@ -131,47 +133,55 @@ export class LibraryService {
     entityName: string,
     query: LibraryQueryDto,
   ): void {
-    if (entityName === 'monsters') {
+    if (entityName === "monsters") {
       if (query.cr != null) {
         const crStr = String(query.cr);
-        if (crStr.includes('-')) {
-          const [minStr, maxStr] = crStr.split('-');
+        if (crStr.includes("-")) {
+          const [minStr, maxStr] = crStr.split("-");
           const minCr = parseFloat(minStr);
           const maxCr = parseFloat(maxStr);
           if (!isNaN(minCr) && !isNaN(maxCr)) {
-            qb.andWhere('entity.challenge_rating >= :minCr', { minCr });
-            qb.andWhere('entity.challenge_rating <= :maxCr', { maxCr });
+            qb.andWhere("entity.challenge_rating >= :minCr", { minCr });
+            qb.andWhere("entity.challenge_rating <= :maxCr", { maxCr });
           }
         } else {
           const exactCr = parseFloat(crStr);
           if (!isNaN(exactCr)) {
-            qb.andWhere('entity.challenge_rating = :cr', { cr: exactCr });
+            qb.andWhere("entity.challenge_rating = :cr", { cr: exactCr });
           }
         }
       }
       if (query.type) {
-        qb.andWhere('entity.type ILIKE :monsterType', { monsterType: `%${query.type}%` });
+        qb.andWhere("entity.type ILIKE :monsterType", {
+          monsterType: `%${query.type}%`,
+        });
       }
     }
 
-    if (entityName === 'spells') {
+    if (entityName === "spells") {
       if (query.level != null) {
-        qb.andWhere('entity.level = :level', { level: query.level });
+        qb.andWhere("entity.level = :level", { level: query.level });
       }
       if (query.school) {
         // school is a relation already joined via relations config
-        qb.andWhere('school.name ILIKE :school', { school: `%${query.school}%` });
+        qb.andWhere("school.name ILIKE :school", {
+          school: `%${query.school}%`,
+        });
       }
       if (query.class) {
         // spell_classes.class already joined via relations config
-        qb.andWhere('spell_classes_class.name ILIKE :className', { className: `%${query.class}%` });
+        qb.andWhere("spell_classes_class.name ILIKE :className", {
+          className: `%${query.class}%`,
+        });
       }
     }
 
-    if (entityName === 'equipments') {
+    if (entityName === "equipments") {
       if (query.category) {
         // category_items.category already joined via relations config
-        qb.andWhere('category_items_category.name ILIKE :category', { category: `%${query.category}%` });
+        qb.andWhere("category_items_category.name ILIKE :category", {
+          category: `%${query.category}%`,
+        });
       }
     }
   }
@@ -188,14 +198,16 @@ export class LibraryService {
   async findBeastsForForm(maxCr: number): Promise<MonsterEntity[]> {
     try {
       return await this.entityManager
-        .createQueryBuilder(MonsterEntity, 'monster')
-        .where('monster.type = :type', { type: 'beast' })
-        .andWhere('monster.challenge_rating <= :maxCr', { maxCr })
+        .createQueryBuilder(MonsterEntity, "monster")
+        .where("monster.type = :type", { type: "beast" })
+        .andWhere("monster.challenge_rating <= :maxCr", { maxCr })
         // Exclui summons conjurados. Slugs SRD: beast-of-the-land,
         // beast-of-the-sea, beast-of-the-sky, beast-of-the-land-tce, etc.
-        .andWhere('monster.slug NOT LIKE :summonPrefix', { summonPrefix: 'beast-of-%' })
-        .orderBy('monster.challenge_rating', 'ASC')
-        .addOrderBy('monster.name', 'ASC')
+        .andWhere("monster.slug NOT LIKE :summonPrefix", {
+          summonPrefix: "beast-of-%",
+        })
+        .orderBy("monster.challenge_rating", "ASC")
+        .addOrderBy("monster.name", "ASC")
         .getMany();
     } catch (error) {
       this.handleErrors(error);
@@ -221,7 +233,7 @@ export class LibraryService {
   ): Promise<T> {
     this.validateEntity(entityClass);
     const entity = await this.entityManager.findOne(entityClass, options);
-    if (!entity) throw new NotFoundException('Registro não encontrado');
+    if (!entity) throw new NotFoundException("Registro não encontrado");
     return entity;
   }
 
@@ -256,7 +268,7 @@ export class LibraryService {
     try {
       const result = await this.entityManager.delete(entityClass, id);
       if (result.affected === 0)
-        throw new NotFoundException('ID não encontrado');
+        throw new NotFoundException("ID não encontrado");
       return result;
     } catch (error) {
       this.handleErrors(error);
@@ -267,9 +279,9 @@ export class LibraryService {
     // Erros de violação de banco (TypeORM)
     if (error instanceof QueryFailedError) {
       const code = (error as any).code;
-      if (code === '23505') throw new ConflictException('Registro duplicado.');
-      if (code === '23503')
-        throw new BadRequestException('Violação de dependência (FK).');
+      if (code === "23505") throw new ConflictException("Registro duplicado.");
+      if (code === "23503")
+        throw new BadRequestException("Violação de dependência (FK).");
     }
 
     // Se o erro já for uma HttpException (como o nosso BadRequest do validateEntity), apenas repassa
@@ -278,13 +290,13 @@ export class LibraryService {
     }
 
     // Erro de metadados do TypeORM (quando a entidade é lixo/null)
-    if (error.name === 'EntityMetadataNotFoundError') {
+    if (error.name === "EntityMetadataNotFoundError") {
       throw new BadRequestException(
-        'A entidade informada não existe no esquema do banco.',
+        "A entidade informada não existe no esquema do banco.",
       );
     }
 
     console.error(error); // Log para debug interno
-    throw new InternalServerErrorException('Erro inesperado no servidor');
+    throw new InternalServerErrorException("Erro inesperado no servidor");
   }
 }

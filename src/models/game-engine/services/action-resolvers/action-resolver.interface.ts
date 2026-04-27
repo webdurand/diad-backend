@@ -2,7 +2,7 @@ import type {
   ActionDescriptor,
   ActionKind,
   ParticipantContext,
-} from '../../interfaces/combat-action.interfaces';
+} from "../../interfaces/combat-action.interfaces";
 
 /**
  * Spec 003 — plugin interface para resolvers de ação.
@@ -27,4 +27,4 @@ export interface ActionResolver {
   ): Promise<ActionDescriptor | null>;
 }
 
-export const ACTION_RESOLVERS = Symbol('ACTION_RESOLVERS');
+export const ACTION_RESOLVERS = Symbol("ACTION_RESOLVERS");

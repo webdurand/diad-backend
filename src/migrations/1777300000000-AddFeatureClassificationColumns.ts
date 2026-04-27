@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 015 Eixo 1 — enriquecimento do FeatureBlock (Princípio X: AI-Legible Mechanics).
@@ -16,10 +16,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Populadas via seed idempotente (`SeedFeatureCategoryOverrides`).
  * Fallback continua em `classifyFeatureForActions` (regex) quando NULL.
  */
-export class AddFeatureClassificationColumns1777300000000
-  implements MigrationInterface
-{
-  name = 'AddFeatureClassificationColumns1777300000000';
+export class AddFeatureClassificationColumns1777300000000 implements MigrationInterface {
+  name = "AddFeatureClassificationColumns1777300000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

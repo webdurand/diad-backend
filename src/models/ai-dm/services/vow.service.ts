@@ -3,16 +3,16 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CloseRollOutcome,
   VowCloseRollResult,
   VowEntity,
   VowMilestoneCondition,
   VowRank,
-} from 'src/entities/vow.entity';
+} from "src/entities/vow.entity";
 
 export interface CreateVowDto {
   description: string;
@@ -26,7 +26,7 @@ export interface UpdateVowDto {
   progress?: number;
   description?: string;
   rank?: VowRank;
-  status?: 'open' | 'fulfilled' | 'forsaken';
+  status?: "open" | "fulfilled" | "forsaken";
   milestoneConditions?: VowMilestoneCondition[];
 }
 
@@ -45,13 +45,13 @@ export class VowService {
   async create(campaignId: string, dto: CreateVowDto): Promise<VowEntity> {
     if (dto.isMainVow) {
       const existing = await this.vowRepo.findOne({
-        where: { campaignId, isMainVow: true, status: 'open' },
+        where: { campaignId, isMainVow: true, status: "open" },
       });
       if (existing) {
         throw new ConflictException({
           ok: false,
-          error: 'Esta campanha já possui uma Vow principal aberta.',
-          code: 'MAIN_VOW_ALREADY_EXISTS',
+          error: "Esta campanha já possui uma Vow principal aberta.",
+          code: "MAIN_VOW_ALREADY_EXISTS",
           existingVowId: existing.id,
         });
       }
@@ -60,8 +60,8 @@ export class VowService {
     if (progress < 0 || progress > 10) {
       throw new BadRequestException({
         ok: false,
-        error: 'progress deve estar entre 0 e 10.',
-        code: 'VOW_PROGRESS_OUT_OF_RANGE',
+        error: "progress deve estar entre 0 e 10.",
+        code: "VOW_PROGRESS_OUT_OF_RANGE",
       });
     }
     const vow = this.vowRepo.create({
@@ -69,7 +69,7 @@ export class VowService {
       description: dto.description,
       rank: dto.rank,
       progress,
-      status: 'open',
+      status: "open",
       isMainVow: dto.isMainVow ?? false,
       milestoneConditions: dto.milestoneConditions ?? [],
     });
@@ -79,7 +79,7 @@ export class VowService {
   async listByCampaign(campaignId: string): Promise<VowEntity[]> {
     return this.vowRepo.find({
       where: { campaignId },
-      order: { isMainVow: 'DESC', createdAt: 'ASC' },
+      order: { isMainVow: "DESC", createdAt: "ASC" },
     });
   }
 
@@ -88,8 +88,8 @@ export class VowService {
     if (!vow) {
       throw new NotFoundException({
         ok: false,
-        error: 'Vow não encontrada.',
-        code: 'VOW_NOT_FOUND',
+        error: "Vow não encontrada.",
+        code: "VOW_NOT_FOUND",
       });
     }
     return vow;
@@ -97,12 +97,12 @@ export class VowService {
 
   async update(vowId: string, dto: UpdateVowDto): Promise<VowEntity> {
     const vow = await this.getById(vowId);
-    if (typeof dto.progress === 'number') {
+    if (typeof dto.progress === "number") {
       if (dto.progress < 0 || dto.progress > 10) {
         throw new BadRequestException({
           ok: false,
-          error: 'progress deve estar entre 0 e 10.',
-          code: 'VOW_PROGRESS_OUT_OF_RANGE',
+          error: "progress deve estar entre 0 e 10.",
+          code: "VOW_PROGRESS_OUT_OF_RANGE",
         });
       }
       vow.progress = dto.progress;
@@ -131,11 +131,11 @@ export class VowService {
    */
   async fulfill(vowId: string): Promise<FulfillVowResponse> {
     const vow = await this.getById(vowId);
-    if (vow.status !== 'open') {
+    if (vow.status !== "open") {
       throw new ConflictException({
         ok: false,
-        error: `Vow já está ${vow.status === 'fulfilled' ? 'cumprida' : 'abandonada'}.`,
-        code: 'VOW_NOT_OPEN',
+        error: `Vow já está ${vow.status === "fulfilled" ? "cumprida" : "abandonada"}.`,
+        code: "VOW_NOT_OPEN",
         currentStatus: vow.status,
       });
     }
@@ -145,9 +145,9 @@ export class VowService {
     const c2 = this.rollD10();
 
     let outcome: CloseRollOutcome;
-    if (target >= c1 && target >= c2) outcome = 'strong_hit';
-    else if (target >= c1 || target >= c2) outcome = 'weak_hit';
-    else outcome = 'miss';
+    if (target >= c1 && target >= c2) outcome = "strong_hit";
+    else if (target >= c1 || target >= c2) outcome = "weak_hit";
+    else outcome = "miss";
 
     const narrativeSeed = this.buildNarrativeSeed(outcome, vow.description);
     const closeRollResult: VowCloseRollResult = {
@@ -159,8 +159,8 @@ export class VowService {
     };
 
     vow.closeRollResult = closeRollResult;
-    if (outcome !== 'miss') {
-      vow.status = 'fulfilled';
+    if (outcome !== "miss") {
+      vow.status = "fulfilled";
       vow.fulfilledAt = new Date();
     }
     await this.vowRepo.save(vow);
@@ -176,10 +176,10 @@ export class VowService {
     outcome: CloseRollOutcome,
     description: string,
   ): string {
-    if (outcome === 'strong_hit') {
+    if (outcome === "strong_hit") {
       return `A jura foi cumprida em sua forma plena: ${description}.`;
     }
-    if (outcome === 'weak_hit') {
+    if (outcome === "weak_hit") {
       return `A jura foi cumprida, mas a custo — ${description}. Algo se perdeu no caminho.`;
     }
     return `A jura não foi cumprida como se esperava: ${description}. O destino pede novo preço.`;

@@ -1,5 +1,5 @@
-import type { AddEffectInput } from './effect-instance.service';
-import type { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import type { AddEffectInput } from "./effect-instance.service";
+import type { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 
 /**
  * Spec 004 — mapeamento de spellSlug → EffectInstance[] a materializar.
@@ -59,12 +59,12 @@ export function checkSpellPreconditions(
 ): PreconditionFailure | null {
   const slug = spellSlug.toLowerCase();
 
-  if (slug === 'mage-armor') {
+  if (slug === "mage-armor") {
     // RAW: "You touch a willing creature who isn't wearing armor."
     const armored = targets.find((t) => t.isWearingArmor);
     if (armored) {
       return {
-        code: 'INVALID_SPELL_TARGET',
+        code: "INVALID_SPELL_TARGET",
         message:
           "Mage Armor so pode ser castada em alvo sem armadura (RAW: 'creature who isn't wearing armor').",
         targetId: armored.id,
@@ -86,7 +86,7 @@ export function materializeSpellEffects(
   const slug = spellSlug.toLowerCase();
 
   switch (slug) {
-    case 'shield': {
+    case "shield": {
       // RAW Shield: "+5 bonus to AC, including against the triggering attack,
       //  until the start of your next turn."
       // Self-target (caster). Reaction.
@@ -94,17 +94,17 @@ export function materializeSpellEffects(
         {
           targetParticipantId: ctx.casterParticipantId,
           input: {
-            kind: 'ac_bonus',
-            sourceSpellSlug: 'shield',
+            kind: "ac_bonus",
+            sourceSpellSlug: "shield",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 5 },
-            expiresAt: { kind: 'until_caster_turn', value: 1 },
+            expiresAt: { kind: "until_caster_turn", value: 1 },
             requiresConcentration: false,
           },
         },
       ];
     }
-    case 'bless': {
+    case "bless": {
       // RAW Bless: escolhe até 3 alvos. Por 1 min (concentration), +1d4 em
       // attack rolls e saving throws.
       const out: SpellEffectMaterialization[] = [];
@@ -112,29 +112,29 @@ export function materializeSpellEffects(
         out.push({
           targetParticipantId: tid,
           input: {
-            kind: 'attack_bonus',
-            sourceSpellSlug: 'bless',
+            kind: "attack_bonus",
+            sourceSpellSlug: "bless",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { diceExpression: '1d4' },
-            expiresAt: { kind: 'concentration' },
+            payload: { diceExpression: "1d4" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         });
         out.push({
           targetParticipantId: tid,
           input: {
-            kind: 'save_bonus',
-            sourceSpellSlug: 'bless',
+            kind: "save_bonus",
+            sourceSpellSlug: "bless",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { diceExpression: '1d4' },
-            expiresAt: { kind: 'concentration' },
+            payload: { diceExpression: "1d4" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         });
       }
       return out;
     }
-    case 'bane': {
+    case "bane": {
       // RAW Bane: até 3 alvos (CHA save na cast; falha → -1d4 em attack/save por 1 min,
       // concentration). Materialização aplica a TODOS os alvos — o save é resolvido
       // pela spell-casting.service ANTES de chamar materialize. Aqui só materializamos
@@ -144,29 +144,29 @@ export function materializeSpellEffects(
         out.push({
           targetParticipantId: tid,
           input: {
-            kind: 'attack_penalty',
-            sourceSpellSlug: 'bane',
+            kind: "attack_penalty",
+            sourceSpellSlug: "bane",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { diceExpression: '1d4' },
-            expiresAt: { kind: 'concentration' },
+            payload: { diceExpression: "1d4" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         });
         out.push({
           targetParticipantId: tid,
           input: {
-            kind: 'save_penalty',
-            sourceSpellSlug: 'bane',
+            kind: "save_penalty",
+            sourceSpellSlug: "bane",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { diceExpression: '1d4' },
-            expiresAt: { kind: 'concentration' },
+            payload: { diceExpression: "1d4" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         });
       }
       return out;
     }
-    case 'guiding-bolt': {
+    case "guiding-bolt": {
       // RAW: "Make a ranged spell attack against the creature" — on hit, 4d6 radiant
       // + "until the end of your next turn, the next attack roll made against
       //   this target by an attacker other than you has advantage."
@@ -178,17 +178,17 @@ export function materializeSpellEffects(
         {
           targetParticipantId: target,
           input: {
-            kind: 'grant_advantage_to_attackers',
-            sourceSpellSlug: 'guiding-bolt',
+            kind: "grant_advantage_to_attackers",
+            sourceSpellSlug: "guiding-bolt",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: {},
-            expiresAt: { kind: 'until_consumed', value: 1 },
+            expiresAt: { kind: "until_consumed", value: 1 },
             requiresConcentration: false,
           },
         },
       ];
     }
-    case 'mage-armor': {
+    case "mage-armor": {
       // RAW: "Until the spell ends, the target's base AC becomes 13 + DEX mod."
       // Simplificacao: assume alvo unarmored (caso contrario, spell nao se aplica).
       // Base AC sem armor = 10 + DEX. Apos Mage Armor = 13 + DEX. Delta = +3.
@@ -199,13 +199,13 @@ export function materializeSpellEffects(
         {
           targetParticipantId: target,
           input: {
-            kind: 'ac_bonus',
-            sourceSpellSlug: 'mage-armor',
+            kind: "ac_bonus",
+            sourceSpellSlug: "mage-armor",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 3 },
             // Mage Armor duracao: 8 horas = 4800 rounds (6s/round). Usamos
             // 'end_of_encounter' na pratica, ja que combate nunca dura 8h.
-            expiresAt: { kind: 'end_of_encounter' },
+            expiresAt: { kind: "end_of_encounter" },
             requiresConcentration: false,
           },
         },
@@ -213,24 +213,24 @@ export function materializeSpellEffects(
     }
     // ── Spec 005 Addendum — Concentration buffs ────────────────────
 
-    case 'blur': {
+    case "blur": {
       // RAW: Attackers have disadvantage on attack rolls vs you. Concentration, 1 min.
       return [
         {
           targetParticipantId: ctx.casterParticipantId,
           input: {
-            kind: 'grant_disadvantage_to_attackers',
-            sourceSpellSlug: 'blur',
+            kind: "grant_disadvantage_to_attackers",
+            sourceSpellSlug: "blur",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: {},
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
       ];
     }
 
-    case 'invisibility': {
+    case "invisibility": {
       // RAW: Target invisible. Attacks against have disadvantage, attacks by have advantage.
       // Concentration, 1 hour. Breaking on attack/spell not tracked mechanically in MVP.
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
@@ -238,169 +238,169 @@ export function materializeSpellEffects(
         {
           targetParticipantId: target,
           input: {
-            kind: 'grant_disadvantage_to_attackers',
-            sourceSpellSlug: 'invisibility',
+            kind: "grant_disadvantage_to_attackers",
+            sourceSpellSlug: "invisibility",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: {},
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
         {
           targetParticipantId: target,
           input: {
-            kind: 'self_advantage',
-            sourceSpellSlug: 'invisibility',
+            kind: "self_advantage",
+            sourceSpellSlug: "invisibility",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { scope: 'melee' },
-            expiresAt: { kind: 'concentration' },
+            payload: { scope: "melee" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
       ];
     }
 
-    case 'greater-invisibility': {
+    case "greater-invisibility": {
       // RAW: Same as invisibility but doesn't end on attack/spell.
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
           targetParticipantId: target,
           input: {
-            kind: 'grant_disadvantage_to_attackers',
-            sourceSpellSlug: 'greater-invisibility',
+            kind: "grant_disadvantage_to_attackers",
+            sourceSpellSlug: "greater-invisibility",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: {},
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
         {
           targetParticipantId: target,
           input: {
-            kind: 'self_advantage',
-            sourceSpellSlug: 'greater-invisibility',
+            kind: "self_advantage",
+            sourceSpellSlug: "greater-invisibility",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { scope: 'any' },
-            expiresAt: { kind: 'concentration' },
+            payload: { scope: "any" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
       ];
     }
 
-    case 'haste': {
+    case "haste": {
       // RAW: +2 AC, doubled speed, extra action (limited). Concentration, 1 min.
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
           targetParticipantId: target,
           input: {
-            kind: 'ac_bonus',
-            sourceSpellSlug: 'haste',
+            kind: "ac_bonus",
+            sourceSpellSlug: "haste",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 2 },
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
         {
           targetParticipantId: target,
           input: {
-            kind: 'speed_multiplier',
-            sourceSpellSlug: 'haste',
+            kind: "speed_multiplier",
+            sourceSpellSlug: "haste",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 2 },
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
         {
           targetParticipantId: target,
           input: {
-            kind: 'extra_action',
-            sourceSpellSlug: 'haste',
+            kind: "extra_action",
+            sourceSpellSlug: "haste",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 1 },
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
       ];
     }
 
-    case 'fly': {
+    case "fly": {
       // RAW: Target gains 60 ft flying speed. Concentration, 10 min.
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
           targetParticipantId: target,
           input: {
-            kind: 'flight_speed',
-            sourceSpellSlug: 'fly',
+            kind: "flight_speed",
+            sourceSpellSlug: "fly",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 60 },
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
       ];
     }
 
-    case 'fire-shield': {
+    case "fire-shield": {
       // RAW: Resistance fire or cold (caster choice), retaliatory damage.
       // No concentration. Duration 10 min = 100 rounds.
       return [
         {
           targetParticipantId: ctx.casterParticipantId,
           input: {
-            kind: 'damage_resistance',
-            sourceSpellSlug: 'fire-shield',
+            kind: "damage_resistance",
+            sourceSpellSlug: "fire-shield",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { damageTypes: ['fire', 'cold'] },
-            expiresAt: { kind: 'rounds', value: 100 },
+            payload: { damageTypes: ["fire", "cold"] },
+            expiresAt: { kind: "rounds", value: 100 },
             requiresConcentration: false,
           },
         },
       ];
     }
 
-    case 'globe-of-invulnerability': {
+    case "globe-of-invulnerability": {
       // RAW: Immune to spells of 5th level or lower. Concentration, 1 min.
       return [
         {
           targetParticipantId: ctx.casterParticipantId,
           input: {
-            kind: 'damage_immunity_threshold',
-            sourceSpellSlug: 'globe-of-invulnerability',
+            kind: "damage_immunity_threshold",
+            sourceSpellSlug: "globe-of-invulnerability",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 5 },
-            expiresAt: { kind: 'concentration' },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
       ];
     }
 
-    case 'true-seeing': {
+    case "true-seeing": {
       // RAW: Truesight 120 ft. No concentration. Duration 1 hour = 600 rounds.
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
           targetParticipantId: target,
           input: {
-            kind: 'true_sight',
-            sourceSpellSlug: 'true-seeing',
+            kind: "true_sight",
+            sourceSpellSlug: "true-seeing",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 120 },
-            expiresAt: { kind: 'rounds', value: 600 },
+            expiresAt: { kind: "rounds", value: 600 },
             requiresConcentration: false,
           },
         },
       ];
     }
 
-    case 'hex': {
+    case "hex": {
       // RAW 2024 XPHB Hex: 1 target, concentração 1h. Attacker deals extra 1d6 necrotic
       // em qualquer weapon attack que hit no target enquanto hex mantém.
       // Bonus action cast. Damage type: necrotic. Target ability check disadvantage (one chosen).
@@ -410,18 +410,18 @@ export function materializeSpellEffects(
         {
           targetParticipantId: target,
           input: {
-            kind: 'hex_mark',
-            sourceSpellSlug: 'hex',
+            kind: "hex_mark",
+            sourceSpellSlug: "hex",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { riderDice: '1d6', riderType: 'necrotic' },
-            expiresAt: { kind: 'concentration' },
+            payload: { riderDice: "1d6", riderType: "necrotic" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },
       ];
     }
-    case 'hunters-mark':
-    case 'hunter-mark': {
+    case "hunters-mark":
+    case "hunter-mark": {
       // RAW 2024 XPHB Hunter's Mark: 1 target, concentração 1h. Attacker deals
       // extra 1d6 em cada weapon attack hit no target enquanto marca mantém.
       // Bonus action cast. No damage type increase (damage type do weapon).
@@ -431,11 +431,11 @@ export function materializeSpellEffects(
         {
           targetParticipantId: target,
           input: {
-            kind: 'hunter_mark',
-            sourceSpellSlug: 'hunters-mark',
+            kind: "hunter_mark",
+            sourceSpellSlug: "hunters-mark",
             sourceCasterParticipantId: ctx.casterParticipantId,
-            payload: { riderDice: '1d6' },
-            expiresAt: { kind: 'concentration' },
+            payload: { riderDice: "1d6" },
+            expiresAt: { kind: "concentration" },
             requiresConcentration: true,
           },
         },

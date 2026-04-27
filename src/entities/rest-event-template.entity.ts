@@ -4,8 +4,8 @@ import {
   Entity,
   Index,
   PrimaryGeneratedColumn,
-} from 'typeorm';
-import type { RestEventTriggered } from './rest-session.entity';
+} from "typeorm";
+import type { RestEventTriggered } from "./rest-session.entity";
 
 /**
  * Spec 016 — RestEventTemplate (camp events pool, BG3-inspired).
@@ -15,28 +15,28 @@ import type { RestEventTriggered } from './rest-session.entity';
  *
  * Ver `specs/016-play-shell-foundation/spec.md` §6.3.
  */
-@Entity('rest_event_templates')
+@Entity("rest_event_templates")
 export class RestEventTemplateEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ type: 'varchar', length: 40 })
+  @Column({ type: "varchar", length: 40 })
   kind: RestEventTriggered;
 
   /**
    * Pseudo-DSL ou função (avaliada server-side).
    * Ex: `bond_score>5 AND intro_scene>2_scenes_ago`
    */
-  @Column({ name: 'trigger_condition', type: 'text' })
+  @Column({ name: "trigger_condition", type: "text" })
   triggerCondition: string;
 
-  @Column({ type: 'int' })
+  @Column({ type: "int" })
   weight: number;
 
-  @Column({ name: 'narrative_template_id', type: 'uuid', nullable: true })
+  @Column({ name: "narrative_template_id", type: "uuid", nullable: true })
   narrativeTemplateId?: string;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 }

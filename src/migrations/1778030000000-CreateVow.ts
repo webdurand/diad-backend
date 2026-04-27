@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — Ironsworn Vow + close-roll mechanic.
@@ -10,7 +10,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   progress < ambos → miss
  */
 export class CreateVow1778030000000 implements MigrationInterface {
-  name = 'CreateVow1778030000000';
+  name = "CreateVow1778030000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

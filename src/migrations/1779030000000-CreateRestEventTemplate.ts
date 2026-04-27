@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 016 M0 — RestEventTemplate (camp events pool, BG3-inspired).
@@ -11,7 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Ver `specs/016-play-shell-foundation/spec.md` §6.3 e contract `rest-session.json#restEventTemplate`.
  */
 export class CreateRestEventTemplate1779030000000 implements MigrationInterface {
-  name = 'CreateRestEventTemplate1779030000000';
+  name = "CreateRestEventTemplate1779030000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
@@ -39,7 +39,9 @@ export class CreateRestEventTemplate1779030000000 implements MigrationInterface 
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_rest_event_templates_kind`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_rest_event_templates_kind`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS rest_event_templates`);
   }
 }

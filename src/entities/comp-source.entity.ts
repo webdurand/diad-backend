@@ -1,9 +1,9 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
-import type { EditionRules } from 'src/shared/edition-rules';
+import { Entity, Column, PrimaryGeneratedColumn } from "typeorm";
+import type { EditionRules } from "src/shared/edition-rules";
 
-@Entity('comp_sources')
+@Entity("comp_sources")
 export class CompSourceEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column({ unique: true })
@@ -25,12 +25,12 @@ export class CompSourceEntity {
   group: string;
 
   /** Edition-specific rules/capabilities for extensible ruleset support */
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   rules?: EditionRules;
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   created_at: Date;
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   updated_at: Date;
 }

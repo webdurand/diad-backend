@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Fix equipment_options dos backgrounds PHB 2014.
@@ -13,65 +13,68 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Esta migration normaliza os 9 backgrounds -phb para o formato correto:
  *   { _: [{ name: 'Crowbar', slug: 'crowbar' }, ...], gold: 15 }
  */
-export class FixPhb2014BackgroundEquipment1776800000000
-  implements MigrationInterface
-{
-  name = 'FixPhb2014BackgroundEquipment1776800000000';
+export class FixPhb2014BackgroundEquipment1776800000000 implements MigrationInterface {
+  name = "FixPhb2014BackgroundEquipment1776800000000";
 
   private readonly equipmentBySlug: Record<
     string,
     { items: string[]; gold: number }
   > = {
-    'acolyte-phb': {
+    "acolyte-phb": {
       items: [
-        'holy-symbol',
-        'prayer-book',
-        'stick-of-incense',
-        'vestments',
-        'common-clothes',
+        "holy-symbol",
+        "prayer-book",
+        "stick-of-incense",
+        "vestments",
+        "common-clothes",
       ],
       gold: 15,
     },
-    'charlatan-phb': {
-      items: ['fine-clothes', 'disguise-kit', 'tools-of-the-con'],
+    "charlatan-phb": {
+      items: ["fine-clothes", "disguise-kit", "tools-of-the-con"],
       gold: 15,
     },
-    'criminal-phb': {
-      items: ['crowbar', 'dark-common-clothes', 'pouch'],
+    "criminal-phb": {
+      items: ["crowbar", "dark-common-clothes", "pouch"],
       gold: 15,
     },
-    'entertainer-phb': {
-      items: ['musical-instrument', 'costume', 'pouch'],
+    "entertainer-phb": {
+      items: ["musical-instrument", "costume", "pouch"],
       gold: 15,
     },
-    'hermit-phb': {
-      items: ['scroll-case', 'winter-blanket', 'herbalism-kit', 'common-clothes'],
+    "hermit-phb": {
+      items: [
+        "scroll-case",
+        "winter-blanket",
+        "herbalism-kit",
+        "common-clothes",
+      ],
       gold: 5,
     },
-    'noble-phb': {
-      items: ['fine-clothes', 'signet-ring', 'scroll-of-pedigree'],
+    "noble-phb": {
+      items: ["fine-clothes", "signet-ring", "scroll-of-pedigree"],
       gold: 25,
     },
-    'sage-phb': {
+    "sage-phb": {
       items: [
-        'ink',
-        'quill',
-        'small-knife',
-        'letter-from-dead-colleague',
-        'common-clothes',
+        "ink",
+        "quill",
+        "small-knife",
+        "letter-from-dead-colleague",
+        "common-clothes",
       ],
       gold: 10,
     },
-    'sailor-phb': {
-      items: ['belaying-pin', 'silk-rope', 'lucky-charm', 'common-clothes'],
+    "sailor-phb": {
+      items: ["belaying-pin", "silk-rope", "lucky-charm", "common-clothes"],
       gold: 10,
     },
-    'soldier-phb': {
+    "soldier-phb": {
       items: [
-        'insignia-of-rank',
-        'trophy-from-fallen-enemy',
-        'dice-set',
-        'common-clothes',
+        "insignia-of-rank",
+        "trophy-from-fallen-enemy",
+        "dice-set",
+        "common-clothes",
       ],
       gold: 10,
     },
@@ -79,13 +82,15 @@ export class FixPhb2014BackgroundEquipment1776800000000
 
   private humanize(slug: string): string {
     return slug
-      .split('-')
+      .split("-")
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
+      .join(" ");
   }
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    for (const [slug, { items, gold }] of Object.entries(this.equipmentBySlug)) {
+    for (const [slug, { items, gold }] of Object.entries(
+      this.equipmentBySlug,
+    )) {
       const equipmentOptions = {
         _: items.map((itemSlug) => ({
           name: this.humanize(itemSlug),
@@ -102,7 +107,9 @@ export class FixPhb2014BackgroundEquipment1776800000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    for (const [slug, { items, gold }] of Object.entries(this.equipmentBySlug)) {
+    for (const [slug, { items, gold }] of Object.entries(
+      this.equipmentBySlug,
+    )) {
       const equipmentOptions = { starting: items, gold };
 
       await queryRunner.query(

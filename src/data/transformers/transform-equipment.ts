@@ -1,8 +1,12 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntriesAsText } from './entries-parser';
-import { ITEM_TYPE_MAP, DAMAGE_TYPE_MAP, WEAPON_PROPERTY_MAP } from './code-maps';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntriesAsText } from "./entries-parser";
+import {
+  ITEM_TYPE_MAP,
+  DAMAGE_TYPE_MAP,
+  WEAPON_PROPERTY_MAP,
+} from "./code-maps";
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -66,21 +70,22 @@ export interface TransformedEquipment {
 // ────────────────────────────────────────────────────────────────
 
 function convertCost(valueCp: number): { quantity: number; unit: string } {
-  if (valueCp >= 100) return { quantity: Math.floor(valueCp / 100), unit: 'gp' };
-  if (valueCp >= 10) return { quantity: Math.floor(valueCp / 10), unit: 'sp' };
-  return { quantity: valueCp, unit: 'cp' };
+  if (valueCp >= 100)
+    return { quantity: Math.floor(valueCp / 100), unit: "gp" };
+  if (valueCp >= 10) return { quantity: Math.floor(valueCp / 10), unit: "sp" };
+  return { quantity: valueCp, unit: "cp" };
 }
 
 function extractTypeCode(type: string): string {
   // 5etools uses "M|XPHB", "HA|XPHB" — extract the code before the pipe
-  return type.split('|')[0];
+  return type.split("|")[0];
 }
 
-function parseDamage(
-  item: FiveToolsBaseItem,
-): TransformedEquipment['damage'] {
+function parseDamage(item: FiveToolsBaseItem): TransformedEquipment["damage"] {
   if (!item.dmg1) return null;
-  const dmgType = item.dmgType ? (DAMAGE_TYPE_MAP[item.dmgType] ?? item.dmgType.toLowerCase()) : 'unknown';
+  const dmgType = item.dmgType
+    ? (DAMAGE_TYPE_MAP[item.dmgType] ?? item.dmgType.toLowerCase())
+    : "unknown";
   return {
     dice: item.dmg1,
     type: dmgType,
@@ -90,32 +95,34 @@ function parseDamage(
 
 function parseArmorClass(
   item: FiveToolsBaseItem,
-): TransformedEquipment['armor_class'] {
+): TransformedEquipment["armor_class"] {
   if (item.ac == null) return null;
-  const typeCode = item.type ? extractTypeCode(item.type) : '';
+  const typeCode = item.type ? extractTypeCode(item.type) : "";
   // Light armor: +full DEX, Medium: +DEX (max 2), Heavy: no DEX, Shield: +2
-  if (typeCode === 'LA') {
+  if (typeCode === "LA") {
     return { base: item.ac, dex_bonus: true };
   }
-  if (typeCode === 'MA') {
+  if (typeCode === "MA") {
     return { base: item.ac, dex_bonus: true, max_bonus: 2 };
   }
-  if (typeCode === 'HA') {
+  if (typeCode === "HA") {
     return { base: item.ac, dex_bonus: false };
   }
-  if (typeCode === 'S') {
+  if (typeCode === "S") {
     return { base: item.ac, dex_bonus: false };
   }
   return { base: item.ac, dex_bonus: false };
 }
 
-function parseProperties(props?: (string | Record<string, unknown>)[]): string[] {
+function parseProperties(
+  props?: (string | Record<string, unknown>)[],
+): string[] {
   if (!props?.length) return [];
   return props
     .map((p) => {
-      const raw = typeof p === 'string' ? p : (p as Record<string, unknown>).uid as string ?? '';
-      if (!raw) return '';
-      const code = raw.split('|')[0];
+      const raw = typeof p === "string" ? p : ((p.uid as string) ?? "");
+      if (!raw) return "";
+      const code = raw.split("|")[0];
       return WEAPON_PROPERTY_MAP[code] ?? code.toLowerCase();
     })
     .filter(Boolean);
@@ -124,17 +131,17 @@ function parseProperties(props?: (string | Record<string, unknown>)[]): string[]
 function parseMasterySlugList(masteries?: string[]): string[] {
   if (!masteries?.length) return [];
   return masteries.map((m) => {
-    const name = m.split('|')[0];
+    const name = m.split("|")[0];
     return name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   });
 }
 
-function parseRange(rangeStr?: string): TransformedEquipment['range'] {
+function parseRange(rangeStr?: string): TransformedEquipment["range"] {
   if (!rangeStr) return null;
-  const parts = rangeStr.split('/').map(Number);
+  const parts = rangeStr.split("/").map(Number);
   if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
     return { normal: parts[0], long: parts[1] };
   }
@@ -156,10 +163,10 @@ function getCategorySlugs(item: FiveToolsBaseItem): string[] {
 
 // D&D 5e armor don/doff times by category
 const ARMOR_DON_DOFF: Record<string, { don: string; doff: string }> = {
-  LA: { don: '1 minute', doff: '1 minute' },
-  MA: { don: '5 minutes', doff: '1 minute' },
-  HA: { don: '10 minutes', doff: '5 minutes' },
-  S: { don: '1 action', doff: '1 action' },
+  LA: { don: "1 minute", doff: "1 minute" },
+  MA: { don: "5 minutes", doff: "1 minute" },
+  HA: { don: "10 minutes", doff: "5 minutes" },
+  S: { don: "1 action", doff: "1 action" },
 };
 
 function getDescription(item: FiveToolsBaseItem): string {
@@ -167,7 +174,7 @@ function getDescription(item: FiveToolsBaseItem): string {
     ...(item.entries ?? []),
     ...(item.additionalEntries ?? []),
   ];
-  if (!allEntries.length) return '';
+  if (!allEntries.length) return "";
   return parseEntriesAsText(allEntries as any[]);
 }
 
@@ -177,7 +184,7 @@ function getDescription(item: FiveToolsBaseItem): string {
 
 function transformItem(item: FiveToolsBaseItem): TransformedEquipment {
   const slug = generateSlug(item.name, item.source, item.srd52);
-  const typeCode = item.type ? extractTypeCode(item.type) : '';
+  const typeCode = item.type ? extractTypeCode(item.type) : "";
   const donDoff = ARMOR_DON_DOFF[typeCode];
 
   return {
@@ -186,7 +193,10 @@ function transformItem(item: FiveToolsBaseItem): TransformedEquipment {
     source_code: item.source,
     weight: item.weight ?? 0,
     description: getDescription(item),
-    cost: item.value != null ? convertCost(item.value) : { quantity: 0, unit: 'gp' },
+    cost:
+      item.value != null
+        ? convertCost(item.value)
+        : { quantity: 0, unit: "gp" },
     damage: parseDamage(item),
     armor_class: parseArmorClass(item),
     properties: parseProperties(item.property),
@@ -210,21 +220,19 @@ export function transformEquipment(): TransformedEquipment[] {
   // ── Source 1: items-base.json (baseitems) ──
   const baseFilePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/items-base.json',
+    "../5etools-src/data/items-base.json",
   );
-  const baseData = JSON.parse(fs.readFileSync(baseFilePath, 'utf-8'));
+  const baseData = JSON.parse(fs.readFileSync(baseFilePath, "utf-8"));
   const baseItems: FiveToolsBaseItem[] = baseData.baseitem ?? [];
 
   // ── Source 2: items.json (mundane items with rarity "none") ──
   const itemsFilePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/items.json',
+    "../5etools-src/data/items.json",
   );
-  const itemsData = JSON.parse(fs.readFileSync(itemsFilePath, 'utf-8'));
+  const itemsData = JSON.parse(fs.readFileSync(itemsFilePath, "utf-8"));
   const allItems: FiveToolsBaseItem[] = itemsData.item ?? [];
-  const mundaneItems = allItems.filter(
-    (i) => i.rarity === 'none' && i.srd52,
-  );
+  const mundaneItems = allItems.filter((i) => i.rarity === "none" && i.srd52);
 
   // ── Merge and deduplicate ──
   const seen = new Map<string, TransformedEquipment>();
@@ -234,7 +242,7 @@ export function transformEquipment(): TransformedEquipment[] {
     const transformed = transformItem(item);
     const existing = seen.get(transformed.slug);
     // Prefer XPHB/SRD52 version
-    if (!existing || item.srd52 || item.source === 'XPHB') {
+    if (!existing || item.srd52 || item.source === "XPHB") {
       seen.set(transformed.slug, transformed);
     }
   }

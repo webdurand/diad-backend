@@ -1,6 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { ITEM_TYPE_MAP } from './code-maps';
+import * as fs from "fs";
+import * as path from "path";
+import { ITEM_TYPE_MAP } from "./code-maps";
 
 export interface TransformedEquipmentCategory {
   slug: string;
@@ -10,49 +10,49 @@ export interface TransformedEquipmentCategory {
 
 // Human-readable names for 5etools item type codes
 const TYPE_NAME_MAP: Record<string, string> = {
-  M: 'Melee Weapon',
-  R: 'Ranged Weapon',
-  LA: 'Light Armor',
-  MA: 'Medium Armor',
-  HA: 'Heavy Armor',
-  S: 'Shield',
-  A: 'Ammunition',
-  G: 'Adventuring Gear',
+  M: "Melee Weapon",
+  R: "Ranged Weapon",
+  LA: "Light Armor",
+  MA: "Medium Armor",
+  HA: "Heavy Armor",
+  S: "Shield",
+  A: "Ammunition",
+  G: "Adventuring Gear",
   AT: "Artisan's Tools",
-  T: 'Tool',
-  INS: 'Instrument',
-  GS: 'Gaming Set',
-  SCF: 'Spellcasting Focus',
-  P: 'Potion',
-  SC: 'Scroll',
-  RD: 'Rod',
-  RG: 'Ring',
-  WD: 'Wand',
-  FD: 'Food and Drink',
-  MNT: 'Mount',
-  TAH: 'Tack and Harness',
-  TG: 'Trade Good',
-  $: 'Treasure',
-  $A: 'Art Object',
-  $C: 'Coinage',
-  $G: 'Gemstone',
-  VEH: 'Vehicle (Land)',
-  SHP: 'Vehicle (Water)',
-  AIR: 'Vehicle (Air)',
-  SPC: 'Vehicle (Space)',
-  EXP: 'Explosive',
-  AF: 'Ammunition (Firearm)',
-  OTH: 'Other',
-  GV: 'Generic Variant',
-  TB: 'Trade Bar',
+  T: "Tool",
+  INS: "Instrument",
+  GS: "Gaming Set",
+  SCF: "Spellcasting Focus",
+  P: "Potion",
+  SC: "Scroll",
+  RD: "Rod",
+  RG: "Ring",
+  WD: "Wand",
+  FD: "Food and Drink",
+  MNT: "Mount",
+  TAH: "Tack and Harness",
+  TG: "Trade Good",
+  $: "Treasure",
+  $A: "Art Object",
+  $C: "Coinage",
+  $G: "Gemstone",
+  VEH: "Vehicle (Land)",
+  SHP: "Vehicle (Water)",
+  AIR: "Vehicle (Air)",
+  SPC: "Vehicle (Space)",
+  EXP: "Explosive",
+  AF: "Ammunition (Firearm)",
+  OTH: "Other",
+  GV: "Generic Variant",
+  TB: "Trade Bar",
 };
 
 export function transformEquipmentCategories(): TransformedEquipmentCategory[] {
   const filePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/items-base.json',
+    "../5etools-src/data/items-base.json",
   );
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
 
   // Deduplicate by preferring XPHB source, falling back to first occurrence
   const itemTypes: { abbreviation: string; name: string; source: string }[] =
@@ -65,7 +65,7 @@ export function transformEquipmentCategories(): TransformedEquipmentCategory[] {
     const slug = ITEM_TYPE_MAP[abbr] ?? abbr.toLowerCase();
 
     // Prefer XPHB source over others
-    if (!seen.has(slug) || t.source === 'XPHB') {
+    if (!seen.has(slug) || t.source === "XPHB") {
       seen.set(slug, {
         slug,
         name: t.name || TYPE_NAME_MAP[abbr] || abbr,
@@ -80,7 +80,7 @@ export function transformEquipmentCategories(): TransformedEquipmentCategory[] {
       seen.set(slug, {
         slug,
         name: TYPE_NAME_MAP[code] || slug,
-        source_code: 'XPHB',
+        source_code: "XPHB",
       });
     }
   }

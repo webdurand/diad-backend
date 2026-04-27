@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FactionEntity } from 'src/entities/faction.entity';
-import { FactionRelationEntity } from 'src/entities/faction-relation.entity';
-import { randomBytes } from 'crypto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { FactionEntity } from "src/entities/faction.entity";
+import { FactionRelationEntity } from "src/entities/faction-relation.entity";
+import { randomBytes } from "crypto";
 
 export interface CreateFactionDto {
   name: string;
@@ -17,7 +17,7 @@ export interface CreateFactionDto {
 
 export interface SetFactionRelationDto {
   factionBId: string;
-  relationType: 'allied' | 'friendly' | 'neutral' | 'rival' | 'hostile' | 'war';
+  relationType: "allied" | "friendly" | "neutral" | "rival" | "hostile" | "war";
   description?: string;
   isKnownToParty?: boolean;
 }
@@ -53,7 +53,7 @@ export class FactionService {
   async listByCampaign(campaignId: string): Promise<FactionEntity[]> {
     return this.factionRepo.find({
       where: { campaignId },
-      order: { name: 'ASC' },
+      order: { name: "ASC" },
     });
   }
 
@@ -61,7 +61,7 @@ export class FactionService {
     const faction = await this.factionRepo.findOne({
       where: { id: factionId },
     });
-    if (!faction) throw new NotFoundException('Faccao nao encontrada.');
+    if (!faction) throw new NotFoundException("Faccao nao encontrada.");
     return faction;
   }
 
@@ -112,25 +112,25 @@ export class FactionService {
   async getRelations(campaignId: string): Promise<FactionRelationEntity[]> {
     const factions = await this.factionRepo.find({
       where: { campaignId },
-      select: ['id'],
+      select: ["id"],
     });
     const ids = factions.map((f) => f.id);
     if (ids.length === 0) return [];
 
     return this.relationRepo
-      .createQueryBuilder('r')
-      .leftJoinAndSelect('r.factionA', 'a')
-      .leftJoinAndSelect('r.factionB', 'b')
-      .where('r.faction_a_id IN (:...ids)', { ids })
+      .createQueryBuilder("r")
+      .leftJoinAndSelect("r.factionA", "a")
+      .leftJoinAndSelect("r.factionB", "b")
+      .where("r.faction_a_id IN (:...ids)", { ids })
       .getMany();
   }
 
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    const suffix = randomBytes(3).toString('hex');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const suffix = randomBytes(3).toString("hex");
     return `${base}-${suffix}`;
   }
 }

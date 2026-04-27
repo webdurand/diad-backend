@@ -2,13 +2,13 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   LoreEntryEntity,
   LoreEntryEntityType,
-} from 'src/entities/lore-entry.entity';
+} from "src/entities/lore-entry.entity";
 
 export interface CreateLoreEntryDto {
   name: string;
@@ -35,16 +35,18 @@ export class LoreEntryService {
     if (!dto.activationKeys?.length) {
       throw new BadRequestException({
         ok: false,
-        error: 'Lore entry precisa de pelo menos uma activationKey.',
-        code: 'LORE_ENTRY_NO_KEYS',
+        error: "Lore entry precisa de pelo menos uma activationKey.",
+        code: "LORE_ENTRY_NO_KEYS",
       });
     }
     const entry = this.repo.create({
       campaignId,
       name: dto.name,
       description: dto.description,
-      activationKeys: dto.activationKeys.map((k) => k.toLowerCase().trim()).filter(Boolean),
-      entityType: dto.entityType ?? 'lore',
+      activationKeys: dto.activationKeys
+        .map((k) => k.toLowerCase().trim())
+        .filter(Boolean),
+      entityType: dto.entityType ?? "lore",
       entityId: dto.entityId,
       isPersistent: dto.isPersistent ?? true,
       priority: this.clampPriority(dto.priority ?? 5),
@@ -56,7 +58,7 @@ export class LoreEntryService {
   async listByCampaign(campaignId: string): Promise<LoreEntryEntity[]> {
     return this.repo.find({
       where: { campaignId },
-      order: { priority: 'DESC', createdAt: 'ASC' },
+      order: { priority: "DESC", createdAt: "ASC" },
     });
   }
 
@@ -65,8 +67,8 @@ export class LoreEntryService {
     if (!entry) {
       throw new NotFoundException({
         ok: false,
-        error: 'Lore entry não encontrada.',
-        code: 'LORE_ENTRY_NOT_FOUND',
+        error: "Lore entry não encontrada.",
+        code: "LORE_ENTRY_NOT_FOUND",
       });
     }
     return entry;

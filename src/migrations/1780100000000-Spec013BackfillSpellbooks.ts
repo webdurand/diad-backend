@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 013 — Backfill ground-effect spells em E2E chars existentes.
@@ -18,29 +18,33 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * character_spells (não cria entry vazio); a magia adicionada vira
  * status='prepared' source='class' — exatamente o que o seed-character faz.
  */
-export class Spec013BackfillSpellbooks1780100000000
-  implements MigrationInterface
-{
-  name = 'Spec013BackfillSpellbooks1780100000000';
+export class Spec013BackfillSpellbooks1780100000000 implements MigrationInterface {
+  name = "Spec013BackfillSpellbooks1780100000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Mapping: pattern do nome → slugs de magia spec 013 a adicionar
     const mappings: Array<{ pattern: string; slugs: string[] }> = [
       {
-        pattern: 'wizard-L%',
-        slugs: ['grease', 'web', 'cloud-of-daggers', 'sleet-storm', 'wall-of-fire'],
+        pattern: "wizard-L%",
+        slugs: [
+          "grease",
+          "web",
+          "cloud-of-daggers",
+          "sleet-storm",
+          "wall-of-fire",
+        ],
       },
       {
-        pattern: 'druid-L%',
-        slugs: ['spike-growth', 'sleet-storm', 'wall-of-fire'],
+        pattern: "druid-L%",
+        slugs: ["spike-growth", "sleet-storm", "wall-of-fire"],
       },
       {
-        pattern: 'cleric-L%',
-        slugs: ['spirit-guardians'],
+        pattern: "cleric-L%",
+        slugs: ["spirit-guardians"],
       },
       {
-        pattern: 'ranger-L%',
-        slugs: ['spike-growth'],
+        pattern: "ranger-L%",
+        slugs: ["spike-growth"],
       },
     ];
 
@@ -71,10 +75,22 @@ export class Spec013BackfillSpellbooks1780100000000
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Best-effort revert: remove spec 013 spells de chars que match pattern.
     const mappings: Array<{ pattern: string; slugs: string[] }> = [
-      { pattern: 'wizard-L%', slugs: ['grease', 'web', 'cloud-of-daggers', 'sleet-storm', 'wall-of-fire'] },
-      { pattern: 'druid-L%', slugs: ['spike-growth', 'sleet-storm', 'wall-of-fire'] },
-      { pattern: 'cleric-L%', slugs: ['spirit-guardians'] },
-      { pattern: 'ranger-L%', slugs: ['spike-growth'] },
+      {
+        pattern: "wizard-L%",
+        slugs: [
+          "grease",
+          "web",
+          "cloud-of-daggers",
+          "sleet-storm",
+          "wall-of-fire",
+        ],
+      },
+      {
+        pattern: "druid-L%",
+        slugs: ["spike-growth", "sleet-storm", "wall-of-fire"],
+      },
+      { pattern: "cleric-L%", slugs: ["spirit-guardians"] },
+      { pattern: "ranger-L%", slugs: ["spike-growth"] },
     ];
     for (const { pattern, slugs } of mappings) {
       for (const slug of slugs) {

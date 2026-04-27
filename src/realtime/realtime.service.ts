@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { Server } from 'socket.io';
+import { Injectable, Logger } from "@nestjs/common";
+import type { Server } from "socket.io";
 
 /**
  * Programmatic API exposed to domain services for emitting realtime events.
@@ -26,7 +26,11 @@ export class RealtimeService {
     this.emitToRoom(`user:${userId}`, eventName, payload);
   }
 
-  broadcastToUsers(userIds: string[], eventName: string, payload: unknown): void {
+  broadcastToUsers(
+    userIds: string[],
+    eventName: string,
+    payload: unknown,
+  ): void {
     for (const userId of userIds) {
       this.emitToUser(userId, eventName, payload);
     }
@@ -36,7 +40,7 @@ export class RealtimeService {
     if (!this.server) return;
     const sockets = await this.server.in(`user:${userId}`).fetchSockets();
     for (const socket of sockets) {
-      if (reason) socket.emit('server:disconnect', { reason });
+      if (reason) socket.emit("server:disconnect", { reason });
       socket.disconnect(true);
     }
   }

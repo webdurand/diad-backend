@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { LocationEntity } from 'src/entities/location.entity';
-import { LocationConnectionEntity } from 'src/entities/location-connection.entity';
-import { randomBytes } from 'crypto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { LocationEntity } from "src/entities/location.entity";
+import { LocationConnectionEntity } from "src/entities/location-connection.entity";
+import { randomBytes } from "crypto";
 
 export interface CreateLocationDto {
   name: string;
@@ -69,20 +69,23 @@ export class LocationService {
   async getById(locationId: string): Promise<LocationEntity> {
     const loc = await this.locationRepo.findOne({
       where: { id: locationId },
-      relations: ['children'],
+      relations: ["children"],
     });
-    if (!loc) throw new NotFoundException('Local nao encontrado.');
+    if (!loc) throw new NotFoundException("Local nao encontrado.");
     return loc;
   }
 
   async getTree(campaignId: string): Promise<LocationEntity[]> {
     const all = await this.locationRepo.find({
       where: { campaignId },
-      order: { sortOrder: 'ASC', name: 'ASC' },
+      order: { sortOrder: "ASC", name: "ASC" },
     });
 
     // Build tree: root nodes have no parentId
-    const map = new Map<string, LocationEntity & { children: LocationEntity[] }>();
+    const map = new Map<
+      string,
+      LocationEntity & { children: LocationEntity[] }
+    >();
     const roots: LocationEntity[] = [];
 
     for (const loc of all) {
@@ -151,27 +154,24 @@ export class LocationService {
     locationId: string,
   ): Promise<LocationConnectionEntity[]> {
     return this.connectionRepo.find({
-      where: [
-        { fromLocationId: locationId },
-        { toLocationId: locationId },
-      ],
-      relations: ['fromLocation', 'toLocation'],
+      where: [{ fromLocationId: locationId }, { toLocationId: locationId }],
+      relations: ["fromLocation", "toLocation"],
     });
   }
 
   async listByCampaign(campaignId: string): Promise<LocationEntity[]> {
     return this.locationRepo.find({
       where: { campaignId },
-      order: { sortOrder: 'ASC', name: 'ASC' },
+      order: { sortOrder: "ASC", name: "ASC" },
     });
   }
 
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    const suffix = randomBytes(3).toString('hex');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const suffix = randomBytes(3).toString("hex");
     return `${base}-${suffix}`;
   }
 }

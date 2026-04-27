@@ -1,21 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import {
   failure,
   GameErrorCode,
   GameEventData,
   GameResult,
   success,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 
 const INCAPACITATING_SLUGS = new Set([
-  'incapacitated',
-  'paralyzed',
-  'petrified',
-  'stunned',
-  'unconscious',
+  "incapacitated",
+  "paralyzed",
+  "petrified",
+  "stunned",
+  "unconscious",
 ]);
 
 export interface LegendaryActionExecuteResult {
@@ -70,14 +70,17 @@ export class LegendaryActionService {
     monster: EncounterParticipantEntity,
     cost: 1 | 2 | 3,
     actionName: string,
-  ): Promise<{ events: GameEventData[]; result: LegendaryActionExecuteResult }> {
+  ): Promise<{
+    events: GameEventData[];
+    result: LegendaryActionExecuteResult;
+  }> {
     monster.legendaryPointsAvailable =
       (monster.legendaryPointsAvailable ?? 0) - cost;
     await this.participants.save(monster);
     return {
       events: [
         {
-          event_type: 'legendary_action_used',
+          event_type: "legendary_action_used",
           actor_participant_id: monster.id,
           data: {
             actionName,
@@ -108,7 +111,7 @@ export class LegendaryActionService {
     return {
       events: [
         {
-          event_type: 'legendary_pool_reset',
+          event_type: "legendary_pool_reset",
           actor_participant_id: monster.id,
           data: { legendaryPointsAvailable: monster.legendaryPointsAvailable },
         },

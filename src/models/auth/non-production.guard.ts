@@ -3,7 +3,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
-} from '@nestjs/common';
+} from "@nestjs/common";
 
 /**
  * Guard que bloqueia endpoints em ambiente de produção.
@@ -19,13 +19,13 @@ import {
 export class NonProductionGuard implements CanActivate {
   canActivate(_context: ExecutionContext): boolean {
     const env = process.env.NODE_ENV;
-    const override = process.env.ALLOW_TEST_ENDPOINTS === 'true';
+    const override = process.env.ALLOW_TEST_ENDPOINTS === "true";
 
-    if (env === 'production' && !override) {
+    if (env === "production" && !override) {
       throw new ForbiddenException({
-        code: 'DISABLED_IN_PRODUCTION',
+        code: "DISABLED_IN_PRODUCTION",
         message:
-          'Este endpoint está desabilitado em produção. Use ALLOW_TEST_ENDPOINTS=true para override em staging.',
+          "Este endpoint está desabilitado em produção. Use ALLOW_TEST_ENDPOINTS=true para override em staging.",
       });
     }
 

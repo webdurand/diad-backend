@@ -1,16 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterStateEntity,
   CharacterClassEntity,
   CharacterAbilityScoreEntity,
   CharacterLevelUpEntity,
-} from 'src/entities';
-import { XP_THRESHOLDS, normalizeClassSlug } from 'src/shared/srd-constants';
-import { getAbilityModifier } from 'src/shared/srd-utils';
-import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
+} from "src/entities";
+import { XP_THRESHOLDS, normalizeClassSlug } from "src/shared/srd-constants";
+import { getAbilityModifier } from "src/shared/srd-utils";
+import {
+  ensureCharacterOwnership,
+  getCharacterState,
+} from "src/shared/character-guard";
 
 export interface HpUpdateDto {
   damage?: number;
@@ -155,7 +162,7 @@ export class CharacterStateService {
   private async computeMaxHp(characterId: string): Promise<number> {
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },
-      order: { order: 'ASC' },
+      order: { order: "ASC" },
     });
     const primaryClass = charClasses[0];
     if (!primaryClass) return 10;
@@ -164,7 +171,7 @@ export class CharacterStateService {
       where: { character_id: characterId },
     });
     const conAbility = charAbilities.find(
-      (a) => a.ability_score.slug === 'con',
+      (a) => a.ability_score.slug === "con",
     );
     const conMod = conAbility
       ? getAbilityModifier(conAbility.base_score + conAbility.bonus)
@@ -195,14 +202,14 @@ export class CharacterStateService {
     await this.ensureOwnership(userId, characterId);
 
     if (dto.damage !== undefined && dto.damage < 0) {
-      throw new BadRequestException('Dano deve ser um valor positivo.');
+      throw new BadRequestException("Dano deve ser um valor positivo.");
     }
     if (dto.healing !== undefined && dto.healing < 0) {
-      throw new BadRequestException('Cura deve ser um valor positivo.');
+      throw new BadRequestException("Cura deve ser um valor positivo.");
     }
     if (dto.tempHp !== undefined && dto.tempHp < 0) {
       throw new BadRequestException(
-        'HP temporario deve ser um valor positivo.',
+        "HP temporario deve ser um valor positivo.",
       );
     }
 
@@ -235,8 +242,8 @@ export class CharacterStateService {
         state.current_hp = 1;
         knockedOut = true;
         const conds = Array.isArray(state.conditions) ? state.conditions : [];
-        if (!conds.includes('unconscious')) {
-          state.conditions = [...conds, 'unconscious'];
+        if (!conds.includes("unconscious")) {
+          state.conditions = [...conds, "unconscious"];
         }
       } else {
         state.current_hp = Math.max(0, state.current_hp - remaining);
@@ -287,7 +294,7 @@ export class CharacterStateService {
     await this.ensureOwnership(userId, characterId);
 
     if (dto.amount < 0) {
-      throw new BadRequestException('Quantidade de XP deve ser positiva.');
+      throw new BadRequestException("Quantidade de XP deve ser positiva.");
     }
 
     const state = await this.getState(characterId);
@@ -324,7 +331,10 @@ export class CharacterStateService {
       state.death_saves_success = 0;
       state.death_saves_fail = 0;
     } else if (dto.failuresDelta !== undefined && dto.failuresDelta > 0) {
-      state.death_saves_fail = Math.min(3, state.death_saves_fail + dto.failuresDelta);
+      state.death_saves_fail = Math.min(
+        3,
+        state.death_saves_fail + dto.failuresDelta,
+      );
     } else if (dto.rollValue === 20) {
       // Natural 20: regain 1 HP, reset all death saves, regain consciousness
       state.current_hp = 1;
@@ -338,7 +348,10 @@ export class CharacterStateService {
       if (dto.success || (dto.rollValue !== undefined && dto.rollValue >= 10)) {
         state.death_saves_success = Math.min(3, state.death_saves_success + 1);
       }
-      if (dto.fail || (dto.rollValue !== undefined && dto.rollValue < 10 && dto.rollValue > 1)) {
+      if (
+        dto.fail ||
+        (dto.rollValue !== undefined && dto.rollValue < 10 && dto.rollValue > 1)
+      ) {
         state.death_saves_fail = Math.min(3, state.death_saves_fail + 1);
       }
     }
@@ -365,9 +378,11 @@ export class CharacterStateService {
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },
     });
-    const monk = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
+    const monk = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === "monk",
+    );
     if (!monk || monk.class_level < 2) {
-      throw new BadRequestException('Personagem nao possui pontos de Ki.');
+      throw new BadRequestException("Personagem nao possui pontos de Ki.");
     }
 
     const total = monk.class_level;

@@ -6,19 +6,19 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-} from 'typeorm';
-import { CampaignEntity } from './campaign.entity';
+} from "typeorm";
+import { CampaignEntity } from "./campaign.entity";
 
 export type VowRank =
-  | 'troublesome'
-  | 'dangerous'
-  | 'formidable'
-  | 'extreme'
-  | 'epic';
+  | "troublesome"
+  | "dangerous"
+  | "formidable"
+  | "extreme"
+  | "epic";
 
-export type VowStatus = 'open' | 'fulfilled' | 'forsaken';
+export type VowStatus = "open" | "fulfilled" | "forsaken";
 
-export type CloseRollOutcome = 'strong_hit' | 'weak_hit' | 'miss';
+export type CloseRollOutcome = "strong_hit" | "weak_hit" | "miss";
 
 export interface VowMilestoneCondition {
   description: string;
@@ -35,44 +35,44 @@ export interface VowCloseRollResult {
   rolledAt: string;
 }
 
-@Entity('vows')
+@Entity("vows")
 export class VowEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ name: 'campaign_id', type: 'uuid' })
+  @Column({ name: "campaign_id", type: "uuid" })
   campaignId: string;
 
-  @ManyToOne(() => CampaignEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'campaign_id' })
+  @ManyToOne(() => CampaignEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "campaign_id" })
   campaign: CampaignEntity;
 
-  @Column({ type: 'text' })
+  @Column({ type: "text" })
   description: string;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: "varchar" })
   rank: VowRank;
 
-  @Column({ type: 'numeric', precision: 4, scale: 2, default: 0 })
+  @Column({ type: "numeric", precision: 4, scale: 2, default: 0 })
   progress: number;
 
-  @Column({ type: 'varchar', default: 'open' })
+  @Column({ type: "varchar", default: "open" })
   status: VowStatus;
 
   @Index()
-  @Column({ name: 'is_main_vow', type: 'boolean', default: false })
+  @Column({ name: "is_main_vow", type: "boolean", default: false })
   isMainVow: boolean;
 
-  @Column({ name: 'milestone_conditions', type: 'jsonb', default: [] })
+  @Column({ name: "milestone_conditions", type: "jsonb", default: [] })
   milestoneConditions: VowMilestoneCondition[];
 
-  @Column({ name: 'close_roll_result', type: 'jsonb', nullable: true })
+  @Column({ name: "close_roll_result", type: "jsonb", nullable: true })
   closeRollResult?: VowCloseRollResult;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 
-  @Column({ name: 'fulfilled_at', type: 'timestamptz', nullable: true })
+  @Column({ name: "fulfilled_at", type: "timestamptz", nullable: true })
   fulfilledAt?: Date;
 }

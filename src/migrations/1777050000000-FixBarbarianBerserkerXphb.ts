@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Barbarian — Fix data 2024 XPHB:
@@ -15,7 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *    ser usadas em seeds 2014 futuros via outra spec).
  */
 export class FixBarbarianBerserkerXphb1777050000000 implements MigrationInterface {
-  name = 'FixBarbarianBerserkerXphb1777050000000';
+  name = "FixBarbarianBerserkerXphb1777050000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     // --- Parte 1: Swap Berserker L10 (intimidating-presence) ↔ L14 (retaliation)

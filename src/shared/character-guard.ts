@@ -1,8 +1,8 @@
 // Shared character ownership and state helpers — eliminates duplication across 4 services
 
-import { NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
-import { CharacterEntity, CharacterStateEntity } from 'src/entities';
+import { NotFoundException } from "@nestjs/common";
+import { Repository } from "typeorm";
+import { CharacterEntity, CharacterStateEntity } from "src/entities";
 
 /**
  * Ensures the character belongs to the given user.
@@ -19,7 +19,7 @@ export async function ensureCharacterOwnership(
     relations,
   });
   if (!character) {
-    throw new NotFoundException('Personagem nao encontrado.');
+    throw new NotFoundException("Personagem nao encontrado.");
   }
   return character;
 }
@@ -35,7 +35,7 @@ export async function getCharacterState(
     where: { character_id: characterId },
   });
   if (!state) {
-    throw new NotFoundException('Estado do personagem nao encontrado.');
+    throw new NotFoundException("Estado do personagem nao encontrado.");
   }
   return state;
 }

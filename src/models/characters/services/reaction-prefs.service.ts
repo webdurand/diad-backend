@@ -1,14 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterClassEntity,
   CharacterStateEntity,
   ReactionDefaultEntity,
-} from 'src/entities';
-import type { ReactionState } from 'src/entities/reaction-default.entity';
-import { ensureCharacterOwnership, getCharacterState } from 'src/shared/character-guard';
+} from "src/entities";
+import type { ReactionState } from "src/entities/reaction-default.entity";
+import {
+  ensureCharacterOwnership,
+  getCharacterState,
+} from "src/shared/character-guard";
 
 /**
  * Spec 016 M5 — Reaction prefs service.
@@ -23,7 +26,7 @@ export interface ReactionPrefEntry {
   state: ReactionState;
   consumesSpellSlot: boolean;
   description?: string;
-  source: 'default' | 'override';
+  source: "default" | "override";
 }
 
 @Injectable()
@@ -45,20 +48,23 @@ export class ReactionPrefsService {
   ): Promise<ReactionPrefEntry[]> {
     await ensureCharacterOwnership(this.characterRepo, userId, characterId);
     const state = await getCharacterState(this.stateRepo, characterId);
-    const overrides = (state.reaction_prefs ?? {}) as Record<string, ReactionState>;
+    const overrides = (state.reaction_prefs ?? {}) as Record<
+      string,
+      ReactionState
+    >;
 
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId } as any,
-      relations: ['class'],
+      relations: ["class"],
     });
     const slugs = charClasses
       .map((c: any) => c.class?.slug)
-      .filter((s: unknown): s is string => typeof s === 'string');
+      .filter((s: unknown): s is string => typeof s === "string");
 
     const defaults = slugs.length
       ? await this.reactionDefaultRepo
-          .createQueryBuilder('rd')
-          .where('rd.classSlug IN (:...slugs)', { slugs })
+          .createQueryBuilder("rd")
+          .where("rd.classSlug IN (:...slugs)", { slugs })
           .getMany()
       : [];
 
@@ -72,7 +78,7 @@ export class ReactionPrefsService {
         state: overridden ?? d.defaultState,
         consumesSpellSlot: d.consumesSpellSlot,
         description: d.description,
-        source: overridden ? 'override' : 'default',
+        source: overridden ? "override" : "default",
       });
     }
     // Custom overrides sem default correspondente (raro, mas suportado).
@@ -82,7 +88,7 @@ export class ReactionPrefsService {
         reactionName: name,
         state,
         consumesSpellSlot: false,
-        source: 'override',
+        source: "override",
       });
     }
     return merged;
@@ -94,14 +100,17 @@ export class ReactionPrefsService {
     reactionName: string,
     state: ReactionState,
   ): Promise<{ ok: true; reactionName: string; state: ReactionState }> {
-    if (!['auto', 'ask', 'off'].includes(state)) {
+    if (!["auto", "ask", "off"].includes(state)) {
       throw new NotFoundException(
         `Estado de reaction inválido: "${state}". Use auto|ask|off.`,
       );
     }
     await ensureCharacterOwnership(this.characterRepo, userId, characterId);
     const stateRow = await getCharacterState(this.stateRepo, characterId);
-    const prefs = ((stateRow.reaction_prefs ?? {}) as Record<string, ReactionState>);
+    const prefs = (stateRow.reaction_prefs ?? {}) as Record<
+      string,
+      ReactionState
+    >;
     prefs[reactionName] = state;
     stateRow.reaction_prefs = prefs;
     await this.stateRepo.save(stateRow);

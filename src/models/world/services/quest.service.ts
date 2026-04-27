@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { QuestEntity } from 'src/entities/quest.entity';
-import { QuestObjectiveEntity } from 'src/entities/quest-objective.entity';
-import { QuestPrerequisiteEntity } from 'src/entities/quest-prerequisite.entity';
-import { randomBytes } from 'crypto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { QuestEntity } from "src/entities/quest.entity";
+import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
+import { QuestPrerequisiteEntity } from "src/entities/quest-prerequisite.entity";
+import { randomBytes } from "crypto";
 
 export interface CreateQuestDto {
   name: string;
@@ -13,7 +13,12 @@ export interface CreateQuestDto {
   storyArcId?: string;
   giverNpcId?: string;
   locationId?: string;
-  rewards?: { xp?: number; gold?: number; items?: string[]; reputation?: Record<string, number> };
+  rewards?: {
+    xp?: number;
+    gold?: number;
+    items?: string[];
+    reputation?: Record<string, number>;
+  };
   levelRange?: { min?: number; max?: number };
   objectives?: Array<{
     description: string;
@@ -26,7 +31,13 @@ export interface UpdateQuestDto {
   name?: string;
   description?: string;
   descriptionHidden?: string;
-  status?: 'unknown' | 'available' | 'active' | 'completed' | 'failed' | 'abandoned';
+  status?:
+    | "unknown"
+    | "available"
+    | "active"
+    | "completed"
+    | "failed"
+    | "abandoned";
   storyArcId?: string;
   giverNpcId?: string;
   locationId?: string;
@@ -44,10 +55,7 @@ export class QuestService {
     private readonly prereqRepo: Repository<QuestPrerequisiteEntity>,
   ) {}
 
-  async create(
-    campaignId: string,
-    dto: CreateQuestDto,
-  ): Promise<QuestEntity> {
+  async create(campaignId: string, dto: CreateQuestDto): Promise<QuestEntity> {
     const slug = this.generateSlug(dto.name);
     const quest = this.questRepo.create({
       campaignId,
@@ -60,7 +68,7 @@ export class QuestService {
       locationId: dto.locationId,
       rewards: dto.rewards ?? {},
       levelRange: dto.levelRange,
-      status: 'unknown',
+      status: "unknown",
     });
 
     const saved = await this.questRepo.save(quest);
@@ -73,7 +81,7 @@ export class QuestService {
           pathGroup: o.pathGroup,
           isOptional: o.isOptional ?? false,
           sortOrder: i,
-          status: 'locked',
+          status: "locked",
         }),
       );
       await this.objectiveRepo.save(objectives);
@@ -85,9 +93,9 @@ export class QuestService {
   async getById(questId: string): Promise<QuestEntity> {
     const quest = await this.questRepo.findOne({
       where: { id: questId },
-      relations: ['objectives', 'giverNpc', 'location', 'storyArc'],
+      relations: ["objectives", "giverNpc", "location", "storyArc"],
     });
-    if (!quest) throw new NotFoundException('Quest nao encontrada.');
+    if (!quest) throw new NotFoundException("Quest nao encontrada.");
     return quest;
   }
 
@@ -99,8 +107,8 @@ export class QuestService {
     if (status) where.status = status;
     return this.questRepo.find({
       where,
-      relations: ['objectives'],
-      order: { sortOrder: 'ASC', name: 'ASC' },
+      relations: ["objectives"],
+      order: { sortOrder: "ASC", name: "ASC" },
     });
   }
 
@@ -110,7 +118,7 @@ export class QuestService {
     const saved = await this.questRepo.save(quest);
 
     // If quest completed, unlock dependent quests
-    if (dto.status === 'completed' || dto.status === 'failed') {
+    if (dto.status === "completed" || dto.status === "failed") {
       await this.cascadeUnlock(saved);
     }
 
@@ -119,12 +127,12 @@ export class QuestService {
 
   async updateObjectiveStatus(
     objectiveId: string,
-    status: 'locked' | 'active' | 'completed' | 'failed' | 'optional',
+    status: "locked" | "active" | "completed" | "failed" | "optional",
   ): Promise<QuestObjectiveEntity> {
     const obj = await this.objectiveRepo.findOne({
       where: { id: objectiveId },
     });
-    if (!obj) throw new NotFoundException('Objetivo nao encontrado.');
+    if (!obj) throw new NotFoundException("Objetivo nao encontrado.");
     obj.status = status;
     return this.objectiveRepo.save(obj);
   }
@@ -132,7 +140,7 @@ export class QuestService {
   async addPrerequisite(
     questId: string,
     requiredQuestId: string,
-    requiredStatus = 'completed',
+    requiredStatus = "completed",
   ): Promise<QuestPrerequisiteEntity> {
     const prereq = this.prereqRepo.create({
       questId,
@@ -158,7 +166,7 @@ export class QuestService {
     const questStatusMap = new Map(allQuests.map((q) => [q.id, q.status]));
 
     return allQuests.filter((q) => {
-      if (q.status !== 'unknown') return false;
+      if (q.status !== "unknown") return false;
       const reqs = prereqMap.get(q.id) ?? [];
       return reqs.every(
         (r) => questStatusMap.get(r.requiredQuestId) === r.requiredStatus,
@@ -185,7 +193,7 @@ export class QuestService {
       const depQuest = await this.questRepo.findOne({
         where: { id: dep.questId },
       });
-      if (!depQuest || depQuest.status !== 'unknown') continue;
+      if (!depQuest || depQuest.status !== "unknown") continue;
 
       const allMet = await Promise.all(
         allPrereqs.map(async (p) => {
@@ -197,7 +205,7 @@ export class QuestService {
       );
 
       if (allMet.every(Boolean)) {
-        depQuest.status = 'available';
+        depQuest.status = "available";
         await this.questRepo.save(depQuest);
       }
     }
@@ -206,9 +214,9 @@ export class QuestService {
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    const suffix = randomBytes(3).toString('hex');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const suffix = randomBytes(3).toString("hex");
     return `${base}-${suffix}`;
   }
 }

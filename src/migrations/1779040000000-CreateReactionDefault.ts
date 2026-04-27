@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 016 M0 — ReactionDefault per (class, reaction).
@@ -14,7 +14,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Ver `specs/016-play-shell-foundation/spec.md` §8.2 e contract `quick-adjust-state.json#reactions`.
  */
 export class CreateReactionDefault1779040000000 implements MigrationInterface {
-  name = 'CreateReactionDefault1779040000000';
+  name = "CreateReactionDefault1779040000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Weapon Mastery Tier B (RAW 2024) — tracking per-turn:
@@ -8,10 +8,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Ambas flags resetam em start-turn. Usa participant pra ser runtime-only
  * (não persistir entre encontros).
  */
-export class AddCleaveNickUsedToParticipant1777000000000
-  implements MigrationInterface
-{
-  name = 'AddCleaveNickUsedToParticipant1777000000000';
+export class AddCleaveNickUsedToParticipant1777000000000 implements MigrationInterface {
+  name = "AddCleaveNickUsedToParticipant1777000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

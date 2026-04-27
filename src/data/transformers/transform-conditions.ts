@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntriesAsText } from './entries-parser';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntriesAsText } from "./entries-parser";
 
 interface FiveToolsCondition {
   name: string;
@@ -23,15 +23,15 @@ export interface TransformedCondition {
 export function transformConditions(): TransformedCondition[] {
   const filePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/conditionsdiseases.json',
+    "../5etools-src/data/conditionsdiseases.json",
   );
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const conditions: FiveToolsCondition[] = data.condition ?? [];
 
   return conditions.map((c) => ({
     slug: generateSlug(c.name, c.source, c.srd52),
     name: c.name,
-    description: c.entries ? parseEntriesAsText(c.entries as any[]) : '',
+    description: c.entries ? parseEntriesAsText(c.entries as any[]) : "",
     source_code: c.source,
     raw: c as Record<string, unknown>,
   }));

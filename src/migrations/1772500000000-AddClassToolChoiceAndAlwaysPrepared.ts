@@ -1,8 +1,6 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddClassToolChoiceAndAlwaysPrepared1772500000000
-  implements MigrationInterface
-{
+export class AddClassToolChoiceAndAlwaysPrepared1772500000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "classes" ADD COLUMN IF NOT EXISTS "tool_choice" jsonb`,

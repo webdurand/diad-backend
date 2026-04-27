@@ -1,19 +1,19 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { EncounterService } from './encounter.service';
-import { DiceService } from './dice.service';
-import { EventService } from './event.service';
-import { EffectInstanceService } from './effect-instance.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { EncounterService } from "./encounter.service";
+import { DiceService } from "./dice.service";
+import { EventService } from "./event.service";
+import { EffectInstanceService } from "./effect-instance.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 
 /**
  * Barbarian L9 Brutal Strike (RAW 2024 XPHB).
@@ -47,7 +47,10 @@ export class BrutalStrikeService {
   ) {}
 
   /** L9-12: 1d10. L13-16: 1d10 (2 options permitidos). L17+: 2d10. */
-  private computeBrutalDamage(barbarianLevel: number): { roll: number; diceCount: 1 | 2 } {
+  private computeBrutalDamage(barbarianLevel: number): {
+    roll: number;
+    diceCount: 1 | 2;
+  } {
     const diceCount: 1 | 2 = barbarianLevel >= 17 ? 2 : 1;
     let total = 0;
     for (let i = 0; i < diceCount; i++) {
@@ -59,19 +62,33 @@ export class BrutalStrikeService {
   private async validateBarbarianL9(
     userId: string,
     participantId: string,
-  ): Promise<GameResult<{ barbarian: EncounterParticipantEntity; barbarianLevel: number }>> {
+  ): Promise<
+    GameResult<{
+      barbarian: EncounterParticipantEntity;
+      barbarianLevel: number;
+    }>
+  > {
     const barbarian = await this.encounterService.getParticipant(participantId);
-    if (barbarian.type !== 'pc' || !barbarian.characterId) {
-      return failure('Apenas PCs.', 'INVALID_PARTICIPANT');
+    if (barbarian.type !== "pc" || !barbarian.characterId) {
+      return failure("Apenas PCs.", "INVALID_PARTICIPANT");
     }
-    const sheet = await this.sheetService.computeSheet(userId, barbarian.characterId);
-    const barbLv = (sheet.classes ?? []).find((c) => c.slug === 'barbarian')?.level ?? 0;
-    const hasBrutalStrike = (sheet as unknown as { hasBrutalStrike?: boolean }).hasBrutalStrike === true;
+    const sheet = await this.sheetService.computeSheet(
+      userId,
+      barbarian.characterId,
+    );
+    const barbLv =
+      (sheet.classes ?? []).find((c) => c.slug === "barbarian")?.level ?? 0;
+    const hasBrutalStrike =
+      (sheet as unknown as { hasBrutalStrike?: boolean }).hasBrutalStrike ===
+      true;
     if (!hasBrutalStrike || barbLv < 9) {
-      return failure('Você não é Barbarian L9+ com Brutal Strike.', 'FEATURE_NOT_AVAILABLE');
+      return failure(
+        "Você não é Barbarian L9+ com Brutal Strike.",
+        "FEATURE_NOT_AVAILABLE",
+      );
     }
-    if (!(barbarian.conditions ?? []).includes('raging')) {
-      return failure('Brutal Strike exige Rage ativo.', 'RAGE_REQUIRED');
+    if (!(barbarian.conditions ?? []).includes("raging")) {
+      return failure("Brutal Strike exige Rage ativo.", "RAGE_REQUIRED");
     }
     return success({ barbarian, barbarianLevel: barbLv });
   }
@@ -96,7 +113,8 @@ export class BrutalStrikeService {
     if (!validate.ok) return validate;
     const { barbarian, barbarianLevel } = validate.value;
 
-    const target = await this.encounterService.getParticipant(targetParticipantId);
+    const target =
+      await this.encounterService.getParticipant(targetParticipantId);
     const { roll, diceCount } = this.computeBrutalDamage(barbarianLevel);
 
     // Damage direto em target (HP). Monster vs PC: mesmo approach do BM Trip.
@@ -106,16 +124,21 @@ export class BrutalStrikeService {
 
     // Attacker recebe move_bonus via effect (similar Tactical Shift rider)
     // Half speed calc: sheet.speed ÷ 2
-    const barbSheet = await this.sheetService.computeSheet(userId, barbarian.characterId!);
-    const halfSpeed = Math.floor((barbSheet as unknown as { speed: number }).speed / 2);
+    const barbSheet = await this.sheetService.computeSheet(
+      userId,
+      barbarian.characterId!,
+    );
+    const halfSpeed = Math.floor(
+      (barbSheet as unknown as { speed: number }).speed / 2,
+    );
 
     const event: GameEventData = {
-      event_type: 'class_feature_triggered',
+      event_type: "class_feature_triggered",
       actor_participant_id: barbarian.id,
       target_participant_id: target.id,
       data: {
-        featureSlug: 'brutal-strike',
-        option: 'forceful-blow',
+        featureSlug: "brutal-strike",
+        option: "forceful-blow",
         damage: roll,
         diceCount,
         targetPushFt: 10,
@@ -124,7 +147,9 @@ export class BrutalStrikeService {
         targetNewHp: target.currentHp,
       },
     };
-    const enc = await this.encounterRepo.findOne({ where: { id: encounterId } });
+    const enc = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
     if (enc?.sessionId) {
       await this.eventService.emit(enc.sessionId, encounterId, [event]);
     }
@@ -154,7 +179,8 @@ export class BrutalStrikeService {
     if (!validate.ok) return validate;
     const { barbarian, barbarianLevel } = validate.value;
 
-    const target = await this.encounterService.getParticipant(targetParticipantId);
+    const target =
+      await this.encounterService.getParticipant(targetParticipantId);
     const { roll, diceCount } = this.computeBrutalDamage(barbarianLevel);
 
     const prevHp = target.currentHp ?? 0;
@@ -163,21 +189,21 @@ export class BrutalStrikeService {
 
     // Aplica effect speed_reduction no target até fim próximo turno
     await this.effectInstances.addEffect(target, {
-      kind: 'speed_reduction',
-      sourceFeatureSlug: 'brutal-strike',
+      kind: "speed_reduction",
+      sourceFeatureSlug: "brutal-strike",
       sourceCasterParticipantId: barbarian.id,
       payload: { amount: 15 },
-      expiresAt: { kind: 'rounds', value: 1 },
+      expiresAt: { kind: "rounds", value: 1 },
       requiresConcentration: false,
     });
 
     const event: GameEventData = {
-      event_type: 'class_feature_triggered',
+      event_type: "class_feature_triggered",
       actor_participant_id: barbarian.id,
       target_participant_id: target.id,
       data: {
-        featureSlug: 'brutal-strike',
-        option: 'hamstring-blow',
+        featureSlug: "brutal-strike",
+        option: "hamstring-blow",
         damage: roll,
         diceCount,
         targetSpeedReduction: 15,
@@ -185,11 +211,15 @@ export class BrutalStrikeService {
         targetNewHp: target.currentHp,
       },
     };
-    const enc = await this.encounterRepo.findOne({ where: { id: encounterId } });
+    const enc = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
     if (enc?.sessionId) {
       await this.eventService.emit(enc.sessionId, encounterId, [event]);
     }
 
-    return success({ damage: roll, diceCount, targetSpeedReduction: 15 }, [event]);
+    return success({ damage: roll, diceCount, targetSpeedReduction: 15 }, [
+      event,
+    ]);
   }
 }

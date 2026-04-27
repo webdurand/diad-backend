@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { RestEventTemplateEntity } from 'src/entities';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { RestEventTemplateEntity } from "src/entities";
 
 /**
  * Spec 016 M4 — Rest Event Picker (BG3-inspired weighted roll).
@@ -17,7 +17,7 @@ import { RestEventTemplateEntity } from 'src/entities';
  */
 export interface RestEventPickContext {
   /** Long rest only — short rest não dispara events. */
-  kind: 'long';
+  kind: "long";
   /** Score de safety da location atual (0-5). Se <=2, pode pular pick. */
   locationSafety: number;
   /** Player acknowledged warning de hostile? Se false, suprime interrupt. */
@@ -28,7 +28,7 @@ export interface RestEventPickContext {
 
 export interface RestEventPickResult {
   templateId: string;
-  kind: RestEventTemplateEntity['kind'];
+  kind: RestEventTemplateEntity["kind"];
   triggerCondition: string;
   weight: number;
   narrativeTemplateId?: string | null;
@@ -44,14 +44,14 @@ export class RestEventPickerService {
   async pickForLongRest(
     ctx: RestEventPickContext,
   ): Promise<RestEventPickResult | null> {
-    if (ctx.kind !== 'long') return null;
+    if (ctx.kind !== "long") return null;
 
     const all = await this.templateRepo.find();
     if (all.length === 0) return null;
 
     // Hostile-suppression: se warning não foi acknowledged, remove interrupts.
     const candidates = all.filter((t) => {
-      if (t.kind === 'hostile_interruption') {
+      if (t.kind === "hostile_interruption") {
         return ctx.warningAcknowledged && ctx.locationSafety <= 2;
       }
       return true;

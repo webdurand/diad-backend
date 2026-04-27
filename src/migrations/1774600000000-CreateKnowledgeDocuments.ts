@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateKnowledgeDocuments1774600000000 implements MigrationInterface {
-  name = 'CreateKnowledgeDocuments1774600000000';
+  name = "CreateKnowledgeDocuments1774600000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

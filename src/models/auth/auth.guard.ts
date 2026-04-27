@@ -2,37 +2,41 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
-  Logger,
   UnauthorizedException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
-import { AuthRequest } from './auth.types';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { AuthService } from "./auth.service";
+import { AuthRequest } from "./auth.types";
+import { DiadLogger } from "../../common/observability/logger/diad-logger.service";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly logger = new Logger(AuthGuard.name);
   private readonly serviceKey: string;
 
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly logger: DiadLogger,
   ) {
-    this.serviceKey = this.configService.get<string>('SERVICE_KEY') ?? 'diad-internal-dev';
+    this.logger.setContext(AuthGuard.name);
+    this.serviceKey =
+      this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev";
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthRequest>();
 
     // Internal service-to-service calls (Python agent → NestJS)
-    const incomingServiceKey = request.headers['x-service-key'] as string | undefined;
+    const incomingServiceKey = request.headers["x-service-key"] as
+      | string
+      | undefined;
     if (incomingServiceKey && incomingServiceKey === this.serviceKey) {
-      const userId = request.headers['x-user-id'] as string | undefined;
+      const userId = request.headers["x-user-id"] as string | undefined;
       request.user = {
-        id: userId ?? 'service',
-        email: 'service@diad.internal',
-        name: 'Service',
-        role: 'admin',
+        id: userId ?? "service",
+        email: "service@diad.internal",
+        name: "Service",
+        role: "admin",
       };
       return true;
     }
@@ -41,12 +45,15 @@ export class AuthGuard implements CanActivate {
     const cookieName = this.authService.getCookieName();
     const token = request.cookies?.[cookieName];
 
-    this.logger.debug(
-      `[AuthGuard] ${request.method} ${request.url} | origin=${request.headers.origin ?? 'none'} | cookie present=${!!token}`,
-    );
+    this.logger.debug("auth.guard.check", {
+      "http.request.method": request.method,
+      "url.path": request.url,
+      "request.origin": request.headers.origin ?? null,
+      "auth.cookie_present": !!token,
+    });
 
     if (!token) {
-      throw new UnauthorizedException('Sessao ausente.');
+      throw new UnauthorizedException("Sessao ausente.");
     }
 
     const user = await this.authService.getUserFromToken(token);
@@ -55,7 +62,7 @@ export class AuthGuard implements CanActivate {
       email: user.email,
       name: user.name ?? undefined,
       username: user.username ?? undefined,
-      role: user.role ?? 'user',
+      role: user.role ?? "user",
     };
     return true;
   }

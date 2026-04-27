@@ -2,17 +2,17 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   ClockAdvanceRules,
   ClockEntity,
   ClockOnFullAction,
   ClockType,
-} from 'src/entities/clock.entity';
-import { GameSessionEntity } from 'src/entities/game-session.entity';
-import { EventLogService } from 'src/models/session/services/event-log.service';
+} from "src/entities/clock.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
+import { EventLogService } from "src/models/session/services/event-log.service";
 
 export interface CreateClockDto {
   name: string;
@@ -41,15 +41,12 @@ export class ClockService {
     private readonly eventLog: EventLogService,
   ) {}
 
-  async create(
-    campaignId: string,
-    dto: CreateClockDto,
-  ): Promise<ClockEntity> {
+  async create(campaignId: string, dto: CreateClockDto): Promise<ClockEntity> {
     if (dto.segments < 1) {
       throw new BadRequestException({
         ok: false,
-        error: 'Relógio precisa de pelo menos 1 segmento.',
-        code: 'CLOCK_SEGMENTS_INVALID',
+        error: "Relógio precisa de pelo menos 1 segmento.",
+        code: "CLOCK_SEGMENTS_INVALID",
       });
     }
     const clock = this.clockRepo.create({
@@ -57,7 +54,7 @@ export class ClockService {
       name: dto.name,
       segments: dto.segments,
       filled: 0,
-      type: dto.type ?? 'threat',
+      type: dto.type ?? "threat",
       visibleToPlayer: dto.visibleToPlayer ?? true,
       onFullAction: dto.onFullAction ?? ({} as ClockOnFullAction),
       advanceRules: dto.advanceRules ?? ({} as ClockAdvanceRules),
@@ -69,7 +66,7 @@ export class ClockService {
   async listByCampaign(campaignId: string): Promise<ClockEntity[]> {
     return this.clockRepo.find({
       where: { campaignId },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: "ASC" },
     });
   }
 
@@ -78,8 +75,8 @@ export class ClockService {
     if (!clock) {
       throw new NotFoundException({
         ok: false,
-        error: 'Relógio não encontrado.',
-        code: 'CLOCK_NOT_FOUND',
+        error: "Relógio não encontrado.",
+        code: "CLOCK_NOT_FOUND",
       });
     }
     return clock;
@@ -111,8 +108,8 @@ export class ClockService {
     if (rows.length === 0) {
       throw new NotFoundException({
         ok: false,
-        error: 'Relógio não encontrado.',
-        code: 'CLOCK_NOT_FOUND',
+        error: "Relógio não encontrado.",
+        code: "CLOCK_NOT_FOUND",
       });
     }
     const row = rows[0];
@@ -147,13 +144,13 @@ export class ClockService {
     if (Array.isArray(raw)) {
       if (raw.length === 0) return [];
       const first = raw[0];
-      if (first && typeof first === 'object' && !Array.isArray(first)) {
+      if (first && typeof first === "object" && !Array.isArray(first)) {
         return raw as Array<Record<string, any>>;
       }
       if (Array.isArray(first)) return first as Array<Record<string, any>>;
       return [];
     }
-    if (typeof raw === 'object' && raw !== null && 'rows' in (raw as any)) {
+    if (typeof raw === "object" && raw !== null && "rows" in (raw as any)) {
       return ((raw as any).rows ?? []) as Array<Record<string, any>>;
     }
     return [];
@@ -169,7 +166,7 @@ export class ClockService {
     if (!sessionId) {
       const latest = await this.sessionRepo.findOne({
         where: { campaignId: clock.campaignId },
-        order: { updatedAt: 'DESC' },
+        order: { updatedAt: "DESC" },
       });
       sessionId = latest?.id;
     }
@@ -178,7 +175,7 @@ export class ClockService {
     await this.eventLog.logEvent({
       sessionId,
       sceneId: advance.sceneId,
-      eventType: 'clock_full',
+      eventType: "clock_full",
       summary: `Relógio "${clock.name}" preencheu (${clock.segments}/${clock.segments}).`,
       details: {
         clockId: clock.id,

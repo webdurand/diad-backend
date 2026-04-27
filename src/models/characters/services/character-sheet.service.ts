@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -19,8 +19,8 @@ import {
   ClassProficiencyEntity,
   EquipmentCategoryItemEntity,
   SkillEntity,
-} from 'src/entities';
-import { ProficiencyTypeEnum } from 'src/entities/enums';
+} from "src/entities";
+import { ProficiencyTypeEnum } from "src/entities/enums";
 import {
   PROF_BONUS_BY_LEVEL,
   XP_THRESHOLDS,
@@ -29,14 +29,18 @@ import {
   getSpellcastingAbility,
   getCasterSlotType,
   normalizeClassSlug,
-} from 'src/shared/srd-constants';
-import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
-import type { EquipmentArmorClass } from 'src/shared/equipment-types';
-import { classifyFeatureForActions } from './feature-classification';
+} from "src/shared/srd-constants";
+import {
+  getAbilityModifier,
+  isEquipmentProficient,
+  DRACONIC_ANCESTRY_MAP,
+} from "src/shared/srd-utils";
+import type { EquipmentArmorClass } from "src/shared/equipment-types";
+import { classifyFeatureForActions } from "./feature-classification";
 import {
   renderFeatureDescription,
   extractNarrativeDescriptor,
-} from './feature-text-renderer';
+} from "./feature-text-renderer";
 
 // ---- Response DTOs ----
 
@@ -94,7 +98,7 @@ export interface SpellSlotBlock {
    * (spell-casting.service) precisam dessa info pra invocar
    * updateSpellSlots com level=-1 convention.
    */
-  kind?: 'standard' | 'pact';
+  kind?: "standard" | "pact";
 }
 
 interface ProficiencyBlock {
@@ -121,7 +125,7 @@ interface FeatureBlock {
   description: Record<string, unknown>;
   sourceClass?: string;
   active: boolean;
-  category?: 'active' | 'passive' | 'capstone' | 'resource';
+  category?: "active" | "passive" | "capstone" | "resource";
   displayText?: string;
   narrativeDescriptor?: string;
   tacticalValue?: number;
@@ -129,7 +133,7 @@ interface FeatureBlock {
     current?: number;
     max: number | null;
     formula?: string;
-    recharge?: 'short' | 'long' | 'turn' | 'none';
+    recharge?: "short" | "long" | "turn" | "none";
   };
   isPassive: boolean;
 }
@@ -459,13 +463,13 @@ export function buildFeatureBlock(
 
   const overrideCategory = feature.category;
   const isPassive =
-    overrideCategory === 'passive' ||
-    overrideCategory === 'capstone' ||
-    classification?.kind === 'hide';
+    overrideCategory === "passive" ||
+    overrideCategory === "capstone" ||
+    classification?.kind === "hide";
 
-  const category: FeatureBlock['category'] =
+  const category: FeatureBlock["category"] =
     overrideCategory ??
-    (classification?.kind === 'hide' ? 'passive' : undefined);
+    (classification?.kind === "hide" ? "passive" : undefined);
 
   const displayText =
     feature.display_text?.trim() ||
@@ -477,7 +481,7 @@ export function buildFeatureBlock(
     (displayText ? extractNarrativeDescriptor(displayText, 120) : undefined) ||
     undefined;
 
-  let resourceCharges: FeatureBlock['resourceCharges'] | undefined;
+  let resourceCharges: FeatureBlock["resourceCharges"] | undefined;
   if (feature.resource_charges || feature.recharge_rule) {
     const rawCharges = feature.resource_charges ?? { max: null };
     const used = featureUsesUsed[slug] ?? 0;
@@ -553,7 +557,7 @@ export class CharacterSheetService {
       where: { id: characterId, userId },
     });
     if (!character) {
-      throw new NotFoundException('Personagem nao encontrado.');
+      throw new NotFoundException("Personagem nao encontrado.");
     }
 
     // Load all related data in parallel
@@ -572,12 +576,12 @@ export class CharacterSheetService {
     ] = await Promise.all([
       this.charClassRepo.find({
         where: { character_id: characterId },
-        order: { order: 'ASC' },
+        order: { order: "ASC" },
       }),
       this.charAbilityRepo.find({ where: { character_id: characterId } }),
       this.charSkillRepo.find({
         where: { character_id: characterId },
-        relations: ['skill', 'skill.ability_score'],
+        relations: ["skill", "skill.ability_score"],
       }),
       this.charProfRepo.find({ where: { character_id: characterId } }),
       this.charSpellRepo.find({ where: { character_id: characterId } }),
@@ -586,18 +590,18 @@ export class CharacterSheetService {
       this.charStateRepo.findOne({ where: { character_id: characterId } }),
       this.charLevelUpRepo.find({
         where: { character_id: characterId },
-        order: { total_level: 'ASC' },
+        order: { total_level: "ASC" },
       }),
       this.charFeatureRepo.find({
         where: { character_id: characterId },
-        relations: ['source_class'],
+        relations: ["source_class"],
       }),
       this.charOriginRepo.findOne({ where: { character_id: characterId } }),
     ]);
 
     if (!charOrigin) {
       throw new NotFoundException(
-        'Dados de origem do personagem nao encontrados.',
+        "Dados de origem do personagem nao encontrados.",
       );
     }
 
@@ -626,12 +630,12 @@ export class CharacterSheetService {
     };
 
     const abilityScores: AbilityScoreBlock[] = [
-      'str',
-      'dex',
-      'con',
-      'int',
-      'wis',
-      'cha',
+      "str",
+      "dex",
+      "con",
+      "int",
+      "wis",
+      "cha",
     ].map((slug) => {
       const entry = abilityMap.get(slug);
       return {
@@ -644,7 +648,7 @@ export class CharacterSheetService {
 
     // Max HP
     const primaryClass = charClasses[0];
-    const conMod = mod('con');
+    const conMod = mod("con");
     let maxHp = primaryClass
       ? primaryClass.class.hit_die + conMod
       : 10 + conMod;
@@ -656,21 +660,26 @@ export class CharacterSheetService {
     // Speed (from race) + Barbarian Fast Movement L5 rider
     let speed = charOrigin.race?.speed ?? 30;
     const hasFastMovementFeat = charFeatures.some((cf) =>
-      (cf.feature?.slug ?? '').startsWith('fast-movement'),
+      (cf.feature?.slug ?? "").startsWith("fast-movement"),
     );
     if (hasFastMovementFeat) {
       // RAW 2024: Fast Movement +10ft enquanto não usa Heavy Armor.
-      const heavyArmorSlugs = new Set(['chain-mail', 'splint', 'plate', 'ring-mail']);
+      const heavyArmorSlugs = new Set([
+        "chain-mail",
+        "splint",
+        "plate",
+        "ring-mail",
+      ]);
       const heavyArmorEquipped = charEquip.some(
         (eq) =>
           eq.equipped &&
-          heavyArmorSlugs.has((eq.equipment?.slug ?? '').toLowerCase()),
+          heavyArmorSlugs.has((eq.equipment?.slug ?? "").toLowerCase()),
       );
       if (!heavyArmorEquipped) speed += 10;
     }
 
     // AC calculation
-    const dexMod = mod('dex');
+    const dexMod = mod("dex");
 
     // Step 1: Determine armor AC and whether shield is equipped.
     // Shield é identificado por slug/name (SRD o marca como armor com base=2),
@@ -679,9 +688,9 @@ export class CharacterSheetService {
     let hasShield = false;
     for (const eq of charEquip) {
       if (!eq.equipped || !eq.equipment?.armor_class) continue;
-      const slug = (eq.equipment.slug ?? '').toLowerCase();
-      const name = (eq.equipment.name ?? '').toLowerCase();
-      const isShield = slug === 'shield' || name === 'shield';
+      const slug = (eq.equipment.slug ?? "").toLowerCase();
+      const name = (eq.equipment.name ?? "").toLowerCase();
+      const isShield = slug === "shield" || name === "shield";
       if (isShield) {
         hasShield = true;
         continue;
@@ -703,7 +712,9 @@ export class CharacterSheetService {
     }
 
     // Step 2: Determine base AC (armor, unarmored defense, or default)
-    const classSlugs = charClasses.map((cc) => cc.class.slug.replace(/-phb$/, ''));
+    const classSlugs = charClasses.map((cc) =>
+      cc.class.slug.replace(/-phb$/, ""),
+    );
     const editionRules = character.source?.rules;
     let armorClass: number;
 
@@ -712,12 +723,12 @@ export class CharacterSheetService {
       armorClass = armorAc;
     } else {
       // Not wearing armor — check Unarmored Defense
-      if (classSlugs.includes('barbarian')) {
+      if (classSlugs.includes("barbarian")) {
         // Barbarian Unarmored Defense: 10 + DEX + CON (can use shield)
         armorClass = 10 + dexMod + conMod;
-      } else if (classSlugs.includes('monk')) {
+      } else if (classSlugs.includes("monk")) {
         // Monk Unarmored Defense: 10 + DEX + WIS
-        const wisMod = mod('wis');
+        const wisMod = mod("wis");
         armorClass = 10 + dexMod + wisMod;
         // 2014: Unarmored Defense doesn't work with shields (lose WIS, keep base)
         // 2024: Unarmored Defense works with shields
@@ -737,7 +748,7 @@ export class CharacterSheetService {
 
     // Spec 012 Fase 0 — Fighting Style: Defense dá +1 AC se usando armadura
     // (qualquer armor; RAW só exige "armor", inclui light/medium/heavy).
-    if (charOrigin.fighting_style_index === 'defense' && armorAc !== null) {
+    if (charOrigin.fighting_style_index === "defense" && armorAc !== null) {
       armorClass += 1;
     }
 
@@ -747,12 +758,12 @@ export class CharacterSheetService {
     // Saving throws
     const classSavingThrows = await this.getClassSavingThrows(charClasses);
     const savingThrows: SavingThrowBlock[] = [
-      'str',
-      'dex',
-      'con',
-      'int',
-      'wis',
-      'cha',
+      "str",
+      "dex",
+      "con",
+      "int",
+      "wis",
+      "cha",
     ].map((slug) => {
       const proficient = classSavingThrows.has(slug);
       return {
@@ -765,8 +776,8 @@ export class CharacterSheetService {
 
     // Skills (all SRD skills, sorted alphabetically)
     const allSkills = await this.skillRepo.find({
-      relations: ['ability_score'],
-      order: { name: 'ASC' },
+      relations: ["ability_score"],
+      order: { name: "ASC" },
     });
     const proficientSkillIds = new Set(charSkills.map((s) => s.skill_id));
     const expertiseSkillIds = new Set(
@@ -774,7 +785,7 @@ export class CharacterSheetService {
     );
 
     const skills: SkillBlock[] = allSkills.map((skill) => {
-      const abilitySlug = skill.ability_score?.slug ?? 'dex';
+      const abilitySlug = skill.ability_score?.slug ?? "dex";
       const isProficient = proficientSkillIds.has(skill.id);
       const isExpertise = expertiseSkillIds.has(skill.id);
       const bonus =
@@ -793,13 +804,13 @@ export class CharacterSheetService {
 
     // Passive Perception
     const perceptionSkill = charSkills.find(
-      (s) => s.skill.slug === 'perception',
+      (s) => s.skill.slug === "perception",
     );
     const perceptionProficient = !!perceptionSkill;
     const perceptionExpertise = perceptionSkill?.expertise ?? false;
     const passivePerception =
       10 +
-      mod('wis') +
+      mod("wis") +
       (perceptionProficient ? profBonus : 0) +
       (perceptionExpertise ? profBonus : 0);
 
@@ -813,7 +824,7 @@ export class CharacterSheetService {
     }));
 
     // Carrying capacity & weight
-    const strScore = abilityMap.get('str')?.score ?? 10;
+    const strScore = abilityMap.get("str")?.score ?? 10;
     const carryingCapacity = strScore * 15;
 
     const totalWeight = charEquip.reduce((sum, ce) => {
@@ -869,9 +880,9 @@ export class CharacterSheetService {
     const classIds = charClasses.map((cc) => cc.class_id);
     if (classIds.length > 0) {
       const classProfs = await this.classProfRepo
-        .createQueryBuilder('cp')
-        .innerJoinAndSelect('cp.proficiency', 'p')
-        .where('cp.class_id IN (:...classIds)', { classIds })
+        .createQueryBuilder("cp")
+        .innerJoinAndSelect("cp.proficiency", "p")
+        .where("cp.class_id IN (:...classIds)", { classIds })
         .getMany();
       for (const cp of classProfs) {
         if (!existingProfSlugs.has(cp.proficiency.slug)) {
@@ -880,7 +891,7 @@ export class CharacterSheetService {
             slug: cp.proficiency.slug,
             name: cp.proficiency.name,
             type: cp.proficiency.proficiency_type,
-            source: 'class',
+            source: "class",
           });
         }
       }
@@ -897,7 +908,9 @@ export class CharacterSheetService {
 
     // Origin details (misc creation metadata)
     const raceTraitChoices = charOrigin.race_trait_choices ?? [];
-    const draconicChoice = raceTraitChoices.find((c) => DRACONIC_ANCESTRY_MAP[c]);
+    const draconicChoice = raceTraitChoices.find(
+      (c) => DRACONIC_ANCESTRY_MAP[c],
+    );
     const draconicAncestry = draconicChoice
       ? {
           dragon:
@@ -925,11 +938,11 @@ export class CharacterSheetService {
 
     // Equipment blocks — resolve proficiency per item
     const equipIds = charEquip.map((ce) => ce.equipment_id);
-    let equipCatMap = new Map<string, Set<string>>();
+    const equipCatMap = new Map<string, Set<string>>();
     if (equipIds.length > 0) {
       const catItems = await this.equipCatItemRepo.find({
         where: equipIds.map((eid) => ({ equipment_id: eid })),
-        relations: ['category'],
+        relations: ["category"],
       });
       for (const ci of catItems) {
         let s = equipCatMap.get(ci.equipment_id);
@@ -1050,7 +1063,9 @@ export class CharacterSheetService {
       spellSlots,
 
       kiPoints: (() => {
-        const monkClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
+        const monkClass = charClasses.find(
+          (cc) => normalizeClassSlug(cc.class.slug) === "monk",
+        );
         if (!monkClass || monkClass.class_level < 2) return undefined;
         return {
           total: monkClass.class_level,
@@ -1071,148 +1086,300 @@ export class CharacterSheetService {
       conditions: charState?.conditions ?? [],
       exhaustionLevel: charState?.exhaustion_level ?? 0,
       inspiration: charState?.inspiration ?? false,
-      hasBlindsight10ft: charOrigin.fighting_style_index === 'blind-fighting',
+      hasBlindsight10ft: charOrigin.fighting_style_index === "blind-fighting",
       hasRemarkableAthlete: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('remarkable-athlete'),
+        (cf.feature?.slug ?? "").startsWith("remarkable-athlete"),
       ),
       hasHeroicWarrior: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('heroic-warrior'),
+        (cf.feature?.slug ?? "").startsWith("heroic-warrior"),
       ),
       hasSurvivor: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('survivor'),
+        (cf.feature?.slug ?? "").startsWith("survivor"),
       ),
       hasDangerSense: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('danger-sense'),
+        (cf.feature?.slug ?? "").startsWith("danger-sense"),
       ),
       hasPrimalKnowledge: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('primal-knowledge'),
+        (cf.feature?.slug ?? "").startsWith("primal-knowledge"),
       ),
       hasFastMovement: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('fast-movement'),
+        (cf.feature?.slug ?? "").startsWith("fast-movement"),
       ),
       hasFeralInstinct: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('feral-instinct'),
+        (cf.feature?.slug ?? "").startsWith("feral-instinct"),
       ),
       hasInstinctivePounce: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('instinctive-pounce'),
+        (cf.feature?.slug ?? "").startsWith("instinctive-pounce"),
       ),
-      hasBrutalStrike: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('brutal-strike') ||
-        (cf.feature?.slug ?? '').startsWith('improved-brutal-strike'),
+      hasBrutalStrike: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("brutal-strike") ||
+          (cf.feature?.slug ?? "").startsWith("improved-brutal-strike"),
       ),
       hasRelentlessRage: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('relentless-rage'),
+        (cf.feature?.slug ?? "").startsWith("relentless-rage"),
       ),
       hasPersistentRage: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('persistent-rage'),
+        (cf.feature?.slug ?? "").startsWith("persistent-rage"),
       ),
       hasIndomitableMight: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('indomitable-might'),
+        (cf.feature?.slug ?? "").startsWith("indomitable-might"),
       ),
       hasPrimalChampion: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('primal-champion'),
+        (cf.feature?.slug ?? "").startsWith("primal-champion"),
       ),
-      hasFrenzy: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'frenzy' || (cf.feature?.slug ?? '').startsWith('frenzy-')),
-      hasMindlessRage: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'mindless-rage' || (cf.feature?.slug ?? '').startsWith('mindless-rage-')),
-      hasRetaliation: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'retaliation' || (cf.feature?.slug ?? '').startsWith('retaliation-')),
-      hasIntimidatingPresence: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'intimidating-presence' || (cf.feature?.slug ?? '').startsWith('intimidating-presence-')),
-      hasDivineOrder: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('divine-order')),
-      hasChannelDivinity: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('channel-divinity')),
-      hasTurnUndead: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('channel-divinity-turn-undead') ||
-        (cf.feature?.slug ?? '') === 'turn-undead',
+      hasFrenzy: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "") === "frenzy" ||
+          (cf.feature?.slug ?? "").startsWith("frenzy-"),
       ),
-      hasSearUndead: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sear-undead')),
-      hasBlessedStrikes: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('blessed-strikes') ||
-        (cf.feature?.slug ?? '').startsWith('improved-blessed-strikes'),
+      hasMindlessRage: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "") === "mindless-rage" ||
+          (cf.feature?.slug ?? "").startsWith("mindless-rage-"),
       ),
-      hasImprovedBlessedStrikes: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('improved-blessed-strikes')),
-      hasDivineIntervention: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('divine-intervention') ||
-        (cf.feature?.slug ?? '').startsWith('greater-divine-intervention'),
+      hasRetaliation: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "") === "retaliation" ||
+          (cf.feature?.slug ?? "").startsWith("retaliation-"),
       ),
-      hasGreaterDivineIntervention: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('greater-divine-intervention')),
-      hasDiscipleOfLife: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('disciple-of-life')),
-      hasPreserveLife: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('channel-divinity-preserve-life') ||
-        (cf.feature?.slug ?? '') === 'preserve-life',
+      hasIntimidatingPresence: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "") === "intimidating-presence" ||
+          (cf.feature?.slug ?? "").startsWith("intimidating-presence-"),
       ),
-      hasBlessedHealer: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('blessed-healer')),
-      hasSupremeHealing: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('supreme-healing')),
-      hasWardingFlare: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('warding-flare')),
-      hasRadianceOfTheDawn: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('radiance-of-the-dawn')),
-      hasInvokeDuplicity: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('invoke-duplicity')),
-      hasWarPriest: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('war-priest')),
-      hasGuidedStrike: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('guided-strike')),
+      hasDivineOrder: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("divine-order"),
+      ),
+      hasChannelDivinity: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("channel-divinity"),
+      ),
+      hasTurnUndead: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("channel-divinity-turn-undead") ||
+          (cf.feature?.slug ?? "") === "turn-undead",
+      ),
+      hasSearUndead: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("sear-undead"),
+      ),
+      hasBlessedStrikes: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("blessed-strikes") ||
+          (cf.feature?.slug ?? "").startsWith("improved-blessed-strikes"),
+      ),
+      hasImprovedBlessedStrikes: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("improved-blessed-strikes"),
+      ),
+      hasDivineIntervention: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("divine-intervention") ||
+          (cf.feature?.slug ?? "").startsWith("greater-divine-intervention"),
+      ),
+      hasGreaterDivineIntervention: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("greater-divine-intervention"),
+      ),
+      hasDiscipleOfLife: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("disciple-of-life"),
+      ),
+      hasPreserveLife: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith(
+            "channel-divinity-preserve-life",
+          ) || (cf.feature?.slug ?? "") === "preserve-life",
+      ),
+      hasBlessedHealer: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("blessed-healer"),
+      ),
+      hasSupremeHealing: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("supreme-healing"),
+      ),
+      hasWardingFlare: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("warding-flare"),
+      ),
+      hasRadianceOfTheDawn: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("radiance-of-the-dawn"),
+      ),
+      hasInvokeDuplicity: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("invoke-duplicity"),
+      ),
+      hasWarPriest: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("war-priest"),
+      ),
+      hasGuidedStrike: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("guided-strike"),
+      ),
 
-      hasDivineSense: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('divine-sense')),
-      hasDivineSmite: charFeatures.some((cf) => (cf.feature?.slug ?? '') === 'divine-smite' || (cf.feature?.slug ?? '').startsWith('divine-smite-')),
-      hasPaladinsSmite: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('paladins-smite')),
-      hasFaithfulSteed: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('faithful-steed')),
-      hasAuraOfProtection: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-of-protection')),
-      hasAuraOfCourage: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-of-courage')),
-      hasRadiantStrikes: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('radiant-strikes')),
-      hasRestoringTouch: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('restoring-touch')),
-      hasAuraExpansion: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-expansion')),
-      hasSacredWeapon: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('channel-divinity-sacred-weapon')),
-      hasAuraOfDevotion: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('aura-of-devotion')),
-      hasHolyNimbus: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('holy-nimbus')),
-
-      hasArcaneRecovery: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('arcane-recovery')),
-      hasRitualAdept: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('ritual-adept')),
-      hasScholar: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('scholar-wizard') || (cf.feature?.slug ?? '') === 'scholar'),
-      hasMemorizeSpell: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('memorize-spell')),
-      hasSpellMastery: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('spell-mastery')),
-      hasSignatureSpells: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('signature-spell') ||
-        (cf.feature?.slug ?? '').startsWith('signature-spells'),
+      hasDivineSense: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("divine-sense"),
       ),
-      hasEvocationSavant: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('evocation-savant')),
-      hasSculptSpells: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sculpt-spells')),
-      hasPotentCantrip: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('potent-cantrip')),
-      hasEmpoweredEvocation: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('empowered-evocation')),
-      hasOverchannel: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('overchannel')),
-
-      hasInnateSorcery: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('innate-sorcery')),
-      hasFontOfMagic: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('font-of-magic')),
-      hasMetamagic: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? '').startsWith('metamagic-sorcerer') ||
-        (cf.feature?.slug ?? '') === 'metamagic-1' ||
-        (cf.feature?.slug ?? '') === 'metamagic-2' ||
-        (cf.feature?.slug ?? '').startsWith('metamagic-options'),
+      hasDivineSmite: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "") === "divine-smite" ||
+          (cf.feature?.slug ?? "").startsWith("divine-smite-"),
       ),
-      hasSorcerousRestoration: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sorcerous-restoration')),
-      hasSorceryIncarnate: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('sorcery-incarnate')),
-      hasArcaneApotheosis: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('arcane-apotheosis')),
-      hasDraconicResilience: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('draconic-resilience')),
-      hasDragonAncestor: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('dragon-ancestor')),
-      hasElementalAffinity: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('elemental-affinity')),
-      hasDragonWings: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('dragon-wings')),
-      hasDraconicPresence: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('draconic-presence')),
-      hasWildMagicSurge: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('wild-magic-surge')),
-      hasTidesOfChaos: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('tides-of-chaos')),
+      hasPaladinsSmite: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("paladins-smite"),
+      ),
+      hasFaithfulSteed: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("faithful-steed"),
+      ),
+      hasAuraOfProtection: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("aura-of-protection"),
+      ),
+      hasAuraOfCourage: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("aura-of-courage"),
+      ),
+      hasRadiantStrikes: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("radiant-strikes"),
+      ),
+      hasRestoringTouch: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("restoring-touch"),
+      ),
+      hasAuraExpansion: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("aura-expansion"),
+      ),
+      hasSacredWeapon: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("channel-divinity-sacred-weapon"),
+      ),
+      hasAuraOfDevotion: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("aura-of-devotion"),
+      ),
+      hasHolyNimbus: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("holy-nimbus"),
+      ),
+
+      hasArcaneRecovery: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("arcane-recovery"),
+      ),
+      hasRitualAdept: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("ritual-adept"),
+      ),
+      hasScholar: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("scholar-wizard") ||
+          (cf.feature?.slug ?? "") === "scholar",
+      ),
+      hasMemorizeSpell: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("memorize-spell"),
+      ),
+      hasSpellMastery: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("spell-mastery"),
+      ),
+      hasSignatureSpells: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("signature-spell") ||
+          (cf.feature?.slug ?? "").startsWith("signature-spells"),
+      ),
+      hasEvocationSavant: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("evocation-savant"),
+      ),
+      hasSculptSpells: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("sculpt-spells"),
+      ),
+      hasPotentCantrip: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("potent-cantrip"),
+      ),
+      hasEmpoweredEvocation: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("empowered-evocation"),
+      ),
+      hasOverchannel: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("overchannel"),
+      ),
+
+      hasInnateSorcery: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("innate-sorcery"),
+      ),
+      hasFontOfMagic: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("font-of-magic"),
+      ),
+      hasMetamagic: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("metamagic-sorcerer") ||
+          (cf.feature?.slug ?? "") === "metamagic-1" ||
+          (cf.feature?.slug ?? "") === "metamagic-2" ||
+          (cf.feature?.slug ?? "").startsWith("metamagic-options"),
+      ),
+      hasSorcerousRestoration: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("sorcerous-restoration"),
+      ),
+      hasSorceryIncarnate: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("sorcery-incarnate"),
+      ),
+      hasArcaneApotheosis: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("arcane-apotheosis"),
+      ),
+      hasDraconicResilience: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("draconic-resilience"),
+      ),
+      hasDragonAncestor: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("dragon-ancestor"),
+      ),
+      hasElementalAffinity: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("elemental-affinity"),
+      ),
+      hasDragonWings: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("dragon-wings"),
+      ),
+      hasDraconicPresence: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("draconic-presence"),
+      ),
+      hasWildMagicSurge: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("wild-magic-surge"),
+      ),
+      hasTidesOfChaos: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("tides-of-chaos"),
+      ),
       hasLandsStride: charFeatures.some((cf) => {
-        const slug = cf.feature?.slug ?? '';
+        const slug = cf.feature?.slug ?? "";
         // Aceita slugs: 'lands-stride-*', 'land-s-stride-*', 'druid-lands-stride', 'ranger-lands-stride'.
-        return slug.includes('lands-stride') || slug.includes('land-s-stride');
+        return slug.includes("lands-stride") || slug.includes("land-s-stride");
       }),
-      hasNaturesSanctuary: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('natures-sanctuary') || (cf.feature?.slug ?? '').startsWith('nature-s-sanctuary')),
+      hasNaturesSanctuary: charFeatures.some(
+        (cf) =>
+          (cf.feature?.slug ?? "").startsWith("natures-sanctuary") ||
+          (cf.feature?.slug ?? "").startsWith("nature-s-sanctuary"),
+      ),
 
       // Spec 012 Lote C — Capstones L18-L20 (RAW 2024 XPHB)
-      hasEmptyBody: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('empty-body')),
-      hasSuperiorDefense: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('superior-defense')),
-      hasBodyAndMind: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('body-and-mind')),
-      hasPerfectSelf: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('perfect-self')),
-      hasElusive: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('elusive')),
-      hasStrokeOfLuck: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('stroke-of-luck')),
-      hasFeralSenses: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('feral-senses')),
-      hasFoeSlayer: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('foe-slayer')),
-      hasEldritchMaster: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('eldritch-master')),
-      hasBeastSpells: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('beast-spells')),
-      hasArchdruid: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('archdruid')),
-      hasSuperiorInspiration: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('superior-inspiration')),
-      hasWordsOfCreation: charFeatures.some((cf) => (cf.feature?.slug ?? '').startsWith('words-of-creation')),
+      hasEmptyBody: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("empty-body"),
+      ),
+      hasSuperiorDefense: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("superior-defense"),
+      ),
+      hasBodyAndMind: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("body-and-mind"),
+      ),
+      hasPerfectSelf: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("perfect-self"),
+      ),
+      hasElusive: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("elusive"),
+      ),
+      hasStrokeOfLuck: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("stroke-of-luck"),
+      ),
+      hasFeralSenses: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("feral-senses"),
+      ),
+      hasFoeSlayer: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("foe-slayer"),
+      ),
+      hasEldritchMaster: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("eldritch-master"),
+      ),
+      hasBeastSpells: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("beast-spells"),
+      ),
+      hasArchdruid: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("archdruid"),
+      ),
+      hasSuperiorInspiration: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("superior-inspiration"),
+      ),
+      hasWordsOfCreation: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("words-of-creation"),
+      ),
 
       equipment,
       magicItems,
@@ -1239,9 +1406,9 @@ export class CharacterSheetService {
     if (!primaryClass) return new Set();
 
     const savingThrows = await this.classSavingThrowRepo
-      .createQueryBuilder('cst')
-      .innerJoinAndSelect('cst.ability_score', 'as')
-      .where('cst.class_id = :classId', { classId: primaryClass.class_id })
+      .createQueryBuilder("cst")
+      .innerJoinAndSelect("cst.ability_score", "as")
+      .where("cst.class_id = :classId", { classId: primaryClass.class_id })
       .getMany();
 
     return new Set(savingThrows.map((st) => st.ability_score.slug));
@@ -1258,15 +1425,12 @@ export class CharacterSheetService {
     for (const cc of charClasses) {
       const type = getCasterSlotType(cc.class.slug);
       if (!type) continue;
-      if (type === 'full') fullCasterLevels += cc.class_level;
-      else if (type === 'half') halfCasterLevels += cc.class_level;
-      else if (type === 'pact') warlockLevel = cc.class_level;
+      if (type === "full") fullCasterLevels += cc.class_level;
+      else if (type === "half") halfCasterLevels += cc.class_level;
+      else if (type === "pact") warlockLevel = cc.class_level;
     }
 
-    const slotsUsed = (charState?.spell_slots_used ?? {}) as Record<
-      string,
-      number
-    >;
+    const slotsUsed = charState?.spell_slots_used ?? {};
 
     const result: SpellSlotBlock[] = [];
 
@@ -1282,7 +1446,7 @@ export class CharacterSheetService {
             level: i + 1,
             total: slotTable[i],
             used: slotsUsed[String(i + 1)] ?? 0,
-            kind: 'standard',
+            kind: "standard",
           });
         }
       }
@@ -1295,13 +1459,12 @@ export class CharacterSheetService {
         result.push({
           level: pact.level,
           total: pact.slots,
-          used: slotsUsed['pact'] ?? 0,
-          kind: 'pact',
+          used: slotsUsed["pact"] ?? 0,
+          kind: "pact",
         });
       }
     }
 
     return result;
   }
-
 }

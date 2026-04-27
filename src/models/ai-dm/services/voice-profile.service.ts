@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { VoiceProfileEntity } from 'src/entities/voice-profile.entity';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { VoiceProfileEntity } from "src/entities/voice-profile.entity";
 
 @Injectable()
 export class VoiceProfileService {
@@ -12,14 +12,14 @@ export class VoiceProfileService {
 
   async listAll(): Promise<VoiceProfileEntity[]> {
     return this.repo.find({
-      order: { isSystemPreset: 'DESC', name: 'ASC' },
+      order: { isSystemPreset: "DESC", name: "ASC" },
     });
   }
 
   async listSystemPresets(): Promise<VoiceProfileEntity[]> {
     return this.repo.find({
       where: { isSystemPreset: true },
-      order: { name: 'ASC' },
+      order: { name: "ASC" },
     });
   }
 
@@ -28,8 +28,8 @@ export class VoiceProfileService {
     if (!profile) {
       throw new NotFoundException({
         ok: false,
-        error: 'Voice profile não encontrado.',
-        code: 'VOICE_PROFILE_NOT_FOUND',
+        error: "Voice profile não encontrado.",
+        code: "VOICE_PROFILE_NOT_FOUND",
       });
     }
     return profile;
@@ -41,7 +41,7 @@ export class VoiceProfileService {
       throw new NotFoundException({
         ok: false,
         error: `Voice profile "${name}" não encontrado.`,
-        code: 'VOICE_PROFILE_NOT_FOUND',
+        code: "VOICE_PROFILE_NOT_FOUND",
       });
     }
     return profile;

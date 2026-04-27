@@ -1,15 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 import {
   AiTurnExecutor,
   TurnExecutionPlan,
   AiTurnExecutorOpts,
-} from './ai-turn-executor.interface';
-import { success, GameResult, failure, GameErrorCode } from '../interfaces/result.type';
+} from "./ai-turn-executor.interface";
+import {
+  success,
+  GameResult,
+  failure,
+  GameErrorCode,
+} from "../interfaces/result.type";
 import type {
   EncounterSnapshot,
   SnapshotParticipant,
-} from '../interfaces/encounter-snapshot.interface';
-import type { PlannedActionStep } from '../interfaces/combat.interfaces';
+} from "../interfaces/encounter-snapshot.interface";
+import type { PlannedActionStep } from "../interfaces/combat.interfaces";
 
 /**
  * Spec 003 T045 — implementação determinística do `AiTurnExecutor` usada em
@@ -34,56 +39,57 @@ export class MockAiTurnExecutor extends AiTurnExecutor {
       (p) =>
         p.faction !== self.faction &&
         p.hp.current > 0 &&
-        p.dyingState !== 'dead',
+        p.dyingState !== "dead",
     );
 
     const steps: PlannedActionStep[] = [];
-    let rationale = '';
+    let rationale = "";
 
     if (enemies.length === 0) {
       // Nenhum inimigo — apenas encerra o turno.
-      steps.push({ kind: 'end-turn' });
-      rationale = 'Nenhum inimigo visível; turno passa.';
+      steps.push({ kind: "end-turn" });
+      rationale = "Nenhum inimigo visível; turno passa.";
     } else {
       const nearest = pickNearest(self, enemies, snapshot);
       // Move adjacente se mapa presente e distância > 1 tile
-      const dist = snapshot.map && self.position ? distanceFt(self, nearest) : 0;
-      if (snapshot.map && dist > 5 && self.actionEconomy.movementRemaining > 0) {
+      const dist =
+        snapshot.map && self.position ? distanceFt(self, nearest) : 0;
+      if (
+        snapshot.map &&
+        dist > 5 &&
+        self.actionEconomy.movementRemaining > 0
+      ) {
         // Simples heurística: move em direção ao alvo (1 step × movementRemaining)
         steps.push({
-          kind: 'move',
+          kind: "move",
           to: {
             x:
-              self.position.x +
-              Math.sign(nearest.position.x - self.position.x),
+              self.position.x + Math.sign(nearest.position.x - self.position.x),
             y:
-              self.position.y +
-              Math.sign(nearest.position.y - self.position.y),
+              self.position.y + Math.sign(nearest.position.y - self.position.y),
           },
         });
       }
 
       // Escolhe a ação com maior attackBonus
       const attackAction = [...self.availableActions]
-        .filter((a) => typeof a.attackBonus === 'number')
-        .sort(
-          (a, b) => (b.attackBonus ?? 0) - (a.attackBonus ?? 0),
-        )[0];
+        .filter((a) => typeof a.attackBonus === "number")
+        .sort((a, b) => (b.attackBonus ?? 0) - (a.attackBonus ?? 0))[0];
 
       if (attackAction) {
         steps.push({
-          kind: 'attack',
+          kind: "attack",
           actionName: attackAction.name,
           targetParticipantIds: [nearest.id],
         });
         rationale = `Atacou ${nearest.displayName} com ${attackAction.name} (alvo mais próximo).`;
       } else {
         // Fallback: esquiva
-        steps.push({ kind: 'dodge' });
-        rationale = 'Sem ataque disponível — esquivou.';
+        steps.push({ kind: "dodge" });
+        rationale = "Sem ataque disponível — esquivou.";
       }
 
-      steps.push({ kind: 'end-turn' });
+      steps.push({ kind: "end-turn" });
     }
 
     return success({
@@ -111,8 +117,7 @@ function pickNearest(
   if (self.distances && Object.keys(self.distances).length > 0) {
     const sorted = [...enemies].sort(
       (a, b) =>
-        (self.distances[a.id] ?? Infinity) -
-        (self.distances[b.id] ?? Infinity),
+        (self.distances[a.id] ?? Infinity) - (self.distances[b.id] ?? Infinity),
     );
     return sorted[0];
   }

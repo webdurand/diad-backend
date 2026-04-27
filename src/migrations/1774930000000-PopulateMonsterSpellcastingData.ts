@@ -1,5 +1,5 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
-import { parseSpellcastingFromSpecialAbilities } from './utils/parse-spellcasting';
+import { MigrationInterface, QueryRunner } from "typeorm";
+import { parseSpellcastingFromSpecialAbilities } from "./utils/parse-spellcasting";
 
 /**
  * Populates `monsters.spellcasting` for every monster whose `special_abilities`
@@ -11,12 +11,13 @@ import { parseSpellcastingFromSpecialAbilities } from './utils/parse-spellcastin
  * DOWN: clears all populated rows (preserves schema).
  */
 export class PopulateMonsterSpellcastingData1774930000000 implements MigrationInterface {
-  name = 'PopulateMonsterSpellcastingData1774930000000';
+  name = "PopulateMonsterSpellcastingData1774930000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const monsters: Array<{ id: string; special_abilities: any }> = await queryRunner.query(
-      `SELECT id, special_abilities FROM monsters WHERE special_abilities IS NOT NULL`,
-    );
+    const monsters: Array<{ id: string; special_abilities: any }> =
+      await queryRunner.query(
+        `SELECT id, special_abilities FROM monsters WHERE special_abilities IS NOT NULL`,
+      );
 
     let populated = 0;
     let skipped = 0;
@@ -34,8 +35,9 @@ export class PopulateMonsterSpellcastingData1774930000000 implements MigrationIn
       populated++;
     }
 
-    // eslint-disable-next-line no-console
-    console.log(`[PopulateMonsterSpellcastingData] populated=${populated} skipped=${skipped}`);
+    console.log(
+      `[PopulateMonsterSpellcastingData] populated=${populated} skipped=${skipped}`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

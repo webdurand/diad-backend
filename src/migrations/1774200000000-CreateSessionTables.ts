@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateSessionTables1774200000000 implements MigrationInterface {
-  name = 'CreateSessionTables1774200000000';
+  name = "CreateSessionTables1774200000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- scenes ---
@@ -25,7 +25,9 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
           REFERENCES "locations"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_scenes_session" ON "scenes" ("session_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_scenes_session" ON "scenes" ("session_id")`,
+    );
 
     // --- scene_npcs ---
     await queryRunner.query(`
@@ -63,8 +65,12 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
           REFERENCES "scenes"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_se_session" ON "session_events" ("session_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_se_session_seq" ON "session_events" ("session_id", "sequence")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_se_session" ON "session_events" ("session_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_se_session_seq" ON "session_events" ("session_id", "sequence")`,
+    );
 
     // --- campaign_chronicles ---
     await queryRunner.query(`
@@ -85,8 +91,12 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
           REFERENCES "game_sessions"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cc_campaign" ON "campaign_chronicles" ("campaign_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_cc_significance" ON "campaign_chronicles" ("campaign_id", "significance" DESC)`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cc_campaign" ON "campaign_chronicles" ("campaign_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cc_significance" ON "campaign_chronicles" ("campaign_id", "significance" DESC)`,
+    );
 
     // --- party_knowledge ---
     await queryRunner.query(`
@@ -107,7 +117,9 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
           REFERENCES "game_sessions"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_pk_campaign_entity" ON "party_knowledge" ("campaign_id", "entity_type", "entity_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_pk_campaign_entity" ON "party_knowledge" ("campaign_id", "entity_type", "entity_id")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

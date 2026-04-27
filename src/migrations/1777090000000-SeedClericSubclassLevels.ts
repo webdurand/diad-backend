@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Cleric — Data gap: subclasses alternativas Light/Trickery/War
@@ -15,7 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - War: war-priest, guided-strike
  */
 export class SeedClericSubclassLevels1777090000000 implements MigrationInterface {
-  name = 'SeedClericSubclassLevels1777090000000';
+  name = "SeedClericSubclassLevels1777090000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     const [xphb] = (await queryRunner.query(

@@ -10,7 +10,7 @@ export interface MonsterMultiattackSubAttack {
   actionName: string;
   count: number;
   requireDistinctTargets?: boolean;
-  recharge?: '5-6' | '6';
+  recharge?: "5-6" | "6";
 }
 
 export interface MonsterMultiattack {
@@ -18,7 +18,7 @@ export interface MonsterMultiattack {
   description: string;
 }
 
-export type InnateUsage = 'at-will' | '1/day' | '2/day' | '3/day';
+export type InnateUsage = "at-will" | "1/day" | "2/day" | "3/day";
 
 export interface MonsterKnownSpell {
   slug: string;
@@ -26,8 +26,8 @@ export interface MonsterKnownSpell {
 }
 
 export interface MonsterSpellcasting {
-  type: 'standard' | 'innate';
-  ability: 'int' | 'wis' | 'cha';
+  type: "standard" | "innate";
+  ability: "int" | "wis" | "cha";
   saveDc: number;
   attackBonus: number;
   casterLevel?: number;

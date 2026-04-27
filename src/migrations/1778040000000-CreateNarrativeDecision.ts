@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — Tagged choice log (L5 memory).
@@ -7,10 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Director consulta top-N por overlap com current_scene (callbacks).
  * Epilogue renderiza top-3 por impact_weight.
  */
-export class CreateNarrativeDecision1778040000000
-  implements MigrationInterface
-{
-  name = 'CreateNarrativeDecision1778040000000';
+export class CreateNarrativeDecision1778040000000 implements MigrationInterface {
+  name = "CreateNarrativeDecision1778040000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -11,21 +11,21 @@ import {
   Max,
   MaxLength,
   Min,
-} from 'class-validator';
+} from "class-validator";
 
 export const SUPPORTED_CLASS_SLUGS = [
-  'barbarian',
-  'bard',
-  'cleric',
-  'druid',
-  'fighter',
-  'monk',
-  'paladin',
-  'ranger',
-  'rogue',
-  'sorcerer',
-  'warlock',
-  'wizard',
+  "barbarian",
+  "bard",
+  "cleric",
+  "druid",
+  "fighter",
+  "monk",
+  "paladin",
+  "ranger",
+  "rogue",
+  "sorcerer",
+  "warlock",
+  "wizard",
 ] as const;
 
 export type SupportedClassSlug = (typeof SUPPORTED_CLASS_SLUGS)[number];
@@ -51,8 +51,8 @@ export class SeedCharacterDto {
   @IsIn(SUPPORTED_LEVELS as unknown as number[])
   level!: SupportedLevel;
 
-  @IsIn(['XPHB'])
-  edition!: 'XPHB';
+  @IsIn(["XPHB"])
+  edition!: "XPHB";
 
   /**
    * [STR, DEX, CON, INT, WIS, CHA]. Se omitido, standard array alocado pela

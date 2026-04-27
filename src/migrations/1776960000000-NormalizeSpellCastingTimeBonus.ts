@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 #5 — normaliza `casting_time` com padrão malformado `"1 bonus"`
@@ -17,10 +17,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * não "1 Bonus Action") fica em item separado do backlog — exige ler RAW spell
  * a spell.
  */
-export class NormalizeSpellCastingTimeBonus1776960000000
-  implements MigrationInterface
-{
-  name = 'NormalizeSpellCastingTimeBonus1776960000000';
+export class NormalizeSpellCastingTimeBonus1776960000000 implements MigrationInterface {
+  name = "NormalizeSpellCastingTimeBonus1776960000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     // Caso simples: "1 bonus" exato → "1 bonus action"

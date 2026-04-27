@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from "@nestjs/common";
 
 /**
  * Single source of truth for resolving a monster's statblock action into
@@ -24,43 +24,46 @@ export interface ResolvedMonsterAction {
   range?: string;
   reach?: string;
   description: string;
-  attackBonusSource: 'structured' | 'regex' | 'fallback' | 'none';
+  attackBonusSource: "structured" | "regex" | "fallback" | "none";
 }
 
 @Injectable()
 export class MonsterActionResolver {
   private readonly logger = new Logger(MonsterActionResolver.name);
 
-  resolve(monsterAction: any, monsterName = 'unknown'): ResolvedMonsterAction {
-    const name: string = monsterAction?.name ?? 'Ataque';
-    const desc: string = monsterAction?.desc ?? '';
+  resolve(monsterAction: any, monsterName = "unknown"): ResolvedMonsterAction {
+    const name: string = monsterAction?.name ?? "Ataque";
+    const desc: string = monsterAction?.desc ?? "";
     const structuredBonus: number | undefined =
-      typeof monsterAction?.attack_bonus === 'number'
+      typeof monsterAction?.attack_bonus === "number"
         ? monsterAction.attack_bonus
         : undefined;
 
     const regexMatch = desc.match(/([+-]?\d+)\s*to hit/i);
     const regexBonus = regexMatch ? parseInt(regexMatch[1], 10) : undefined;
 
-    const looksLikeAttack = /to hit|attack roll/i.test(desc) || structuredBonus !== undefined;
+    const looksLikeAttack =
+      /to hit|attack roll/i.test(desc) || structuredBonus !== undefined;
 
     let attackBonus = 0;
-    let source: ResolvedMonsterAction['attackBonusSource'] = 'none';
+    let source: ResolvedMonsterAction["attackBonusSource"] = "none";
 
     if (structuredBonus !== undefined) {
       attackBonus = structuredBonus;
-      source = 'structured';
+      source = "structured";
     } else if (regexBonus !== undefined) {
       attackBonus = regexBonus;
-      source = 'regex';
+      source = "regex";
     } else if (looksLikeAttack) {
-      source = 'fallback';
+      source = "fallback";
       this.logger.warn(
         `MonsterActionResolver fallback: ${monsterName}/${name} has no attack_bonus and no "+X to hit" in desc. Using 0.`,
       );
     }
 
-    const dmg = Array.isArray(monsterAction?.damage) ? monsterAction.damage[0] : undefined;
+    const dmg = Array.isArray(monsterAction?.damage)
+      ? monsterAction.damage[0]
+      : undefined;
     const damageMatch = desc.match(/\(([^)]+)\)\s+(\w+)\s+damage/i);
 
     const damageDice: string | undefined =
@@ -84,7 +87,7 @@ export class MonsterActionResolver {
     return {
       name,
       attackBonus,
-      hasAttack: source !== 'none',
+      hasAttack: source !== "none",
       damageDice,
       damageType,
       damageBonus: 0,
@@ -99,7 +102,7 @@ export class MonsterActionResolver {
     monster: { name?: string; actions?: any },
     actionName: string,
   ): ResolvedMonsterAction | null {
-    const actions = Array.isArray(monster?.actions) ? (monster.actions as any[]) : [];
+    const actions = Array.isArray(monster?.actions) ? monster.actions : [];
     const action = actions.find(
       (a: any) => a?.name?.toLowerCase?.() === actionName.toLowerCase(),
     );

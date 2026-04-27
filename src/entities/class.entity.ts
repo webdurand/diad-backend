@@ -5,16 +5,16 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
-} from 'typeorm';
-import { CompSourceEntity } from './comp-source.entity';
-import { SubclassEntity } from './subclass.entity';
-import { ClassProficiencyEntity } from './class-proficiency.entity';
-import { ClassSavingThrowEntity } from './class-saving-throw.entity';
-import { ClassStartingEquipmentEntity } from './class-starting-equipment.entity';
+} from "typeorm";
+import { CompSourceEntity } from "./comp-source.entity";
+import { SubclassEntity } from "./subclass.entity";
+import { ClassProficiencyEntity } from "./class-proficiency.entity";
+import { ClassSavingThrowEntity } from "./class-saving-throw.entity";
+import { ClassStartingEquipmentEntity } from "./class-starting-equipment.entity";
 
-@Entity('classes')
+@Entity("classes")
 export class ClassEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column({ unique: true })
@@ -23,59 +23,59 @@ export class ClassEntity {
   @Column()
   name: string;
 
-  @Column({ type: 'int' })
+  @Column({ type: "int" })
   hit_die: number;
 
-  @Column({ type: 'jsonb' })
+  @Column({ type: "jsonb" })
   proficiency_choices: Record<string, unknown>;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   starting_equipment_options?: Record<string, unknown>;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   class_levels_url?: string;
 
-  @Column({ type: 'jsonb' })
+  @Column({ type: "jsonb" })
   multi_classing: Record<string, unknown>;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   spellcasting?: Record<string, unknown>;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   spells_url?: string;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   weapon_mastery_count: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   weapon_mastery_restriction?: string;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   cantrips_known: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   spells_prepared_count: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   spellbook_count: number;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   class_features_level_1?: Record<string, unknown>[];
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   tool_choice?: Record<string, unknown>;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   always_prepared_spells?: Record<string, unknown>[];
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   source_id?: string;
 
   @ManyToOne(() => CompSourceEntity, { nullable: true })
-  @JoinColumn({ name: 'source_id' })
+  @JoinColumn({ name: "source_id" })
   source?: CompSourceEntity;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   raw?: Record<string, unknown>;
 
   @OneToMany(() => SubclassEntity, (subclass) => subclass.class)
@@ -90,9 +90,9 @@ export class ClassEntity {
   @OneToMany(() => ClassStartingEquipmentEntity, (item) => item.class)
   class_starting_equipment?: ClassStartingEquipmentEntity[];
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   created_at: Date;
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   updated_at: Date;
 }

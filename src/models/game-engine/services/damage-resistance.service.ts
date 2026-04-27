@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 import type {
   DamageInstance,
   DamageProfile,
   ApplyDamageOptions,
   ResistanceApplyResult,
-} from '../interfaces/combat.interfaces';
+} from "../interfaces/combat.interfaces";
 
 /**
  * Spec 004 — Aplicação de resistências/imunidades/vulnerabilidades.
@@ -30,9 +30,9 @@ export class DamageResistanceService {
     const resistances = this.normalize(profile.resistances);
     const vulnerabilities = this.normalize(profile.vulnerabilities);
 
-    const perPartFinal: ResistanceApplyResult['perPartFinal'] = parts.map(
+    const perPartFinal: ResistanceApplyResult["perPartFinal"] = parts.map(
       (part) => {
-        const t = (part.type ?? '').toLowerCase();
+        const t = (part.type ?? "").toLowerCase();
         const isImmune = !opts.ignoreImmunity && this.matches(immunities, t);
         const isResist = !opts.ignoreResistance && this.matches(resistances, t);
         const isVuln = this.matches(vulnerabilities, t);
@@ -41,7 +41,7 @@ export class DamageResistanceService {
           return {
             ...part,
             afterModifier: 0,
-            modifier: 'immune',
+            modifier: "immune",
           };
         }
         // Resist + Vuln cancelam (RAW)
@@ -49,27 +49,27 @@ export class DamageResistanceService {
           return {
             ...part,
             afterModifier: part.amount,
-            modifier: 'none',
+            modifier: "none",
           };
         }
         if (isResist) {
           return {
             ...part,
             afterModifier: Math.floor(part.amount / 2),
-            modifier: 'resist',
+            modifier: "resist",
           };
         }
         if (isVuln) {
           return {
             ...part,
             afterModifier: part.amount * 2,
-            modifier: 'vuln',
+            modifier: "vuln",
           };
         }
         return {
           ...part,
           afterModifier: part.amount,
-          modifier: 'none',
+          modifier: "none",
         };
       },
     );
@@ -99,12 +99,12 @@ export class DamageResistanceService {
     if (Array.isArray(raw)) {
       return raw.map((v) => String(v).toLowerCase());
     }
-    if (typeof raw === 'object') {
+    if (typeof raw === "object") {
       const obj = raw as Record<string, unknown>;
       // Algumas entradas SRD vêm como { 0: "fire", 1: "cold" } ou { types: [...] }
       const list = Array.isArray(obj.types)
         ? obj.types
-        : Object.values(obj).filter((v) => typeof v === 'string');
+        : Object.values(obj).filter((v) => typeof v === "string");
       return (list as unknown[]).map((v) => String(v).toLowerCase());
     }
     return [];
@@ -116,6 +116,8 @@ export class DamageResistanceService {
 
   private matches(list: string[], type: string): boolean {
     if (!type) return false;
-    return list.some((entry) => entry === type || entry.includes(type) || type.includes(entry));
+    return list.some(
+      (entry) => entry === type || entry.includes(type) || type.includes(entry),
+    );
   }
 }

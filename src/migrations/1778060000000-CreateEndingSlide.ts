@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — BG3/PoE pattern epilogue slides.
@@ -9,7 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * {decision.text}, {consequence} etc.
  */
 export class CreateEndingSlide1778060000000 implements MigrationInterface {
-  name = 'CreateEndingSlide1778060000000';
+  name = "CreateEndingSlide1778060000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

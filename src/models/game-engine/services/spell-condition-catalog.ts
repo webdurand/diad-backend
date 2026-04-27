@@ -14,7 +14,7 @@ import type {
   ConditionSlug,
   SaveAbility,
   RepeatSaveTiming,
-} from '../interfaces/combat.interfaces';
+} from "../interfaces/combat.interfaces";
 
 export interface SpellConditionEntry {
   conditionSlug: ConditionSlug;
@@ -26,112 +26,112 @@ export interface SpellConditionEntry {
 }
 
 export const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
-  'hold-person': {
-    conditionSlug: 'paralyzed',
-    saveAbility: 'wis',
+  "hold-person": {
+    conditionSlug: "paralyzed",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
-  'hold-monster': {
-    conditionSlug: 'paralyzed',
-    saveAbility: 'wis',
+  "hold-monster": {
+    conditionSlug: "paralyzed",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
-  'web': {
-    conditionSlug: 'restrained',
-    saveAbility: 'dex',
+  web: {
+    conditionSlug: "restrained",
+    saveAbility: "dex",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
-  'dominate-monster': {
-    conditionSlug: 'charmed',
-    saveAbility: 'wis',
+  "dominate-monster": {
+    conditionSlug: "charmed",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'never',
+    repeatSaveTiming: "never",
   },
-  'dominate-person': {
-    conditionSlug: 'charmed',
-    saveAbility: 'wis',
+  "dominate-person": {
+    conditionSlug: "charmed",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'never',
+    repeatSaveTiming: "never",
   },
-  'hypnotic-pattern': {
-    conditionSlug: 'incapacitated',
-    saveAbility: 'wis',
+  "hypnotic-pattern": {
+    conditionSlug: "incapacitated",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'never',
+    repeatSaveTiming: "never",
   },
-  'fear': {
-    conditionSlug: 'frightened',
-    saveAbility: 'wis',
+  fear: {
+    conditionSlug: "frightened",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
-  'command': {
-    conditionSlug: 'charmed',
-    saveAbility: 'wis',
+  command: {
+    conditionSlug: "charmed",
+    saveAbility: "wis",
     durationRounds: 1,
     requiresConcentration: false,
-    repeatSaveTiming: 'never',
+    repeatSaveTiming: "never",
   },
   // Spec 012 Lote B — polymorph é transformation (statblock swap), não condition.
   // Wire dedicado em spell-casting.service via TransformationService.enterForm.
-  'maze': {
-    conditionSlug: 'incapacitated',
-    saveAbility: 'int',
+  maze: {
+    conditionSlug: "incapacitated",
+    saveAbility: "int",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
-  'banishment': {
-    conditionSlug: 'incapacitated',
-    saveAbility: 'cha',
+  banishment: {
+    conditionSlug: "incapacitated",
+    saveAbility: "cha",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'never',
+    repeatSaveTiming: "never",
   },
-  'blindness-deafness': {
-    conditionSlug: 'blinded',
-    saveAbility: 'con',
+  "blindness-deafness": {
+    conditionSlug: "blinded",
+    saveAbility: "con",
     durationRounds: 10,
     requiresConcentration: false,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
-  'sleep': {
-    conditionSlug: 'unconscious',
-    saveAbility: 'wis',
+  sleep: {
+    conditionSlug: "unconscious",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: false,
-    repeatSaveTiming: 'never',
+    repeatSaveTiming: "never",
   },
-  'suggestion': {
-    conditionSlug: 'charmed',
-    saveAbility: 'wis',
+  suggestion: {
+    conditionSlug: "charmed",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'never',
+    repeatSaveTiming: "never",
   },
-  'tashas-hideous-laughter': {
-    conditionSlug: 'incapacitated',
-    saveAbility: 'wis',
+  "tashas-hideous-laughter": {
+    conditionSlug: "incapacitated",
+    saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
-  'entangle': {
-    conditionSlug: 'restrained',
-    saveAbility: 'str',
+  entangle: {
+    conditionSlug: "restrained",
+    saveAbility: "str",
     durationRounds: 10,
     requiresConcentration: true,
-    repeatSaveTiming: 'end_of_turn',
+    repeatSaveTiming: "end_of_turn",
   },
 };
 

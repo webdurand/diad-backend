@@ -1,10 +1,16 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { CompSourceEntity } from './comp-source.entity';
-import { ProficiencyTypeEnum } from './enums';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+} from "typeorm";
+import { CompSourceEntity } from "./comp-source.entity";
+import { ProficiencyTypeEnum } from "./enums";
 
-@Entity('proficiencies')
+@Entity("proficiencies")
 export class ProficiencyEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column({ unique: true })
@@ -14,28 +20,28 @@ export class ProficiencyEntity {
   name: string;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: ProficiencyTypeEnum,
-    enumName: 'proficiency_type_enum',
+    enumName: "proficiency_type_enum",
   })
   proficiency_type: ProficiencyTypeEnum;
 
-  @Column({ type: 'jsonb' })
+  @Column({ type: "jsonb" })
   reference: Record<string, unknown>;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   source_id?: string;
 
   @ManyToOne(() => CompSourceEntity, { nullable: true })
-  @JoinColumn({ name: 'source_id' })
+  @JoinColumn({ name: "source_id" })
   source?: CompSourceEntity;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   raw?: Record<string, unknown>;
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   created_at: Date;
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   updated_at: Date;
 }

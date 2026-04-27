@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Barbarian 100% — campo `relentless_rage_uses_used` em
@@ -6,7 +6,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * desde o último long rest. DC escala: 10 + 5×uses.
  */
 export class AddRelentlessRageUses1777070000000 implements MigrationInterface {
-  name = 'AddRelentlessRageUses1777070000000';
+  name = "AddRelentlessRageUses1777070000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 005 — Level-up PHB Unified.
@@ -9,10 +9,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * PHB para aquele (class_id, level) não foi seedada (XPHB é usado como
  * fallback, com flag `featureSourceFallback` no response).
  */
-export class AddEditionRulesFallbackSources1776500000000
-  implements MigrationInterface
-{
-  name = 'AddEditionRulesFallbackSources1776500000000';
+export class AddEditionRulesFallbackSources1776500000000 implements MigrationInterface {
+  name = "AddEditionRulesFallbackSources1776500000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

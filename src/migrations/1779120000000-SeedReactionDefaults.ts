@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 016 M5 — Seed defaults de reactions por classe (RAW 2024 + Solasta lesson).
@@ -15,7 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 interface DefaultRow {
   classSlug: string;
   reactionName: string;
-  defaultState: 'auto' | 'ask' | 'off';
+  defaultState: "auto" | "ask" | "off";
   consumesSpellSlot: boolean;
   description: string;
 }
@@ -23,87 +23,86 @@ interface DefaultRow {
 const DEFAULTS: DefaultRow[] = [
   // Fighter
   {
-    classSlug: 'fighter',
-    reactionName: 'opportunity-attack',
-    defaultState: 'auto',
+    classSlug: "fighter",
+    reactionName: "opportunity-attack",
+    defaultState: "auto",
     consumesSpellSlot: false,
-    description: 'OA passivo — dispara quando inimigo sai do alcance.',
+    description: "OA passivo — dispara quando inimigo sai do alcance.",
   },
   {
-    classSlug: 'fighter',
-    reactionName: 'second-wind',
-    defaultState: 'auto',
+    classSlug: "fighter",
+    reactionName: "second-wind",
+    defaultState: "auto",
     consumesSpellSlot: false,
-    description: 'Recupera HP quando você cai abaixo de 50%; bônus action.',
+    description: "Recupera HP quando você cai abaixo de 50%; bônus action.",
   },
   // Wizard
   {
-    classSlug: 'wizard',
-    reactionName: 'shield',
-    defaultState: 'ask',
+    classSlug: "wizard",
+    reactionName: "shield",
+    defaultState: "ask",
     consumesSpellSlot: true,
-    description: '+5 CA até início do próximo turno; consome slot 1.',
+    description: "+5 CA até início do próximo turno; consome slot 1.",
   },
   {
-    classSlug: 'wizard',
-    reactionName: 'counterspell',
-    defaultState: 'ask',
+    classSlug: "wizard",
+    reactionName: "counterspell",
+    defaultState: "ask",
     consumesSpellSlot: true,
-    description: 'Cancela spell inimiga; consome slot 3+ (RAW 2024 ability check).',
+    description:
+      "Cancela spell inimiga; consome slot 3+ (RAW 2024 ability check).",
   },
   // Cleric
   {
-    classSlug: 'cleric',
-    reactionName: 'sanctuary',
-    defaultState: 'ask',
+    classSlug: "cleric",
+    reactionName: "sanctuary",
+    defaultState: "ask",
     consumesSpellSlot: true,
-    description: 'Protege aliado de ataque; consome slot 1.',
+    description: "Protege aliado de ataque; consome slot 1.",
   },
   // Sorcerer
   {
-    classSlug: 'sorcerer',
-    reactionName: 'counterspell',
-    defaultState: 'ask',
+    classSlug: "sorcerer",
+    reactionName: "counterspell",
+    defaultState: "ask",
     consumesSpellSlot: true,
-    description: 'Cancela spell inimiga; consome slot 3+.',
+    description: "Cancela spell inimiga; consome slot 3+.",
   },
   {
-    classSlug: 'sorcerer',
-    reactionName: 'shield',
-    defaultState: 'ask',
+    classSlug: "sorcerer",
+    reactionName: "shield",
+    defaultState: "ask",
     consumesSpellSlot: true,
-    description: '+5 CA via subclass spell list; consome slot 1.',
+    description: "+5 CA via subclass spell list; consome slot 1.",
   },
   // Bard
   {
-    classSlug: 'bard',
-    reactionName: 'cutting-words',
-    defaultState: 'ask',
+    classSlug: "bard",
+    reactionName: "cutting-words",
+    defaultState: "ask",
     consumesSpellSlot: false,
-    description: 'Reduz attack/check inimigo (Lore L3); consome bardic die.',
+    description: "Reduz attack/check inimigo (Lore L3); consome bardic die.",
   },
   // Paladin
   {
-    classSlug: 'paladin',
-    reactionName: 'rebuke-the-violent-2024',
-    defaultState: 'ask',
+    classSlug: "paladin",
+    reactionName: "rebuke-the-violent-2024",
+    defaultState: "ask",
     consumesSpellSlot: true,
-    description: 'Oath of Vengeance L7 — força save quando aliado é atingido.',
+    description: "Oath of Vengeance L7 — força save quando aliado é atingido.",
   },
   // Rogue
   {
-    classSlug: 'rogue',
-    reactionName: 'uncanny-dodge',
-    defaultState: 'auto',
+    classSlug: "rogue",
+    reactionName: "uncanny-dodge",
+    defaultState: "auto",
     consumesSpellSlot: false,
-    description: 'Reduz pela metade dano de ataque visível (L5+).',
+    description: "Reduz pela metade dano de ataque visível (L5+).",
   },
 ];
 
-export class SeedReactionDefaults1779120000000
-  implements MigrationInterface
-{
-  name = 'SeedReactionDefaults1779120000000';
+export class SeedReactionDefaults1779120000000 implements MigrationInterface {
+  name = "SeedReactionDefaults1779120000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     for (const d of DEFAULTS) {
@@ -127,7 +126,9 @@ export class SeedReactionDefaults1779120000000
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    const rows = DEFAULTS.map((d) => `('${d.classSlug}','${d.reactionName}')`).join(',');
+    const rows = DEFAULTS.map(
+      (d) => `('${d.classSlug}','${d.reactionName}')`,
+    ).join(",");
     await queryRunner.query(
       `DELETE FROM reaction_defaults
        WHERE (class_slug, reaction_name) IN (${rows})`,

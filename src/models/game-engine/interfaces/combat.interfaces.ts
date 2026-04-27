@@ -1,5 +1,5 @@
-import { DiceResult, AdvantageResult } from './dice.interfaces';
-import type { AreaEffect } from 'src/shared/aoe-origin.types';
+import { DiceResult, AdvantageResult } from "./dice.interfaces";
+import type { AreaEffect } from "src/shared/aoe-origin.types";
 
 export interface AttackRollResult {
   roll: number;
@@ -73,7 +73,7 @@ export interface DeathSaveResult {
   successes: number;
   failures: number;
   /** Final dying state after this roll. */
-  dyingState: 'none' | 'dying' | 'stable' | 'dead';
+  dyingState: "none" | "dying" | "stable" | "dead";
   /** Back-compat: `dyingState === 'stable'`. */
   stabilized: boolean;
   /** Back-compat: `dyingState === 'dead'`. */
@@ -87,10 +87,10 @@ export interface TurnInfo {
   round: number;
   participantId: string;
   participantName: string;
-  participantType: 'pc' | 'monster' | 'npc';
+  participantType: "pc" | "monster" | "npc";
   isDefeated: boolean;
   /** Only meaningful for PCs; monsters are always 'none'. */
-  dyingState?: 'none' | 'dying' | 'stable' | 'dead';
+  dyingState?: "none" | "dying" | "stable" | "dead";
   /** True when turn was auto-skipped (stable PC); frontend should call /end-turn immediately. */
   autoSkip?: boolean;
 }
@@ -128,7 +128,7 @@ export interface ConditionTurnEffect {
 }
 
 // AoEShape re-exportado de shared/aoe-origin.types pra compat; preferir import direto de lá.
-export type { AoEShape } from 'src/shared/aoe-origin.types';
+export type { AoEShape } from "src/shared/aoe-origin.types";
 
 export interface TurnActionBlock {
   id: string;
@@ -138,7 +138,7 @@ export interface TurnActionBlock {
   sourceLabel: string;
   description: string;
   /** Discriminator for aggregators — 'multiattack' | 'spell-opener' | undefined (regular). */
-  kind?: 'multiattack' | 'spell-opener' | 'attack';
+  kind?: "multiattack" | "spell-opener" | "attack";
   attackBonus?: number;
   damage?: { dice: string; type: string; bonus?: number };
   range?: string;
@@ -155,7 +155,7 @@ export interface TurnActionBlock {
   /** Multiattack aggregator: ordered list of sub-attacks. */
   sequence?: Array<{ actionName: string; count: number }>;
   /** Multiattack recharge gate (e.g. '5-6' on a breath weapon). null when always available. */
-  rechargeRequired?: '5-6' | '6' | null;
+  rechargeRequired?: "5-6" | "6" | null;
   /** Spec 011 Phase 3 — slug canônico (ex: 'arcane-recovery', 'second-wind') sem prefixo `feature-{uuid}-`.
    *  Necessário pro front chamar /class-feature com o featureSlug certo do catálogo. */
   featureSlug?: string;
@@ -167,7 +167,7 @@ export interface TurnActionBlock {
   /** Premissa weapons-in-hand — char é proficient com a arma/escudo. */
   proficient?: boolean;
   /** Premissa weapons-in-hand — slot (main | off | null). Unarmed é null (intrínseco). */
-  handSlot?: 'main' | 'off' | null;
+  handSlot?: "main" | "off" | null;
   /** Spec 015 — uses restantes (features com carga contável: BI, Second Wind, Rage, etc.). */
   uses?: number;
   /** Spec 015 — max uses no nível atual (usado pra render "3/5" no card). */
@@ -191,7 +191,7 @@ export interface AoEResolveResult {
 export interface TurnActionsResult {
   participantId: string;
   participantName: string;
-  participantType: 'pc' | 'monster' | 'npc';
+  participantType: "pc" | "monster" | "npc";
   /** Ataques de arma, multiataques e ações específicas (source !== 'generic'). Spec 005 US13. */
   actions: TurnActionBlock[];
   /** As 8 ações PHB (Dodge/Dash/Disengage/Help/Hide/Ready/Search/Use Object). Spec 005 US13.
@@ -215,8 +215,8 @@ export interface TurnActionsResult {
 /** Gatilho de Ready (PHB cap. 9). Spec 003 cobre apenas os 2 enums pré-definidos;
  * gatilhos textuais livres ("custom") ficam pra spec futura. */
 export type ReadyTrigger =
-  | { kind: 'enemy_enters_range'; rangeFt: number }
-  | { kind: 'enemy_attacks_ally'; allyParticipantId: string };
+  | { kind: "enemy_enters_range"; rangeFt: number }
+  | { kind: "enemy_attacks_ally"; allyParticipantId: string };
 
 /** Ação armada via Ready; dispara quando o gatilho ocorre, consumindo a reação. */
 export interface ReadiedAction {
@@ -235,31 +235,31 @@ export interface HelpingState {
 
 /** Discriminated union — planos emitidos pelo `AiTurnExecutor` antes da execução. */
 export type PlannedActionStep =
-  | { kind: 'move'; to: { x: number; y: number } }
-  | { kind: 'attack'; actionName: string; targetParticipantIds: string[] }
+  | { kind: "move"; to: { x: number; y: number } }
+  | { kind: "attack"; actionName: string; targetParticipantIds: string[] }
   | {
-      kind: 'cast-spell';
+      kind: "cast-spell";
       spellSlug: string;
       slotLevel?: number;
       targetParticipantIds?: string[];
       point?: { x: number; y: number };
     }
-  | { kind: 'dodge' }
-  | { kind: 'dash' }
-  | { kind: 'disengage' }
-  | { kind: 'help'; allyParticipantId: string; targetParticipantId: string }
-  | { kind: 'hide' }
-  | { kind: 'ready'; trigger: ReadyTrigger; readiedAction: PlannedActionStep }
-  | { kind: 'search'; ability: 'perception' | 'investigation' }
+  | { kind: "dodge" }
+  | { kind: "dash" }
+  | { kind: "disengage" }
+  | { kind: "help"; allyParticipantId: string; targetParticipantId: string }
+  | { kind: "hide" }
+  | { kind: "ready"; trigger: ReadyTrigger; readiedAction: PlannedActionStep }
+  | { kind: "search"; ability: "perception" | "investigation" }
   | {
-      kind: 'use-object';
-      objectRef: { source: 'inventory' | 'environment'; slug: string };
+      kind: "use-object";
+      objectRef: { source: "inventory" | "environment"; slug: string };
     }
-  | { kind: 'end-turn' };
+  | { kind: "end-turn" };
 
 /** Resultado de um step executado, com descritor do evento gerado. */
 export interface ActionStep {
-  kind: PlannedActionStep['kind'];
+  kind: PlannedActionStep["kind"];
   payload: Record<string, unknown>;
   result: {
     ok: boolean;
@@ -280,7 +280,7 @@ export interface TurnExecutionResult {
     reactionUsed: boolean;
     hp: { current: number; max: number };
     conditions: string[];
-    dyingState: 'none' | 'dying' | 'stable' | 'dead';
+    dyingState: "none" | "dying" | "stable" | "dead";
   };
   llmCostUsd?: number;
   tookMs: number;
@@ -292,26 +292,26 @@ export interface TurnExecutionResult {
 // ============================================================================
 
 export type ConditionSlug =
-  | 'blinded'
-  | 'charmed'
-  | 'deafened'
-  | 'frightened'
-  | 'grappled'
-  | 'incapacitated'
-  | 'invisible'
-  | 'paralyzed'
-  | 'petrified'
-  | 'poisoned'
-  | 'prone'
-  | 'restrained'
-  | 'stunned'
-  | 'unconscious'
-  | 'exhaustion'
-  | 'hidden';
+  | "blinded"
+  | "charmed"
+  | "deafened"
+  | "frightened"
+  | "grappled"
+  | "incapacitated"
+  | "invisible"
+  | "paralyzed"
+  | "petrified"
+  | "poisoned"
+  | "prone"
+  | "restrained"
+  | "stunned"
+  | "unconscious"
+  | "exhaustion"
+  | "hidden";
 
-export type SaveAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+export type SaveAbility = "str" | "dex" | "con" | "int" | "wis" | "cha";
 
-export type RepeatSaveTiming = 'end_of_turn' | 'start_of_turn' | 'never';
+export type RepeatSaveTiming = "end_of_turn" | "start_of_turn" | "never";
 
 /**
  * Spec 015 Eixo 3 — semântica de origem da condição.
@@ -332,8 +332,8 @@ export type RepeatSaveTiming = 'end_of_turn' | 'start_of_turn' | 'never';
  *   3. Narrative descriptor em `condition_removed` events — render UI.
  */
 export type ConditionSource =
-  | 'manual'
-  | 'hp_zero'
+  | "manual"
+  | "hp_zero"
   | `spell:${string}`
   | `feature:${string}`
   | `ability:${string}`
@@ -368,7 +368,10 @@ export interface ConditionInstance {
   appliedAt: string;
 }
 
-export type AppliedEffectKind = 'condition' | 'persistent-area' | 'effect-instance';
+export type AppliedEffectKind =
+  | "condition"
+  | "persistent-area"
+  | "effect-instance";
 
 /**
  * Rastreia o que uma magia de concentração aplicou.
@@ -391,50 +394,50 @@ export interface AppliedEffect {
 // ============================================================================
 
 export type EffectInstanceKind =
-  | 'ac_bonus'                          // Mage Armor, Shield, Haste
-  | 'attack_bonus'                      // Bless (attack portion), Divine Favor
-  | 'attack_penalty'                    // Bane (attack portion) — rolled dice subtracts
-  | 'save_bonus'                        // Bless (save portion)
-  | 'save_penalty'                      // Bane (save portion) — rolled dice subtracts
-  | 'damage_bonus'                      // Rage, Divine Favor
-  | 'damage_resistance'                 // Rage, Protection from Energy, Fire Shield
-  | 'grant_advantage_to_attackers'      // Guiding Bolt, Reckless Attack target
-  | 'grant_disadvantage_to_attackers'   // Dodge, Sanctuary, Blur, Invisibility
-  | 'self_advantage'                    // Rage STR checks, Invisibility (attack)
-  | 'self_disadvantage'
-  | 'self_advantage_next_attack'        // Steady Aim (one-shot flag); Vex (vs target)
-  | 'self_disadvantage_next_attack'     // Sap mastery (one-shot flag no target)
-  | 'speed_reduction'                   // Slow mastery: payload.amount = ft subtraidos
-  | 'hp_shield'                         // False Life, Heroism absorption
-  | 'statblock_swap'                    // Wild Shape
-  | 'inspiration_die'                   // Bardic Inspiration (consumível)
-  | 'flight_speed'                      // Fly
-  | 'speed_multiplier'                  // Haste (×2 speed)
-  | 'extra_action'                      // Haste (1 extra action)
-  | 'true_sight'                        // True Seeing
-  | 'damage_immunity_threshold'         // Globe of Invulnerability (immune ≤ L5)
-  | 'hex_mark'                          // Hex: target recebe +1d6 necrotic rider do caster
-  | 'hunter_mark'                       // Hunter's Mark: target recebe +1d6 rider do caster
-  | 'foe_slayer_used_this_turn'         // Ranger L20 Foe Slayer: 1/turn consumed flag
-  | 'bardic_inspiration'                // Bardic Inspiration armada no target
-  | 'bane'
-  | 'bless'
-  | 'capstone_start_combat_done'        // Spec 012 Lote C — marker capstone start-of-combat
-  | 'eldritch_master_used_this_rest'    // Warlock L20 — marker 1/LR
-  | 'stroke_of_luck_armed_attack'       // Rogue L20 — próximo attack miss → hit
-  | 'stroke_of_luck_armed_check'        // Rogue L20 — próximo ability check → d20=20
-  | 'stroke_of_luck_used_this_rest'     // Rogue L20 — marker 1/SR
-  | 'holy_nimbus_armed'                 // Paladin L20 Devotion — aura 30ft 1min
-  | 'spell_mastery_slot_free'           // Wizard L18 — marcador de cast grátis
-  | 'signature_spell_used_this_rest';   // Wizard L20 — marker 1/SR por spell
+  | "ac_bonus" // Mage Armor, Shield, Haste
+  | "attack_bonus" // Bless (attack portion), Divine Favor
+  | "attack_penalty" // Bane (attack portion) — rolled dice subtracts
+  | "save_bonus" // Bless (save portion)
+  | "save_penalty" // Bane (save portion) — rolled dice subtracts
+  | "damage_bonus" // Rage, Divine Favor
+  | "damage_resistance" // Rage, Protection from Energy, Fire Shield
+  | "grant_advantage_to_attackers" // Guiding Bolt, Reckless Attack target
+  | "grant_disadvantage_to_attackers" // Dodge, Sanctuary, Blur, Invisibility
+  | "self_advantage" // Rage STR checks, Invisibility (attack)
+  | "self_disadvantage"
+  | "self_advantage_next_attack" // Steady Aim (one-shot flag); Vex (vs target)
+  | "self_disadvantage_next_attack" // Sap mastery (one-shot flag no target)
+  | "speed_reduction" // Slow mastery: payload.amount = ft subtraidos
+  | "hp_shield" // False Life, Heroism absorption
+  | "statblock_swap" // Wild Shape
+  | "inspiration_die" // Bardic Inspiration (consumível)
+  | "flight_speed" // Fly
+  | "speed_multiplier" // Haste (×2 speed)
+  | "extra_action" // Haste (1 extra action)
+  | "true_sight" // True Seeing
+  | "damage_immunity_threshold" // Globe of Invulnerability (immune ≤ L5)
+  | "hex_mark" // Hex: target recebe +1d6 necrotic rider do caster
+  | "hunter_mark" // Hunter's Mark: target recebe +1d6 rider do caster
+  | "foe_slayer_used_this_turn" // Ranger L20 Foe Slayer: 1/turn consumed flag
+  | "bardic_inspiration" // Bardic Inspiration armada no target
+  | "bane"
+  | "bless"
+  | "capstone_start_combat_done" // Spec 012 Lote C — marker capstone start-of-combat
+  | "eldritch_master_used_this_rest" // Warlock L20 — marker 1/LR
+  | "stroke_of_luck_armed_attack" // Rogue L20 — próximo attack miss → hit
+  | "stroke_of_luck_armed_check" // Rogue L20 — próximo ability check → d20=20
+  | "stroke_of_luck_used_this_rest" // Rogue L20 — marker 1/SR
+  | "holy_nimbus_armed" // Paladin L20 Devotion — aura 30ft 1min
+  | "spell_mastery_slot_free" // Wizard L18 — marcador de cast grátis
+  | "signature_spell_used_this_rest"; // Wizard L20 — marker 1/SR por spell
 
 export type EffectExpirationKind =
-  | 'rounds'
-  | 'turns'
-  | 'concentration'
-  | 'until_caster_turn'
-  | 'until_consumed'
-  | 'end_of_encounter';
+  | "rounds"
+  | "turns"
+  | "concentration"
+  | "until_caster_turn"
+  | "until_consumed"
+  | "end_of_encounter";
 
 export interface EffectInstancePayload {
   amount?: number;
@@ -443,7 +446,7 @@ export interface EffectInstancePayload {
   beastSlug?: string;
   absorptionHp?: number;
   triggerEventId?: string;
-  scope?: 'any' | 'melee' | 'ranged' | 'str-check' | 'str-save' | 'dex-save';
+  scope?: "any" | "melee" | "ranged" | "str-check" | "str-save" | "dex-save";
   /** Vex mastery: attacker-side self_advantage_next_attack só aplica se alvo bater.
    *  Se undefined → advantage em qualquer alvo (Steady Aim). */
   requiredTargetId?: string;
@@ -489,7 +492,7 @@ export interface LairAction {
   appliesCondition?: ConditionSlug;
   /** Se a ação cria área persistente, descritor pra criação. */
   createsPersistentArea?: {
-    shapeKind: 'sphere' | 'cube' | 'cylinder' | 'line' | 'cone';
+    shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
     radiusCells: number;
     damageDice: string;
     damageType: string;
@@ -504,10 +507,10 @@ export interface LegendaryActionStatblock {
   name: string;
   description: string;
   cost: 1 | 2 | 3;
-  resolverHint: 'attack' | 'save' | 'movement' | 'special';
+  resolverHint: "attack" | "save" | "movement" | "special";
 }
 
-export type RechargeState = Record<string, 'available' | 'used'>;
+export type RechargeState = Record<string, "available" | "used">;
 
 export interface DamageInstance {
   type: string;
@@ -527,8 +530,10 @@ export interface DamageProfile {
 
 export interface ResistanceApplyResult {
   finalDamage: number;
-  perPartFinal: Array<DamageInstance & {
-    afterModifier: number;
-    modifier: 'resist' | 'immune' | 'vuln' | 'none';
-  }>;
+  perPartFinal: Array<
+    DamageInstance & {
+      afterModifier: number;
+      modifier: "resist" | "immune" | "vuln" | "none";
+    }
+  >;
 }

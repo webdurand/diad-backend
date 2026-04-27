@@ -5,13 +5,13 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
-} from 'typeorm';
-import { CompSourceEntity } from './comp-source.entity';
-import { EquipmentCategoryItemEntity } from './equipment-category-item.entity';
+} from "typeorm";
+import { CompSourceEntity } from "./comp-source.entity";
+import { EquipmentCategoryItemEntity } from "./equipment-category-item.entity";
 
-@Entity('equipment_categories')
+@Entity("equipment_categories")
 export class EquipmentCategoryEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column({ unique: true })
@@ -20,25 +20,22 @@ export class EquipmentCategoryEntity {
   @Column()
   name: string;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   source_id?: string;
 
   @ManyToOne(() => CompSourceEntity, { nullable: true })
-  @JoinColumn({ name: 'source_id' })
+  @JoinColumn({ name: "source_id" })
   source?: CompSourceEntity;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   raw?: Record<string, unknown>;
 
-  @OneToMany(
-    () => EquipmentCategoryItemEntity,
-    (item) => item.category,
-  )
+  @OneToMany(() => EquipmentCategoryItemEntity, (item) => item.category)
   equipment_items?: EquipmentCategoryItemEntity[];
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   created_at: Date;
 
-  @Column({ type: 'timestamptz', default: () => 'now()' })
+  @Column({ type: "timestamptz", default: () => "now()" })
   updated_at: Date;
 }

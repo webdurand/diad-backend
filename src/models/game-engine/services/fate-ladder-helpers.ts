@@ -7,10 +7,10 @@
  */
 
 export type ResurrectionSpell =
-  | 'Revivify'
-  | 'Raise Dead'
-  | 'Resurrection'
-  | 'True Resurrection';
+  | "Revivify"
+  | "Raise Dead"
+  | "Resurrection"
+  | "True Resurrection";
 
 export interface ResurrectionRequirements {
   spell: ResurrectionSpell;
@@ -20,56 +20,62 @@ export interface ResurrectionRequirements {
   timeWindowMinutes: number;
   d20Penalty: number;
   decayPerLongRest: number;
-  duration: 'none' | 'until_long_rest_decay' | 'permanent_until_greater_restoration';
+  duration:
+    | "none"
+    | "until_long_rest_decay"
+    | "permanent_until_greater_restoration";
 }
 
-export const RESURRECTION_TABLE: Record<ResurrectionSpell, ResurrectionRequirements> = {
+export const RESURRECTION_TABLE: Record<
+  ResurrectionSpell,
+  ResurrectionRequirements
+> = {
   // RAW 2024 PHB.
   Revivify: {
-    spell: 'Revivify',
+    spell: "Revivify",
     diamondGp: 300,
     spellSlotLevel: 3,
     timeWindowMinutes: 1,
     d20Penalty: 0,
     decayPerLongRest: 0,
-    duration: 'none',
+    duration: "none",
   },
-  'Raise Dead': {
-    spell: 'Raise Dead',
+  "Raise Dead": {
+    spell: "Raise Dead",
     diamondGp: 500,
     spellSlotLevel: 5,
     timeWindowMinutes: 10 * 24 * 60, // 10 dias
     d20Penalty: -4,
     decayPerLongRest: 1,
-    duration: 'until_long_rest_decay',
+    duration: "until_long_rest_decay",
   },
   Resurrection: {
-    spell: 'Resurrection',
+    spell: "Resurrection",
     diamondGp: 1000,
     spellSlotLevel: 7,
     timeWindowMinutes: 100 * 365 * 24 * 60, // 100 anos
     d20Penalty: -4,
     decayPerLongRest: 1,
-    duration: 'until_long_rest_decay',
+    duration: "until_long_rest_decay",
   },
-  'True Resurrection': {
-    spell: 'True Resurrection',
+  "True Resurrection": {
+    spell: "True Resurrection",
     diamondGp: 25000,
     spellSlotLevel: 9,
     timeWindowMinutes: 200 * 365 * 24 * 60, // 200 anos
     d20Penalty: 0,
     decayPerLongRest: 0,
-    duration: 'none',
+    duration: "none",
   },
 };
 
 export type PriceCostKind =
-  | 'npc_bond_broken'
-  | 'faction_shift_hostile'
-  | 'exhaustion_plus_2_perm'
-  | 'quest_hard_locked'
-  | 'magic_item_consumed'
-  | 'memory_loss_one_scene';
+  | "npc_bond_broken"
+  | "faction_shift_hostile"
+  | "exhaustion_plus_2_perm"
+  | "quest_hard_locked"
+  | "magic_item_consumed"
+  | "memory_loss_one_scene";
 
 export interface PriceCost {
   kind: PriceCostKind;
@@ -84,41 +90,47 @@ export interface PriceCost {
  */
 export const DEFAULT_PRICE_TABLE: PriceCost[] = [
   {
-    kind: 'npc_bond_broken',
-    narrativeFraming: 'Um NPC aliado se afasta — culpa, dor ou trauma quebra o vínculo.',
+    kind: "npc_bond_broken",
+    narrativeFraming:
+      "Um NPC aliado se afasta — culpa, dor ou trauma quebra o vínculo.",
     weight: 25,
   },
   {
-    kind: 'faction_shift_hostile',
-    narrativeFraming: 'Uma facção que era neutra agora é hostil — o resgate teve um preço político.',
+    kind: "faction_shift_hostile",
+    narrativeFraming:
+      "Uma facção que era neutra agora é hostil — o resgate teve um preço político.",
     weight: 15,
   },
   {
-    kind: 'exhaustion_plus_2_perm',
-    narrativeFraming: 'O corpo sobrevive marcado: 2 níveis de exaustão permanentes (até greater restoration).',
+    kind: "exhaustion_plus_2_perm",
+    narrativeFraming:
+      "O corpo sobrevive marcado: 2 níveis de exaustão permanentes (até greater restoration).",
     weight: 20,
   },
   {
-    kind: 'quest_hard_locked',
-    narrativeFraming: 'Uma quest secundária se fecha — quem você precisava ajudar morre ou desaparece.',
+    kind: "quest_hard_locked",
+    narrativeFraming:
+      "Uma quest secundária se fecha — quem você precisava ajudar morre ou desaparece.",
     weight: 15,
   },
   {
-    kind: 'magic_item_consumed',
-    narrativeFraming: 'Um item mágico significativo se quebra ou consome a si mesmo no preço.',
+    kind: "magic_item_consumed",
+    narrativeFraming:
+      "Um item mágico significativo se quebra ou consome a si mesmo no preço.",
     weight: 15,
   },
   {
-    kind: 'memory_loss_one_scene',
-    narrativeFraming: 'Você esquece o que aconteceu na cena anterior — ela vira mistério no journal.',
+    kind: "memory_loss_one_scene",
+    narrativeFraming:
+      "Você esquece o que aconteceu na cena anterior — ela vira mistério no journal.",
     weight: 10,
   },
 ];
 
 export const FORBIDDEN_COSTS = [
-  'level_drain',
-  'hp_max_permanent_loss',
-  'ability_score_reduction',
+  "level_drain",
+  "hp_max_permanent_loss",
+  "ability_score_reduction",
 ] as const;
 
 /**
@@ -161,10 +173,10 @@ export function validateSacrificeBounded(
   const max = options?.maxLength ?? 300;
 
   if (trimmed.length < min) {
-    return { ok: false, reason: 'Descrição muito curta. Use 1-2 frases.' };
+    return { ok: false, reason: "Descrição muito curta. Use 1-2 frases." };
   }
   if (trimmed.length > max) {
-    return { ok: false, reason: 'Descrição muito longa. Limite: 1-2 frases.' };
+    return { ok: false, reason: "Descrição muito longa. Limite: 1-2 frases." };
   }
   // Heurística anti-grand-claim: rejeita verbos que sugerem resolver arcs ungated.
   const overreachPatterns = [
@@ -177,7 +189,8 @@ export function validateSacrificeBounded(
     if (pattern.test(trimmed)) {
       return {
         ok: false,
-        reason: 'Sacrifício deve fechar a cena atual, não resolver arcs futuros.',
+        reason:
+          "Sacrifício deve fechar a cena atual, não resolver arcs futuros.",
       };
     }
   }
@@ -208,7 +221,7 @@ export function eligibleResurrectionSpells(input: {
  */
 export interface PayPriceOutcome {
   hpRestored: 1;
-  status: 'stable_unconscious';
+  status: "stable_unconscious";
   wakesNextRound: true;
   costApplied: PriceCost;
 }
@@ -216,7 +229,7 @@ export interface PayPriceOutcome {
 export function buildPayPriceOutcome(cost: PriceCost): PayPriceOutcome {
   return {
     hpRestored: 1,
-    status: 'stable_unconscious',
+    status: "stable_unconscious",
     wakesNextRound: true,
     costApplied: cost,
   };

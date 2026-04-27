@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { PersistentAreaEffectEntity } from 'src/entities/persistent-area-effect.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { DiceService } from './dice.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { DiceService } from "./dice.service";
 import {
   TILE_EFFECT_CATALOG,
   getTileEffectDefinition,
@@ -11,15 +11,15 @@ import {
   type TileEffectKind,
   type TileEffectTrigger,
   type ConditionSlug,
-} from './tile-effect-catalog';
-import type { GameEventData } from '../interfaces/result.type';
-import type { SaveAbility } from '../interfaces/combat.interfaces';
+} from "./tile-effect-catalog";
+import type { GameEventData } from "../interfaces/result.type";
+import type { SaveAbility } from "../interfaces/combat.interfaces";
 
 export interface CreatePersistentAreaInput {
   encounterId: string;
   casterParticipantId: string | null;
   sourceSpell: string;
-  shapeKind: 'sphere' | 'cube' | 'cylinder' | 'line' | 'cone';
+  shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
   originCell: { x: number; y: number };
   radiusCells: number;
   damageDice: string;
@@ -48,9 +48,7 @@ export interface ResolveResult {
   stopMovement: boolean;
 }
 
-type SaveModifierFn = (
-  ability: SaveAbility,
-) => Promise<{ modifier: number }>;
+type SaveModifierFn = (ability: SaveAbility) => Promise<{ modifier: number }>;
 
 /**
  * Spec 004 (legacy) + Spec 013 (ground effects).
@@ -87,7 +85,9 @@ export class PersistentAreaService {
 
   // ── Spec 004 legacy path (preserved) ───────────────────────────────────
 
-  async create(input: CreatePersistentAreaInput): Promise<PersistentAreaEffectEntity> {
+  async create(
+    input: CreatePersistentAreaInput,
+  ): Promise<PersistentAreaEffectEntity> {
     const entity = this.areas.create({
       encounterId: input.encounterId,
       casterParticipantId: input.casterParticipantId,
@@ -118,7 +118,9 @@ export class PersistentAreaService {
   ): Promise<PersistentAreaEffectEntity> {
     const def = getTileEffectDefinition(input.spellSlug);
     if (!def) {
-      throw new Error(`tile-effect-catalog: spell "${input.spellSlug}" not registered`);
+      throw new Error(
+        `tile-effect-catalog: spell "${input.spellSlug}" not registered`,
+      );
     }
     const radius = def.defaultRadiusCells(input.slotLevel);
     const duration = def.durationRoundsAtSlot(input.slotLevel);
@@ -128,26 +130,26 @@ export class PersistentAreaService {
     // Damage real de cada trigger usa expressionPerSlot do catalog em runtime,
     // mas snapshot top-level mantém compat com tickDamageFor legacy + queries.
     const dmgTrigger =
-      def.triggers.find((t) => t.kind === 'on-start-turn-in' && t.damage) ??
-      def.triggers.find((t) => t.kind === 'on-cast' && t.damage) ??
-      def.triggers.find((t) => t.kind === 'on-move-through');
+      def.triggers.find((t) => t.kind === "on-start-turn-in" && t.damage) ??
+      def.triggers.find((t) => t.kind === "on-cast" && t.damage) ??
+      def.triggers.find((t) => t.kind === "on-move-through");
     const damageDice =
-      dmgTrigger && 'damage' in dmgTrigger && dmgTrigger.damage
+      dmgTrigger && "damage" in dmgTrigger && dmgTrigger.damage
         ? dmgTrigger.damage.expressionPerSlot(input.slotLevel)
-        : dmgTrigger?.kind === 'on-move-through'
+        : dmgTrigger?.kind === "on-move-through"
           ? dmgTrigger.damagePerCell.expressionPerSlot(input.slotLevel)
-          : '';
+          : "";
     const damageType =
-      dmgTrigger && 'damage' in dmgTrigger && dmgTrigger.damage
+      dmgTrigger && "damage" in dmgTrigger && dmgTrigger.damage
         ? dmgTrigger.damage.type
-        : dmgTrigger?.kind === 'on-move-through'
+        : dmgTrigger?.kind === "on-move-through"
           ? dmgTrigger.damagePerCell.type
-          : '';
+          : "";
 
     // Save snapshot — primeiro trigger com save define o top-level (compat).
-    const saveTrigger = def.triggers.find(
-      (t) => 'save' in t && t.save,
-    ) as Extract<TileEffectTrigger, { save?: unknown }> | undefined;
+    const saveTrigger = def.triggers.find((t) => "save" in t && t.save) as
+      | Extract<TileEffectTrigger, { save?: unknown }>
+      | undefined;
     const saveAbility = saveTrigger?.save?.ability ?? null;
     const halfOnSave = saveTrigger?.save?.halfOnSave ?? false;
 
@@ -200,7 +202,7 @@ export class PersistentAreaService {
     if (!def) return result;
     const slot = area.slotLevel ?? 1;
 
-    const onCast = area.triggers.find((t) => t.kind === 'on-cast');
+    const onCast = area.triggers.find((t) => t.kind === "on-cast");
     if (!onCast) return result;
 
     for (const target of participantsInArea) {
@@ -248,7 +250,7 @@ export class PersistentAreaService {
       (a) => a.effectKind && this.cellInArea(toCell.x, toCell.y, a),
     );
     for (const area of affecting) {
-      const onEnter = area.triggers?.find((t) => t.kind === 'on-enter');
+      const onEnter = area.triggers?.find((t) => t.kind === "on-enter");
       if (!onEnter) continue;
       const slot = area.slotLevel ?? 1;
       const partial = await this.dispatchTrigger(
@@ -269,13 +271,13 @@ export class PersistentAreaService {
         if (area.speedMultiplier === 0 && !partial.savePassed) {
           result.stopMovement = true;
           result.events.push({
-            event_type: 'tile_effect_movement_stopped',
+            event_type: "tile_effect_movement_stopped",
             target_participant_id: participant.id,
             data: {
               areaId: area.id,
               effectKind: area.effectKind,
               atCell: toCell,
-              reason: 'restrained-failed',
+              reason: "restrained-failed",
               narrativeDescriptor: area.narrativeDescriptor,
               tactical: area.tacticalMetadata,
             },
@@ -305,26 +307,26 @@ export class PersistentAreaService {
 
     const areas = await this.areas.find({ where: { encounterId } });
     const moveThruAreas = areas.filter((a) =>
-      a.triggers?.some((t) => t.kind === 'on-move-through'),
+      a.triggers?.some((t) => t.kind === "on-move-through"),
     );
     if (moveThruAreas.length === 0) return result;
 
     for (const cell of cellsTraversed) {
       for (const area of moveThruAreas) {
         if (!this.cellInArea(cell.x, cell.y, area)) continue;
-        const trig = area.triggers!.find((t) => t.kind === 'on-move-through');
-        if (!trig || trig.kind !== 'on-move-through') continue;
+        const trig = area.triggers!.find((t) => t.kind === "on-move-through");
+        if (!trig || trig.kind !== "on-move-through") continue;
         const slot = area.slotLevel ?? 1;
         const expr = trig.damagePerCell.expressionPerSlot(slot);
         const damage = this.rollExpression(expr);
         result.totalDamage += damage;
         result.events.push({
-          event_type: 'tile_effect_damage_applied',
+          event_type: "tile_effect_damage_applied",
           target_participant_id: participant.id,
           data: {
             areaId: area.id,
             effectKind: area.effectKind,
-            triggerKind: 'on-move-through',
+            triggerKind: "on-move-through",
             expression: expr,
             type: trig.damagePerCell.type,
             amount: damage,
@@ -376,7 +378,7 @@ export class PersistentAreaService {
     for (const area of affecting) {
       // Catalog-aware: usa triggers[] e expressionPerSlot.
       if (area.effectKind && area.triggers) {
-        const trig = area.triggers.find((t) => t.kind === 'on-start-turn-in');
+        const trig = area.triggers.find((t) => t.kind === "on-start-turn-in");
         if (trig) {
           const slot = area.slotLevel ?? 1;
           const partial = await this.dispatchTrigger(
@@ -471,14 +473,14 @@ export class PersistentAreaService {
       events: [
         {
           event_type: a.effectKind
-            ? 'tile_effect_damage_applied'
-            : 'persistent_area_tick',
+            ? "tile_effect_damage_applied"
+            : "persistent_area_tick",
           target_participant_id: participant.id,
           data: {
             areaId: a.id,
             sourceSpell: a.sourceSpell,
             effectKind: a.effectKind,
-            triggerKind: 'on-start-turn-in',
+            triggerKind: "on-start-turn-in",
             expression: a.damageDice,
             type: a.damageType,
             amount: damage,
@@ -518,8 +520,8 @@ export class PersistentAreaService {
     });
     for (const area of areas) {
       if (!area.effectKind || !area.triggers) continue;
-      const trig = area.triggers.find((t) => t.kind === 'on-end-turn-adjacent');
-      if (!trig || trig.kind !== 'on-end-turn-adjacent') continue;
+      const trig = area.triggers.find((t) => t.kind === "on-end-turn-adjacent");
+      if (!trig || trig.kind !== "on-end-turn-adjacent") continue;
       // Critério: está DENTRO ou ADJACENTE (Chebyshev ≤ trig.range) ao tile.
       const dx = participant.positionX - area.originCell.x;
       const dy = participant.positionY - area.originCell.y;
@@ -573,7 +575,7 @@ export class PersistentAreaService {
       modifier: number;
       total: number;
     } | null = null;
-    const save = 'save' in trigger ? trigger.save : undefined;
+    const save = "save" in trigger ? trigger.save : undefined;
     if (save && area.saveDc != null) {
       const m = getSaveModifier
         ? await getSaveModifier(save.ability)
@@ -584,7 +586,7 @@ export class PersistentAreaService {
       saveData = { rolled: r, modifier: m.modifier, total, passed };
       savePassed = passed;
       events.push({
-        event_type: 'tile_effect_save_rolled',
+        event_type: "tile_effect_save_rolled",
         target_participant_id: target.id,
         data: {
           areaId: area.id,
@@ -603,7 +605,7 @@ export class PersistentAreaService {
       if (!passed && save.onFailCondition) {
         conditionApplied = save.onFailCondition;
         events.push({
-          event_type: 'tile_effect_condition_applied',
+          event_type: "tile_effect_condition_applied",
           target_participant_id: target.id,
           data: {
             areaId: area.id,
@@ -620,14 +622,14 @@ export class PersistentAreaService {
     let damageSpec:
       | { expressionPerSlot: (s: number) => string; type: string }
       | undefined;
-    if (trigger.kind === 'on-move-through') {
+    if (trigger.kind === "on-move-through") {
       damageSpec = trigger.damagePerCell;
     } else if (
-      trigger.kind === 'on-cast' ||
-      trigger.kind === 'on-enter' ||
-      trigger.kind === 'on-start-turn-in' ||
-      trigger.kind === 'on-end-turn-adjacent' ||
-      trigger.kind === 'on-pass-through-wall'
+      trigger.kind === "on-cast" ||
+      trigger.kind === "on-enter" ||
+      trigger.kind === "on-start-turn-in" ||
+      trigger.kind === "on-end-turn-adjacent" ||
+      trigger.kind === "on-pass-through-wall"
     ) {
       damageSpec = trigger.damage;
     }
@@ -639,7 +641,7 @@ export class PersistentAreaService {
       }
       damage = amount;
       events.push({
-        event_type: 'tile_effect_damage_applied',
+        event_type: "tile_effect_damage_applied",
         target_participant_id: target.id,
         data: {
           areaId: area.id,
@@ -679,12 +681,14 @@ export class PersistentAreaService {
       if (a.durationRoundsRemaining <= 0) {
         expired.push(a);
         events.push({
-          event_type: a.effectKind ? 'tile_effect_expired' : 'persistent_area_expired',
+          event_type: a.effectKind
+            ? "tile_effect_expired"
+            : "persistent_area_expired",
           data: {
             areaId: a.id,
             sourceSpell: a.sourceSpell,
             effectKind: a.effectKind,
-            reason: 'duration',
+            reason: "duration",
             narrativeDescriptor: a.narrativeDescriptor,
           },
         });
@@ -713,14 +717,14 @@ export class PersistentAreaService {
     for (const a of areas) {
       events.push({
         event_type: a.effectKind
-          ? 'tile_effect_concentration_broken'
-          : 'persistent_area_removed',
+          ? "tile_effect_concentration_broken"
+          : "persistent_area_removed",
         data: {
           areaId: a.id,
           sourceSpell: a.sourceSpell,
           effectKind: a.effectKind,
           casterId: casterParticipantId,
-          reason: 'concentration_broken',
+          reason: "concentration_broken",
           narrativeDescriptor: a.narrativeDescriptor,
         },
       });
@@ -775,22 +779,20 @@ export class PersistentAreaService {
 
   // ── Geometry helpers ───────────────────────────────────────────────────
 
-  cellInArea(
-    x: number,
-    y: number,
-    area: PersistentAreaEffectEntity,
-  ): boolean {
+  cellInArea(x: number, y: number, area: PersistentAreaEffectEntity): boolean {
     const dx = x - area.originCell.x;
     const dy = y - area.originCell.y;
-    if (area.shapeKind === 'sphere' || area.shapeKind === 'cylinder') {
+    if (area.shapeKind === "sphere" || area.shapeKind === "cylinder") {
       // Chebyshev RAW 5e (diagonal=5ft); legacy usava Euclidean — mantido
       // pra compat com Spirit Guardians (refatorável em spec futura).
       return Math.sqrt(dx * dx + dy * dy) <= area.radiusCells;
     }
-    if (area.shapeKind === 'cube') {
-      return Math.abs(dx) <= area.radiusCells && Math.abs(dy) <= area.radiusCells;
+    if (area.shapeKind === "cube") {
+      return (
+        Math.abs(dx) <= area.radiusCells && Math.abs(dy) <= area.radiusCells
+      );
     }
-    if (area.shapeKind === 'line') {
+    if (area.shapeKind === "line") {
       // Line: bounding box até radiusCells de comprimento, 1 cell de largura.
       // Direção implícita pela origem; aproximação Chebyshev.
       return Math.abs(dx) <= area.radiusCells && Math.abs(dy) <= 0;
@@ -830,10 +832,10 @@ export class PersistentAreaService {
     type: string,
     triggerKind: string,
   ): string {
-    const name = target.displayName || 'Alvo';
+    const name = target.displayName || "Alvo";
     const verb = this.verbForTrigger(triggerKind);
-    const text = `${name} ${verb} ${area.narrativeDescriptor ? '— ' + this.shortKind(area) : ''}: ${damage} ${type}.`;
-    return text.length > 120 ? text.slice(0, 117) + '...' : text;
+    const text = `${name} ${verb} ${area.narrativeDescriptor ? "— " + this.shortKind(area) : ""}: ${damage} ${type}.`;
+    return text.length > 120 ? text.slice(0, 117) + "..." : text;
   }
 
   private buildMoveThroughNarrative(
@@ -842,38 +844,38 @@ export class PersistentAreaService {
     damage: number,
     type: string,
   ): string {
-    const name = target.displayName || 'Alvo';
+    const name = target.displayName || "Alvo";
     const text = `${name} atravessa ${this.shortKind(area)}: ${damage} ${type}.`;
-    return text.length > 120 ? text.slice(0, 117) + '...' : text;
+    return text.length > 120 ? text.slice(0, 117) + "..." : text;
   }
 
   private verbForTrigger(kind: string): string {
     switch (kind) {
-      case 'on-cast':
-        return 'é atingido por';
-      case 'on-enter':
-        return 'pisa em';
-      case 'on-start-turn-in':
-        return 'sofre dentro de';
-      case 'on-end-turn-adjacent':
-        return 'queima ao lado de';
-      case 'on-pass-through-wall':
-        return 'atravessa';
+      case "on-cast":
+        return "é atingido por";
+      case "on-enter":
+        return "pisa em";
+      case "on-start-turn-in":
+        return "sofre dentro de";
+      case "on-end-turn-adjacent":
+        return "queima ao lado de";
+      case "on-pass-through-wall":
+        return "atravessa";
       default:
-        return 'é afetado por';
+        return "é afetado por";
     }
   }
 
   private shortKind(area: PersistentAreaEffectEntity): string {
     const k = area.effectKind ?? area.sourceSpell;
     const labels: Record<string, string> = {
-      grease: 'graxa',
-      web: 'teia',
-      'spike-growth': 'espinhos',
-      'wall-of-fire': 'parede de fogo',
-      'cloud-of-daggers': 'nuvem de adagas',
-      'sleet-storm': 'tempestade de granizo',
-      'spirit-guardians': 'guardiões espectrais',
+      grease: "graxa",
+      web: "teia",
+      "spike-growth": "espinhos",
+      "wall-of-fire": "parede de fogo",
+      "cloud-of-daggers": "nuvem de adagas",
+      "sleet-storm": "tempestade de granizo",
+      "spirit-guardians": "guardiões espectrais",
     };
     return labels[k] ?? k;
   }

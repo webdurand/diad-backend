@@ -16,39 +16,59 @@ export const HIT_DIE_BY_CLASS: Record<string, number> = {
 };
 
 export const SAVING_THROWS_BY_CLASS: Record<string, string[]> = {
-  barbarian: ['str', 'con'],
-  bard: ['dex', 'cha'],
-  cleric: ['wis', 'cha'],
-  druid: ['int', 'wis'],
-  fighter: ['str', 'con'],
-  monk: ['str', 'dex'],
-  paladin: ['wis', 'cha'],
-  ranger: ['str', 'dex'],
-  rogue: ['dex', 'int'],
-  sorcerer: ['con', 'cha'],
-  warlock: ['wis', 'cha'],
-  wizard: ['int', 'wis'],
+  barbarian: ["str", "con"],
+  bard: ["dex", "cha"],
+  cleric: ["wis", "cha"],
+  druid: ["int", "wis"],
+  fighter: ["str", "con"],
+  monk: ["str", "dex"],
+  paladin: ["wis", "cha"],
+  ranger: ["str", "dex"],
+  rogue: ["dex", "int"],
+  sorcerer: ["con", "cha"],
+  warlock: ["wis", "cha"],
+  wizard: ["int", "wis"],
 };
 
 export const SPELLCASTING_CLASSES = [
-  'bard', 'cleric', 'druid', 'paladin', 'ranger', 'sorcerer', 'warlock', 'wizard',
+  "bard",
+  "cleric",
+  "druid",
+  "paladin",
+  "ranger",
+  "sorcerer",
+  "warlock",
+  "wizard",
 ];
 
 export const NON_SPELLCASTING_CLASSES = [
-  'barbarian', 'fighter', 'monk', 'rogue',
+  "barbarian",
+  "fighter",
+  "monk",
+  "rogue",
 ];
 
 export const SRD_PROFICIENCY_BONUS: Array<{ level: number; bonus: number }> = [
-  { level: 1, bonus: 2 }, { level: 2, bonus: 2 },
-  { level: 3, bonus: 2 }, { level: 4, bonus: 2 },
-  { level: 5, bonus: 3 }, { level: 6, bonus: 3 },
-  { level: 7, bonus: 3 }, { level: 8, bonus: 3 },
-  { level: 9, bonus: 4 }, { level: 10, bonus: 4 },
-  { level: 11, bonus: 4 }, { level: 12, bonus: 4 },
-  { level: 13, bonus: 5 }, { level: 14, bonus: 5 },
-  { level: 15, bonus: 5 }, { level: 16, bonus: 5 },
-  { level: 17, bonus: 6 }, { level: 18, bonus: 6 },
-  { level: 19, bonus: 6 }, { level: 20, bonus: 6 },
+  { level: 1, bonus: 2 },
+  { level: 2, bonus: 2 },
+  { level: 3, bonus: 2 },
+  { level: 4, bonus: 2 },
+  { level: 5, bonus: 3 },
+  { level: 6, bonus: 3 },
+  { level: 7, bonus: 3 },
+  { level: 8, bonus: 3 },
+  { level: 9, bonus: 4 },
+  { level: 10, bonus: 4 },
+  { level: 11, bonus: 4 },
+  { level: 12, bonus: 4 },
+  { level: 13, bonus: 5 },
+  { level: 14, bonus: 5 },
+  { level: 15, bonus: 5 },
+  { level: 16, bonus: 5 },
+  { level: 17, bonus: 6 },
+  { level: 18, bonus: 6 },
+  { level: 19, bonus: 6 },
+  { level: 20, bonus: 6 },
 ];
 
 export const SRD_XP_THRESHOLDS: Array<{ level: number; xp: number }> = [
@@ -76,10 +96,10 @@ export const SRD_XP_THRESHOLDS: Array<{ level: number; xp: number }> = [
 
 // Monk Martial Arts die progression
 export const MONK_MARTIAL_ARTS_DIE: Array<{ level: number; die: string }> = [
-  { level: 1, die: '1d6' },
-  { level: 5, die: '1d8' },
-  { level: 11, die: '1d10' },
-  { level: 17, die: '1d12' },
+  { level: 1, die: "1d6" },
+  { level: 5, die: "1d8" },
+  { level: 11, die: "1d10" },
+  { level: 17, die: "1d12" },
 ];
 
 // Cantrip damage scaling thresholds

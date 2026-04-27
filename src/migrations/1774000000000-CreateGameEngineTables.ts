@@ -1,9 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class CreateGameEngineTables1774000000000
-  implements MigrationInterface
-{
-  name = 'CreateGameEngineTables1774000000000';
+export class CreateGameEngineTables1774000000000 implements MigrationInterface {
+  name = "CreateGameEngineTables1774000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- game_sessions ---

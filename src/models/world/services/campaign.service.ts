@@ -2,20 +2,20 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CampaignEntity,
   CampaignContentBudget,
   CampaignContentCounts,
   CampaignDmPersonality,
   CampaignTonalAnchor,
-} from 'src/entities/campaign.entity';
-import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
-import { randomBytes } from 'crypto';
+} from "src/entities/campaign.entity";
+import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import { randomBytes } from "crypto";
 
-export type BoundedCountKind = 'scenes' | 'npcs' | 'locations';
+export type BoundedCountKind = "scenes" | "npcs" | "locations";
 
 export interface CreateCampaignDto {
   name: string;
@@ -31,7 +31,7 @@ export interface UpdateCampaignDto {
   setting?: string;
   theme?: string;
   difficulty?: string;
-  status?: 'draft' | 'active' | 'paused' | 'completed' | 'archived';
+  status?: "draft" | "active" | "paused" | "completed" | "archived";
   worldLore?: string;
 }
 
@@ -68,7 +68,7 @@ export class CampaignService {
     dto: CreateCampaignDto,
   ): Promise<CampaignEntity> {
     const slug = this.generateSlug(dto.name);
-    const inviteCode = randomBytes(6).toString('hex');
+    const inviteCode = randomBytes(6).toString("hex");
 
     const campaign = this.campaignRepo.create({
       slug,
@@ -76,9 +76,9 @@ export class CampaignService {
       description: dto.description,
       setting: dto.setting,
       theme: dto.theme,
-      difficulty: dto.difficulty ?? 'standard',
+      difficulty: dto.difficulty ?? "standard",
       dmUserId,
-      status: 'draft',
+      status: "draft",
       inviteCode,
     });
 
@@ -98,7 +98,7 @@ export class CampaignService {
   async listByUser(userId: string): Promise<CampaignEntity[]> {
     const players = await this.playerRepo.find({
       where: { userId, isActive: true },
-      relations: ['campaign'],
+      relations: ["campaign"],
     });
     return players.map((p) => p.campaign).filter(Boolean);
   }
@@ -107,7 +107,7 @@ export class CampaignService {
     const campaign = await this.campaignRepo.findOne({
       where: { id: campaignId },
     });
-    if (!campaign) throw new NotFoundException('Campanha nao encontrada.');
+    if (!campaign) throw new NotFoundException("Campanha nao encontrada.");
     return campaign;
   }
 
@@ -115,7 +115,7 @@ export class CampaignService {
     const campaign = await this.campaignRepo.findOne({
       where: { inviteCode: code },
     });
-    if (!campaign) throw new NotFoundException('Convite invalido.');
+    if (!campaign) throw new NotFoundException("Convite invalido.");
     return campaign;
   }
 
@@ -159,25 +159,20 @@ export class CampaignService {
     const player = await this.playerRepo.findOne({
       where: { campaignId, userId },
     });
-    if (!player) throw new NotFoundException('Jogador nao encontrado na campanha.');
+    if (!player)
+      throw new NotFoundException("Jogador nao encontrado na campanha.");
     player.characterId = characterId;
     return this.playerRepo.save(player);
   }
 
-  async removePlayer(
-    campaignId: string,
-    userId: string,
-  ): Promise<void> {
-    await this.playerRepo.update(
-      { campaignId, userId },
-      { isActive: false },
-    );
+  async removePlayer(campaignId: string, userId: string): Promise<void> {
+    await this.playerRepo.update({ campaignId, userId }, { isActive: false });
   }
 
   async getPlayers(campaignId: string): Promise<CampaignPlayerEntity[]> {
     return this.playerRepo.find({
       where: { campaignId, isActive: true },
-      relations: ['user', 'character'],
+      relations: ["user", "character"],
     });
   }
 
@@ -187,7 +182,7 @@ export class CampaignService {
   ): Promise<CampaignEntity> {
     const campaign = await this.getById(campaignId);
     if (campaign.dmUserId !== userId) {
-      throw new NotFoundException('Campanha nao encontrada.');
+      throw new NotFoundException("Campanha nao encontrada.");
     }
     return campaign;
   }
@@ -199,16 +194,17 @@ export class CampaignService {
     const player = await this.playerRepo.findOne({
       where: { campaignId, userId, isActive: true },
     });
-    if (!player) throw new NotFoundException('Voce nao faz parte desta campanha.');
+    if (!player)
+      throw new NotFoundException("Voce nao faz parte desta campanha.");
     return player;
   }
 
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    const suffix = randomBytes(3).toString('hex');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const suffix = randomBytes(3).toString("hex");
     return `${base}-${suffix}`;
   }
 
@@ -221,14 +217,15 @@ export class CampaignService {
     const campaign = await this.getById(campaignId);
     if (dto.contentBudget) {
       campaign.contentBudget = {
-        maxScenes: dto.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
+        maxScenes:
+          dto.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
         maxNpcs: dto.contentBudget.maxNpcs ?? campaign.contentBudget.maxNpcs,
         maxLocations:
           dto.contentBudget.maxLocations ?? campaign.contentBudget.maxLocations,
       };
     }
     if (dto.dmPersonality) campaign.dmPersonality = dto.dmPersonality;
-    if (typeof dto.chaosFactor === 'number') {
+    if (typeof dto.chaosFactor === "number") {
       this.assertChaosRange(dto.chaosFactor);
       campaign.chaosFactor = dto.chaosFactor;
     }
@@ -247,14 +244,15 @@ export class CampaignService {
     const campaign = await this.getById(campaignId);
     if (dto.contentBudget) {
       campaign.contentBudget = {
-        maxScenes: dto.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
+        maxScenes:
+          dto.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
         maxNpcs: dto.contentBudget.maxNpcs ?? campaign.contentBudget.maxNpcs,
         maxLocations:
           dto.contentBudget.maxLocations ?? campaign.contentBudget.maxLocations,
       };
     }
     if (dto.dmPersonality) campaign.dmPersonality = dto.dmPersonality;
-    if (typeof dto.chaosFactor === 'number') {
+    if (typeof dto.chaosFactor === "number") {
       this.assertChaosRange(dto.chaosFactor);
       campaign.chaosFactor = dto.chaosFactor;
     }
@@ -262,10 +260,10 @@ export class CampaignService {
     if (dto.centralQuestion !== undefined) {
       campaign.centralQuestion = dto.centralQuestion;
     }
-    if (typeof dto.questionStatedAtScene === 'number') {
+    if (typeof dto.questionStatedAtScene === "number") {
       campaign.questionStatedAtScene = dto.questionStatedAtScene;
     }
-    if (typeof dto.questionAnswered === 'boolean') {
+    if (typeof dto.questionAnswered === "boolean") {
       campaign.questionAnswered = dto.questionAnswered;
     }
     if (dto.questionAnswer !== undefined) {
@@ -287,7 +285,11 @@ export class CampaignService {
   ): Promise<CampaignContentCounts> {
     const key = kind;
     const maxKey =
-      kind === 'scenes' ? 'maxScenes' : kind === 'npcs' ? 'maxNpcs' : 'maxLocations';
+      kind === "scenes"
+        ? "maxScenes"
+        : kind === "npcs"
+          ? "maxNpcs"
+          : "maxLocations";
 
     const raw = await this.campaignRepo.query(
       `UPDATE campaigns
@@ -313,7 +315,7 @@ export class CampaignService {
       throw new ConflictException({
         ok: false,
         error: `Orçamento da campanha para ${kind} foi atingido.`,
-        code: 'BUDGET_EXCEEDED',
+        code: "BUDGET_EXCEEDED",
         kind,
         current: campaign.currentCounts[kind],
         max: campaign.contentBudget[maxKey],
@@ -341,13 +343,13 @@ export class CampaignService {
       // Caso B: [rows, affected] tuple (raro no 0.3.x)
       if (raw.length === 0) return [];
       const first = raw[0];
-      if (first && typeof first === 'object' && !Array.isArray(first)) {
+      if (first && typeof first === "object" && !Array.isArray(first)) {
         return raw as Array<Record<string, any>>;
       }
       if (Array.isArray(first)) return first as Array<Record<string, any>>;
       return [];
     }
-    if (typeof raw === 'object' && raw !== null && 'rows' in (raw as any)) {
+    if (typeof raw === "object" && raw !== null && "rows" in (raw as any)) {
       return ((raw as any).rows ?? []) as Array<Record<string, any>>;
     }
     return [];
@@ -357,8 +359,8 @@ export class CampaignService {
     if (value < 1 || value > 9 || !Number.isInteger(value)) {
       throw new ConflictException({
         ok: false,
-        error: 'chaosFactor deve ser inteiro entre 1 e 9.',
-        code: 'CHAOS_FACTOR_OUT_OF_RANGE',
+        error: "chaosFactor deve ser inteiro entre 1 e 9.",
+        code: "CHAOS_FACTOR_OUT_OF_RANGE",
         value,
       });
     }

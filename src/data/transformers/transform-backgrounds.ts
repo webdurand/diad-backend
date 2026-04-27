@@ -1,9 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntriesAsText } from './entries-parser';
-import { ABILITY_MAP } from './code-maps';
-import { stripTags } from './tag-stripper';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntriesAsText } from "./entries-parser";
+import { ABILITY_MAP } from "./code-maps";
+import { stripTags } from "./tag-stripper";
 
 interface FiveToolsBackground {
   name: string;
@@ -24,13 +24,13 @@ interface FiveToolsBackground {
 }
 
 const INHERITABLE_FIELDS = [
-  'skillProficiencies',
-  'toolProficiencies',
-  'languageProficiencies',
-  'startingEquipment',
-  'entries',
-  'ability',
-  'feats',
+  "skillProficiencies",
+  "toolProficiencies",
+  "languageProficiencies",
+  "startingEquipment",
+  "entries",
+  "ability",
+  "feats",
 ] as const;
 
 function resolveCopy(
@@ -58,19 +58,19 @@ function resolveCopy(
       : [bg._copy._mod.entries];
 
     for (const mod of mods as Record<string, unknown>[]) {
-      if (mod.mode === 'replaceArr' && mod.replace && mod.items) {
-        const idx = resolved.entries!.findIndex((e: any) => {
-          if (typeof e === 'object' && e !== null && 'name' in e) {
+      if (mod.mode === "replaceArr" && mod.replace && mod.items) {
+        const idx = resolved.entries.findIndex((e: any) => {
+          if (typeof e === "object" && e !== null && "name" in e) {
             return (e as { name: string }).name === mod.replace;
           }
           return false;
         });
         if (idx !== -1) {
-          resolved.entries!.splice(idx, 1, mod.items as unknown);
+          resolved.entries.splice(idx, 1, mod.items as unknown);
         }
-      } else if (mod.mode === 'insertArr' && mod.items != null) {
-        const insertIdx = (mod.index as number) ?? resolved.entries!.length;
-        resolved.entries!.splice(insertIdx, 0, mod.items as unknown);
+      } else if (mod.mode === "insertArr" && mod.items != null) {
+        const insertIdx = (mod.index as number) ?? resolved.entries.length;
+        resolved.entries.splice(insertIdx, 0, mod.items as unknown);
       }
     }
   }
@@ -103,12 +103,12 @@ export interface TransformedBackground {
 }
 
 const ABILITY_NAMES: Record<string, string> = {
-  str: 'STR',
-  dex: 'DEX',
-  con: 'CON',
-  int: 'INT',
-  wis: 'WIS',
-  cha: 'CHA',
+  str: "STR",
+  dex: "DEX",
+  con: "CON",
+  int: "INT",
+  wis: "WIS",
+  cha: "CHA",
 };
 
 function convertAbilityScores(
@@ -145,9 +145,7 @@ function convertAbilityScores(
   return { abilities, options };
 }
 
-function parseFeatReference(
-  feats?: Record<string, boolean>[],
-): string | null {
+function parseFeatReference(feats?: Record<string, boolean>[]): string | null {
   if (!feats?.length) return null;
 
   const first = feats[0];
@@ -155,19 +153,19 @@ function parseFeatReference(
   if (!key) return null;
 
   // Format: "feat name|source" or "feat name; variant|source"
-  const [nameWithVariant, source] = key.split('|');
+  const [nameWithVariant, source] = key.split("|");
   if (!nameWithVariant || !source) return null;
 
   // Remove variant info (e.g., "magic initiate; cleric" -> "magic initiate")
-  const baseName = nameWithVariant.split(';')[0].trim();
+  const baseName = nameWithVariant.split(";")[0].trim();
   return generateSlug(baseName, source);
 }
 
 function normalizeSkillSlug(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function convertSkillProficiencies(
@@ -178,7 +176,7 @@ function convertSkillProficiencies(
   const slugs: string[] = [];
   for (const entry of skillProfs) {
     for (const [key, value] of Object.entries(entry)) {
-      if (key === 'choose') continue;
+      if (key === "choose") continue;
       if (value === true) {
         slugs.push(`skill-${normalizeSkillSlug(key)}`);
       }
@@ -195,7 +193,7 @@ function convertToolProficiencies(
   const slugs: string[] = [];
   for (const entry of toolProfs) {
     for (const [key, value] of Object.entries(entry)) {
-      if (key === 'choose' || key === 'anyArtisansTool') continue;
+      if (key === "choose" || key === "anyArtisansTool") continue;
       if (value === true) {
         slugs.push(normalizeSkillSlug(key));
       }
@@ -211,7 +209,7 @@ function convertLanguageChoices(
 
   const entry = langProfs[0];
   if (entry.anyStandard) {
-    return { choose: entry.anyStandard, type: 'standard' };
+    return { choose: entry.anyStandard, type: "standard" };
   }
 
   const fixed: string[] = [];
@@ -228,7 +226,7 @@ function convertEquipment(
 ): Record<string, unknown> {
   if (!equip?.length) return {};
 
-  const entry = equip[0] as Record<string, unknown>;
+  const entry = equip[0];
 
   // 2024 format: { A: [...], B: [...] }
   // Classic format: { _: [...] } or { a: [...], b: [...] }
@@ -238,9 +236,9 @@ function convertEquipment(
     if (!Array.isArray(items)) continue;
 
     groups[key.toUpperCase()] = items.map((item: unknown) => {
-      if (typeof item === 'string') {
-        const [name, source] = item.split('|');
-        return { name: stripTags(name), source: source ?? '' };
+      if (typeof item === "string") {
+        const [name, source] = item.split("|");
+        return { name: stripTags(name), source: source ?? "" };
       }
 
       const obj = item as Record<string, unknown>;
@@ -254,12 +252,12 @@ function convertEquipment(
         };
       }
       if (obj.item) {
-        const [name, source] = (obj.item as string).split('|');
+        const [name, source] = (obj.item as string).split("|");
         return {
           name: obj.displayName
             ? stripTags(obj.displayName as string)
             : stripTags(name),
-          source: source ?? '',
+          source: source ?? "",
           quantity: obj.quantity ?? 1,
         };
       }
@@ -276,20 +274,20 @@ function extractFeature(
   if (!entries?.length) return null;
 
   for (const entry of entries) {
-    if (typeof entry !== 'object' || entry === null) continue;
+    if (typeof entry !== "object" || entry === null) continue;
     const obj = entry as { type?: string; name?: string; entries?: unknown[] };
 
     if (
-      obj.type === 'entries' &&
+      obj.type === "entries" &&
       obj.name &&
-      typeof obj.name === 'string' &&
-      obj.name.startsWith('Feature:')
+      typeof obj.name === "string" &&
+      obj.name.startsWith("Feature:")
     ) {
       return {
         name: stripTags(obj.name),
         description: obj.entries
           ? parseEntriesAsText(obj.entries as any[])
-          : '',
+          : "",
       };
     }
   }
@@ -300,9 +298,9 @@ function extractFeature(
 export function transformBackgrounds(): TransformedBackground[] {
   const filePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/backgrounds.json',
+    "../5etools-src/data/backgrounds.json",
   );
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const backgrounds: FiveToolsBackground[] = data.background ?? [];
 
   return backgrounds

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — Harmon Story Circle beat tracking por cena.
@@ -7,7 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * (scenes antigas ficam sem beat; computed apenas em scenes novas).
  */
 export class AddSceneArcBeat1778010000000 implements MigrationInterface {
-  name = 'AddSceneArcBeat1778010000000';
+  name = "AddSceneArcBeat1778010000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

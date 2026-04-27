@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Sorcerer Font of Magic — campo `sorcery_points_used` em
@@ -13,7 +13,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   floor(max/2) em short rest.
  */
 export class AddSorceryPointsUsed1777140000000 implements MigrationInterface {
-  name = 'AddSorceryPointsUsed1777140000000';
+  name = "AddSorceryPointsUsed1777140000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

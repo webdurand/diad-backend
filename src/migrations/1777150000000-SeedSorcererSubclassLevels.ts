@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Sorcerer — Data gap: subclasses alternativas `sorcerer-wild-magic`,
@@ -12,10 +12,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - Clockwork Soul: clockwork-sorcery + clockwork-spells + restore-balance
  *  - Aberrant Sorcery: aberrant-sorcery + psionic-spells + telepathic-speech
  */
-export class SeedSorcererSubclassLevels1777150000000
-  implements MigrationInterface
-{
-  name = 'SeedSorcererSubclassLevels1777150000000';
+export class SeedSorcererSubclassLevels1777150000000 implements MigrationInterface {
+  name = "SeedSorcererSubclassLevels1777150000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     const [xphb] = (await queryRunner.query(

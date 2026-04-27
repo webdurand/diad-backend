@@ -42,50 +42,50 @@ export interface FeatureClassification {
    * - `hide`: passiva — não emite como action.
    * - `alias`: scaling/variant — o canonical cuida da emissão.
    */
-  kind: 'hide' | 'alias';
+  kind: "hide" | "alias";
   /** Só preenchido quando `kind === 'alias'`. */
   canonicalSlug?: string;
 }
 
 /** Features passivas do Bardo (PHB 2014 + XPHB 2024 variants). */
 const BARD_PASSIVES: readonly string[] = [
-  'song-of-rest-d6',
-  'song-of-rest-d8',
-  'song-of-rest-d10',
-  'song-of-rest-d12',
-  'jack-of-all-trades',
-  'jack-of-all-trades-bard-2',
-  'bard-expertise-1',
-  'bard-expertise-2',
-  'expertise-bard-2',
-  'expertise-bard-9',
-  'font-of-inspiration',
-  'font-of-inspiration-bard-5',
-  'superior-inspiration',
-  'superior-inspiration-bard-18',
-  'magical-secrets-1',
-  'magical-secrets-2',
-  'magical-secrets-3',
-  'magical-secrets-bard-10',
-  'additional-magical-secrets',
-  'peerless-skill',
-  'words-of-creation-bard-20',
-  'bonus-proficiencies',
-  'bard-college',
-  'bard-subclass-bard-3',
+  "song-of-rest-d6",
+  "song-of-rest-d8",
+  "song-of-rest-d10",
+  "song-of-rest-d12",
+  "jack-of-all-trades",
+  "jack-of-all-trades-bard-2",
+  "bard-expertise-1",
+  "bard-expertise-2",
+  "expertise-bard-2",
+  "expertise-bard-9",
+  "font-of-inspiration",
+  "font-of-inspiration-bard-5",
+  "superior-inspiration",
+  "superior-inspiration-bard-18",
+  "magical-secrets-1",
+  "magical-secrets-2",
+  "magical-secrets-3",
+  "magical-secrets-bard-10",
+  "additional-magical-secrets",
+  "peerless-skill",
+  "words-of-creation-bard-20",
+  "bonus-proficiencies",
+  "bard-college",
+  "bard-subclass-bard-3",
 ];
 
 /** Features passivas do Druida. */
 const DRUID_PASSIVES: readonly string[] = [
-  'archdruid', // L20 capstone — unlimited Wild Shape
-  'druid-timeless-body', // L18
-  'wild-shape-improvements',
-  'druidic',
-  'druidic-druid-1',
-  'druid-circle',
-  'druid-subclass-druid-3',
-  'nature-s-sanctuary',
-  'nature-s-ward',
+  "archdruid", // L20 capstone — unlimited Wild Shape
+  "druid-timeless-body", // L18
+  "wild-shape-improvements",
+  "druidic",
+  "druidic-druid-1",
+  "druid-circle",
+  "druid-subclass-druid-3",
+  "nature-s-sanctuary",
+  "nature-s-ward",
 ];
 
 /**
@@ -94,7 +94,7 @@ const DRUID_PASSIVES: readonly string[] = [
  * cuida de emitir UMA entry com stats do nível atual.
  */
 const ALIASES: Record<string, string> = {
-  'countercharm-bard-7': 'countercharm',
+  "countercharm-bard-7": "countercharm",
 };
 
 const HIDE_SET: ReadonlySet<string> = new Set([
@@ -132,30 +132,42 @@ const HIDE_PATTERNS: readonly RegExp[] = [
  */
 const ALIAS_PATTERNS: Array<{ regex: RegExp; canonicalSlug: string }> = [
   // Bardic Inspiration: d6/d8/d10/d12 + variant -bard-1 (XPHB seed)
-  { regex: /^bardic-inspiration-(d\d+|bard-\d+)$/, canonicalSlug: 'bardic-inspiration' },
+  {
+    regex: /^bardic-inspiration-(d\d+|bard-\d+)$/,
+    canonicalSlug: "bardic-inspiration",
+  },
   // Spec 015 Eixo 1 — XPHB 2024 adiciona sufixo `<feature>-<classe>-<level>`
   // ao slug. Sem estes aliases o matching em featureActionMap falha e a
   // feature não aparece na ActionBar (reportado 2026-04-24 sobre Wild Shape).
-  { regex: /^wild-shape-druid-\d+$/, canonicalSlug: 'wild-shape' },
-  { regex: /^rage-barbarian-\d+$/, canonicalSlug: 'rage' },
-  { regex: /^reckless-attack-barbarian-\d+$/, canonicalSlug: 'reckless-attack' },
-  { regex: /^action-surge-fighter-\d+$/, canonicalSlug: 'action-surge' },
-  { regex: /^second-wind-fighter-\d+$/, canonicalSlug: 'second-wind' },
-  { regex: /^sneak-attack-rogue-\d+$/, canonicalSlug: 'sneak-attack' },
-  { regex: /^cunning-action-rogue-\d+$/, canonicalSlug: 'cunning-action' },
-  { regex: /^martial-arts-monk-\d+$/, canonicalSlug: 'martial-arts' },
-  { regex: /^flurry-of-blows-monk-\d+$/, canonicalSlug: 'flurry-of-blows' },
-  { regex: /^patient-defense-monk-\d+$/, canonicalSlug: 'patient-defense' },
-  { regex: /^step-of-the-wind-monk-\d+$/, canonicalSlug: 'step-of-the-wind' },
-  { regex: /^channel-divinity-(cleric|paladin)-\d+$/, canonicalSlug: 'channel-divinity' },
-  { regex: /^divine-smite-paladin-\d+$/, canonicalSlug: 'divine-smite' },
-  { regex: /^lay-on-hands-paladin-\d+$/, canonicalSlug: 'lay-on-hands' },
-  { regex: /^font-of-magic-sorcerer-\d+$/, canonicalSlug: 'font-of-magic' },
-  { regex: /^arcane-recovery-wizard-\d+$/, canonicalSlug: 'arcane-recovery' },
-  { regex: /^eldritch-invocations?-warlock-\d+$/, canonicalSlug: 'eldritch-invocations' },
-  { regex: /^cutting-words-bard-\d+$/, canonicalSlug: 'cutting-words' },
-  { regex: /^countercharm-bard-\d+$/, canonicalSlug: 'countercharm' },
-  { regex: /^dreadful-strikes-ranger-\d+$/, canonicalSlug: 'dreadful-strikes' },
+  { regex: /^wild-shape-druid-\d+$/, canonicalSlug: "wild-shape" },
+  { regex: /^rage-barbarian-\d+$/, canonicalSlug: "rage" },
+  {
+    regex: /^reckless-attack-barbarian-\d+$/,
+    canonicalSlug: "reckless-attack",
+  },
+  { regex: /^action-surge-fighter-\d+$/, canonicalSlug: "action-surge" },
+  { regex: /^second-wind-fighter-\d+$/, canonicalSlug: "second-wind" },
+  { regex: /^sneak-attack-rogue-\d+$/, canonicalSlug: "sneak-attack" },
+  { regex: /^cunning-action-rogue-\d+$/, canonicalSlug: "cunning-action" },
+  { regex: /^martial-arts-monk-\d+$/, canonicalSlug: "martial-arts" },
+  { regex: /^flurry-of-blows-monk-\d+$/, canonicalSlug: "flurry-of-blows" },
+  { regex: /^patient-defense-monk-\d+$/, canonicalSlug: "patient-defense" },
+  { regex: /^step-of-the-wind-monk-\d+$/, canonicalSlug: "step-of-the-wind" },
+  {
+    regex: /^channel-divinity-(cleric|paladin)-\d+$/,
+    canonicalSlug: "channel-divinity",
+  },
+  { regex: /^divine-smite-paladin-\d+$/, canonicalSlug: "divine-smite" },
+  { regex: /^lay-on-hands-paladin-\d+$/, canonicalSlug: "lay-on-hands" },
+  { regex: /^font-of-magic-sorcerer-\d+$/, canonicalSlug: "font-of-magic" },
+  { regex: /^arcane-recovery-wizard-\d+$/, canonicalSlug: "arcane-recovery" },
+  {
+    regex: /^eldritch-invocations?-warlock-\d+$/,
+    canonicalSlug: "eldritch-invocations",
+  },
+  { regex: /^cutting-words-bard-\d+$/, canonicalSlug: "cutting-words" },
+  { regex: /^countercharm-bard-\d+$/, canonicalSlug: "countercharm" },
+  { regex: /^dreadful-strikes-ranger-\d+$/, canonicalSlug: "dreadful-strikes" },
 ];
 
 /**
@@ -166,17 +178,17 @@ export function classifyFeatureForActions(
   slug: string,
 ): FeatureClassification | null {
   if (HIDE_SET.has(slug)) {
-    return { kind: 'hide' };
+    return { kind: "hide" };
   }
   for (const pattern of HIDE_PATTERNS) {
-    if (pattern.test(slug)) return { kind: 'hide' };
+    if (pattern.test(slug)) return { kind: "hide" };
   }
   const directAlias = ALIASES[slug];
   if (directAlias) {
-    return { kind: 'alias', canonicalSlug: directAlias };
+    return { kind: "alias", canonicalSlug: directAlias };
   }
   for (const { regex, canonicalSlug } of ALIAS_PATTERNS) {
-    if (regex.test(slug)) return { kind: 'alias', canonicalSlug };
+    if (regex.test(slug)) return { kind: "alias", canonicalSlug };
   }
   return null;
 }

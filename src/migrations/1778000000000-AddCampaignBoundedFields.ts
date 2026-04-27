@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — Bounded World + Closure Mechanics.
@@ -8,10 +8,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - P4 Closure: centralQuestion, arcState (Harmon Story Circle tracking)
  * - Tone: dmPersonality, tonalAnchor, chaosFactor (Mythic GME 1-9)
  */
-export class AddCampaignBoundedFields1778000000000
-  implements MigrationInterface
-{
-  name = 'AddCampaignBoundedFields1778000000000';
+export class AddCampaignBoundedFields1778000000000 implements MigrationInterface {
+  name = "AddCampaignBoundedFields1778000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

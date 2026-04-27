@@ -15,100 +15,101 @@ interface EntityConfig {
 
 export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   races: {
-    relations: ['race_languages.language', 'race_traits.trait', 'subraces'],
+    relations: ["race_languages.language", "race_traits.trait", "subraces"],
     flatten: {
-      race_languages: { as: 'languages', pick: 'language' },
-      race_traits: { as: 'traits', pick: 'trait' },
+      race_languages: { as: "languages", pick: "language" },
+      race_traits: { as: "traits", pick: "trait" },
     },
   },
   classes: {
     relations: [
-      'class_proficiencies.proficiency',
-      'class_saving_throws.ability_score',
-      'class_starting_equipment.equipment',
-      'subclasses',
+      "class_proficiencies.proficiency",
+      "class_saving_throws.ability_score",
+      "class_starting_equipment.equipment",
+      "subclasses",
     ],
     flatten: {
-      class_proficiencies: { as: 'proficiencies', pick: 'proficiency' },
-      class_saving_throws: { as: 'saving_throws', pick: 'ability_score' },
+      class_proficiencies: { as: "proficiencies", pick: "proficiency" },
+      class_saving_throws: { as: "saving_throws", pick: "ability_score" },
       class_starting_equipment: {
-        as: 'starting_equipment',
-        pick: 'equipment',
+        as: "starting_equipment",
+        pick: "equipment",
       },
     },
   },
   spells: {
-    relations: ['school', 'spell_classes.class', 'spell_subclasses.subclass'],
+    relations: ["school", "spell_classes.class", "spell_subclasses.subclass"],
     flatten: {
-      spell_classes: { as: 'classes', pick: 'class' },
-      spell_subclasses: { as: 'subclasses', pick: 'subclass' },
+      spell_classes: { as: "classes", pick: "class" },
+      spell_subclasses: { as: "subclasses", pick: "subclass" },
     },
   },
   backgrounds: {
-    relations: ['feat', 'background_proficiencies.proficiency'],
+    relations: ["feat", "background_proficiencies.proficiency"],
     flatten: {
-      background_proficiencies: { as: 'proficiencies', pick: 'proficiency' },
+      background_proficiencies: { as: "proficiencies", pick: "proficiency" },
     },
   },
   traits: {
-    relations: ['trait_proficiencies.proficiency', 'parent'],
+    relations: ["trait_proficiencies.proficiency", "parent"],
     flatten: {
-      trait_proficiencies: { as: 'proficiencies', pick: 'proficiency' },
+      trait_proficiencies: { as: "proficiencies", pick: "proficiency" },
     },
   },
   levels: {
-    relations: ['class', 'subclass', 'level_features.feature'],
+    relations: ["class", "subclass", "level_features.feature"],
     flatten: {
-      level_features: { as: 'features', pick: 'feature' },
+      level_features: { as: "features", pick: "feature" },
     },
   },
   subraces: {
-    relations: ['race', 'subrace_traits.trait'],
+    relations: ["race", "subrace_traits.trait"],
     flatten: {
-      subrace_traits: { as: 'racial_traits', pick: 'trait' },
+      subrace_traits: { as: "racial_traits", pick: "trait" },
     },
   },
   skills: {
-    relations: ['ability_score'],
+    relations: ["ability_score"],
   },
   ability_scores: {
-    relations: ['skills'],
+    relations: ["skills"],
   },
   equipments: {
-    relations: ['category_items.category'],
+    relations: ["category_items.category"],
     flatten: {
-      category_items: { as: 'equipment_categories', pick: 'category' },
+      category_items: { as: "equipment_categories", pick: "category" },
     },
   },
   equipment_categories: {
-    relations: ['equipment_items.equipment'],
+    relations: ["equipment_items.equipment"],
     flatten: {
-      equipment_items: { as: 'equipment', pick: 'equipment' },
+      equipment_items: { as: "equipment", pick: "equipment" },
     },
   },
   magic_items: {
-    relations: ['equipment_category'],
+    relations: ["equipment_category"],
   },
   features: {
-    relations: ['class', 'subclass', 'parent'],
+    relations: ["class", "subclass", "parent"],
   },
   subclasses: {
-    relations: ['class'],
+    relations: ["class"],
   },
   comp_sources: {},
 };
 
 const INTERNAL_FIELDS = new Set([
-  'raw',
-  'created_at',
-  'updated_at',
-  'search_text',
+  "raw",
+  "created_at",
+  "updated_at",
+  "search_text",
 ]);
 
-function stripInternal(obj: unknown, depth = 0, entityName = ''): unknown {
-  if (!obj || typeof obj !== 'object' || depth > 4) return obj;
+function stripInternal(obj: unknown, depth = 0, entityName = ""): unknown {
+  if (!obj || typeof obj !== "object" || depth > 4) return obj;
   if (obj instanceof Date) return obj;
-  if (Array.isArray(obj)) return obj.map((item) => stripInternal(item, depth, entityName));
+  if (Array.isArray(obj))
+    return obj.map((item) => stripInternal(item, depth, entityName));
 
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
@@ -116,17 +117,17 @@ function stripInternal(obj: unknown, depth = 0, entityName = ''): unknown {
 
     // Strip FK columns for loaded relations (e.g. school_id when school is loaded)
     if (
-      key.endsWith('_id') &&
-      key !== 'id' &&
-      (obj as Record<string, unknown>)[key.replace(/_id$/, '')] !== undefined
+      key.endsWith("_id") &&
+      key !== "id" &&
+      (obj as Record<string, unknown>)[key.replace(/_id$/, "")] !== undefined
     ) {
       continue;
     }
 
-    if (key === 'description' && entityName === 'spells') {
+    if (key === "description" && entityName === "spells") {
       // Remover description do retorno da listagem para reduzir drastically tamanho
       continue;
-    } else if (value && typeof value === 'object' && !(value instanceof Date)) {
+    } else if (value && typeof value === "object" && !(value instanceof Date)) {
       result[key] = stripInternal(value, depth + 1, entityName);
     } else {
       result[key] = value;

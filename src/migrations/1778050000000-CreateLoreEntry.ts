@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — NovelAI-style lorebook (L2 memory).
@@ -8,7 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * pra match sub-millisegundo mesmo com 200+ entries por campanha.
  */
 export class CreateLoreEntry1778050000000 implements MigrationInterface {
-  name = 'CreateLoreEntry1778050000000';
+  name = "CreateLoreEntry1778050000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -44,7 +44,9 @@ export class CreateLoreEntry1778050000000 implements MigrationInterface {
     await queryRunner.query(
       `DROP INDEX IF EXISTS idx_lore_entries_activation_keys`,
     );
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_lore_entries_campaign_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_lore_entries_campaign_id`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS lore_entries`);
   }
 }

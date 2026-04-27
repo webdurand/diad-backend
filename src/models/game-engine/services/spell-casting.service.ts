@@ -1,24 +1,24 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { SpellEntity } from 'src/entities/spell.entity';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { GameEventEntity } from 'src/entities/game-event.entity';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { SpellService } from 'src/models/characters/services/spell.service';
-import { DiceService } from './dice.service';
-import { SavingThrowService } from './saving-throw.service';
-import { CombatService } from './combat.service';
-import { EncounterService } from './encounter.service';
-import { MonsterSpellcastingService } from './monster-spellcasting.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { SpellEntity } from "src/entities/spell.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { GameEventEntity } from "src/entities/game-event.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { SpellService } from "src/models/characters/services/spell.service";
+import { DiceService } from "./dice.service";
+import { SavingThrowService } from "./saving-throw.service";
+import { CombatService } from "./combat.service";
+import { EncounterService } from "./encounter.service";
+import { MonsterSpellcastingService } from "./monster-spellcasting.service";
 import {
   GameResult,
   GameEventData,
   GameErrorCode,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 import {
   isAoeSpell,
   isMultiTargetNonAoeSpell,
@@ -26,28 +26,28 @@ import {
   getAoeShape,
   cellInAoe,
   getPerHitDamage,
-} from './spell-targeting';
-import { parseRangeString, chebyshevDistanceFt } from './combat-range';
-import { getSpellEffectiveRange } from './spell-effective-range';
-import { EffectInstanceService } from './effect-instance.service';
+} from "./spell-targeting";
+import { parseRangeString, chebyshevDistanceFt } from "./combat-range";
+import { getSpellEffectiveRange } from "./spell-effective-range";
+import { EffectInstanceService } from "./effect-instance.service";
 import {
   materializeSpellEffects,
   checkSpellPreconditions,
   type TargetMetadata,
-} from './spell-effect-catalog';
-import { getAbilityModifier } from 'src/shared/srd-utils';
-import { getSpellDamage } from './spell-damage-catalog';
-import { getSpellHealing } from './spell-healing-catalog';
-import { substituteSpellcastingMod } from './spellcasting-mod';
-import { getSpellCondition } from './spell-condition-catalog';
-import { ConditionLifecycleService } from './condition-lifecycle.service';
-import { SummoningService } from './summoning.service';
-import { PersistentAreaService } from './persistent-area.service';
+} from "./spell-effect-catalog";
+import { getAbilityModifier } from "src/shared/srd-utils";
+import { getSpellDamage } from "./spell-damage-catalog";
+import { getSpellHealing } from "./spell-healing-catalog";
+import { substituteSpellcastingMod } from "./spellcasting-mod";
+import { getSpellCondition } from "./spell-condition-catalog";
+import { ConditionLifecycleService } from "./condition-lifecycle.service";
+import { SummoningService } from "./summoning.service";
+import { PersistentAreaService } from "./persistent-area.service";
 import {
   TILE_EFFECT_CATALOG,
   type TileEffectKind,
-} from './tile-effect-catalog';
-import { TransformationService } from './transformation.service';
+} from "./tile-effect-catalog";
+import { TransformationService } from "./transformation.service";
 
 // --- Result interfaces ---
 
@@ -122,12 +122,12 @@ export interface CastSpellInCombatDto {
    */
   metamagic?: {
     type:
-      | 'twinned'
-      | 'quickened'
-      | 'distant'
-      | 'heightened'
-      | 'extended'
-      | 'subtle';
+      | "twinned"
+      | "quickened"
+      | "distant"
+      | "heightened"
+      | "extended"
+      | "subtle";
     /** Segundo alvo pro Twinned Spell. */
     targetExtra?: string;
     /** Target do save com disadvantage pro Heightened Spell. */
@@ -181,36 +181,60 @@ export class SpellCastingService {
    * stats escaladas pelo slot level. MVP: escolhemos uma besta fixa por slot
    * pra validar o pipeline. V2: UI picker pro player escolher a besta.
    */
-  private getSummonMonsterForSpell(spellSlug: string, slotLevel: number): string | null {
+  private getSummonMonsterForSpell(
+    spellSlug: string,
+    slotLevel: number,
+  ): string | null {
     const map: Record<string, Record<number, string>> = {
-      'summon-beast': { 2: 'wolf', 3: 'wolf', 4: 'panther', 5: 'brown-bear' },
-      'conjure-animals': { 3: 'wolf', 4: 'wolf', 5: 'brown-bear' },
-      'conjure-woodland-beings': { 4: 'giant-spider' },
-      'find-familiar': { 1: 'giant-owl' },
-      'spiritual-weapon': { 2: 'giant-badger' }, // proxy: n\u00e3o tem monster "weapon", usar besta pequena
+      "summon-beast": { 2: "wolf", 3: "wolf", 4: "panther", 5: "brown-bear" },
+      "conjure-animals": { 3: "wolf", 4: "wolf", 5: "brown-bear" },
+      "conjure-woodland-beings": { 4: "giant-spider" },
+      "find-familiar": { 1: "giant-owl" },
+      "spiritual-weapon": { 2: "giant-badger" }, // proxy: n\u00e3o tem monster "weapon", usar besta pequena
     };
-    return map[spellSlug]?.[slotLevel] ?? map[spellSlug]?.[Object.keys(map[spellSlug] ?? {}).map(Number).sort()[0]] ?? null;
+    return (
+      map[spellSlug]?.[slotLevel] ??
+      map[spellSlug]?.[
+        Object.keys(map[spellSlug] ?? {})
+          .map(Number)
+          .sort()[0]
+      ] ??
+      null
+    );
   }
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
     // 1. Get character sheet to verify spell access and slots
-    const sheet = await this.sheetService.computeSheet(dto.userId, dto.characterId);
+    const sheet = await this.sheetService.computeSheet(
+      dto.userId,
+      dto.characterId,
+    );
     if (!sheet) {
-      return failure('Personagem nao encontrado.', 'INVALID_PARTICIPANT');
+      return failure("Personagem nao encontrado.", "INVALID_PARTICIPANT");
     }
 
     // 2. Check character knows/has the spell prepared
     const charSpellRef = sheet.spells.find(
-      (s) => s.slug === dto.spellSlug || s.name.toLowerCase() === dto.spellSlug.toLowerCase(),
+      (s) =>
+        s.slug === dto.spellSlug ||
+        s.name.toLowerCase() === dto.spellSlug.toLowerCase(),
     );
     if (!charSpellRef) {
-      return failure(`Magia '${dto.spellSlug}' nao encontrada no repertorio.`, 'INVALID_ACTION');
+      return failure(
+        `Magia '${dto.spellSlug}' nao encontrada no repertorio.`,
+        "INVALID_ACTION",
+      );
     }
 
     // 3. Fetch full spell data from DB (has damage, concentration, components, etc.)
-    const spell = await this.spellRepo.findOne({ where: { slug: charSpellRef.slug } });
+    const spell = await this.spellRepo.findOne({
+      where: { slug: charSpellRef.slug },
+    });
     if (!spell) {
-      return failure(`Dados da magia '${dto.spellSlug}' nao encontrados.`, 'INVALID_ACTION');
+      return failure(
+        `Dados da magia '${dto.spellSlug}' nao encontrados.`,
+        "INVALID_ACTION",
+      );
     }
 
     // 4. Cantrips don't consume slots
@@ -221,7 +245,7 @@ export class SpellCastingService {
       if (dto.slotLevel < spell.level) {
         return failure(
           `Slot nivel ${dto.slotLevel} insuficiente para magia nivel ${spell.level}.`,
-          'INSUFFICIENT_SPELL_SLOTS',
+          "INSUFFICIENT_SPELL_SLOTS",
         );
       }
 
@@ -229,13 +253,19 @@ export class SpellCastingService {
       // só tem pact slot naquele nível. Pact slots têm kind='pact' e são
       // chaveados por 'pact' (level=-1 convention) em updateSpellSlots.
       const slotBlock =
-        sheet.spellSlots.find((s) => s.level === dto.slotLevel && s.kind !== 'pact' && s.used < s.total)
-        ?? sheet.spellSlots.find((s) => s.level >= dto.slotLevel && s.kind === 'pact' && s.used < s.total)
-        ?? sheet.spellSlots.find((s) => s.level === dto.slotLevel);
+        sheet.spellSlots.find(
+          (s) =>
+            s.level === dto.slotLevel && s.kind !== "pact" && s.used < s.total,
+        ) ??
+        sheet.spellSlots.find(
+          (s) =>
+            s.level >= dto.slotLevel && s.kind === "pact" && s.used < s.total,
+        ) ??
+        sheet.spellSlots.find((s) => s.level === dto.slotLevel);
       if (!slotBlock || slotBlock.used >= slotBlock.total) {
         return failure(
           `Sem slots de nivel ${dto.slotLevel} disponiveis.`,
-          'INSUFFICIENT_SPELL_SLOTS',
+          "INSUFFICIENT_SPELL_SLOTS",
         );
       }
 
@@ -243,7 +273,7 @@ export class SpellCastingService {
       // Spec 012 Lote D — skip consumption quando Wizard cast free (Spell Mastery/Signature).
       if (!dto._skipSlotConsumption) {
         await this.spellService.updateSpellSlots(dto.userId, dto.characterId, {
-          level: slotBlock.kind === 'pact' ? -1 : dto.slotLevel,
+          level: slotBlock.kind === "pact" ? -1 : dto.slotLevel,
           used: slotBlock.used + 1,
         });
       }
@@ -270,7 +300,11 @@ export class SpellCastingService {
     // 9. Resolve damage if applicable.
     // Spec 005 Addendum: spell-damage-catalog como fonte primária (seed não tem
     // damage_at_slot_level). Fallback para DB spell.damage quando catálogo miss.
-    const catalogDmg = getSpellDamage(spell.slug, dto.slotLevel, sheet.totalLevel);
+    const catalogDmg = getSpellDamage(
+      spell.slug,
+      dto.slotLevel,
+      sheet.totalLevel,
+    );
     if (catalogDmg) {
       const rollResult = this.diceService.rollExpression(catalogDmg.expression);
       result.damage = {
@@ -279,14 +313,14 @@ export class SpellCastingService {
         type: catalogDmg.type,
       };
       events.push({
-        event_type: 'spell_damage',
+        event_type: "spell_damage",
         data: {
           spell: spell.name,
           expression: catalogDmg.expression,
           total: rollResult.total,
           type: catalogDmg.type,
           slot_level: dto.slotLevel,
-          source: 'catalog',
+          source: "catalog",
         },
       });
     } else if (spell.damage) {
@@ -294,7 +328,7 @@ export class SpellCastingService {
       const slotKey = String(dto.slotLevel);
       const cantripScalingExpr = (() => {
         const map = damageInfo?.damage_at_character_level;
-        if (!map || typeof map !== 'object') return null;
+        if (!map || typeof map !== "object") return null;
         const lvl = sheet.totalLevel;
         const validKeys = Object.keys(map)
           .map((k) => parseInt(k, 10))
@@ -314,20 +348,20 @@ export class SpellCastingService {
         // grava como string[]. Aceita ambos pra não cair em 'magical' genérico.
         const rawDt = damageInfo?.damage_type as unknown;
         const damageType =
-          (typeof rawDt === 'object' && rawDt !== null && 'name' in rawDt
+          (typeof rawDt === "object" && rawDt !== null && "name" in rawDt
             ? String((rawDt as { name: string }).name).toLowerCase()
             : Array.isArray(rawDt)
-              ? String(rawDt[0] ?? '').toLowerCase()
-              : typeof rawDt === 'string'
+              ? String(rawDt[0] ?? "").toLowerCase()
+              : typeof rawDt === "string"
                 ? rawDt.toLowerCase()
-                : null) ?? 'magical';
+                : null) ?? "magical";
         result.damage = {
           expression,
           total: rollResult.total,
           type: damageType,
         };
         events.push({
-          event_type: 'spell_damage',
+          event_type: "spell_damage",
           data: {
             spell: spell.name,
             expression,
@@ -347,9 +381,10 @@ export class SpellCastingService {
     const catalogHeal = getSpellHealing(dto.spellSlug, dto.slotLevel);
     const healTemplate =
       catalogHeal?.expression ??
-      ((spell.heal_at_slot_level as Record<string, string> | null)?.[
+      (spell.heal_at_slot_level as Record<string, string> | null)?.[
         String(dto.slotLevel)
-      ] ?? null);
+      ] ??
+      null;
     if (healTemplate) {
       const expression = substituteSpellcastingMod(healTemplate, sheet);
 
@@ -361,7 +396,7 @@ export class SpellCastingService {
         };
 
         events.push({
-          event_type: 'spell_healing',
+          event_type: "spell_healing",
           data: {
             spell: spell.name,
             expression,
@@ -373,7 +408,7 @@ export class SpellCastingService {
     }
 
     events.push({
-      event_type: 'spell_cast',
+      event_type: "spell_cast",
       data: {
         character_id: dto.characterId,
         spell: spell.name,
@@ -393,16 +428,19 @@ export class SpellCastingService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: dto.encounterId },
     });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
     // 2. Validate it's this participant's turn — SKIP se asReaction=true (Spec 003 Fatia 9).
     if (!dto.asReaction) {
       const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
       if (currentPid !== dto.participantId)
-        return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+        return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
     } else if (!dto.triggerEventId) {
-      return failure("asReaction=true exige 'triggerEventId'.", 'MISSING_TRIGGER_EVENT');
+      return failure(
+        "asReaction=true exige 'triggerEventId'.",
+        "MISSING_TRIGGER_EVENT",
+      );
     }
 
     // Spec 012 Gap 1 — normalizar targetParticipantIds. Undefined/null crashava
@@ -412,15 +450,20 @@ export class SpellCastingService {
       ? dto.targetParticipantIds
       : [];
 
-    const participant = await this.encounterService.getParticipant(dto.participantId);
-    if (participant.type === 'monster') {
+    const participant = await this.encounterService.getParticipant(
+      dto.participantId,
+    );
+    if (participant.type === "monster") {
       return this.castMonsterSpellInCombat(
         { ...dto, targetParticipantIds: requestedTargetIds },
         participant,
       );
     }
     if (!participant.characterId)
-      return failure('Apenas PCs e monstros casters podem lancar magias.', 'INVALID_PARTICIPANT');
+      return failure(
+        "Apenas PCs e monstros casters podem lancar magias.",
+        "INVALID_PARTICIPANT",
+      );
 
     // 3. Get the spell to determine casting time
     const spell = await this.spellRepo.findOne({
@@ -432,10 +475,15 @@ export class SpellCastingService {
         where: { name: dto.spellSlug },
       });
       if (!byName)
-        return failure(`Magia '${dto.spellSlug}' nao encontrada.`, 'INVALID_ACTION');
+        return failure(
+          `Magia '${dto.spellSlug}' nao encontrada.`,
+          "INVALID_ACTION",
+        );
       dto.spellSlug = byName.slug;
     }
-    const spellData = spell ?? (await this.spellRepo.findOne({ where: { slug: dto.spellSlug } }))!;
+    const spellData =
+      spell ??
+      (await this.spellRepo.findOne({ where: { slug: dto.spellSlug } }))!;
 
     // 3.5 Spec 012 Gap 1 — resolver targets AoE via aoeOriginCell.
     // Se spell tem shape (sphere/cube/cone/line/cylinder) + caller passou
@@ -451,8 +499,8 @@ export class SpellCastingService {
     if (
       aoeShape &&
       !effectiveOriginCell &&
-      typeof spellData.range === 'string' &&
-      spellData.range.trim().toLowerCase() === 'self' &&
+      typeof spellData.range === "string" &&
+      spellData.range.trim().toLowerCase() === "self" &&
       participant.positionX != null &&
       participant.positionY != null
     ) {
@@ -462,11 +510,7 @@ export class SpellCastingService {
       };
     }
 
-    if (
-      aoeShape &&
-      effectiveOriginCell &&
-      effectiveTargetIds.length === 0
-    ) {
+    if (aoeShape && effectiveOriginCell && effectiveTargetIds.length === 0) {
       const allParticipants = await this.participantRepo.find({
         where: { encounterId: dto.encounterId },
       });
@@ -476,8 +520,8 @@ export class SpellCastingService {
       // Spells com origin ≠ caster (Fireball, Cloudkill) mantêm caster se
       // ele estiver dentro do raio (RAW: caster afetado pela própria AoE).
       const isSelfRangeSpell =
-        typeof spellData.range === 'string' &&
-        spellData.range.trim().toLowerCase() === 'self';
+        typeof spellData.range === "string" &&
+        spellData.range.trim().toLowerCase() === "self";
 
       effectiveTargetIds = allParticipants
         .filter((p) => !p.isDefeated)
@@ -488,7 +532,7 @@ export class SpellCastingService {
             p.positionY != null &&
             cellInAoe(
               { x: p.positionX, y: p.positionY },
-              effectiveOriginCell!,
+              effectiveOriginCell,
               aoeShape,
             ),
         )
@@ -504,7 +548,10 @@ export class SpellCastingService {
     if (targetCount > 1 && !isAoeSpell(spellData)) {
       let casterLevel = 0;
       if (isMultiTargetNonAoeSpell(spellData)) {
-        const sheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
+        const sheet = await this.sheetService.computeSheet(
+          dto.ownerUserId,
+          participant.characterId,
+        );
         casterLevel = (sheet as any)?.totalLevel ?? 0;
       }
       const maxTargets = maxTargetsFor(spellData, dto.slotLevel, casterLevel);
@@ -518,10 +565,7 @@ export class SpellCastingService {
     // (caso comum: 1 target), auto-distribui todos os darts/rays/beams
     // no primeiro alvo (RAW: caster pode escolher concentrar tudo em 1).
     // Preserva semântica old-code: single-target cast = full spell damage.
-    if (
-      effectiveTargetIds.length >= 1 &&
-      isMultiTargetNonAoeSpell(spellData)
-    ) {
+    if (effectiveTargetIds.length >= 1 && isMultiTargetNonAoeSpell(spellData)) {
       const sheet = await this.sheetService.computeSheet(
         dto.ownerUserId,
         participant.characterId,
@@ -548,11 +592,11 @@ export class SpellCastingService {
     //   (b) valida range real do attack (30ft ranged, 5ft melee).
     const effectiveRange = getSpellEffectiveRange(spellData);
     if (
-      effectiveRange.kind === 'self-origin-attack' &&
+      effectiveRange.kind === "self-origin-attack" &&
       effectiveTargetIds.includes(participant.id)
     ) {
       return failure(
-        'Esta magia precisa ser lancada contra outra criatura.',
+        "Esta magia precisa ser lancada contra outra criatura.",
         GameErrorCode.INVALID_TARGET_SELF,
       );
     }
@@ -567,14 +611,16 @@ export class SpellCastingService {
     // metamagic mais abaixo (action economy); aqui só aplicamos o multiplier
     // pra que o range check não rejeite falsamente.
     const distantRangeMultiplier =
-      dto.metamagic?.type === 'distant'
-        ? ((spellData.range ?? '').trim().toLowerCase() === 'touch' ? 6 : 2)
+      dto.metamagic?.type === "distant"
+        ? (spellData.range ?? "").trim().toLowerCase() === "touch"
+          ? 6
+          : 2
         : 1;
     // Spec 015 Eixo 2 — quando self-origin-attack, force range check usando
     // attackRangeFt do helper (parseRangeString("Self") retornaria 0, skipando
     // a validação inteira).
     const parsedRange =
-      effectiveRange.kind === 'self-origin-attack'
+      effectiveRange.kind === "self-origin-attack"
         ? { normal: effectiveRange.attackRangeFt }
         : parseRangeString(spellData.range);
     if (parsedRange && parsedRange.normal > 0) {
@@ -586,7 +632,8 @@ export class SpellCastingService {
       // AoE: check origin (shape define alcance do efeito a partir do origin)
       if (aoeShape && effectiveOriginCell && casterPos) {
         const dist = chebyshevDistanceFt(casterPos, effectiveOriginCell);
-        const maxFt = (parsedRange.long ?? parsedRange.normal) * distantRangeMultiplier;
+        const maxFt =
+          (parsedRange.long ?? parsedRange.normal) * distantRangeMultiplier;
         if (dist > maxFt) {
           return failure(
             `Alvo fora do alcance (${dist}ft > ${maxFt}ft).`,
@@ -619,21 +666,21 @@ export class SpellCastingService {
     }
 
     // 4. Check action economy based on casting time
-    const castingTime = (spellData.casting_time ?? 'action').toLowerCase();
-    const baseIsBonusAction = castingTime.includes('bonus');
-    const isReactionSpell = castingTime.includes('reaction');
+    const castingTime = (spellData.casting_time ?? "action").toLowerCase();
+    const baseIsBonusAction = castingTime.includes("bonus");
+    const isReactionSpell = castingTime.includes("reaction");
 
     // Spec 012 Sorcerer — Metamagic Quickened: cast como bonus action em vez
     // de action (RAW: custa 2 SP). Preserva o flag `isBonusAction` final pra
     // action economy check abaixo. Metamagic Twinned adiciona targetExtra.
     let metamagicSpCost = 0;
     let metamagicAppliedType:
-      | 'twinned'
-      | 'quickened'
-      | 'distant'
-      | 'heightened'
-      | 'extended'
-      | 'subtle'
+      | "twinned"
+      | "quickened"
+      | "distant"
+      | "heightened"
+      | "extended"
+      | "subtle"
       | null = null;
     // Heightened target id (save disadvantage) passado do DTO.
     let heightenedTargetIdForSave: string | null = null;
@@ -644,108 +691,105 @@ export class SpellCastingService {
         participant.characterId,
       );
       const sorcClass = (sheet as any).classes?.find(
-        (c: any) => c.slug === 'sorcerer',
+        (c: any) => c.slug === "sorcerer",
       );
       if (!sorcClass || sorcClass.level < 2) {
-        return failure(
-          'Metamagic requer Sorcerer L2+.',
-          'INVALID_ACTION',
-        );
+        return failure("Metamagic requer Sorcerer L2+.", "INVALID_ACTION");
       }
 
-      if (dto.metamagic.type === 'twinned') {
+      if (dto.metamagic.type === "twinned") {
         // RAW 2024: Twinned Spell custa SP = slotLevel (ou 1 se cantrip).
         // Requer spell single-target (max 1 alvo normalmente).
         if (isAoeSpell(spellData) || isMultiTargetNonAoeSpell(spellData)) {
           return failure(
-            'Twinned Spell requer spell de alvo único (não AoE, não multi-target).',
-            'INVALID_ACTION',
+            "Twinned Spell requer spell de alvo único (não AoE, não multi-target).",
+            "INVALID_ACTION",
           );
         }
         if (!dto.metamagic.targetExtra) {
           return failure(
-            'Twinned Spell requer `targetExtra` (segundo alvo).',
-            'INVALID_ACTION',
+            "Twinned Spell requer `targetExtra` (segundo alvo).",
+            "INVALID_ACTION",
           );
         }
         if (effectiveTargetIds.includes(dto.metamagic.targetExtra)) {
           return failure(
-            'Twinned Spell: targetExtra deve ser diferente do primeiro alvo.',
-            'INVALID_ACTION',
+            "Twinned Spell: targetExtra deve ser diferente do primeiro alvo.",
+            "INVALID_ACTION",
           );
         }
         metamagicSpCost = spellData.level === 0 ? 1 : dto.slotLevel;
-        metamagicAppliedType = 'twinned';
+        metamagicAppliedType = "twinned";
         effectiveTargetIds.push(dto.metamagic.targetExtra);
-      } else if (dto.metamagic.type === 'quickened') {
+      } else if (dto.metamagic.type === "quickened") {
         // RAW 2024: Quickened custa 2 SP, cast vira bonus action.
         if (isReactionSpell) {
           return failure(
-            'Quickened Spell não pode ser aplicado em reaction spells.',
-            'INVALID_ACTION',
+            "Quickened Spell não pode ser aplicado em reaction spells.",
+            "INVALID_ACTION",
           );
         }
         if (baseIsBonusAction) {
           return failure(
-            'Quickened Spell não pode ser aplicado em spell que já é bonus action.',
-            'INVALID_ACTION',
+            "Quickened Spell não pode ser aplicado em spell que já é bonus action.",
+            "INVALID_ACTION",
           );
         }
         metamagicSpCost = 2;
-        metamagicAppliedType = 'quickened';
-      } else if (dto.metamagic.type === 'distant') {
+        metamagicAppliedType = "quickened";
+      } else if (dto.metamagic.type === "distant") {
         // RAW 2024: Distant Spell custa 1 SP. Dobra range (ranged), ou touch→30ft.
         // Multiplier aplicado no range check (bloco acima) via distantRangeMultiplier.
-        const rangeStr = (spellData.range ?? '').trim().toLowerCase();
-        if (rangeStr === 'self') {
+        const rangeStr = (spellData.range ?? "").trim().toLowerCase();
+        if (rangeStr === "self") {
           return failure(
-            'Distant Spell não pode ser aplicado em spells de range Self.',
-            'INVALID_ACTION',
+            "Distant Spell não pode ser aplicado em spells de range Self.",
+            "INVALID_ACTION",
           );
         }
         metamagicSpCost = 1;
-        metamagicAppliedType = 'distant';
-      } else if (dto.metamagic.type === 'heightened') {
+        metamagicAppliedType = "distant";
+      } else if (dto.metamagic.type === "heightened") {
         // RAW 2024: Heightened Spell custa 3 SP. 1 target rola save com disadvantage.
         if (!spellData.dc) {
           return failure(
-            'Heightened Spell requer spell com saving throw.',
-            'INVALID_ACTION',
+            "Heightened Spell requer spell com saving throw.",
+            "INVALID_ACTION",
           );
         }
         if (!dto.metamagic.heightenedTargetId) {
           return failure(
-            'Heightened Spell requer `heightenedTargetId` (alvo com save em disadvantage).',
-            'INVALID_ACTION',
+            "Heightened Spell requer `heightenedTargetId` (alvo com save em disadvantage).",
+            "INVALID_ACTION",
           );
         }
         metamagicSpCost = 3;
-        metamagicAppliedType = 'heightened';
+        metamagicAppliedType = "heightened";
         heightenedTargetIdForSave = dto.metamagic.heightenedTargetId;
-      } else if (dto.metamagic.type === 'extended') {
+      } else if (dto.metamagic.type === "extended") {
         // RAW 2024: Extended Spell custa 1 SP. Dobra duração (1 min ou mais).
         // Spells "Instantaneous" ou "1 round" não podem receber Extended.
         // MVP: documented-only (event + SP cost). Duration × 2 em effect-instance/
         // condition-lifecycle é V2 (exige thread-through em vários pontos).
-        const durationStr = (spellData.duration ?? '').trim().toLowerCase();
+        const durationStr = (spellData.duration ?? "").trim().toLowerCase();
         if (
-          durationStr === 'instantaneous' ||
-          durationStr === '1 round' ||
-          durationStr.includes('until')
+          durationStr === "instantaneous" ||
+          durationStr === "1 round" ||
+          durationStr.includes("until")
         ) {
           return failure(
-            'Extended Spell requer spell de duração ≥ 1 minuto.',
-            'INVALID_ACTION',
+            "Extended Spell requer spell de duração ≥ 1 minuto.",
+            "INVALID_ACTION",
           );
         }
         metamagicSpCost = 1;
-        metamagicAppliedType = 'extended';
-      } else if (dto.metamagic.type === 'subtle') {
+        metamagicAppliedType = "extended";
+      } else if (dto.metamagic.type === "subtle") {
         // RAW 2024: Subtle Spell custa 1 SP. Sem componentes V/S (não pode ser
         // Counterspelled via "ver cast"). DIAD MVP: documented-only porque não
         // valida components atualmente — cost é debitado + flag no event.
         metamagicSpCost = 1;
-        metamagicAppliedType = 'subtle';
+        metamagicAppliedType = "subtle";
       }
 
       // Valida SP disponível (pool = classLevel)
@@ -755,40 +799,48 @@ export class SpellCastingService {
       if (spRemaining < metamagicSpCost) {
         return failure(
           `Metamagic '${dto.metamagic.type}' requer ${metamagicSpCost} SP, tem ${spRemaining}.`,
-          'INSUFFICIENT_SPELL_SLOTS',
+          "INSUFFICIENT_SPELL_SLOTS",
         );
       }
     }
 
     // Action economy final: Quickened força bonus action.
     const isBonusAction =
-      baseIsBonusAction || metamagicAppliedType === 'quickened';
+      baseIsBonusAction || metamagicAppliedType === "quickened";
 
     // Spec 003 Fatia 9 — asReaction requer spell.casting_time contendo 'reaction'.
     if (dto.asReaction && !isReactionSpell) {
       return failure(
         `A magia '${dto.spellSlug}' nao e castavel como reaction (casting_time='${spellData.casting_time}').`,
-        'SPELL_NOT_REACTION',
+        "SPELL_NOT_REACTION",
       );
     }
 
     if (dto.asReaction) {
       if (participant.reactionsUsed > 0)
-        return failure('Reacao ja utilizada.', 'REACTION_ALREADY_USED');
+        return failure("Reacao ja utilizada.", "REACTION_ALREADY_USED");
     } else if (isBonusAction) {
       if (participant.bonusActionUsed)
-        return failure('Bonus action ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+        return failure(
+          "Bonus action ja utilizada neste turno.",
+          "NO_ACTION_AVAILABLE",
+        );
     } else {
       if (participant.actionUsed)
-        return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+        return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
 
     // 4.5 Spec 004 — pre-conditions mecanicas (ex: Mage Armor exige alvo sem armadura).
     const targetMeta: TargetMetadata[] = [];
     for (const tid of effectiveTargetIds) {
-      const t = await this.encounterService.getParticipant(tid).catch(() => null);
+      const t = await this.encounterService
+        .getParticipant(tid)
+        .catch(() => null);
       if (!t) continue;
-      const isWearingArmor = await this.isTargetWearingArmor(t, dto.ownerUserId);
+      const isWearingArmor = await this.isTargetWearingArmor(
+        t,
+        dto.ownerUserId,
+      );
       targetMeta.push({ id: t.id, isWearingArmor, participant: t });
     }
     const precondFail = checkSpellPreconditions(dto.spellSlug, targetMeta);
@@ -802,18 +854,36 @@ export class SpellCastingService {
     let spellMasteryApplied = false;
     let signatureSpellApplied = false;
     try {
-      const casterSheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
-      const hasSpellMastery = (casterSheet as { hasSpellMastery?: boolean }).hasSpellMastery === true;
-      const hasSignatureSpells = (casterSheet as { hasSignatureSpells?: boolean }).hasSignatureSpells === true;
-      if (hasSpellMastery && (dto.slotLevel === 1 || dto.slotLevel === 2) && spellData.level <= dto.slotLevel) {
+      const casterSheet = await this.sheetService.computeSheet(
+        dto.ownerUserId,
+        participant.characterId,
+      );
+      const hasSpellMastery =
+        (casterSheet as { hasSpellMastery?: boolean }).hasSpellMastery === true;
+      const hasSignatureSpells =
+        (casterSheet as { hasSignatureSpells?: boolean }).hasSignatureSpells ===
+        true;
+      if (
+        hasSpellMastery &&
+        (dto.slotLevel === 1 || dto.slotLevel === 2) &&
+        spellData.level <= dto.slotLevel
+      ) {
         skipSlotConsumption = true;
         spellMasteryApplied = true;
-      } else if (hasSignatureSpells && dto.slotLevel === 3 && spellData.level <= 3) {
+      } else if (
+        hasSignatureSpells &&
+        dto.slotLevel === 3 &&
+        spellData.level <= 3
+      ) {
         // 1/SR por spell específica. Marker kind='signature_spell_used_this_rest' payload.slug.
         const usedMarkers = (participant.effectInstances ?? []).filter(
-          (e) => (e as unknown as { kind?: string }).kind === 'signature_spell_used_this_rest',
+          (e) =>
+            (e as unknown as { kind?: string }).kind ===
+            "signature_spell_used_this_rest",
         );
-        const usedSlugs = usedMarkers.map((m) => (m.payload as unknown as { slug?: string })?.slug).filter(Boolean);
+        const usedSlugs = usedMarkers
+          .map((m) => (m.payload as unknown as { slug?: string })?.slug)
+          .filter(Boolean);
         if (!usedSlugs.includes(dto.spellSlug) && usedMarkers.length < 2) {
           skipSlotConsumption = true;
           signatureSpellApplied = true;
@@ -843,12 +913,14 @@ export class SpellCastingService {
       participant.effectInstances = [
         ...(participant.effectInstances ?? []),
         {
-          id: require('crypto').randomUUID(),
-          kind: 'signature_spell_used_this_rest',
-          sourceFeatureSlug: 'signature-spells',
+          id: require("crypto").randomUUID(),
+          kind: "signature_spell_used_this_rest",
+          sourceFeatureSlug: "signature-spells",
           sourceCasterParticipantId: participant.id,
-          payload: { slug: dto.spellSlug } as unknown as import('../interfaces/combat.interfaces').EffectInstancePayload,
-          expiresAt: { kind: 'end_of_encounter' },
+          payload: {
+            slug: dto.spellSlug,
+          } as unknown as import("../interfaces/combat.interfaces").EffectInstancePayload,
+          expiresAt: { kind: "end_of_encounter" },
           requiresConcentration: false,
           appliedAt: new Date().toISOString(),
         } as unknown as (typeof participant.effectInstances)[number],
@@ -876,7 +948,8 @@ export class SpellCastingService {
     // (i18n-sensitive, quebra comparação invariant-driven).
     if (spellResult.concentration) {
       if (participant.isConcentrating) {
-        spellResult.previousConcentration = participant.concentratingOn ?? undefined;
+        spellResult.previousConcentration =
+          participant.concentratingOn ?? undefined;
       }
       participant.isConcentrating = true;
       participant.concentratingOn = dto.spellSlug;
@@ -886,30 +959,38 @@ export class SpellCastingService {
 
     // Spec 012 \u2014 hook summon spells. Se o spell \u00e9 de summon, spawna no grid.
     // summonEvents inicia separado e \u00e9 merged em events ap\u00f3s declara\u00e7\u00e3o abaixo.
-    const summonEvents: import('../interfaces/result.type').GameEventData[] = [];
-    const summonMonsterSlug = this.getSummonMonsterForSpell(dto.spellSlug, dto.slotLevel);
+    const summonEvents: import("../interfaces/result.type").GameEventData[] =
+      [];
+    const summonMonsterSlug = this.getSummonMonsterForSpell(
+      dto.spellSlug,
+      dto.slotLevel,
+    );
     if (summonMonsterSlug) {
       try {
         const summon = await this.summoning.spawnSummon(dto.encounterId, {
           casterParticipantId: participant.id,
           monsterSlug: summonMonsterSlug,
-          displayName: `${dto.spellSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} (${summonMonsterSlug})`,
-          position: participant.positionX != null && participant.positionY != null ? { x: participant.positionX + 1, y: participant.positionY } : undefined,
-          faction: 'ally',
+          displayName: `${dto.spellSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} (${summonMonsterSlug})`,
+          position:
+            participant.positionX != null && participant.positionY != null
+              ? { x: participant.positionX + 1, y: participant.positionY }
+              : undefined,
+          faction: "ally",
           concentrationLinked: spellResult.concentration === true,
           durationRoundsTotal: spellResult.concentration ? 10 : 60,
-          source: dto.spellSlug === 'find-familiar'
-            ? 'find-familiar-spell'
-            : dto.spellSlug === 'conjure-animals'
-              ? 'conjure-animals-spell'
-              : dto.spellSlug === 'summon-beast'
-                ? 'summon-beast-spell'
-                : dto.spellSlug === 'spiritual-weapon'
-                  ? 'spiritual-weapon-spell'
-                  : 'summon-beast-spell',
+          source:
+            dto.spellSlug === "find-familiar"
+              ? "find-familiar-spell"
+              : dto.spellSlug === "conjure-animals"
+                ? "conjure-animals-spell"
+                : dto.spellSlug === "summon-beast"
+                  ? "summon-beast-spell"
+                  : dto.spellSlug === "spiritual-weapon"
+                    ? "spiritual-weapon-spell"
+                    : "summon-beast-spell",
         });
         summonEvents.push({
-          event_type: 'summon_spawned',
+          event_type: "summon_spawned",
           actor_participant_id: participant.id,
           data: {
             spellSlug: dto.spellSlug,
@@ -922,7 +1003,7 @@ export class SpellCastingService {
         // N\u00e3o aborta o cast em caso de erro do summon (spell j\u00e1 foi paga).
         const msg = err instanceof Error ? err.message : String(err);
         summonEvents.push({
-          event_type: 'summon_error',
+          event_type: "summon_error",
           actor_participant_id: participant.id,
           data: { spellSlug: dto.spellSlug, error: msg },
         });
@@ -930,13 +1011,13 @@ export class SpellCastingService {
     }
 
     // 8. Apply effects to targets
-    const targetsHit: CombatSpellResult['targetsHit'] = [];
+    const targetsHit: CombatSpellResult["targetsHit"] = [];
     const events = [...(castResult.events ?? []), ...summonEvents];
 
     // Spec 012 Sorcerer — emitir evento metamagic_applied (histórico + UI).
     if (metamagicAppliedType) {
       events.push({
-        event_type: 'metamagic_applied',
+        event_type: "metamagic_applied",
         actor_participant_id: participant.id,
         data: {
           type: metamagicAppliedType,
@@ -974,7 +1055,7 @@ export class SpellCastingService {
 
     for (const targetId of effectiveTargetIds) {
       const target = await this.encounterService.getParticipant(targetId);
-      const targetResult: CombatSpellResult['targetsHit'][0] = {
+      const targetResult: CombatSpellResult["targetsHit"][0] = {
         participantId: targetId,
         displayName: target.displayName,
       };
@@ -982,7 +1063,7 @@ export class SpellCastingService {
       // Apply damage — per-hit rola aqui (multi-target non-AoE); AoE usa o
       // roll agregado de castSpell.
       let damageThisHit = 0;
-      let damageType = spellResult.damage?.type ?? 'force';
+      let damageType = spellResult.damage?.type ?? "force";
       if (perHitBase) {
         const rolled = this.diceService.rollExpression(perHitBase.expression);
         damageThisHit = rolled.total;
@@ -999,15 +1080,22 @@ export class SpellCastingService {
         // (scorching ray = attack roll, magic missile = auto) não usa save aqui.
         if (spellData.dc && !perHitBase) {
           const dcInfo = spellData.dc as Record<string, any>;
-          const rawAbility = Array.isArray(dcInfo.dc_type) ? dcInfo.dc_type[0] : (dcInfo.dc_type?.name ?? dcInfo.dc_type ?? 'dexterity');
+          const rawAbility = Array.isArray(dcInfo.dc_type)
+            ? dcInfo.dc_type[0]
+            : (dcInfo.dc_type?.name ?? dcInfo.dc_type ?? "dexterity");
           const saveAbility = String(rawAbility).toLowerCase().substring(0, 3);
-          const casterSheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
-          const casterClass = casterSheet.classes?.find((c: any) => c.spellSaveDc != null);
+          const casterSheet = await this.sheetService.computeSheet(
+            dto.ownerUserId,
+            participant.characterId,
+          );
+          const casterClass = casterSheet.classes?.find(
+            (c: any) => c.spellSaveDc != null,
+          );
           const spellSaveDc = casterClass?.spellSaveDc ?? 13;
 
           // Metamagic Heightened — disadvantage só no target apontado.
           const heightenedDisadvantage =
-            metamagicAppliedType === 'heightened' &&
+            metamagicAppliedType === "heightened" &&
             heightenedTargetIdForSave === targetId;
           const saveResult = await this.rollMonsterOrPcSave(
             target,
@@ -1017,22 +1105,25 @@ export class SpellCastingService {
             heightenedDisadvantage,
           );
           if (saveResult.success) {
-            const dcSuccess = dcInfo.dc_success ?? 'half';
-            if (dcSuccess === 'half') {
+            const dcSuccess = dcInfo.dc_success ?? "half";
+            if (dcSuccess === "half") {
               finalDamage = Math.floor(finalDamage / 2);
-            } else if (dcSuccess === 'none') {
+            } else if (dcSuccess === "none") {
               finalDamage = 0;
             }
             targetResult.savedSuccessfully = true;
           }
         }
 
-        const dmgResult = await this.combatService.applyDamage(dto.encounterId, {
-          targetParticipantId: targetId,
-          amount: finalDamage,
-          damageType,
-          ownerUserId: dto.ownerUserId,
-        });
+        const dmgResult = await this.combatService.applyDamage(
+          dto.encounterId,
+          {
+            targetParticipantId: targetId,
+            amount: finalDamage,
+            damageType,
+            ownerUserId: dto.ownerUserId,
+          },
+        );
 
         targetResult.damageDealt = finalDamage;
         if (dmgResult.ok) {
@@ -1053,8 +1144,13 @@ export class SpellCastingService {
       // Spec 005 Addendum — apply condition from spell-condition-catalog
       const condEntry = getSpellCondition(dto.spellSlug);
       if (condEntry && target.id !== participant.id) {
-        const sheet = await this.sheetService.computeSheet(dto.ownerUserId, participant.characterId);
-        const casterClass = (sheet as any).classes?.find((c: any) => c.spellSaveDc != null);
+        const sheet = await this.sheetService.computeSheet(
+          dto.ownerUserId,
+          participant.characterId,
+        );
+        const casterClass = (sheet as any).classes?.find(
+          (c: any) => c.spellSaveDc != null,
+        );
         const spellSaveDc: number = casterClass?.spellSaveDc ?? 13;
 
         const saveRoll = this.rollMonsterOrPcSave(
@@ -1065,16 +1161,19 @@ export class SpellCastingService {
         );
         const saveResult = await saveRoll;
         if (!saveResult.success) {
-          const condResult = await this.conditionLifecycle.applyCondition(target, {
-            slug: condEntry.conditionSlug,
-            appliedBy: participant.id,
-            sourceSpell: dto.spellSlug,
-            sourceConcentration: condEntry.requiresConcentration,
-            saveAbility: condEntry.saveAbility,
-            saveDc: spellSaveDc,
-            repeatSaveTiming: condEntry.repeatSaveTiming,
-            durationRoundsRemaining: condEntry.durationRounds,
-          });
+          const condResult = await this.conditionLifecycle.applyCondition(
+            target,
+            {
+              slug: condEntry.conditionSlug,
+              appliedBy: participant.id,
+              sourceSpell: dto.spellSlug,
+              sourceConcentration: condEntry.requiresConcentration,
+              saveAbility: condEntry.saveAbility,
+              saveDc: spellSaveDc,
+              repeatSaveTiming: condEntry.repeatSaveTiming,
+              durationRoundsRemaining: condEntry.durationRounds,
+            },
+          );
           events.push(...condResult.events);
           (targetResult as any).conditionApplied = {
             instanceId: condResult.instance.id,
@@ -1118,7 +1217,7 @@ export class SpellCastingService {
     // Adicionar magia futura = nova entry no tile-effect-catalog.ts. ZERO
     // edit aqui. Princípio X: snapshot tactical metadata + narrativeDescriptor
     // na entity, consumido por CombatAgent (L2/L3) e Narrator (3 camada).
-    const slugNorm = dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, '');
+    const slugNorm = dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, "");
     const tileDef = TILE_EFFECT_CATALOG[slugNorm as TileEffectKind];
     if (
       tileDef &&
@@ -1136,15 +1235,17 @@ export class SpellCastingService {
 
       // Save DC do caster (RAW: spell save DC = 8 + prof + spellcasting mod).
       let saveDc = 13; // fallback razoável (DC L5 caster)
-      if (participant.type === 'pc' && participant.characterId) {
+      if (participant.type === "pc" && participant.characterId) {
         try {
           const s = await this.sheetService.computeSheet(
             dto.ownerUserId,
             participant.characterId,
           );
-          const casterClass = (s as { classes?: Array<{ spellSaveDc?: number }> })
-            .classes?.find((c) => c.spellSaveDc != null);
-          if (casterClass?.spellSaveDc != null) saveDc = casterClass.spellSaveDc;
+          const casterClass = (
+            s as { classes?: Array<{ spellSaveDc?: number }> }
+          ).classes?.find((c) => c.spellSaveDc != null);
+          if (casterClass?.spellSaveDc != null)
+            saveDc = casterClass.spellSaveDc;
         } catch {
           /* fallback DC=13 */
         }
@@ -1160,7 +1261,7 @@ export class SpellCastingService {
       });
 
       events.push({
-        event_type: 'tile_effect_created',
+        event_type: "tile_effect_created",
         actor_participant_id: participant.id,
         data: {
           areaId: area.id,
@@ -1211,30 +1312,36 @@ export class SpellCastingService {
     // Target faz WIS save; se falha, TransformationService.enterForm swap
     // pro monster escolhido (beast form). Concentração 1h = 600 rounds.
     // durationRoundsTotal=600, revertTriggers: hpZero|concentrationBroken|dismiss.
-    if (slugNorm === 'polymorph') {
-      const encounterRound = (await this.encounterRepo.findOne({ where: { id: dto.encounterId } }))?.currentRound ?? 0;
-      const beastSlug = dto.polymorphBeastSlug ?? 'brown-bear';
+    if (slugNorm === "polymorph") {
+      const encounterRound =
+        (await this.encounterRepo.findOne({ where: { id: dto.encounterId } }))
+          ?.currentRound ?? 0;
+      const beastSlug = dto.polymorphBeastSlug ?? "brown-bear";
 
       // Save DC do caster
       const casterSheet = await this.sheetService
         .computeSheet(dto.ownerUserId, participant.characterId)
         .catch(() => null as any);
-      const casterClass = (casterSheet as any)?.classes?.find((c: any) => c.spellSaveDc != null);
+      const casterClass = casterSheet?.classes?.find(
+        (c: any) => c.spellSaveDc != null,
+      );
       const spellSaveDc: number = casterClass?.spellSaveDc ?? 13;
 
       for (const targetId of effectiveTargetIds) {
         // Ignorar self (Polymorph RAW aceita self, mas aí sem save)
         const isSelf = targetId === participant.id;
-        const target = await this.encounterService.getParticipant(targetId).catch(() => null);
+        const target = await this.encounterService
+          .getParticipant(targetId)
+          .catch(() => null);
         if (!target) continue;
 
         // Se target já está transformado, recusar (idempotência, previne conflito)
         if (target.transformationState) {
           events.push({
-            event_type: 'polymorph_rejected',
+            event_type: "polymorph_rejected",
             actor_participant_id: participant.id,
             target_participant_id: targetId,
-            data: { reason: 'already_transformed' },
+            data: { reason: "already_transformed" },
           });
           continue;
         }
@@ -1243,16 +1350,21 @@ export class SpellCastingService {
         if (!isSelf) {
           const saveResult = await this.rollMonsterOrPcSave(
             target,
-            'wis',
+            "wis",
             spellSaveDc,
             dto.ownerUserId,
           );
           savedSuccessfully = saveResult.success;
           events.push({
-            event_type: 'polymorph_save',
+            event_type: "polymorph_save",
             actor_participant_id: participant.id,
             target_participant_id: targetId,
-            data: { ability: 'wis', dc: spellSaveDc, success: savedSuccessfully, total: saveResult.total },
+            data: {
+              ability: "wis",
+              dc: spellSaveDc,
+              success: savedSuccessfully,
+              total: saveResult.total,
+            },
           });
           const hit = targetsHit.find((th) => th.participantId === targetId);
           if (hit) hit.savedSuccessfully = savedSuccessfully;
@@ -1262,7 +1374,7 @@ export class SpellCastingService {
 
         try {
           await this.transformation.enterForm(targetId, {
-            source: 'polymorph-spell',
+            source: "polymorph-spell",
             monsterSlug: beastSlug,
             durationRoundsTotal: 600, // 1 hour
             revertTriggers: {
@@ -1275,15 +1387,15 @@ export class SpellCastingService {
             sourceCasterParticipantId: participant.id,
           });
           events.push({
-            event_type: 'polymorph_applied',
+            event_type: "polymorph_applied",
             actor_participant_id: participant.id,
             target_participant_id: targetId,
-            data: { beastSlug, durationRounds: 600, source: 'polymorph-spell' },
+            data: { beastSlug, durationRounds: 600, source: "polymorph-spell" },
           });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : 'unknown';
+          const msg = err instanceof Error ? err.message : "unknown";
           events.push({
-            event_type: 'polymorph_failed',
+            event_type: "polymorph_failed",
             actor_participant_id: participant.id,
             target_participant_id: targetId,
             data: { beastSlug, reason: msg },
@@ -1298,7 +1410,7 @@ export class SpellCastingService {
     if (
       dto.asReaction &&
       dto.triggerEventId &&
-      dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, '') === 'shield'
+      dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, "") === "shield"
     ) {
       retroactiveReview = await this.recomputeShieldTrigger(
         dto.encounterId,
@@ -1313,21 +1425,34 @@ export class SpellCastingService {
 
     if (spellMasteryApplied) {
       events.push({
-        event_type: 'spell_mastery_free_cast',
+        event_type: "spell_mastery_free_cast",
         actor_participant_id: participant.id,
-        data: { featureSlug: 'spell-mastery', spellSlug: dto.spellSlug, slotLevel: dto.slotLevel },
+        data: {
+          featureSlug: "spell-mastery",
+          spellSlug: dto.spellSlug,
+          slotLevel: dto.slotLevel,
+        },
       });
     }
     if (signatureSpellApplied) {
       events.push({
-        event_type: 'signature_spell_free_cast',
+        event_type: "signature_spell_free_cast",
         actor_participant_id: participant.id,
-        data: { featureSlug: 'signature-spells', spellSlug: dto.spellSlug, slotLevel: dto.slotLevel },
+        data: {
+          featureSlug: "signature-spells",
+          spellSlug: dto.spellSlug,
+          slotLevel: dto.slotLevel,
+        },
       });
     }
 
     return success(
-      { ...spellResult, targetsHit, appliedEffectIds, retroactiveReview } as any,
+      {
+        ...spellResult,
+        targetsHit,
+        appliedEffectIds,
+        retroactiveReview,
+      } as any,
       events,
     );
   }
@@ -1342,11 +1467,16 @@ export class SpellCastingService {
     triggerEventId: string,
     casterParticipantId: string,
     ownerUserId: string,
-  ): Promise<{ newHit: boolean; previousHit: boolean; damageReverted: number; events: any[] } | null> {
+  ): Promise<{
+    newHit: boolean;
+    previousHit: boolean;
+    damageReverted: number;
+    events: any[];
+  } | null> {
     const trigger = await this.gameEventRepo.findOne({
       where: { id: triggerEventId },
     });
-    if (!trigger || trigger.eventType !== 'attack_roll') return null;
+    if (!trigger || trigger.eventType !== "attack_roll") return null;
     const data = trigger.data as any;
     const prevHit: boolean = data.hit ?? false;
     const prevTotal: number = data.total ?? 0;
@@ -1355,7 +1485,7 @@ export class SpellCastingService {
     const newHit = prevTotal >= newAc && !data.criticalMiss;
     const events: any[] = [
       {
-        event_type: 'shield_retroactive_review',
+        event_type: "shield_retroactive_review",
         actor_participant_id: casterParticipantId,
         target_participant_id: trigger.targetParticipantId,
         data: {
@@ -1375,12 +1505,14 @@ export class SpellCastingService {
       // attack (mesmo target). Event shape: data.damage.finalDamage ou
       // data.damage ou data.amount dependendo do emitter.
       const hpChange = await this.gameEventRepo
-        .createQueryBuilder('e')
-        .where('e.encounterId = :encId', { encId: encounterId })
+        .createQueryBuilder("e")
+        .where("e.encounterId = :encId", { encId: encounterId })
         .andWhere("e.eventType IN ('damage_applied', 'hp_change')")
-        .andWhere('e.targetParticipantId = :tid', { tid: trigger.targetParticipantId })
-        .andWhere('e.sequence >= :seq', { seq: trigger.sequence })
-        .orderBy('e.sequence', 'ASC')
+        .andWhere("e.targetParticipantId = :tid", {
+          tid: trigger.targetParticipantId,
+        })
+        .andWhere("e.sequence >= :seq", { seq: trigger.sequence })
+        .orderBy("e.sequence", "ASC")
         .limit(1)
         .getOne();
       if (hpChange) {
@@ -1388,7 +1520,7 @@ export class SpellCastingService {
         const dmg =
           d?.damage?.finalDamage ??
           d?.damage?.total ??
-          (typeof d?.damage === 'number' ? d.damage : undefined) ??
+          (typeof d?.damage === "number" ? d.damage : undefined) ??
           d?.amount ??
           0;
         if (dmg > 0) {
@@ -1400,7 +1532,7 @@ export class SpellCastingService {
           });
           damageReverted = dmg;
           events.push({
-            event_type: 'shield_damage_reverted',
+            event_type: "shield_damage_reverted",
             target_participant_id: trigger.targetParticipantId,
             data: { amount: dmg, triggerEventId },
           });
@@ -1425,7 +1557,7 @@ export class SpellCastingService {
     participant: EncounterParticipantEntity,
     ownerUserId: string,
   ): Promise<boolean> {
-    if (participant.type === 'pc' && participant.characterId) {
+    if (participant.type === "pc" && participant.characterId) {
       try {
         const sheet = await this.sheetService.computeSheet(
           ownerUserId,
@@ -1434,10 +1566,10 @@ export class SpellCastingService {
         const equip = (sheet as any)?.equipment ?? [];
         for (const eq of equip) {
           if (!eq.equipped || !eq.armorClass) continue;
-          const slug = (eq.slug ?? '').toLowerCase();
-          const name = (eq.name ?? '').toLowerCase();
-          if (slug === 'shield' || name === 'shield') continue;
-          const base = (eq.armorClass as any)?.base ?? 0;
+          const slug = (eq.slug ?? "").toLowerCase();
+          const name = (eq.name ?? "").toLowerCase();
+          if (slug === "shield" || name === "shield") continue;
+          const base = eq.armorClass?.base ?? 0;
           if (base > 0) return true;
         }
         return false;
@@ -1446,7 +1578,7 @@ export class SpellCastingService {
       }
     }
     // Monsters: quase sempre tem natural armor — Mage Armor RAW nao se aplica.
-    return participant.type === 'monster';
+    return participant.type === "monster";
   }
 
   /** Retorna DEX modifier do caster (PC via sheet, monster via statblock). */
@@ -1454,13 +1586,13 @@ export class SpellCastingService {
     participant: EncounterParticipantEntity,
     ownerUserId: string,
   ): Promise<number> {
-    if (participant.type === 'pc' && participant.characterId) {
+    if (participant.type === "pc" && participant.characterId) {
       const sheet = await this.sheetService.computeSheet(
         ownerUserId,
         participant.characterId,
       );
       const dexBlock = (sheet?.abilityScores ?? []).find(
-        (a) => a.slug === 'dex' || a.slug === 'dexterity',
+        (a) => a.slug === "dex" || a.slug === "dexterity",
       );
       if (dexBlock) return dexBlock.modifier;
       return 0;
@@ -1479,51 +1611,64 @@ export class SpellCastingService {
     participant: EncounterParticipantEntity,
   ): Promise<GameResult<CombatSpellResult>> {
     const sc = (participant.monster as any)?.spellcasting;
-    if (!sc) return failure('Este monstro não possui magia.', 'INVALID_SPELL');
+    if (!sc) return failure("Este monstro não possui magia.", "INVALID_SPELL");
 
-    const check = this.monsterSpellcasting.canCast(participant, dto.spellSlug, dto.slotLevel);
+    const check = this.monsterSpellcasting.canCast(
+      participant,
+      dto.spellSlug,
+      dto.slotLevel,
+    );
     if (!check.allowed) {
       return failure(
-        check.message ?? 'Não pode lançar esta magia.',
-        check.code ?? 'INVALID_SPELL',
+        check.message ?? "Não pode lançar esta magia.",
+        check.code ?? "INVALID_SPELL",
       );
     }
 
-    let spell = await this.spellRepo.findOne({ where: { slug: dto.spellSlug } });
+    let spell = await this.spellRepo.findOne({
+      where: { slug: dto.spellSlug },
+    });
     if (!spell) {
       spell = await this.spellRepo.findOne({ where: { name: dto.spellSlug } });
     }
     if (!spell) {
-      return failure(`Magia '${dto.spellSlug}' nao encontrada.`, 'INVALID_SPELL');
+      return failure(
+        `Magia '${dto.spellSlug}' nao encontrada.`,
+        "INVALID_SPELL",
+      );
     }
 
-    const castingTime = (spell.casting_time ?? 'action').toLowerCase();
-    const isBonusAction = castingTime.includes('bonus');
+    const castingTime = (spell.casting_time ?? "action").toLowerCase();
+    const isBonusAction = castingTime.includes("bonus");
     if (isBonusAction) {
       if (participant.bonusActionUsed)
-        return failure('Bonus action ja utilizada neste turno.', 'NO_BONUS_ACTION_AVAILABLE');
+        return failure(
+          "Bonus action ja utilizada neste turno.",
+          "NO_BONUS_ACTION_AVAILABLE",
+        );
     } else {
       if (participant.actionUsed)
-        return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+        return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
 
     // Damage from spell.damage JSON (damage_at_slot_level keyed by slot number).
     const damageInfo: any = (spell as any).damage ?? {};
     const rawDt = damageInfo?.damage_type as unknown;
     const damageType: string =
-      (typeof rawDt === 'object' && rawDt !== null && 'name' in rawDt
+      (typeof rawDt === "object" && rawDt !== null && "name" in rawDt
         ? String((rawDt as { name: string }).name).toLowerCase()
         : Array.isArray(rawDt)
-          ? String(rawDt[0] ?? '').toLowerCase()
-          : typeof rawDt === 'string'
+          ? String(rawDt[0] ?? "").toLowerCase()
+          : typeof rawDt === "string"
             ? rawDt.toLowerCase()
-            : null) ?? 'force';
+            : null) ?? "force";
 
     let damageExpression: string | undefined;
     if (damageInfo.damage_at_slot_level) {
       damageExpression = damageInfo.damage_at_slot_level[String(dto.slotLevel)];
     } else if (damageInfo.damage_at_character_level) {
-      damageExpression = damageInfo.damage_at_character_level[String(sc.casterLevel ?? 1)];
+      damageExpression =
+        damageInfo.damage_at_character_level[String(sc.casterLevel ?? 1)];
     }
 
     const concentration = Boolean((spell as any).concentration);
@@ -1535,22 +1680,22 @@ export class SpellCastingService {
 
     const events: GameEventData[] = [];
     events.push({
-      event_type: 'spell_cast',
+      event_type: "spell_cast",
       actor_participant_id: participant.id,
       data: {
         spellSlug: dto.spellSlug,
         spellName: spell.name,
         slotLevel: dto.slotLevel,
-        casterType: 'monster',
+        casterType: "monster",
         saveDc: sc.saveDc,
       },
     });
 
-    const targetsHit: CombatSpellResult['targetsHit'] = [];
+    const targetsHit: CombatSpellResult["targetsHit"] = [];
 
     for (const targetId of dto.targetParticipantIds) {
       const target = await this.encounterService.getParticipant(targetId);
-      const entry: CombatSpellResult['targetsHit'][0] = {
+      const entry: CombatSpellResult["targetsHit"][0] = {
         participantId: targetId,
         displayName: target.displayName,
       };
@@ -1558,7 +1703,7 @@ export class SpellCastingService {
       if (baseRoll) {
         let finalDamage = baseRoll.total;
         if (saveAbility) {
-          if (target.type === 'pc' && target.characterId) {
+          if (target.type === "pc" && target.characterId) {
             const saveRes = await this.savingThrowService.rollSavingThrow({
               characterId: target.characterId,
               ability: saveAbility,
@@ -1601,11 +1746,11 @@ export class SpellCastingService {
     const result: CombatSpellResult = {
       spellName: spell.name,
       spellLevel: dto.slotLevel,
-      slotUsed: sc.type === 'standard' ? dto.slotLevel : 0,
+      slotUsed: sc.type === "standard" ? dto.slotLevel : 0,
       concentration,
       damage: baseRoll
         ? {
-            expression: damageExpression ?? '',
+            expression: damageExpression ?? "",
             total: baseRoll.total,
             type: damageType,
           }
@@ -1620,7 +1765,7 @@ export class SpellCastingService {
     const dc = (spell as any).dc;
     if (!dc) return null;
     const ability = dc.dc_type?.name ?? dc.dc_type ?? null;
-    if (typeof ability !== 'string') return null;
+    if (typeof ability !== "string") return null;
     return ability.toLowerCase().substring(0, 3);
   }
 
@@ -1637,7 +1782,7 @@ export class SpellCastingService {
     /** Spec 012 Metamagic Heightened — rola 2d20 e usa o menor (disadvantage). */
     withDisadvantage: boolean = false,
   ): Promise<{ success: boolean; roll: number; total: number; dc: number }> {
-    if (target.type === 'pc' && target.characterId) {
+    if (target.type === "pc" && target.characterId) {
       const saveResult = await this.savingThrowService.rollSavingThrow({
         characterId: target.characterId,
         ability,
@@ -1657,9 +1802,12 @@ export class SpellCastingService {
     }
 
     // Monster: compute from entity abilities
-    const monster = target.monster ??
+    const monster =
+      target.monster ??
       (target.monsterId
-        ? await this.encounterService.getParticipant(target.id).then((p) => p.monster)
+        ? await this.encounterService
+            .getParticipant(target.id)
+            .then((p) => p.monster)
         : null);
 
     if (!monster) {
@@ -1680,17 +1828,26 @@ export class SpellCastingService {
     const score = abilityMap[ability.toLowerCase().substring(0, 3)] ?? 10;
     const mod = Math.floor((score - 10) / 2);
 
-    const profs = Array.isArray(monster.proficiencies) ? monster.proficiencies : [];
+    const profs = Array.isArray(monster.proficiencies)
+      ? monster.proficiencies
+      : [];
     const hasSaveProf = profs.some(
       (p: any) =>
-        p.type === 'saving-throw' &&
-        (p.name ?? '').toLowerCase().includes(ability.toLowerCase().substring(0, 3)),
+        p.type === "saving-throw" &&
+        (p.name ?? "")
+          .toLowerCase()
+          .includes(ability.toLowerCase().substring(0, 3)),
     );
     const bonus = mod + (hasSaveProf ? (monster.proficiency_bonus ?? 0) : 0);
 
     const rollA = this.diceService.roll(20);
     const rollB = withDisadvantage ? this.diceService.roll(20) : rollA;
     const chosen = withDisadvantage ? Math.min(rollA, rollB) : rollA;
-    return { success: chosen + bonus >= dc, roll: chosen, total: chosen + bonus, dc };
+    return {
+      success: chosen + bonus >= dc,
+      roll: chosen,
+      total: chosen + bonus,
+      dc,
+    };
   }
 }

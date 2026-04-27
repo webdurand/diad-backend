@@ -5,9 +5,9 @@ import {
   Logger,
   NotFoundException,
   NotImplementedException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   UserEntity,
   CharacterEntity,
@@ -15,14 +15,14 @@ import {
   SubclassEntity,
   CharacterEquipmentEntity,
   EquipmentEntity,
-} from 'src/entities';
-import { EquipmentSourceEnum } from 'src/entities/enums';
-import { CharactersService } from '../../characters/services/characters.service';
-import { CharacterSheetService } from '../../characters/services/character-sheet.service';
+} from "src/entities";
+import { EquipmentSourceEnum } from "src/entities/enums";
+import { CharactersService } from "../../characters/services/characters.service";
+import { CharacterSheetService } from "../../characters/services/character-sheet.service";
 import {
   SeedCharacterDto,
   SupportedClassSlug,
-} from '../dto/seed-character.dto';
+} from "../dto/seed-character.dto";
 
 export interface SeedCharacterResult {
   id: string;
@@ -56,7 +56,7 @@ const PRIMARY_ABILITY_INDEX: Record<SupportedClassSlug, number> = {
 };
 
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
-const E2E_DEFAULT_USER_EMAIL = 'e2e-harness@diad.local';
+const E2E_DEFAULT_USER_EMAIL = "e2e-harness@diad.local";
 
 /**
  * Spell defaults por classe pro harness poder castar cantrips/spells icônicos.
@@ -76,41 +76,41 @@ interface ClassSpellDefaults {
 const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
   barbarian: {},
   bard: {
-    cantrips: ['vicious-mockery', 'light'],
-    preparedSpells: ['healing-word', 'faerie-fire', 'charm-person', 'sleep'],
+    cantrips: ["vicious-mockery", "light"],
+    preparedSpells: ["healing-word", "faerie-fire", "charm-person", "sleep"],
   },
   cleric: {
-    cantrips: ['sacred-flame', 'guidance', 'light'],
+    cantrips: ["sacred-flame", "guidance", "light"],
     // Spec 013 — adiciona 'spirit-guardians' (L3) pra ground effects via catalog.
     preparedSpells: [
-      'cure-wounds',
-      'bless',
-      'healing-word',
-      'guiding-bolt',
-      'spirit-guardians',
+      "cure-wounds",
+      "bless",
+      "healing-word",
+      "guiding-bolt",
+      "spirit-guardians",
     ],
   },
   druid: {
-    cantrips: ['druidcraft', 'produce-flame'],
+    cantrips: ["druidcraft", "produce-flame"],
     // Spec 013 — adiciona 'spike-growth' (L2), 'sleet-storm' (L3), 'wall-of-fire' (L4).
     preparedSpells: [
-      'cure-wounds',
-      'entangle',
-      'healing-word',
-      'thunderwave',
-      'spike-growth',
-      'sleet-storm',
-      'wall-of-fire',
+      "cure-wounds",
+      "entangle",
+      "healing-word",
+      "thunderwave",
+      "spike-growth",
+      "sleet-storm",
+      "wall-of-fire",
     ],
   },
   fighter: {},
   monk: {},
   paladin: {
-    preparedSpells: ['bless', 'cure-wounds'], // Paladin L1 tem spells só a partir de L2 mas seed não quebra
+    preparedSpells: ["bless", "cure-wounds"], // Paladin L1 tem spells só a partir de L2 mas seed não quebra
   },
   ranger: {
     // Spec 013 — adiciona 'spike-growth' (L2 ranger) pra ground effects.
-    preparedSpells: ['hunters-mark', 'cure-wounds', 'spike-growth'],
+    preparedSpells: ["hunters-mark", "cure-wounds", "spike-growth"],
   },
   rogue: {},
   sorcerer: {
@@ -118,12 +118,23 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
     // Cantrips incluem ray-of-frost (debuff cold), fire-bolt (damage), light,
     // prestidigitation, mage-hand. Spells inclui burning-hands (AoE cone),
     // chromatic-orb (damage versátil), magic-missile (multi-dart), shield (reaction).
-    cantrips: ['fire-bolt', 'ray-of-frost', 'light', 'prestidigitation', 'mage-hand'],
-    preparedSpells: ['magic-missile', 'shield', 'burning-hands', 'chromatic-orb'],
+    cantrips: [
+      "fire-bolt",
+      "ray-of-frost",
+      "light",
+      "prestidigitation",
+      "mage-hand",
+    ],
+    preparedSpells: [
+      "magic-missile",
+      "shield",
+      "burning-hands",
+      "chromatic-orb",
+    ],
   },
   warlock: {
-    cantrips: ['eldritch-blast', 'mage-hand'],
-    preparedSpells: ['hex', 'armor-of-agathys'],
+    cantrips: ["eldritch-blast", "mage-hand"],
+    preparedSpells: ["hex", "armor-of-agathys"],
   },
   wizard: {
     // Spec 012 Gap 4 — cantrips incluem ray-of-frost (debuff) e minor-illusion
@@ -131,32 +142,39 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
     // burning-hands (AoE cone), alinhado ao starter pack RAW 2024 XPHB.
     // Spec 013 — adiciona 'grease' (L1), 'web' (L2), 'cloud-of-daggers' (L2),
     // 'sleet-storm' (L3), 'wall-of-fire' (L4) pra ground effects via catalog.
-    cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand', 'prestidigitation', 'minor-illusion', 'light'],
+    cantrips: [
+      "fire-bolt",
+      "ray-of-frost",
+      "mage-hand",
+      "prestidigitation",
+      "minor-illusion",
+      "light",
+    ],
     spellbook: [
-      'mage-armor',
-      'magic-missile',
-      'shield',
-      'sleep',
-      'detect-magic',
-      'feather-fall',
-      'witch-bolt',
-      'burning-hands',
-      'grease',
-      'web',
-      'cloud-of-daggers',
-      'sleet-storm',
-      'wall-of-fire',
+      "mage-armor",
+      "magic-missile",
+      "shield",
+      "sleep",
+      "detect-magic",
+      "feather-fall",
+      "witch-bolt",
+      "burning-hands",
+      "grease",
+      "web",
+      "cloud-of-daggers",
+      "sleet-storm",
+      "wall-of-fire",
     ],
     preparedSpells: [
-      'mage-armor',
-      'magic-missile',
-      'shield',
-      'sleep',
-      'grease',
-      'web',
-      'cloud-of-daggers',
-      'sleet-storm',
-      'wall-of-fire',
+      "mage-armor",
+      "magic-missile",
+      "shield",
+      "sleep",
+      "grease",
+      "web",
+      "cloud-of-daggers",
+      "sleet-storm",
+      "wall-of-fire",
     ],
   },
 };
@@ -195,7 +213,9 @@ export class SeedCharacterService {
     for (const slug of slugs) {
       const eq = await this.equipmentRepo.findOne({ where: { slug } });
       if (!eq) {
-        this.logger.warn(`addExtraEquipment: slug "${slug}" não existe em equipments. Pulando.`);
+        this.logger.warn(
+          `addExtraEquipment: slug "${slug}" não existe em equipments. Pulando.`,
+        );
         continue;
       }
       await this.characterEquipRepo.save({
@@ -217,9 +237,11 @@ export class SeedCharacterService {
   private async equipHandBySlug(
     characterId: string,
     equipmentSlug: string,
-    hand: 'main' | 'off',
+    hand: "main" | "off",
   ): Promise<void> {
-    const eq = await this.equipmentRepo.findOne({ where: { slug: equipmentSlug } });
+    const eq = await this.equipmentRepo.findOne({
+      where: { slug: equipmentSlug },
+    });
     if (!eq) {
       this.logger.warn(
         `equipHandBySlug: slug "${equipmentSlug}" não existe em equipments. Pulando.`,
@@ -237,8 +259,10 @@ export class SeedCharacterService {
     }
 
     // Libera o slot alvo de QUALQUER outro item (exclusivo por mão).
-    const targetCol = hand === 'main' ? 'mainHand' : 'offHand';
-    const others = await this.characterEquipRepo.find({ where: { character_id: characterId } });
+    const targetCol = hand === "main" ? "mainHand" : "offHand";
+    const others = await this.characterEquipRepo.find({
+      where: { character_id: characterId },
+    });
     for (const other of others) {
       if (other.id === ce.id) continue;
       if (other[targetCol]) {
@@ -248,13 +272,19 @@ export class SeedCharacterService {
     }
 
     // 2H weapon em main ocupa ambas as mãos.
-    const props = (eq.properties ?? []) as Array<{ slug?: string; index?: string; name?: string }>;
-    const isTwoHanded = Array.isArray(props) && props.some(
-      (p) => (p.slug ?? p.index ?? '').toLowerCase() === 'two-handed',
-    );
+    const props = (eq.properties ?? []) as Array<{
+      slug?: string;
+      index?: string;
+      name?: string;
+    }>;
+    const isTwoHanded =
+      Array.isArray(props) &&
+      props.some(
+        (p) => (p.slug ?? p.index ?? "").toLowerCase() === "two-handed",
+      );
 
-    ce.mainHand = hand === 'main';
-    ce.offHand = hand === 'off' || (hand === 'main' && isTwoHanded);
+    ce.mainHand = hand === "main";
+    ce.offHand = hand === "off" || (hand === "main" && isTwoHanded);
     await this.characterEquipRepo.save(ce);
   }
 
@@ -285,7 +315,7 @@ export class SeedCharacterService {
     const masterySet = new Set(weaponMasteryChoices ?? []);
     let pick = weapons.find((w) => masterySet.has(w.equipment.slug));
     if (!pick) {
-      const priority = ['longsword', 'shortsword', 'mace', 'club', 'dagger'];
+      const priority = ["longsword", "shortsword", "mace", "club", "dagger"];
       pick = weapons.find((w) => priority.includes(w.equipment.slug));
     }
     if (!pick) pick = weapons[0];
@@ -295,9 +325,11 @@ export class SeedCharacterService {
       index?: string;
       name?: string;
     }>;
-    const isTwoHanded = Array.isArray(props) && props.some(
-      (p) => (p.slug ?? p.index ?? '').toLowerCase() === 'two-handed',
-    );
+    const isTwoHanded =
+      Array.isArray(props) &&
+      props.some(
+        (p) => (p.slug ?? p.index ?? "").toLowerCase() === "two-handed",
+      );
 
     pick.mainHand = true;
     pick.offHand = isTwoHanded;
@@ -333,24 +365,27 @@ export class SeedCharacterService {
     // (ActionBar não fica vazio). Se fixture passa mainHandSlug explícito,
     // sobrescreve abaixo.
     if (!dto.mainHandSlug) {
-      await this.defaultEquipFirstWeapon(character.id, dto.weaponMasteryChoices);
+      await this.defaultEquipFirstWeapon(
+        character.id,
+        dto.weaponMasteryChoices,
+      );
     }
 
     // Premissa weapons-in-hand — empunha arma(s)/escudo nos slots indicados.
     // Deve rodar APÓS o starter pack + additionalEquipmentSlugs (slugs precisam
     // estar no inventário). 2H weapon em main ocupa ambas automaticamente.
     if (dto.mainHandSlug) {
-      await this.equipHandBySlug(character.id, dto.mainHandSlug, 'main');
+      await this.equipHandBySlug(character.id, dto.mainHandSlug, "main");
     }
     if (dto.offHandSlug) {
-      await this.equipHandBySlug(character.id, dto.offHandSlug, 'off');
+      await this.equipHandBySlug(character.id, dto.offHandSlug, "off");
     }
 
     if (dto.level > 1) {
       // Harness L10/L20 exige level-up determinístico com escolhas de ASI/feat/spells/subclass.
       // Deixado pra próxima iteração da spec 012 — endpoint retorna 501 enquanto isso.
       throw new NotImplementedException({
-        code: 'LEVEL_UP_NOT_YET_IMPLEMENTED',
+        code: "LEVEL_UP_NOT_YET_IMPLEMENTED",
         message: `Seed L${dto.level} ainda não implementado. PC L1 criado (id=${character.id}); próxima iteração da spec 012 adiciona level-up determinístico.`,
         characterId: character.id,
         level: 1,
@@ -374,8 +409,8 @@ export class SeedCharacterService {
     const entity = await this.classRepo.findOneBy({ slug });
     if (!entity) {
       throw new BadRequestException({
-        code: 'INVALID_CLASS',
-        field: 'classSlug',
+        code: "INVALID_CLASS",
+        field: "classSlug",
         message: `Classe "${slug}" não encontrada em comp_sources. Rode /admin/seed-all antes.`,
       });
     }
@@ -389,15 +424,15 @@ export class SeedCharacterService {
     const entity = await this.subclassRepo.findOneBy({ slug });
     if (!entity) {
       throw new BadRequestException({
-        code: 'INVALID_SUBCLASS',
-        field: 'subclassSlug',
+        code: "INVALID_SUBCLASS",
+        field: "subclassSlug",
         message: `Subclasse "${slug}" não encontrada.`,
       });
     }
     if (entity.class_id !== classId) {
       throw new BadRequestException({
-        code: 'INVALID_SUBCLASS',
-        field: 'subclassSlug',
+        code: "INVALID_SUBCLASS",
+        field: "subclassSlug",
         message: `Subclasse "${slug}" não pertence à classe informada.`,
       });
     }
@@ -409,8 +444,8 @@ export class SeedCharacterService {
       const user = await this.userRepo.findOneBy({ id: explicitId });
       if (!user) {
         throw new NotFoundException({
-          code: 'OWNER_USER_NOT_FOUND',
-          field: 'ownerUserId',
+          code: "OWNER_USER_NOT_FOUND",
+          field: "ownerUserId",
           message: `Usuário ${explicitId} não encontrado.`,
         });
       }
@@ -422,7 +457,7 @@ export class SeedCharacterService {
     });
     if (!e2eUser) {
       throw new NotFoundException({
-        code: 'E2E_USER_NOT_SEEDED',
+        code: "E2E_USER_NOT_SEEDED",
         message: `Usuário E2E (${E2E_DEFAULT_USER_EMAIL}) não existe. Rode a migration SeedE2EHarnessUser com E2E_HARNESS_PASSWORD definido, ou passe ownerUserId explícito.`,
       });
     }
@@ -457,9 +492,7 @@ export class SeedCharacterService {
 
     // Remaining scores [13, 12, 10, 8] filled in remaining slots in order
     const remainingScores =
-      primaryIdx === conIdx
-        ? [14, 13, 12, 10, 8]
-        : [13, 12, 10, 8];
+      primaryIdx === conIdx ? [14, 13, 12, 10, 8] : [13, 12, 10, 8];
     let scoreIdx = 0;
     for (let i = 0; i < 6; i++) {
       if (i === primaryIdx || i === conIdx) continue;
@@ -479,7 +512,7 @@ export class SeedCharacterService {
     });
     if (existing) {
       throw new ConflictException({
-        code: 'CHARACTER_NAME_EXISTS',
+        code: "CHARACTER_NAME_EXISTS",
         message: `Personagem "${name}" já existe para este usuário. Use nome diferente ou delete o anterior.`,
       });
     }
@@ -502,18 +535,20 @@ export class SeedCharacterService {
     //   e bug validado via harness spec 012.
     const spellDefaults = CLASS_SPELL_DEFAULTS[params.classSlug];
     const data: Record<string, unknown> = {
-      sourceCode: 'XPHB',
+      sourceCode: "XPHB",
       classSlug: params.classSlug,
-      raceSlug: 'human',
-      backgroundSlug: 'acolyte',
+      raceSlug: "human",
+      backgroundSlug: "acolyte",
       abilityScores: params.abilityScores,
-      abilityScoreMethod: 'standard-array',
+      abilityScoreMethod: "standard-array",
       skills: [],
-      classEquipmentChoices: ['A'],
-      backgroundEquipmentChoices: ['A'],
+      classEquipmentChoices: ["A"],
+      backgroundEquipmentChoices: ["A"],
       // Spells por classe (spec 012) — sem isso, cast-spell falha com
       // "magia não encontrada no repertório".
-      ...(spellDefaults.cantrips ? { classCantrips: spellDefaults.cantrips } : {}),
+      ...(spellDefaults.cantrips
+        ? { classCantrips: spellDefaults.cantrips }
+        : {}),
       ...(spellDefaults.preparedSpells
         ? { classPreparedSpells: spellDefaults.preparedSpells }
         : {}),
@@ -540,7 +575,7 @@ export class SeedCharacterService {
   private async buildSheetSummary(
     userId: string,
     characterId: string,
-  ): Promise<SeedCharacterResult['sheetSummary']> {
+  ): Promise<SeedCharacterResult["sheetSummary"]> {
     const sheet = (await this.characterSheetService.computeSheet(
       userId,
       characterId,
@@ -572,28 +607,28 @@ export class SeedCharacterService {
     if (Array.isArray(raw)) {
       // Shape preferido do sheet atual: [{ level, total, used }]
       for (const entry of raw) {
-        if (typeof entry === 'number') {
+        if (typeof entry === "number") {
           // Fallback: array plano [2, 3, 0, ...]
           const idx = raw.indexOf(entry);
           if (idx >= 0 && idx < 9) slots[idx] = entry;
-        } else if (entry && typeof entry === 'object') {
+        } else if (entry && typeof entry === "object") {
           const level = (entry as { level?: number }).level;
           const total = (entry as { total?: number }).total;
           if (
-            typeof level === 'number'
-            && level >= 1
-            && level <= 9
-            && typeof total === 'number'
+            typeof level === "number" &&
+            level >= 1 &&
+            level <= 9 &&
+            typeof total === "number"
           ) {
             slots[level - 1] = total;
           }
         }
       }
-    } else if (raw && typeof raw === 'object') {
+    } else if (raw && typeof raw === "object") {
       const obj = raw as Record<string, unknown>;
       for (let i = 1; i <= 9; i++) {
         const val = obj[i] ?? obj[String(i)] ?? obj[`level${i}`];
-        if (typeof val === 'number') slots[i - 1] = val;
+        if (typeof val === "number") slots[i - 1] = val;
       }
     }
 

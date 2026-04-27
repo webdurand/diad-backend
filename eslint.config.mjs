@@ -29,7 +29,28 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
-      "prettier/prettier": ["error", { endOfLine: "auto" }],
+      'prettier/prettier': ['error', { endOfLine: 'auto' }],
+    },
+  },
+  // Spec 016 — Princípio XI: erros cross-boundary devem usar DiadException
+  // ou subclasse com error code semântico. `throw new Error(...)` perde causa-raiz.
+  {
+    files: ['src/**/*.ts'],
+    ignores: [
+      'src/**/__tests__/**',
+      'src/**/*.spec.ts',
+      'src/migrations/**',
+      'src/data/**',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: 'NewExpression[callee.name="Error"]',
+          message:
+            'Princípio XI (spec 016): use DiadException ou subclass com error code semântico. Veja src/common/observability/errors/.',
+        },
+      ],
     },
   },
 );

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Fighter L9 Tactical Master (RAW 2024) — pode aplicar mastery alternativa
@@ -6,7 +6,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * no próximo attack.
  */
 export class AddTacticalMasterOverride1777010000000 implements MigrationInterface {
-  name = 'AddTacticalMasterOverride1777010000000';
+  name = "AddTacticalMasterOverride1777010000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

@@ -1,15 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { SpellService } from 'src/models/characters/services/spell.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { SpellService } from "src/models/characters/services/spell.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 
 /**
  * Spec 012 Sorcerer — Font of Magic (L2+).
@@ -71,7 +71,7 @@ export class SorcererFeaturesService {
       participant.characterId,
     );
     const sorcClass = (sheet as any).classes?.find(
-      (c: any) => c.slug === 'sorcerer',
+      (c: any) => c.slug === "sorcerer",
     );
     const total = sorcClass && sorcClass.level >= 2 ? sorcClass.level : 0;
     const used = participant.sorceryPointsUsed ?? 0;
@@ -90,43 +90,44 @@ export class SorcererFeaturesService {
     if (slotLevel < 1 || slotLevel > 5) {
       return failure(
         `Slot level ${slotLevel} inválido (Font of Magic: 1-5).`,
-        'INVALID_ACTION',
+        "INVALID_ACTION",
       );
     }
     const participant = await this.participantRepo.findOne({
       where: { id: participantId },
     });
     if (!participant?.characterId) {
-      return failure('Participant inválido.', 'INVALID_PARTICIPANT');
+      return failure("Participant inválido.", "INVALID_PARTICIPANT");
     }
     const sheet = await this.sheetService.computeSheet(
       ownerUserId,
       participant.characterId,
     );
     const sorcClass = (sheet as any).classes?.find(
-      (c: any) => c.slug === 'sorcerer',
+      (c: any) => c.slug === "sorcerer",
     );
     if (!sorcClass || sorcClass.level < 2) {
-      return failure(
-        'Font of Magic requer Sorcerer L2+.',
-        'INVALID_ACTION',
-      );
+      return failure("Font of Magic requer Sorcerer L2+.", "INVALID_ACTION");
     }
     const slotBlock = (sheet.spellSlots ?? []).find(
-      (s) => s.level === slotLevel && s.kind !== 'pact',
+      (s) => s.level === slotLevel && s.kind !== "pact",
     );
     if (!slotBlock || slotBlock.used >= slotBlock.total) {
       return failure(
         `Sem slot L${slotLevel} disponível pra converter.`,
-        'INSUFFICIENT_SPELL_SLOTS',
+        "INSUFFICIENT_SPELL_SLOTS",
       );
     }
 
     // Consume the slot
-    await this.spellService.updateSpellSlots(ownerUserId, participant.characterId, {
-      level: slotLevel,
-      used: slotBlock.used + 1,
-    });
+    await this.spellService.updateSpellSlots(
+      ownerUserId,
+      participant.characterId,
+      {
+        level: slotLevel,
+        used: slotBlock.used + 1,
+      },
+    );
 
     // Refund SP (used -= slotLevel, floor 0). Font of Magic NÃO permite
     // ultrapassar pool máximo; se refund > used, clamp em 0.
@@ -139,10 +140,10 @@ export class SorcererFeaturesService {
     const total = sorcClass.level;
     const events: GameEventData[] = [
       {
-        event_type: 'sorcery_points_gained',
+        event_type: "sorcery_points_gained",
         actor_participant_id: participantId,
         data: {
-          source: 'convert-slot',
+          source: "convert-slot",
           slotLevelConsumed: slotLevel,
           gained: actuallyGained,
           poolUsed: newUsed,
@@ -152,7 +153,10 @@ export class SorcererFeaturesService {
     ];
 
     return success(
-      { gained: actuallyGained, pool: { total, used: newUsed, remaining: total - newUsed } },
+      {
+        gained: actuallyGained,
+        pool: { total, used: newUsed, remaining: total - newUsed },
+      },
       events,
     );
   }
@@ -170,27 +174,24 @@ export class SorcererFeaturesService {
     if (!cost) {
       return failure(
         `Slot L${targetSlotLevel} não pode ser criado via Font of Magic (RAW 2024: L1-L5).`,
-        'INVALID_ACTION',
+        "INVALID_ACTION",
       );
     }
     const participant = await this.participantRepo.findOne({
       where: { id: participantId },
     });
     if (!participant?.characterId) {
-      return failure('Participant inválido.', 'INVALID_PARTICIPANT');
+      return failure("Participant inválido.", "INVALID_PARTICIPANT");
     }
     const sheet = await this.sheetService.computeSheet(
       ownerUserId,
       participant.characterId,
     );
     const sorcClass = (sheet as any).classes?.find(
-      (c: any) => c.slug === 'sorcerer',
+      (c: any) => c.slug === "sorcerer",
     );
     if (!sorcClass || sorcClass.level < 2) {
-      return failure(
-        'Font of Magic requer Sorcerer L2+.',
-        'INVALID_ACTION',
-      );
+      return failure("Font of Magic requer Sorcerer L2+.", "INVALID_ACTION");
     }
     const total = sorcClass.level;
     const prevUsed = participant.sorceryPointsUsed ?? 0;
@@ -198,7 +199,7 @@ export class SorcererFeaturesService {
     if (remaining < cost) {
       return failure(
         `SP insuficiente: requer ${cost}, tem ${remaining}.`,
-        'INSUFFICIENT_SPELL_SLOTS',
+        "INSUFFICIENT_SPELL_SLOTS",
       );
     }
 
@@ -207,25 +208,29 @@ export class SorcererFeaturesService {
     // slot you don't currently have". Implementação MVP: só refund se há
     // used ≥ 1). Gap documentado: bonus slot ainda não implementado.
     const slotBlock = (sheet.spellSlots ?? []).find(
-      (s) => s.level === targetSlotLevel && s.kind !== 'pact',
+      (s) => s.level === targetSlotLevel && s.kind !== "pact",
     );
     if (!slotBlock) {
       return failure(
         `Sorcerer não tem slots L${targetSlotLevel} no nível atual.`,
-        'INVALID_ACTION',
+        "INVALID_ACTION",
       );
     }
     if (slotBlock.used === 0) {
       // Pool cheio já. RAW permite criar "extra slot" — MVP rejeita pra V2.
       return failure(
         `Slot L${targetSlotLevel} não está gasto; Font of Magic MVP só refunda usos (sem bonus slot).`,
-        'INVALID_ACTION',
+        "INVALID_ACTION",
       );
     }
-    await this.spellService.updateSpellSlots(ownerUserId, participant.characterId, {
-      level: targetSlotLevel,
-      used: Math.max(0, slotBlock.used - 1),
-    });
+    await this.spellService.updateSpellSlots(
+      ownerUserId,
+      participant.characterId,
+      {
+        level: targetSlotLevel,
+        used: Math.max(0, slotBlock.used - 1),
+      },
+    );
 
     // Debit SP
     const newUsed = prevUsed + cost;
@@ -234,10 +239,10 @@ export class SorcererFeaturesService {
 
     const events: GameEventData[] = [
       {
-        event_type: 'sorcery_points_spent',
+        event_type: "sorcery_points_spent",
         actor_participant_id: participantId,
         data: {
-          source: 'convert-to-slot',
+          source: "convert-to-slot",
           slotLevelCreated: targetSlotLevel,
           cost,
           poolUsed: newUsed,
@@ -260,32 +265,30 @@ export class SorcererFeaturesService {
   async sorcerousRestoration(
     participantId: string,
     ownerUserId: string,
-  ): Promise<
-    GameResult<{ regained: number; pool: SorceryPointsState }>
-  > {
+  ): Promise<GameResult<{ regained: number; pool: SorceryPointsState }>> {
     const participant = await this.participantRepo.findOne({
       where: { id: participantId },
     });
     if (!participant?.characterId) {
-      return failure('Participant inválido.', 'INVALID_PARTICIPANT');
+      return failure("Participant inválido.", "INVALID_PARTICIPANT");
     }
     const sheet = await this.sheetService.computeSheet(
       ownerUserId,
       participant.characterId,
     );
     const sorcClass = (sheet as any).classes?.find(
-      (c: any) => c.slug === 'sorcerer',
+      (c: any) => c.slug === "sorcerer",
     );
     if (!sorcClass || sorcClass.level < 5) {
       return failure(
-        'Sorcerous Restoration requer Sorcerer L5+.',
-        'INVALID_ACTION',
+        "Sorcerous Restoration requer Sorcerer L5+.",
+        "INVALID_ACTION",
       );
     }
     if (participant.sorcerousRestorationUsed) {
       return failure(
-        'Sorcerous Restoration já utilizada nesta long rest.',
-        'INVALID_ACTION',
+        "Sorcerous Restoration já utilizada nesta long rest.",
+        "INVALID_ACTION",
       );
     }
 
@@ -294,8 +297,8 @@ export class SorcererFeaturesService {
     const prevUsed = participant.sorceryPointsUsed ?? 0;
     if (prevUsed === 0) {
       return failure(
-        'Pool de SP já está cheio; nada para restaurar.',
-        'INVALID_ACTION',
+        "Pool de SP já está cheio; nada para restaurar.",
+        "INVALID_ACTION",
       );
     }
 
@@ -308,7 +311,7 @@ export class SorcererFeaturesService {
 
     const events: GameEventData[] = [
       {
-        event_type: 'sorcerous_restoration',
+        event_type: "sorcerous_restoration",
         actor_participant_id: participantId,
         data: {
           regained,

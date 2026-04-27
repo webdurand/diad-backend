@@ -7,46 +7,46 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-} from 'typeorm';
-import { CampaignEntity } from './campaign.entity';
+} from "typeorm";
+import { CampaignEntity } from "./campaign.entity";
 
-@Entity('story_arcs')
+@Entity("story_arcs")
 export class StoryArcEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ name: 'campaign_id', type: 'uuid' })
+  @Column({ name: "campaign_id", type: "uuid" })
   campaignId: string;
 
-  @ManyToOne(() => CampaignEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'campaign_id' })
+  @ManyToOne(() => CampaignEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "campaign_id" })
   campaign: CampaignEntity;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: "varchar" })
   name: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   description?: string;
 
-  @Column({ name: 'sort_order', type: 'int', default: 0 })
+  @Column({ name: "sort_order", type: "int", default: 0 })
   sortOrder: number;
 
-  @Column({ name: 'current_phase', type: 'varchar', default: 'hook' })
-  currentPhase: 'hook' | 'development' | 'climax' | 'resolution';
+  @Column({ name: "current_phase", type: "varchar", default: "hook" })
+  currentPhase: "hook" | "development" | "climax" | "resolution";
 
-  @Column({ name: 'phase_notes', type: 'jsonb', default: {} })
+  @Column({ name: "phase_notes", type: "jsonb", default: {} })
   phaseNotes: Record<string, string>;
 
-  @Column({ name: 'is_active', type: 'boolean', default: true })
+  @Column({ name: "is_active", type: "boolean", default: true })
   isActive: boolean;
 
-  @Column({ name: 'is_main_arc', type: 'boolean', default: false })
+  @Column({ name: "is_main_arc", type: "boolean", default: false })
   isMainArc: boolean;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 }

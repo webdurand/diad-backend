@@ -25,18 +25,18 @@ export interface InitiativeResult {
  * máx 30 (impossível). Passive checks NUNCA emitem este payload.
  */
 export type DiceRollKind =
-  | 'ability_check'
-  | 'saving_throw'
-  | 'attack_roll'
-  | 'death_save';
+  | "ability_check"
+  | "saving_throw"
+  | "attack_roll"
+  | "death_save";
 
-export type DiceRollAdvantage = 'normal' | 'advantage' | 'disadvantage';
+export type DiceRollAdvantage = "normal" | "advantage" | "disadvantage";
 
 export type DiceVerdict =
-  | 'success'
-  | 'failure'
-  | 'crit_success'
-  | 'crit_failure';
+  | "success"
+  | "failure"
+  | "crit_success"
+  | "crit_failure";
 
 export interface DiceModifierBreakdown {
   label: string;
@@ -47,7 +47,7 @@ export interface DiceRollRequest {
   rollId: string;
   characterId?: string;
   kind: DiceRollKind;
-  ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
+  ability: "STR" | "DEX" | "CON" | "INT" | "WIS" | "CHA";
   skill: string | null;
   dc: number;
   advantage: DiceRollAdvantage;

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 003: adiciona flag `controlled_by` ('human'|'ai'|'dm') + estados de ações
@@ -7,10 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Backfill: monstros e NPCs passam a ser controlados pelo DM (`controlled_by='dm'`);
  * PCs ficam com o default `'human'`. Encontros em andamento não quebram.
  */
-export class AddControlAndReactionsToParticipant1775000000000
-  implements MigrationInterface
-{
-  name = 'AddControlAndReactionsToParticipant1775000000000';
+export class AddControlAndReactionsToParticipant1775000000000 implements MigrationInterface {
+  name = "AddControlAndReactionsToParticipant1775000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

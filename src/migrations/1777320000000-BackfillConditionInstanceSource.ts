@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 015 Eixo 3 — backfill `source` em `condition_instances` JSONB.
@@ -11,10 +11,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Idempotente: WHERE `NOT ? @? '$[*].source'` garante que só atualiza
  * instances que ainda não têm o campo.
  */
-export class BackfillConditionInstanceSource1777320000000
-  implements MigrationInterface
-{
-  name = 'BackfillConditionInstanceSource1777320000000';
+export class BackfillConditionInstanceSource1777320000000 implements MigrationInterface {
+  name = "BackfillConditionInstanceSource1777320000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     // Adiciona source='manual' em cada elemento do array JSONB que ainda

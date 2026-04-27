@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
+import { Injectable } from "@nestjs/common";
+import { v2 as cloudinary, UploadApiResponse } from "cloudinary";
 
 @Injectable()
 export class CloudinaryService {
@@ -20,7 +20,7 @@ export class CloudinaryService {
         .upload_stream(
           {
             folder: `diad/${folder}`,
-            resource_type: 'image',
+            resource_type: "image",
           },
           (error, result) => {
             if (error || !result) return reject(error);
@@ -41,8 +41,8 @@ export class CloudinaryService {
         .upload_stream(
           {
             folder: `diad/${folder}`,
-            resource_type: 'raw',
-            public_id: filename.replace(/\.[^.]+$/, ''),
+            resource_type: "raw",
+            public_id: filename.replace(/\.[^.]+$/, ""),
           },
           (error, result) => {
             if (error || !result) return reject(error);
@@ -53,7 +53,12 @@ export class CloudinaryService {
     });
   }
 
-  async deleteResource(publicId: string, resourceType: 'image' | 'raw' = 'image'): Promise<void> {
-    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+  async deleteResource(
+    publicId: string,
+    resourceType: "image" | "raw" = "image",
+  ): Promise<void> {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+    });
   }
 }

@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-export type ExhaustionVariant = '2014_six_levels' | '2024_ten_levels';
+export type ExhaustionVariant = "2014_six_levels" | "2024_ten_levels";
 
 export interface ExhaustionModifiers {
   /** Desvantagem em ability checks. */
@@ -43,13 +43,13 @@ export interface ExhaustionModifiers {
 export class ExhaustionService {
   getModifiers(
     level: number,
-    variant: ExhaustionVariant = '2014_six_levels',
+    variant: ExhaustionVariant = "2014_six_levels",
   ): ExhaustionModifiers {
-    if (variant === '2024_ten_levels') {
+    if (variant === "2024_ten_levels") {
       const lvl = Math.max(0, Math.min(10, Math.floor(level)));
       // Usa `|| 0` pra normalizar -0 (JS quirk) em 0.
-      const d20Penalty = (-2 * lvl) || 0;
-      const speedPenaltyFt = (-5 * lvl) || 0;
+      const d20Penalty = -2 * lvl || 0;
+      const speedPenaltyFt = -5 * lvl || 0;
       return {
         // Em 2024 não ha "disadvantage" por exhaustion — e penalidade flat.
         disadvAbility: false,
@@ -79,7 +79,7 @@ export class ExhaustionService {
     instances: { slug: string; level?: number }[] | undefined,
   ): number {
     if (!instances || instances.length === 0) return 0;
-    const exh = instances.find((i) => i.slug === 'exhaustion');
+    const exh = instances.find((i) => i.slug === "exhaustion");
     return exh?.level ?? 0;
   }
 }

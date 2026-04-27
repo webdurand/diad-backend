@@ -5,30 +5,30 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
-} from 'typeorm';
-import { CharacterEntity } from './character.entity';
-import { MagicItemEntity } from './magic-item.entity';
+} from "typeorm";
+import { CharacterEntity } from "./character.entity";
+import { MagicItemEntity } from "./magic-item.entity";
 
-@Entity('character_magic_items')
+@Entity("character_magic_items")
 export class CharacterMagicItemEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   character_id: string;
 
-  @ManyToOne(() => CharacterEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'character_id' })
+  @ManyToOne(() => CharacterEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "character_id" })
   character: CharacterEntity;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   magic_item_id: string;
 
   @ManyToOne(() => MagicItemEntity, { eager: true })
-  @JoinColumn({ name: 'magic_item_id' })
+  @JoinColumn({ name: "magic_item_id" })
   magic_item: MagicItemEntity;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   attuned: boolean;
 }

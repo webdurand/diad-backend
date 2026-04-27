@@ -1,8 +1,8 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntriesAsText } from './entries-parser';
-import { FEAT_CATEGORY_MAP, ABILITY_MAP } from './code-maps';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntriesAsText } from "./entries-parser";
+import { FEAT_CATEGORY_MAP, ABILITY_MAP } from "./code-maps";
 
 interface FiveToolsFeat {
   name: string;
@@ -64,7 +64,7 @@ function convertPrerequisites(
 
     if (prereq.otherSummary) {
       const summary = prereq.otherSummary as { entrySummary?: string };
-      result.other = summary.entrySummary ?? 'Special';
+      result.other = summary.entrySummary ?? "Special";
     }
   }
 
@@ -83,11 +83,9 @@ function convertAbilityOptions(
       | { from?: string[]; amount?: number; count?: number }
       | undefined;
     if (choose) {
-      const from = (choose.from ?? []).map(
-        (k: string) => ABILITY_MAP[k] ?? k,
-      );
+      const from = (choose.from ?? []).map((k: string) => ABILITY_MAP[k] ?? k);
       options.push({
-        type: 'choose',
+        type: "choose",
         from,
         amount: choose.amount ?? 1,
         count: choose.count ?? 1,
@@ -96,13 +94,13 @@ function convertAbilityOptions(
       // Direct bonuses like { "cha": 1 }
       const bonuses: { ability: string; bonus: number }[] = [];
       for (const [key, val] of Object.entries(ab)) {
-        if (key === 'hidden') continue;
+        if (key === "hidden") continue;
         const fullName = ABILITY_MAP[key];
-        if (fullName && typeof val === 'number') {
+        if (fullName && typeof val === "number") {
           bonuses.push({ ability: fullName, bonus: val });
         }
       }
-      if (bonuses.length) options.push({ type: 'fixed', bonuses });
+      if (bonuses.length) options.push({ type: "fixed", bonuses });
     }
   }
 
@@ -112,25 +110,23 @@ function convertAbilityOptions(
 export function transformFeats(): TransformedFeat[] {
   const filePath = path.resolve(
     process.cwd(),
-    '../5etools-src/data/feats.json',
+    "../5etools-src/data/feats.json",
   );
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const feats: FiveToolsFeat[] = data.feat ?? [];
 
   return feats
     .filter((f) => !f.reprintedAs)
     .map((f) => {
-      const categoryCode = f.category ?? '';
-      const featType = FEAT_CATEGORY_MAP[categoryCode] ?? 'other';
+      const categoryCode = f.category ?? "";
+      const featType = FEAT_CATEGORY_MAP[categoryCode] ?? "other";
 
       return {
         slug: generateSlug(f.name, f.source, f.srd52),
         name: f.name,
-        description: f.entries
-          ? parseEntriesAsText(f.entries as any[])
-          : '',
+        description: f.entries ? parseEntriesAsText(f.entries as any[]) : "",
         feat_type: featType,
-        repeatable: f.repeatable ? 'true' : null,
+        repeatable: f.repeatable ? "true" : null,
         prerequisites: convertPrerequisites(f.prerequisite),
         ability_options: convertAbilityOptions(f.ability),
         additional_spells: f.additionalSpells ?? null,

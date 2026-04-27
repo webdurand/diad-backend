@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 — Heroic Inspiration em combate.
@@ -7,10 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * "armar" pra próximo d20 test via `encounter_participant.inspiration_armed`.
  * Quando usa: attack/save/check ganha advantage, ambos flags resetam.
  */
-export class AddInspirationArmedToParticipant1776970000000
-  implements MigrationInterface
-{
-  name = 'AddInspirationArmedToParticipant1776970000000';
+export class AddInspirationArmedToParticipant1776970000000 implements MigrationInterface {
+  name = "AddInspirationArmedToParticipant1776970000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

@@ -8,8 +8,8 @@ import {
   IsUUID,
   Min,
   ValidateIf,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { Type } from "class-transformer";
 
 /**
  * Spec 007 — DTO para POST /encounters/:id/resolve.
@@ -27,8 +27,8 @@ import { Type } from 'class-transformer';
  * para que o ValidationPipe não rejeite shapes válidos.
  */
 export class ResolveEncounterDto {
-  @IsIn(['victory', 'retreat', 'negotiation', 'defeat'])
-  outcome: 'victory' | 'retreat' | 'negotiation' | 'defeat';
+  @IsIn(["victory", "retreat", "negotiation", "defeat"])
+  outcome: "victory" | "retreat" | "negotiation" | "defeat";
 
   @IsOptional()
   xpRewards?: any;

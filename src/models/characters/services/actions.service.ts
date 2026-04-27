@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -12,20 +12,34 @@ import {
   CharacterStateEntity,
   EquipmentCategoryItemEntity,
   ClassProficiencyEntity,
-} from 'src/entities';
-import { ProficiencyTypeEnum } from 'src/entities/enums';
+} from "src/entities";
+import { ProficiencyTypeEnum } from "src/entities/enums";
 import {
   PROF_BONUS_BY_LEVEL,
   getSpellcastingAbility,
   normalizeClassSlug,
-} from 'src/shared/srd-constants';
-import { getAbilityModifier, isEquipmentProficient, DRACONIC_ANCESTRY_MAP } from 'src/shared/srd-utils';
-import { classifyFeatureForActions } from './feature-classification';
+} from "src/shared/srd-constants";
+import {
+  getAbilityModifier,
+  isEquipmentProficient,
+  DRACONIC_ANCESTRY_MAP,
+} from "src/shared/srd-utils";
+import { classifyFeatureForActions } from "./feature-classification";
 
 // ---- Types ----
 
-export type ActionTiming = 'action' | 'bonus_action' | 'reaction' | 'free' | 'movement';
-export type ActionSource = 'weapon' | 'spell' | 'feature' | 'base' | 'consumable';
+export type ActionTiming =
+  | "action"
+  | "bonus_action"
+  | "reaction"
+  | "free"
+  | "movement";
+export type ActionSource =
+  | "weapon"
+  | "spell"
+  | "feature"
+  | "base"
+  | "consumable";
 
 export interface DamageBlock {
   dice: string;
@@ -46,7 +60,7 @@ export interface ActionBlock {
   saveDc?: number;
   saveAbility?: string;
   /** Spec 011 Phase 2 — `dc_success` do SRD ('half' | 'none' | 'negates'). */
-  saveSuccess?: 'half' | 'none' | 'negates';
+  saveSuccess?: "half" | "none" | "negates";
   /** Spec 011 Phase 3 — slug canônico da feature/spell (sem prefixo `feature-{uuid}-`).
    *  Usado pelo front pra resolver `POST /class-feature` e `POST /cast-spell`. */
   featureSlug?: string;
@@ -60,7 +74,7 @@ export interface ActionBlock {
   /** Premissa weapons-in-hand — true se o char é proficient com a arma/categoria. Frontend usa pra chip visual. */
   proficient?: boolean;
   /** Premissa weapons-in-hand — 'main' | 'off' | null (intrínseco). Unarmed é null. */
-  handSlot?: 'main' | 'off' | null;
+  handSlot?: "main" | "off" | null;
   uses?: number;
   usesMax?: number;
   usesRecharge?: string;
@@ -71,8 +85,8 @@ export interface ActionBlock {
   /** Spec 005 US14 — área de efeito derivada de `spell.area_of_effect` + `spell.range`.
    *  Populado somente para spells AoE (Acid Splash, Burning Hands, Fireball, etc.). */
   aoe?: {
-    originType: 'self' | 'point' | 'fixed';
-    shape: 'sphere' | 'cone' | 'line' | 'cube' | 'cylinder';
+    originType: "self" | "point" | "fixed";
+    shape: "sphere" | "cone" | "line" | "cube" | "cylinder";
     sizeFt: number;
     rangeFt: number;
   };
@@ -116,13 +130,16 @@ export class ActionsService {
     private readonly classProfRepo: Repository<ClassProficiencyEntity>,
   ) {}
 
-  async getActions(userId: string, characterId: string): Promise<ActionsResponse> {
+  async getActions(
+    userId: string,
+    characterId: string,
+  ): Promise<ActionsResponse> {
     const character = await this.characterRepo.findOne({
       where: { id: characterId, userId },
-      relations: ['character_origin'],
+      relations: ["character_origin"],
     });
     if (!character) {
-      throw new NotFoundException('Personagem nao encontrado.');
+      throw new NotFoundException("Personagem nao encontrado.");
     }
 
     const [
@@ -134,7 +151,10 @@ export class ActionsService {
       charFeatures,
       charState,
     ] = await Promise.all([
-      this.charClassRepo.find({ where: { character_id: characterId }, order: { order: 'ASC' } }),
+      this.charClassRepo.find({
+        where: { character_id: characterId },
+        order: { order: "ASC" },
+      }),
       this.charAbilityRepo.find({ where: { character_id: characterId } }),
       this.charProfRepo.find({ where: { character_id: characterId } }),
       this.charSpellRepo.find({ where: { character_id: characterId } }),
@@ -148,7 +168,8 @@ export class ActionsService {
     for (const ca of charAbilities) {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
     }
-    const mod = (slug: string) => getAbilityModifier(abilityMap.get(slug) ?? 10);
+    const mod = (slug: string) =>
+      getAbilityModifier(abilityMap.get(slug) ?? 10);
     const totalLevel = charClasses.reduce((s, cc) => s + cc.class_level, 0);
     const profBonus = PROF_BONUS_BY_LEVEL[Math.min(totalLevel, 20)] ?? 2;
 
@@ -166,9 +187,9 @@ export class ActionsService {
     const classIds = charClasses.map((cc) => cc.class_id);
     if (classIds.length > 0) {
       const classProfs = await this.classProfRepo
-        .createQueryBuilder('cp')
-        .innerJoinAndSelect('cp.proficiency', 'p')
-        .where('cp.class_id IN (:...classIds)', { classIds })
+        .createQueryBuilder("cp")
+        .innerJoinAndSelect("cp.proficiency", "p")
+        .where("cp.class_id IN (:...classIds)", { classIds })
         .getMany();
       for (const cp of classProfs) {
         if (
@@ -186,7 +207,7 @@ export class ActionsService {
     if (equipIds.length > 0) {
       const catItems = await this.equipCatItemRepo.find({
         where: equipIds.map((eid) => ({ equipment_id: eid })),
-        relations: ['category'],
+        relations: ["category"],
       });
       for (const ci of catItems) {
         let s = equipCatMap.get(ci.equipment_id);
@@ -200,10 +221,10 @@ export class ActionsService {
 
     // Detect extra attack — Fighter scales: 2 at 5, 3 at 11, 4 at 20
     const hasExtraAttack = charFeatures.some(
-      (cf) => cf.feature?.slug?.includes('extra-attack') && cf.active,
+      (cf) => cf.feature?.slug?.includes("extra-attack") && cf.active,
     );
-    const fighterClass = charClasses.find((cc) =>
-      normalizeClassSlug(cc.class.slug) === 'fighter',
+    const fighterClass = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === "fighter",
     );
     let attackCount = 1;
     if (hasExtraAttack) {
@@ -238,7 +259,16 @@ export class ActionsService {
     const allActions: ActionBlock[] = [];
 
     // 1. Weapon attacks
-    this.buildWeaponActions(charEquip, equipCatMap, profSlugs, mod, profBonus, totalLevel, masteryChoices, allActions);
+    this.buildWeaponActions(
+      charEquip,
+      equipCatMap,
+      profSlugs,
+      mod,
+      profBonus,
+      totalLevel,
+      masteryChoices,
+      allActions,
+    );
 
     // 1b. Draw / Stow weapon (premissa weapons-in-hand).
     //   - "Sacar X": disponível se weapon está no inventário (handSlot null)
@@ -248,24 +278,50 @@ export class ActionsService {
     this.buildDrawStowActions(charEquip, allActions);
 
     // 2. Unarmed Strike
-    this.buildUnarmedStrike(mod, profBonus, charClasses, charFeatures, allActions);
+    this.buildUnarmedStrike(
+      mod,
+      profBonus,
+      charClasses,
+      charFeatures,
+      allActions,
+    );
 
     // 3. Spell actions
-    this.buildSpellActions(charSpells, charClasses, spellSaveDc, spellAttackBonus, totalLevel, allActions);
+    this.buildSpellActions(
+      charSpells,
+      charClasses,
+      spellSaveDc,
+      spellAttackBonus,
+      totalLevel,
+      allActions,
+    );
 
     // 4. Consumable actions
     this.buildConsumableActions(charEquip, allActions);
 
     // 5. Feature actions
-    this.buildFeatureActions(charFeatures, charClasses, charState, profBonus, mod, allActions);
+    this.buildFeatureActions(
+      charFeatures,
+      charClasses,
+      charState,
+      profBonus,
+      mod,
+      allActions,
+    );
 
     // 6. Race trait actions (e.g. Breath Weapon)
-    this.buildRaceTraitActions(character, totalLevel, profBonus, mod, allActions);
+    this.buildRaceTraitActions(
+      character,
+      totalLevel,
+      profBonus,
+      mod,
+      allActions,
+    );
 
     // Split by timing
-    const actions = allActions.filter((a) => a.timing === 'action');
-    const bonusActions = allActions.filter((a) => a.timing === 'bonus_action');
-    const reactions = allActions.filter((a) => a.timing === 'reaction');
+    const actions = allActions.filter((a) => a.timing === "action");
+    const bonusActions = allActions.filter((a) => a.timing === "bonus_action");
+    const reactions = allActions.filter((a) => a.timing === "reaction");
 
     return {
       actions,
@@ -293,8 +349,8 @@ export class ActionsService {
     masteryChoices: Set<string>,
     out: ActionBlock[],
   ) {
-    const strMod = mod('str');
-    const dexMod = mod('dex');
+    const strMod = mod("str");
+    const dexMod = mod("dex");
 
     for (const ce of charEquip) {
       const eq = ce.equipment;
@@ -320,17 +376,22 @@ export class ActionsService {
       const damageDice = dmg.damage_dice ?? dmg.dice;
       if (!damageDice) continue;
 
-      const props = (eq.properties ?? []) as Array<{ name?: string; index?: string; slug?: string }>;
+      const props = (eq.properties ?? []) as Array<{
+        name?: string;
+        index?: string;
+        slug?: string;
+      }>;
       // Spec 012 Fase 0 fix: admin seeder popula `{name, slug}` (não `{index}`),
       // então propSlugs ficava vazio e thrown/finesse/heavy nunca disparavam.
       // Aceita ambos shapes pra compat.
-      const propSlugs = props.map((p) => p.index ?? p.slug ?? '');
-      const isFinesse = propSlugs.includes('finesse');
-      const isRanged = propSlugs.includes('ammunition') || propSlugs.includes('thrown');
-      const isTwoHanded = propSlugs.includes('two-handed');
-      const isVersatile = propSlugs.includes('versatile');
-      const isThrown = propSlugs.includes('thrown');
-      const propNames = props.map((p) => p.name ?? '').filter(Boolean);
+      const propSlugs = props.map((p) => p.index ?? p.slug ?? "");
+      const isFinesse = propSlugs.includes("finesse");
+      const isRanged =
+        propSlugs.includes("ammunition") || propSlugs.includes("thrown");
+      const isTwoHanded = propSlugs.includes("two-handed");
+      const isVersatile = propSlugs.includes("versatile");
+      const isThrown = propSlugs.includes("thrown");
+      const propNames = props.map((p) => p.name ?? "").filter(Boolean);
 
       // Determine ability modifier
       let abilityMod: number;
@@ -344,14 +405,15 @@ export class ActionsService {
 
       // Check proficiency
       const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
-      const isProficient = isEquipmentProficient(eq.slug, cats, profSlugs) === true;
+      const isProficient =
+        isEquipmentProficient(eq.slug, cats, profSlugs) === true;
 
       const attackBonus = abilityMod + (isProficient ? profBonus : 0);
-      const damageType = dmg.damage_type?.name ?? dmg.type ?? 'Unknown';
+      const damageType = dmg.damage_type?.name ?? dmg.type ?? "Unknown";
       const damageBonus = abilityMod;
 
       const range = eq.range as { normal?: number; long?: number } | null;
-      let rangeStr = '5 ft';
+      let rangeStr = "5 ft";
       if (range) {
         if (range.long) {
           rangeStr = `${range.normal ?? 5}/${range.long} ft`;
@@ -362,24 +424,27 @@ export class ActionsService {
 
       // Spec 012 — masterySlug: só expõe se (a) arma tem mastery na DB E (b) o personagem
       // escolheu essa arma em weapon_mastery_choices. Sem isso o combat.service ignora.
-      const weaponMastery = eq.mastery as { slug?: string; name?: string } | undefined;
-      const masterySlug = weaponMastery?.slug && masteryChoices.has(eq.slug)
-        ? weaponMastery.slug
-        : undefined;
+      const weaponMastery = eq.mastery as
+        | { slug?: string; name?: string }
+        | undefined;
+      const masterySlug =
+        weaponMastery?.slug && masteryChoices.has(eq.slug)
+          ? weaponMastery.slug
+          : undefined;
 
-      const handSlot: 'main' | 'off' | null = ce.mainHand
-        ? 'main'
+      const handSlot: "main" | "off" | null = ce.mainHand
+        ? "main"
         : ce.offHand
-          ? 'off'
+          ? "off"
           : null;
 
       const action: ActionBlock = {
         id: `weapon-${ce.id}`,
         name: eq.name,
-        timing: 'action',
-        source: 'weapon',
-        sourceLabel: isProficient ? 'Arma (proficiente)' : 'Arma',
-        description: `Ataque com ${eq.name}. ${isTwoHanded ? 'Requer duas maos.' : ''}`,
+        timing: "action",
+        source: "weapon",
+        sourceLabel: isProficient ? "Arma (proficiente)" : "Arma",
+        description: `Ataque com ${eq.name}. ${isTwoHanded ? "Requer duas maos." : ""}`,
         attackBonus,
         damage: {
           dice: damageDice,
@@ -396,9 +461,13 @@ export class ActionsService {
 
       if (isVersatile) {
         // Parse versatile damage from properties or add d10 variant
-        const versatileProp = props.find((p) => p.index === 'versatile');
-        const versatileText = (versatileProp as Record<string, unknown>)?.description as string | undefined;
-        const versatileDice = this.parseVersatileDice(versatileText, damageDice);
+        const versatileProp = props.find((p) => p.index === "versatile");
+        const versatileText = (versatileProp as Record<string, unknown>)
+          ?.description as string | undefined;
+        const versatileDice = this.parseVersatileDice(
+          versatileText,
+          damageDice,
+        );
         action.versatileDamage = {
           dice: versatileDice,
           type: damageType,
@@ -436,7 +505,8 @@ export class ActionsService {
     for (const ce of charEquip) {
       const eq = ce.equipment;
       const isShield =
-        eq.slug?.includes('shield') || eq.name?.toLowerCase().includes('shield');
+        eq.slug?.includes("shield") ||
+        eq.name?.toLowerCase().includes("shield");
       // Só weapons (damage) ou shields podem ser empunhados.
       if (!eq.damage && !isShield) continue;
 
@@ -445,18 +515,18 @@ export class ActionsService {
         out.push({
           id: `stow-${ce.id}`,
           name: `Guardar ${label}`,
-          timing: 'free',
-          source: 'base',
-          sourceLabel: 'Interação com objeto (1×/turno)',
+          timing: "free",
+          source: "base",
+          sourceLabel: "Interação com objeto (1×/turno)",
           description: `Guarda ${label}. Libera a(s) mão(s) empunhando. RAW 2024: 1 free object interaction por turno.`,
         });
       } else {
         out.push({
           id: `draw-${ce.id}`,
           name: `Sacar ${label}`,
-          timing: 'free',
-          source: 'base',
-          sourceLabel: 'Interação com objeto (1×/turno)',
+          timing: "free",
+          source: "base",
+          sourceLabel: "Interação com objeto (1×/turno)",
           description: `Saca ${label} do inventário. RAW 2024: 1 free object interaction por turno.`,
         });
       }
@@ -472,41 +542,43 @@ export class ActionsService {
     charFeatures: CharacterFeatureEntity[],
     out: ActionBlock[],
   ) {
-    const strMod = mod('str');
-    const dexMod = mod('dex');
+    const strMod = mod("str");
+    const dexMod = mod("dex");
 
     // Check for Monk Martial Arts
-    const monkClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
+    const monkClass = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === "monk",
+    );
     let martialArtsDie: string | null = null;
     if (monkClass) {
       const lvl = monkClass.class_level;
-      if (lvl >= 17) martialArtsDie = '1d12';
-      else if (lvl >= 11) martialArtsDie = '1d10';
-      else if (lvl >= 5) martialArtsDie = '1d8';
-      else martialArtsDie = '1d6';
+      if (lvl >= 17) martialArtsDie = "1d12";
+      else if (lvl >= 11) martialArtsDie = "1d10";
+      else if (lvl >= 5) martialArtsDie = "1d8";
+      else martialArtsDie = "1d6";
     }
 
     const attackMod = monkClass ? Math.max(strMod, dexMod) : strMod;
     const attackBonus = attackMod + profBonus;
-    const damageDice = martialArtsDie ?? '1';
+    const damageDice = martialArtsDie ?? "1";
     const damageBonus = attackMod;
 
     out.push({
-      id: 'unarmed-strike',
-      name: 'Ataque Desarmado',
-      timing: 'action',
-      source: 'base',
-      sourceLabel: monkClass ? 'Artes Marciais' : 'Base',
+      id: "unarmed-strike",
+      name: "Ataque Desarmado",
+      timing: "action",
+      source: "base",
+      sourceLabel: monkClass ? "Artes Marciais" : "Base",
       description: monkClass
         ? `Soco, chute ou cabeçada usando Artes Marciais (${martialArtsDie}).`
-        : 'Soco, chute ou cabecada. 1 + mod de Forca de dano de concussao.',
+        : "Soco, chute ou cabecada. 1 + mod de Forca de dano de concussao.",
       attackBonus,
       damage: {
         dice: damageDice,
-        type: 'Bludgeoning',
+        type: "Bludgeoning",
         bonus: damageBonus,
       },
-      range: '5 ft',
+      range: "5 ft",
     });
   }
 
@@ -523,9 +595,7 @@ export class ActionsService {
     // Only include prepared/known/always_prepared spells + cantrips
     const activeSpells = charSpells.filter(
       (cs) =>
-        cs.spell.level === 0 ||
-        cs.status === 'prepared' ||
-        cs.always_prepared,
+        cs.spell.level === 0 || cs.status === "prepared" || cs.always_prepared,
     );
 
     // Get the primary spellcasting class for DC/attack
@@ -533,14 +603,16 @@ export class ActionsService {
       getSpellcastingAbility(cc.class.slug),
     );
     const defaultDc = primaryCaster ? spellSaveDc[primaryCaster.class.slug] : 0;
-    const defaultAttackBonus = primaryCaster ? spellAttackBonus[primaryCaster.class.slug] : 0;
+    const defaultAttackBonus = primaryCaster
+      ? spellAttackBonus[primaryCaster.class.slug]
+      : 0;
 
     for (const cs of activeSpells) {
       const spell = cs.spell;
-      const castingTime = (spell.casting_time ?? '').toLowerCase();
-      let timing: ActionTiming = 'action';
-      if (castingTime.includes('bonus')) timing = 'bonus_action';
-      else if (castingTime.includes('reaction')) timing = 'reaction';
+      const castingTime = (spell.casting_time ?? "").toLowerCase();
+      let timing: ActionTiming = "action";
+      if (castingTime.includes("bonus")) timing = "bonus_action";
+      else if (castingTime.includes("reaction")) timing = "reaction";
 
       // Normalização — a seed do 5eAPI pode armazenar `damage_type` como
       // objeto `{ name, index }` (shape antigo) OU como array `['fire']` (shape
@@ -559,32 +631,37 @@ export class ActionsService {
       const extractDamageType = (
         raw: typeof dmg extends null ? never : typeof dmg,
       ): string => {
-        if (!raw) return 'Unknown';
+        if (!raw) return "Unknown";
         const t = raw.damage_type;
-        if (!t) return 'Unknown';
-        if (Array.isArray(t)) return t[0] ?? 'Unknown';
-        if (typeof t === 'string') return t;
-        return t.name ?? t.index ?? 'Unknown';
+        if (!t) return "Unknown";
+        if (Array.isArray(t)) return t[0] ?? "Unknown";
+        if (typeof t === "string") return t;
+        return t.name ?? t.index ?? "Unknown";
       };
 
       let damage: DamageBlock | undefined;
       if (dmg) {
-        let dice = '';
+        let dice = "";
         if (dmg.damage_at_character_level) {
           // Cantrip scaling
-          dice = this.getCantripDamage(dmg.damage_at_character_level, totalLevel);
+          dice = this.getCantripDamage(
+            dmg.damage_at_character_level,
+            totalLevel,
+          );
         } else if (dmg.damage_at_slot_level) {
           // Take the base slot level damage
-          const levels = Object.keys(dmg.damage_at_slot_level).sort((a, b) => +a - +b);
-          dice = levels.length > 0 ? dmg.damage_at_slot_level[levels[0]] : '';
+          const levels = Object.keys(dmg.damage_at_slot_level).sort(
+            (a, b) => +a - +b,
+          );
+          dice = levels.length > 0 ? dmg.damage_at_slot_level[levels[0]] : "";
         } else {
           // Spec 011 Phase 2 — fallback pra seed incompleta: regex '3d6' na
           // descrição. Cobre magias cujo `damage_at_slot_level` veio vazio.
           const rawDesc = Array.isArray(spell.description)
-            ? (spell.description as unknown[]).join(' ')
-            : typeof spell.description === 'string'
+            ? (spell.description as unknown[]).join(" ")
+            : typeof spell.description === "string"
               ? spell.description
-              : '';
+              : "";
           const match = rawDesc.match(/(\d+d\d+)\s+(?:\w+\s+)?damage/i);
           if (match) dice = match[1];
         }
@@ -597,24 +674,26 @@ export class ActionsService {
       }
 
       const description = Array.isArray(spell.description)
-        ? spell.description[0] ?? ''
-        : typeof spell.description === 'string'
+        ? (spell.description[0] ?? "")
+        : typeof spell.description === "string"
           ? spell.description
-          : '';
+          : "";
 
       // Truncate to first ~150 chars for the action card
-      const shortDesc = description.length > 150
-        ? description.substring(0, 147) + '...'
-        : description;
+      const shortDesc =
+        description.length > 150
+          ? description.substring(0, 147) + "..."
+          : description;
 
       const action: ActionBlock = {
         id: `spell-${spell.slug}`,
         name: spell.name,
         timing,
-        source: 'spell',
-        sourceLabel: spell.level === 0 ? 'Truque' : `Magia Nivel ${spell.level}`,
+        source: "spell",
+        sourceLabel:
+          spell.level === 0 ? "Truque" : `Magia Nivel ${spell.level}`,
         description: shortDesc,
-        range: spell.range ?? 'Self',
+        range: spell.range ?? "Self",
         spellLevel: spell.level,
         requiresConcentration: spell.concentration ?? false,
         isRitual: spell.ritual ?? false,
@@ -627,17 +706,27 @@ export class ActionsService {
         | { type?: string; size?: number }
         | null
         | undefined;
-      if (aoeRaw && aoeRaw.type && typeof aoeRaw.size === 'number') {
-        const validShapes = ['sphere', 'cone', 'line', 'cube', 'cylinder'] as const;
+      if (aoeRaw && aoeRaw.type && typeof aoeRaw.size === "number") {
+        const validShapes = [
+          "sphere",
+          "cone",
+          "line",
+          "cube",
+          "cylinder",
+        ] as const;
         const shape = (validShapes as readonly string[]).includes(aoeRaw.type)
           ? (aoeRaw.type as (typeof validShapes)[number])
-          : 'sphere';
-        const rangeStr = spell.range ?? 'Self';
-        const isSelf = rangeStr.toLowerCase().includes('self');
+          : "sphere";
+        const rangeStr = spell.range ?? "Self";
+        const isSelf = rangeStr.toLowerCase().includes("self");
         const rangeMatch = rangeStr.match(/(\d+)/);
-        const rangeFt = isSelf ? 0 : rangeMatch ? parseInt(rangeMatch[1], 10) : 0;
+        const rangeFt = isSelf
+          ? 0
+          : rangeMatch
+            ? parseInt(rangeMatch[1], 10)
+            : 0;
         action.aoe = {
-          originType: isSelf ? 'self' : 'point',
+          originType: isSelf ? "self" : "point",
           shape,
           sizeFt: aoeRaw.size,
           rangeFt,
@@ -656,13 +745,17 @@ export class ActionsService {
         action.saveDc = defaultDc;
         const rawDcType = dc.dc_type;
         if (Array.isArray(rawDcType)) {
-          action.saveAbility = rawDcType[0] ?? '';
-        } else if (rawDcType && typeof rawDcType === 'object') {
-          action.saveAbility = rawDcType.index ?? rawDcType.name ?? '';
+          action.saveAbility = rawDcType[0] ?? "";
+        } else if (rawDcType && typeof rawDcType === "object") {
+          action.saveAbility = rawDcType.index ?? rawDcType.name ?? "";
         } else {
-          action.saveAbility = '';
+          action.saveAbility = "";
         }
-        if (dc.dc_success === 'half' || dc.dc_success === 'none' || dc.dc_success === 'negates') {
+        if (
+          dc.dc_success === "half" ||
+          dc.dc_success === "none" ||
+          dc.dc_success === "negates"
+        ) {
           action.saveSuccess = dc.dc_success;
         }
       }
@@ -692,18 +785,18 @@ export class ActionsService {
       if (!effect || !effect.label) continue;
 
       const timingMap: Record<string, ActionTiming> = {
-        action: 'action',
-        bonus_action: 'bonus_action',
-        reaction: 'reaction',
+        action: "action",
+        bonus_action: "bonus_action",
+        reaction: "reaction",
       };
-      const timing = timingMap[effect.actionCost ?? 'action'] ?? 'action';
+      const timing = timingMap[effect.actionCost ?? "action"] ?? "action";
 
       const action: ActionBlock = {
         id: `consumable-${ce.id}`,
         name: `${eq.name} (${effect.label})`,
         timing,
-        source: 'consumable',
-        sourceLabel: 'Item Consumivel',
+        source: "consumable",
+        sourceLabel: "Item Consumivel",
         description: `Usar ${eq.name}: ${effect.label}. Quantidade: ${ce.quantity}.`,
         uses: ce.quantity,
         usesMax: ce.quantity,
@@ -712,7 +805,9 @@ export class ActionsService {
       if (effect.dice) {
         action.damage = {
           dice: effect.dice,
-          type: effect.damageType ?? (effect.type === 'healing' ? 'Healing' : 'Unknown'),
+          type:
+            effect.damageType ??
+            (effect.type === "healing" ? "Healing" : "Unknown"),
         };
       }
 
@@ -737,14 +832,20 @@ export class ActionsService {
     const classMap = new Map(charClasses.map((cc) => [cc.class_id, cc]));
 
     // Feature-to-action mapping for known class features
-    const featureActionMap = this.getFeatureActionDefinitions(profBonus, mod, charClasses);
+    const featureActionMap = this.getFeatureActionDefinitions(
+      profBonus,
+      mod,
+      charClasses,
+    );
 
     // Spec 015 — pool de usos consumidos (feature_uses_used do state). Usado
     // pra calcular `uses` atuais (max - used). Cutting Words compartilha pool
     // com bardic-inspiration (RAW).
-    const featureUsesUsed = (charState as unknown as { feature_uses_used?: Record<string, number> })?.feature_uses_used ?? {};
+    const featureUsesUsed =
+      (charState as unknown as { feature_uses_used?: Record<string, number> })
+        ?.feature_uses_used ?? {};
     const SHARED_POOLS: Record<string, string> = {
-      'cutting-words': 'bardic-inspiration',
+      "cutting-words": "bardic-inspiration",
       // Adicione aqui outras features que compartilham pool.
     };
     const resolveUsesForDef = (actionDef: ActionBlock): ActionBlock => {
@@ -768,7 +869,7 @@ export class ActionsService {
 
       // Spec 015 Eixo 1 — classificação curada (passive → hide; scaling → alias).
       const classification = classifyFeatureForActions(slug);
-      if (classification?.kind === 'hide') {
+      if (classification?.kind === "hide") {
         // Feature passiva (Song of Rest, Expertise, Archdruid, Timeless Body,
         // ASI, Epic Boon, subclass/college markers, spellcasting grants, etc).
         // Mostradas na aba Traits/Features via FeatureBlock, não como action.
@@ -777,13 +878,16 @@ export class ActionsService {
 
       // Resolve slug efetivo: se é alias, usar canonical pra lookup no map.
       const effectiveSlug =
-        classification?.kind === 'alias' && classification.canonicalSlug
+        classification?.kind === "alias" && classification.canonicalSlug
           ? classification.canonicalSlug
           : slug;
 
       // Dedup: se já emitimos esse canonical (ex: BI-d8 e BI-d10 ambos
       // apontam pra `bardic-inspiration` canonical), emite apenas 1x.
-      if (classification?.kind === 'alias' && emittedCanonicals.has(effectiveSlug)) {
+      if (
+        classification?.kind === "alias" &&
+        emittedCanonicals.has(effectiveSlug)
+      ) {
         continue;
       }
 
@@ -807,33 +911,40 @@ export class ActionsService {
 
       // Aliases sem canonical mapeado → hide silencioso (não tem stats
       // concretos pra emitir e regex do description dispararia dup).
-      if (classification?.kind === 'alias') {
+      if (classification?.kind === "alias") {
         continue;
       }
 
       // For unknown features, include them as informational if they have description
       const desc = cf.feature.description;
-      const descText = Array.isArray(desc) ? desc[0] : typeof desc === 'string' ? desc : '';
+      const descText = Array.isArray(desc)
+        ? desc[0]
+        : typeof desc === "string"
+          ? desc
+          : "";
 
-      if (descText && typeof descText === 'string') {
+      if (descText && typeof descText === "string") {
         // Skip passive features (no action verb)
-        const isAction = /action|bonus action|reaction|use|activate|expend/i.test(descText);
+        const isAction =
+          /action|bonus action|reaction|use|activate|expend/i.test(descText);
         if (!isAction) continue;
 
-        let timing: ActionTiming = 'action';
-        if (/bonus action/i.test(descText)) timing = 'bonus_action';
-        else if (/reaction/i.test(descText)) timing = 'reaction';
+        let timing: ActionTiming = "action";
+        if (/bonus action/i.test(descText)) timing = "bonus_action";
+        else if (/reaction/i.test(descText)) timing = "reaction";
 
-        const shortDesc = descText.length > 150
-          ? descText.substring(0, 147) + '...'
-          : descText;
+        const shortDesc =
+          descText.length > 150 ? descText.substring(0, 147) + "..." : descText;
 
         out.push({
           id: `feature-${cf.id}`,
           name: cf.feature.name,
           timing,
-          source: 'feature',
-          sourceLabel: (cf.source_class_id ? classMap.get(cf.source_class_id)?.class.name : undefined) ?? 'Classe',
+          source: "feature",
+          sourceLabel:
+            (cf.source_class_id
+              ? classMap.get(cf.source_class_id)?.class.name
+              : undefined) ?? "Classe",
           description: shortDesc,
           // Unknown feature — slug vem direto do catálogo SRD.
           featureSlug: slug,
@@ -856,37 +967,42 @@ export class ActionsService {
     const origin = character.character_origin;
     if (!origin) return;
 
-    const raceSlug = origin.race?.slug ?? '';
-    if (raceSlug !== 'dragonborn') return;
+    const raceSlug = origin.race?.slug ?? "";
+    if (raceSlug !== "dragonborn") return;
 
     const traitChoices: string[] = origin.race_trait_choices ?? [];
     const dragonColor = traitChoices.find((c) => DRACONIC_ANCESTRY_MAP[c]);
     if (!dragonColor) return;
 
     const damageType = DRACONIC_ANCESTRY_MAP[dragonColor].damageType;
-    const damageDice = totalLevel >= 17 ? '4d10'
-      : totalLevel >= 11 ? '3d10'
-      : totalLevel >= 5 ? '2d10'
-      : '1d10';
-    const saveDc = 8 + mod('con') + profBonus;
+    const damageDice =
+      totalLevel >= 17
+        ? "4d10"
+        : totalLevel >= 11
+          ? "3d10"
+          : totalLevel >= 5
+            ? "2d10"
+            : "1d10";
+    const saveDc = 8 + mod("con") + profBonus;
     const uses = profBonus;
 
-    const dragonName = dragonColor.charAt(0).toUpperCase() + dragonColor.slice(1);
+    const dragonName =
+      dragonColor.charAt(0).toUpperCase() + dragonColor.slice(1);
 
     out.push({
-      id: 'breath-weapon',
+      id: "breath-weapon",
       name: `Sopro de Dragao (${dragonName})`,
-      timing: 'action',
-      source: 'feature',
-      sourceLabel: 'Dragonborn',
+      timing: "action",
+      source: "feature",
+      sourceLabel: "Dragonborn",
       description: `Exala ${damageType} em cone de 15 ft ou linha de 30x5 ft. Cada criatura na area faz save de DES (DC ${saveDc}). Falha: ${damageDice} dano ${damageType}. Sucesso: metade. ${uses} usos por descanso longo.`,
       damage: { dice: damageDice, type: damageType },
       saveDc,
-      saveAbility: 'DES',
-      range: '15 ft cone / 30 ft line',
+      saveAbility: "DES",
+      range: "15 ft cone / 30 ft line",
       uses,
       usesMax: uses,
-      usesRecharge: 'long_rest',
+      usesRecharge: "long_rest",
     });
   }
 
@@ -898,313 +1014,385 @@ export class ActionsService {
     charClasses: CharacterClassEntity[],
   ): Map<string, ActionBlock[]> {
     const map = new Map<string, ActionBlock[]>();
-    const conMod = mod('con');
-    const strMod = mod('str');
-    const wisMod = mod('wis');
-    const chaMod = mod('cha');
+    const conMod = mod("con");
+    const strMod = mod("str");
+    const wisMod = mod("wis");
+    const chaMod = mod("cha");
 
     // Fighter
-    const fighterClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'fighter');
+    const fighterClass = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === "fighter",
+    );
     if (fighterClass) {
-      map.set('second-wind', [{
-        id: 'second-wind',
-        name: 'Retomar Folego (Second Wind)',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Guerreiro',
-        description: `Recupera 1d10+${fighterClass.class_level} HP. 1 uso por descanso curto/longo.`,
-        damage: { dice: `1d10+${fighterClass.class_level}`, type: 'Healing' },
-        uses: 1,
-        usesMax: 1,
-        usesRecharge: 'short_rest',
-      }]);
+      map.set("second-wind", [
+        {
+          id: "second-wind",
+          name: "Retomar Folego (Second Wind)",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Guerreiro",
+          description: `Recupera 1d10+${fighterClass.class_level} HP. 1 uso por descanso curto/longo.`,
+          damage: { dice: `1d10+${fighterClass.class_level}`, type: "Healing" },
+          uses: 1,
+          usesMax: 1,
+          usesRecharge: "short_rest",
+        },
+      ]);
 
-      map.set('action-surge', [{
-        id: 'action-surge',
-        name: 'Surto de Acao (Action Surge)',
-        timing: 'free',
-        source: 'feature',
-        sourceLabel: 'Guerreiro',
-        description: 'Ganha uma acao adicional neste turno. 1 uso por descanso curto/longo.',
-        uses: fighterClass.class_level >= 17 ? 2 : 1,
-        usesMax: fighterClass.class_level >= 17 ? 2 : 1,
-        usesRecharge: 'short_rest',
-      }]);
+      map.set("action-surge", [
+        {
+          id: "action-surge",
+          name: "Surto de Acao (Action Surge)",
+          timing: "free",
+          source: "feature",
+          sourceLabel: "Guerreiro",
+          description:
+            "Ganha uma acao adicional neste turno. 1 uso por descanso curto/longo.",
+          uses: fighterClass.class_level >= 17 ? 2 : 1,
+          usesMax: fighterClass.class_level >= 17 ? 2 : 1,
+          usesRecharge: "short_rest",
+        },
+      ]);
 
       // Spec 015 Eixo 1 — Indomitable (Fighter L9+). Re-rola 1 save falho.
       // L9=1 uso, L13=2, L17=3 (RAW XPHB 2024 p.168).
       if (fighterClass.class_level >= 9) {
-        const indomitableUses = fighterClass.class_level >= 17 ? 3
-          : fighterClass.class_level >= 13 ? 2
-          : 1;
-        map.set('indomitable', [{
-          id: 'indomitable',
-          name: 'Indomavel (Indomitable)',
-          timing: 'reaction',
-          source: 'feature',
-          sourceLabel: 'Guerreiro',
-          description: `Re-rola um teste de resistencia falho. ${indomitableUses} uso${indomitableUses > 1 ? 's' : ''} por descanso longo.`,
-          uses: indomitableUses,
-          usesMax: indomitableUses,
-          usesRecharge: 'long_rest',
-        }]);
+        const indomitableUses =
+          fighterClass.class_level >= 17
+            ? 3
+            : fighterClass.class_level >= 13
+              ? 2
+              : 1;
+        map.set("indomitable", [
+          {
+            id: "indomitable",
+            name: "Indomavel (Indomitable)",
+            timing: "reaction",
+            source: "feature",
+            sourceLabel: "Guerreiro",
+            description: `Re-rola um teste de resistencia falho. ${indomitableUses} uso${indomitableUses > 1 ? "s" : ""} por descanso longo.`,
+            uses: indomitableUses,
+            usesMax: indomitableUses,
+            usesRecharge: "long_rest",
+          },
+        ]);
       }
     }
 
     // Barbarian
-    const barbarianClass = charClasses.find((cc) => cc.class.slug === 'barbarian');
+    const barbarianClass = charClasses.find(
+      (cc) => cc.class.slug === "barbarian",
+    );
     if (barbarianClass) {
-      const rages = barbarianClass.class_level >= 17 ? 6
-        : barbarianClass.class_level >= 12 ? 5
-        : barbarianClass.class_level >= 6 ? 4
-        : barbarianClass.class_level >= 3 ? 3
-        : 2;
-      const rageDmg = barbarianClass.class_level >= 16 ? 4
-        : barbarianClass.class_level >= 9 ? 3
-        : 2;
+      const rages =
+        barbarianClass.class_level >= 17
+          ? 6
+          : barbarianClass.class_level >= 12
+            ? 5
+            : barbarianClass.class_level >= 6
+              ? 4
+              : barbarianClass.class_level >= 3
+                ? 3
+                : 2;
+      const rageDmg =
+        barbarianClass.class_level >= 16
+          ? 4
+          : barbarianClass.class_level >= 9
+            ? 3
+            : 2;
 
-      map.set('rage', [{
-        id: 'rage',
-        name: 'Furia (Rage)',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Barbaro',
-        description: `Entra em furia. +${rageDmg} dano melee com FOR, resistencia a dano de concussao/perfuracao/cortante, vantagem em testes de FOR. ${rages} usos por descanso longo.`,
-        uses: rages,
-        usesMax: rages,
-        usesRecharge: 'long_rest',
-      }]);
+      map.set("rage", [
+        {
+          id: "rage",
+          name: "Furia (Rage)",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Barbaro",
+          description: `Entra em furia. +${rageDmg} dano melee com FOR, resistencia a dano de concussao/perfuracao/cortante, vantagem em testes de FOR. ${rages} usos por descanso longo.`,
+          uses: rages,
+          usesMax: rages,
+          usesRecharge: "long_rest",
+        },
+      ]);
 
-      map.set('reckless-attack', [{
-        id: 'reckless-attack',
-        name: 'Ataque Imprudente (Reckless Attack)',
-        timing: 'free',
-        source: 'feature',
-        sourceLabel: 'Barbaro',
-        description: 'No primeiro ataque do turno com FOR: Vantagem no ataque, porem ataques contra voce tem Vantagem ate o proximo turno.',
-      }]);
+      map.set("reckless-attack", [
+        {
+          id: "reckless-attack",
+          name: "Ataque Imprudente (Reckless Attack)",
+          timing: "free",
+          source: "feature",
+          sourceLabel: "Barbaro",
+          description:
+            "No primeiro ataque do turno com FOR: Vantagem no ataque, porem ataques contra voce tem Vantagem ate o proximo turno.",
+        },
+      ]);
     }
 
     // Rogue
-    const rogueClass = charClasses.find((cc) => cc.class.slug === 'rogue');
+    const rogueClass = charClasses.find((cc) => cc.class.slug === "rogue");
     if (rogueClass) {
       const sneakDice = Math.ceil(rogueClass.class_level / 2);
-      map.set('sneak-attack', [{
-        id: 'sneak-attack',
-        name: 'Ataque Furtivo (Sneak Attack)',
-        timing: 'free',
-        source: 'feature',
-        sourceLabel: 'Ladino',
-        description: `${sneakDice}d6 dano extra com arma Finesse/Distancia quando tem Vantagem ou aliado a 5 ft do alvo. 1x por turno.`,
-        damage: { dice: `${sneakDice}d6`, type: 'Extra' },
-      }]);
+      map.set("sneak-attack", [
+        {
+          id: "sneak-attack",
+          name: "Ataque Furtivo (Sneak Attack)",
+          timing: "free",
+          source: "feature",
+          sourceLabel: "Ladino",
+          description: `${sneakDice}d6 dano extra com arma Finesse/Distancia quando tem Vantagem ou aliado a 5 ft do alvo. 1x por turno.`,
+          damage: { dice: `${sneakDice}d6`, type: "Extra" },
+        },
+      ]);
 
-      map.set('cunning-action', [{
-        id: 'cunning-action-dash',
-        name: 'Acao Ardilosa: Disparada',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Ladino',
-        description: 'Usa Disparada como acao bonus.',
-      }, {
-        id: 'cunning-action-disengage',
-        name: 'Acao Ardilosa: Retirada',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Ladino',
-        description: 'Usa Retirada como acao bonus.',
-      }, {
-        id: 'cunning-action-hide',
-        name: 'Acao Ardilosa: Esconder',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Ladino',
-        description: 'Usa Esconder como acao bonus.',
-      }]);
+      map.set("cunning-action", [
+        {
+          id: "cunning-action-dash",
+          name: "Acao Ardilosa: Disparada",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Ladino",
+          description: "Usa Disparada como acao bonus.",
+        },
+        {
+          id: "cunning-action-disengage",
+          name: "Acao Ardilosa: Retirada",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Ladino",
+          description: "Usa Retirada como acao bonus.",
+        },
+        {
+          id: "cunning-action-hide",
+          name: "Acao Ardilosa: Esconder",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Ladino",
+          description: "Usa Esconder como acao bonus.",
+        },
+      ]);
     }
 
     // Monk
-    const monkClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'monk');
+    const monkClass = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === "monk",
+    );
     if (monkClass) {
       const kiPoints = monkClass.class_level;
-      map.set('flurry-of-blows', [{
-        id: 'flurry-of-blows',
-        name: 'Rajada de Golpes (Flurry of Blows)',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Monge',
-        description: `Gasta 1 ponto de Ki para fazer 2 ataques desarmados como acao bonus. ${kiPoints} pontos de Ki por descanso curto/longo.`,
-        uses: kiPoints,
-        usesMax: kiPoints,
-        usesRecharge: 'short_rest',
-      }]);
+      map.set("flurry-of-blows", [
+        {
+          id: "flurry-of-blows",
+          name: "Rajada de Golpes (Flurry of Blows)",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Monge",
+          description: `Gasta 1 ponto de Ki para fazer 2 ataques desarmados como acao bonus. ${kiPoints} pontos de Ki por descanso curto/longo.`,
+          uses: kiPoints,
+          usesMax: kiPoints,
+          usesRecharge: "short_rest",
+        },
+      ]);
 
-      map.set('patient-defense', [{
-        id: 'patient-defense',
-        name: 'Defesa Paciente (Patient Defense)',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Monge',
-        description: 'Gasta 1 ponto de Ki para usar Esquivar como acao bonus.',
-        uses: kiPoints,
-        usesMax: kiPoints,
-        usesRecharge: 'short_rest',
-      }]);
+      map.set("patient-defense", [
+        {
+          id: "patient-defense",
+          name: "Defesa Paciente (Patient Defense)",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Monge",
+          description:
+            "Gasta 1 ponto de Ki para usar Esquivar como acao bonus.",
+          uses: kiPoints,
+          usesMax: kiPoints,
+          usesRecharge: "short_rest",
+        },
+      ]);
 
-      map.set('step-of-the-wind', [{
-        id: 'step-of-the-wind',
-        name: 'Passo do Vento (Step of the Wind)',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Monge',
-        description: 'Gasta 1 ponto de Ki para usar Disparada ou Retirada como acao bonus, e distancia de salto dobra neste turno.',
-        uses: kiPoints,
-        usesMax: kiPoints,
-        usesRecharge: 'short_rest',
-      }]);
+      map.set("step-of-the-wind", [
+        {
+          id: "step-of-the-wind",
+          name: "Passo do Vento (Step of the Wind)",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Monge",
+          description:
+            "Gasta 1 ponto de Ki para usar Disparada ou Retirada como acao bonus, e distancia de salto dobra neste turno.",
+          uses: kiPoints,
+          usesMax: kiPoints,
+          usesRecharge: "short_rest",
+        },
+      ]);
 
       // Monks can make a bonus action unarmed strike
-      map.set('martial-arts', [{
-        id: 'martial-arts-bonus',
-        name: 'Artes Marciais: Ataque Bonus',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Monge',
-        description: 'Apos usar a acao de Ataque com arma de monge ou ataque desarmado, faz um ataque desarmado como acao bonus.',
-      }]);
+      map.set("martial-arts", [
+        {
+          id: "martial-arts-bonus",
+          name: "Artes Marciais: Ataque Bonus",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Monge",
+          description:
+            "Apos usar a acao de Ataque com arma de monge ou ataque desarmado, faz um ataque desarmado como acao bonus.",
+        },
+      ]);
 
       // Spec 015 Eixo 1 — Stunning Strike (Monk L5+). Quando acerta ataque
       // desarmado/monge, gasta 1 Ki; target rola CON save (DC 8+prof+WIS).
       // Falha = Stunned até fim do próximo turno do monge. RAW XPHB 2024.
       if (monkClass.class_level >= 5) {
         const stunDc = 8 + profBonus + wisMod;
-        map.set('stunning-strike', [{
-          id: 'stunning-strike',
-          name: 'Golpe Atordoante (Stunning Strike)',
-          timing: 'free',
-          source: 'feature',
-          sourceLabel: 'Monge',
-          description: `Apos acertar ataque desarmado, gasta 1 Ki: alvo rola CON save (DC ${stunDc}). Falha = Stunned ate o fim do seu proximo turno.`,
-          saveDc: stunDc,
-          saveAbility: 'CON',
-          uses: kiPoints,
-          usesMax: kiPoints,
-          usesRecharge: 'short_rest',
-        }]);
+        map.set("stunning-strike", [
+          {
+            id: "stunning-strike",
+            name: "Golpe Atordoante (Stunning Strike)",
+            timing: "free",
+            source: "feature",
+            sourceLabel: "Monge",
+            description: `Apos acertar ataque desarmado, gasta 1 Ki: alvo rola CON save (DC ${stunDc}). Falha = Stunned ate o fim do seu proximo turno.`,
+            saveDc: stunDc,
+            saveAbility: "CON",
+            uses: kiPoints,
+            usesMax: kiPoints,
+            usesRecharge: "short_rest",
+          },
+        ]);
       }
     }
 
     // Cleric
-    const clericClass = charClasses.find((cc) => cc.class.slug === 'cleric');
+    const clericClass = charClasses.find((cc) => cc.class.slug === "cleric");
     if (clericClass) {
-      map.set('channel-divinity', [{
-        id: 'channel-divinity',
-        name: 'Canalizar Divindade (Channel Divinity)',
-        timing: 'action',
-        source: 'feature',
-        sourceLabel: 'Clerigo',
-        description: `Usa seu poder divino canalizado. ${clericClass.class_level >= 6 ? 2 : 1} uso(s) por descanso curto/longo.`,
-        uses: clericClass.class_level >= 6 ? 2 : 1,
-        usesMax: clericClass.class_level >= 6 ? 2 : 1,
-        usesRecharge: 'short_rest',
-      }]);
+      map.set("channel-divinity", [
+        {
+          id: "channel-divinity",
+          name: "Canalizar Divindade (Channel Divinity)",
+          timing: "action",
+          source: "feature",
+          sourceLabel: "Clerigo",
+          description: `Usa seu poder divino canalizado. ${clericClass.class_level >= 6 ? 2 : 1} uso(s) por descanso curto/longo.`,
+          uses: clericClass.class_level >= 6 ? 2 : 1,
+          usesMax: clericClass.class_level >= 6 ? 2 : 1,
+          usesRecharge: "short_rest",
+        },
+      ]);
     }
 
     // Paladin
-    const paladinClass = charClasses.find((cc) => cc.class.slug === 'paladin');
+    const paladinClass = charClasses.find((cc) => cc.class.slug === "paladin");
     if (paladinClass) {
-      map.set('divine-smite', [{
-        id: 'divine-smite',
-        name: 'Destruicao Divina (Divine Smite)',
-        timing: 'free',
-        source: 'feature',
-        sourceLabel: 'Paladino',
-        description: 'Ao acertar com ataque melee, gasta 1 spell slot para causar 2d8 dano radiante extra (+1d8 por nivel de slot acima do 1o, max 5d8, +1d8 vs mortos-vivos/fadas).',
-        damage: { dice: '2d8', type: 'Radiant' },
-      }]);
+      map.set("divine-smite", [
+        {
+          id: "divine-smite",
+          name: "Destruicao Divina (Divine Smite)",
+          timing: "free",
+          source: "feature",
+          sourceLabel: "Paladino",
+          description:
+            "Ao acertar com ataque melee, gasta 1 spell slot para causar 2d8 dano radiante extra (+1d8 por nivel de slot acima do 1o, max 5d8, +1d8 vs mortos-vivos/fadas).",
+          damage: { dice: "2d8", type: "Radiant" },
+        },
+      ]);
 
-      map.set('lay-on-hands', [{
-        id: 'lay-on-hands',
-        name: 'Imposicao de Maos (Lay on Hands)',
-        timing: 'action',
-        source: 'feature',
-        sourceLabel: 'Paladino',
-        description: `Pool de cura: ${paladinClass.class_level * 5} HP. Toque para curar ou gastar 5 para curar doenca/veneno.`,
-        damage: { dice: `${paladinClass.class_level * 5}`, type: 'Healing' },
-        uses: paladinClass.class_level * 5,
-        usesMax: paladinClass.class_level * 5,
-        usesRecharge: 'long_rest',
-      }]);
+      map.set("lay-on-hands", [
+        {
+          id: "lay-on-hands",
+          name: "Imposicao de Maos (Lay on Hands)",
+          timing: "action",
+          source: "feature",
+          sourceLabel: "Paladino",
+          description: `Pool de cura: ${paladinClass.class_level * 5} HP. Toque para curar ou gastar 5 para curar doenca/veneno.`,
+          damage: { dice: `${paladinClass.class_level * 5}`, type: "Healing" },
+          uses: paladinClass.class_level * 5,
+          usesMax: paladinClass.class_level * 5,
+          usesRecharge: "long_rest",
+        },
+      ]);
     }
 
     // Druid
-    const druidClass = charClasses.find((cc) => cc.class.slug === 'druid');
+    const druidClass = charClasses.find((cc) => cc.class.slug === "druid");
     if (druidClass && druidClass.class_level >= 2) {
-      map.set('wild-shape', [{
-        id: 'wild-shape',
-        name: 'Forma Selvagem (Wild Shape)',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Druida',
-        description: `Transforma-se em uma besta. ${druidClass.class_level >= 20 ? 'Usos ilimitados' : '2 usos'} por descanso curto/longo.`,
-        uses: druidClass.class_level >= 20 ? 999 : 2,
-        usesMax: druidClass.class_level >= 20 ? 999 : 2,
-        usesRecharge: 'short_rest',
-      }]);
+      map.set("wild-shape", [
+        {
+          id: "wild-shape",
+          name: "Forma Selvagem (Wild Shape)",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Druida",
+          description: `Transforma-se em uma besta. ${druidClass.class_level >= 20 ? "Usos ilimitados" : "2 usos"} por descanso curto/longo.`,
+          uses: druidClass.class_level >= 20 ? 999 : 2,
+          usesMax: druidClass.class_level >= 20 ? 999 : 2,
+          usesRecharge: "short_rest",
+        },
+      ]);
     }
 
     // Sorcerer
-    const sorcererClass = charClasses.find((cc) => cc.class.slug === 'sorcerer');
+    const sorcererClass = charClasses.find(
+      (cc) => cc.class.slug === "sorcerer",
+    );
     if (sorcererClass) {
-      map.set('font-of-magic', [{
-        id: 'font-of-magic',
-        name: 'Fonte de Magia (Font of Magic)',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Feiticeiro',
-        description: `${sorcererClass.class_level} pontos de feiticaria. Converte spell slots em pontos ou pontos em slots.`,
-        uses: sorcererClass.class_level,
-        usesMax: sorcererClass.class_level,
-        usesRecharge: 'long_rest',
-      }]);
+      map.set("font-of-magic", [
+        {
+          id: "font-of-magic",
+          name: "Fonte de Magia (Font of Magic)",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Feiticeiro",
+          description: `${sorcererClass.class_level} pontos de feiticaria. Converte spell slots em pontos ou pontos em slots.`,
+          uses: sorcererClass.class_level,
+          usesMax: sorcererClass.class_level,
+          usesRecharge: "long_rest",
+        },
+      ]);
     }
 
     // Warlock
-    const warlockClass = charClasses.find((cc) => normalizeClassSlug(cc.class.slug) === 'warlock');
+    const warlockClass = charClasses.find(
+      (cc) => normalizeClassSlug(cc.class.slug) === "warlock",
+    );
     if (warlockClass) {
-      map.set('eldritch-invocations', [{
-        id: 'eldritch-invocations',
-        name: 'Invocacoes Misticas',
-        timing: 'free',
-        source: 'feature',
-        sourceLabel: 'Bruxo',
-        description: 'Suas invocacoes misticas concedem habilidades passivas e ativas. Verifique suas invocacoes para detalhes.',
-      }]);
+      map.set("eldritch-invocations", [
+        {
+          id: "eldritch-invocations",
+          name: "Invocacoes Misticas",
+          timing: "free",
+          source: "feature",
+          sourceLabel: "Bruxo",
+          description:
+            "Suas invocacoes misticas concedem habilidades passivas e ativas. Verifique suas invocacoes para detalhes.",
+        },
+      ]);
     }
 
     // Wizard
-    const wizardClass = charClasses.find((cc) => cc.class.slug === 'wizard');
+    const wizardClass = charClasses.find((cc) => cc.class.slug === "wizard");
     if (wizardClass && wizardClass.class_level >= 2) {
-      map.set('arcane-recovery', [{
-        id: 'arcane-recovery',
-        name: 'Recuperacao Arcana (Arcane Recovery)',
-        timing: 'action',
-        source: 'feature',
-        sourceLabel: 'Mago',
-        description: `Uma vez por dia durante descanso curto, recupera spell slots com niveis que somam ate ${Math.ceil(wizardClass.class_level / 2)} (nenhum 6o nivel ou acima).`,
-        uses: 1,
-        usesMax: 1,
-        usesRecharge: 'long_rest',
-      }]);
+      map.set("arcane-recovery", [
+        {
+          id: "arcane-recovery",
+          name: "Recuperacao Arcana (Arcane Recovery)",
+          timing: "action",
+          source: "feature",
+          sourceLabel: "Mago",
+          description: `Uma vez por dia durante descanso curto, recupera spell slots com niveis que somam ate ${Math.ceil(wizardClass.class_level / 2)} (nenhum 6o nivel ou acima).`,
+          uses: 1,
+          usesMax: 1,
+          usesRecharge: "long_rest",
+        },
+      ]);
     }
 
     // Bard
-    const bardClass = charClasses.find((cc) => cc.class.slug === 'bard');
+    const bardClass = charClasses.find((cc) => cc.class.slug === "bard");
     if (bardClass) {
-      const inspirationDie = bardClass.class_level >= 15 ? 'd12'
-        : bardClass.class_level >= 10 ? 'd10'
-        : bardClass.class_level >= 5 ? 'd8'
-        : 'd6';
+      const inspirationDie =
+        bardClass.class_level >= 15
+          ? "d12"
+          : bardClass.class_level >= 10
+            ? "d10"
+            : bardClass.class_level >= 5
+              ? "d8"
+              : "d6";
       const uses = Math.max(1, chaMod);
 
       // Spec 015 — Cutting Words (Lore L3) e Countercharm (L5 XPHB/L6 PHB)
@@ -1212,53 +1400,63 @@ export class ActionsService {
       // O regex erra timing (aparecem como 'action'). Aqui explicitamos
       // timing='reaction' RAW. Cutting Words compartilha pool de BI.
       if (bardClass.class_level >= 3) {
-        map.set('cutting-words', [{
-          id: 'cutting-words',
-          name: 'Palavras Cortantes',
-          timing: 'reaction',
-          source: 'feature',
-          sourceLabel: 'Bardo · Lore',
-          description: `Reação: criatura visível em 60ft faz attack/check/damage roll. Gasta 1 uso de Inspiração Bárdica; o alvo subtrai 1${inspirationDie} do resultado.`,
-          uses,
-          usesMax: uses,
-          usesRecharge: bardClass.class_level >= 5 ? 'short_rest' : 'long_rest',
-        }]);
+        map.set("cutting-words", [
+          {
+            id: "cutting-words",
+            name: "Palavras Cortantes",
+            timing: "reaction",
+            source: "feature",
+            sourceLabel: "Bardo · Lore",
+            description: `Reação: criatura visível em 60ft faz attack/check/damage roll. Gasta 1 uso de Inspiração Bárdica; o alvo subtrai 1${inspirationDie} do resultado.`,
+            uses,
+            usesMax: uses,
+            usesRecharge:
+              bardClass.class_level >= 5 ? "short_rest" : "long_rest",
+          },
+        ]);
       }
       if (bardClass.class_level >= 5) {
-        map.set('countercharm', [{
-          id: 'countercharm',
-          name: 'Contrafeitiço',
-          timing: 'reaction',
-          source: 'feature',
-          sourceLabel: 'Bardo',
-          description: 'Reação: criatura em 30ft que falhou save vs Charmed/Frightened re-rola o save.',
-        }]);
+        map.set("countercharm", [
+          {
+            id: "countercharm",
+            name: "Contrafeitiço",
+            timing: "reaction",
+            source: "feature",
+            sourceLabel: "Bardo",
+            description:
+              "Reação: criatura em 30ft que falhou save vs Charmed/Frightened re-rola o save.",
+          },
+        ]);
       }
 
-      map.set('bardic-inspiration', [{
-        id: 'bardic-inspiration',
-        name: 'Inspiracao Bardica',
-        timing: 'bonus_action',
-        source: 'feature',
-        sourceLabel: 'Bardo',
-        description: `Da um ${inspirationDie} de Inspiracao Bardica a um aliado a 60 ft. ${uses} uso(s) por descanso ${bardClass.class_level >= 5 ? 'curto' : 'longo'}.`,
-        uses,
-        usesMax: uses,
-        usesRecharge: bardClass.class_level >= 5 ? 'short_rest' : 'long_rest',
-      }]);
+      map.set("bardic-inspiration", [
+        {
+          id: "bardic-inspiration",
+          name: "Inspiracao Bardica",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Bardo",
+          description: `Da um ${inspirationDie} de Inspiracao Bardica a um aliado a 60 ft. ${uses} uso(s) por descanso ${bardClass.class_level >= 5 ? "curto" : "longo"}.`,
+          uses,
+          usesMax: uses,
+          usesRecharge: bardClass.class_level >= 5 ? "short_rest" : "long_rest",
+        },
+      ]);
     }
 
     // Ranger
-    const rangerClass = charClasses.find((cc) => cc.class.slug === 'ranger');
+    const rangerClass = charClasses.find((cc) => cc.class.slug === "ranger");
     if (rangerClass && rangerClass.class_level >= 3) {
-      map.set('dreadful-strikes', [{
-        id: 'dreadful-strikes',
-        name: 'Golpes Pavorosos',
-        timing: 'free',
-        source: 'feature',
-        sourceLabel: 'Patrulheiro',
-        description: `1x por turno ao acertar ataque com arma: +1d${rangerClass.class_level >= 11 ? '8' : '6'} dano psiquico extra.`,
-      }]);
+      map.set("dreadful-strikes", [
+        {
+          id: "dreadful-strikes",
+          name: "Golpes Pavorosos",
+          timing: "free",
+          source: "feature",
+          sourceLabel: "Patrulheiro",
+          description: `1x por turno ao acertar ataque com arma: +1d${rangerClass.class_level >= 11 ? "8" : "6"} dano psiquico extra.`,
+        },
+      ]);
     }
 
     return map;
@@ -1266,7 +1464,10 @@ export class ActionsService {
 
   // ---- Helpers ----
 
-  private parseVersatileDice(text: string | undefined, baseDice: string): string {
+  private parseVersatileDice(
+    text: string | undefined,
+    baseDice: string,
+  ): string {
     if (!text) {
       // Default: upgrade die by one step
       const match = baseDice.match(/(\d+)d(\d+)/);
@@ -1277,15 +1478,20 @@ export class ActionsService {
     }
     // Try to extract dice from the text, e.g. "(1d10)"
     const diceMatch = text.match(/(\d+d\d+)/);
-    return diceMatch ? diceMatch[1] : this.parseVersatileDice(undefined, baseDice);
+    return diceMatch
+      ? diceMatch[1]
+      : this.parseVersatileDice(undefined, baseDice);
   }
 
-  private getCantripDamage(table: Record<string, string>, totalLevel: number): string {
+  private getCantripDamage(
+    table: Record<string, string>,
+    totalLevel: number,
+  ): string {
     const levels = Object.keys(table)
       .map(Number)
       .sort((a, b) => a - b);
 
-    let dice = '';
+    let dice = "";
     for (const lvl of levels) {
       if (totalLevel >= lvl) {
         dice = table[String(lvl)];

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 004 — Encounter RAW Completeness.
@@ -13,10 +13,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - Lair actions e mapa de custo de lendárias no monster
  * - Tabela nova `persistent_area_effects` para áreas tipo Spirit Guardians, Wall of Fire
  */
-export class AddRawCombatCompleteness1776000000000
-  implements MigrationInterface
-{
-  name = 'AddRawCombatCompleteness1776000000000';
+export class AddRawCombatCompleteness1776000000000 implements MigrationInterface {
+  name = "AddRawCombatCompleteness1776000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- EncounterParticipant ---

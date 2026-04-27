@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Barbarian — Data gap: 3 subclasses alternativas (barbarian-wild-heart,
@@ -15,7 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - Zealot: divine-fury + warrior-of-the-gods
  */
 export class SeedBarbarianSubclassLevels1777060000000 implements MigrationInterface {
-  name = 'SeedBarbarianSubclassLevels1777060000000';
+  name = "SeedBarbarianSubclassLevels1777060000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     const [xphb] = (await queryRunner.query(
@@ -49,13 +49,7 @@ export class SeedBarbarianSubclassLevels1777060000000 implements MigrationInterf
           `INSERT INTO levels (slug, level, url, ability_score_bonuses, class_id, subclass_id, source_id)
            VALUES ($1, 3, $2, 0, $3, $4, $5)
            RETURNING id`,
-          [
-            levelSlug,
-            `/spec-012/${levelSlug}`,
-            classId,
-            sc.id,
-            xphb.id,
-          ],
+          [levelSlug, `/spec-012/${levelSlug}`, classId, sc.id, xphb.id],
         )) as Array<{ id: string }>;
         levelId = inserted[0].id;
       }

@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { DiceService } from './dice.service';
+import { Injectable } from "@nestjs/common";
+import { DiceService } from "./dice.service";
 
 // Spec 012 Fase 0 — Fighting Style (XPHB 2024)
 //
@@ -22,16 +22,16 @@ import { DiceService } from './dice.service';
 //   - blind-fighting: blindsight 10ft (afeta targeting, não attack roll)
 
 export type FightingStyleSlug =
-  | 'archery'
-  | 'defense'
-  | 'dueling'
-  | 'great-weapon-fighting'
-  | 'interception'
-  | 'protection'
-  | 'thrown-weapon-fighting'
-  | 'two-weapon-fighting'
-  | 'unarmed-fighting'
-  | 'blind-fighting';
+  | "archery"
+  | "defense"
+  | "dueling"
+  | "great-weapon-fighting"
+  | "interception"
+  | "protection"
+  | "thrown-weapon-fighting"
+  | "two-weapon-fighting"
+  | "unarmed-fighting"
+  | "blind-fighting";
 
 export interface AttackFightingStyleContext {
   fightingStyleSlug?: string | null;
@@ -92,54 +92,70 @@ export class FightingStyleService {
     if (!slug) return empty;
 
     switch (slug) {
-      case 'archery':
+      case "archery":
         // +2 attack roll com ranged weapons (não thrown; thrown tem style próprio)
         if (!ctx.isMelee && !ctx.isThrown) {
-          return { ...empty, attackBonus: 2, appliedStyle: 'archery' };
+          return { ...empty, attackBonus: 2, appliedStyle: "archery" };
         }
         return empty;
 
-      case 'dueling':
+      case "dueling":
         // +2 damage em 1-handed melee sem offhand (permitido escudo)
         if (ctx.isMelee && ctx.isOneHandNoOffhand && !ctx.isTwoHanded) {
-          return { ...empty, damageBonus: 2, appliedStyle: 'dueling' };
+          return { ...empty, damageBonus: 2, appliedStyle: "dueling" };
         }
         return empty;
 
-      case 'great-weapon-fighting':
+      case "great-weapon-fighting":
         // Reroll 1s/2s em dano de 2h melee (aceitar novo roll uma vez).
         if (ctx.isMelee && ctx.isTwoHanded) {
-          return { ...empty, rerollLowDamage: true, appliedStyle: 'great-weapon-fighting' };
+          return {
+            ...empty,
+            rerollLowDamage: true,
+            appliedStyle: "great-weapon-fighting",
+          };
         }
         return empty;
 
-      case 'thrown-weapon-fighting':
+      case "thrown-weapon-fighting":
         // +2 damage em thrown weapon (javelin, handaxe arremessada)
         if (ctx.isThrown) {
-          return { ...empty, damageBonus: 2, appliedStyle: 'thrown-weapon-fighting' };
+          return {
+            ...empty,
+            damageBonus: 2,
+            appliedStyle: "thrown-weapon-fighting",
+          };
         }
         return empty;
 
-      case 'two-weapon-fighting':
+      case "two-weapon-fighting":
         // Adiciona ability mod ao dano do offhand attack (normalmente offhand não tem mod)
         if (ctx.isOffhandAttack && ctx.abilityMod > 0) {
-          return { ...empty, damageBonus: ctx.abilityMod, appliedStyle: 'two-weapon-fighting' };
+          return {
+            ...empty,
+            damageBonus: ctx.abilityMod,
+            appliedStyle: "two-weapon-fighting",
+          };
         }
         return empty;
 
-      case 'unarmed-fighting': {
+      case "unarmed-fighting": {
         // Unarmed vira d6 (d8 se 2 mãos livres). XPHB 2024: também pode dar
         // 1d4 grappled dano, mas por ora só override do damage die.
         if (!ctx.isUnarmed) return empty;
-        const dice = ctx.hasBothHandsFree ? '1d8' : '1d6';
-        return { ...empty, unarmedDamageOverride: { dice }, appliedStyle: 'unarmed-fighting' };
+        const dice = ctx.hasBothHandsFree ? "1d8" : "1d6";
+        return {
+          ...empty,
+          unarmedDamageOverride: { dice },
+          appliedStyle: "unarmed-fighting",
+        };
       }
 
       // Tier B deferred — sem modifier direto em attack
-      case 'defense':
-      case 'blind-fighting':
-      case 'interception':
-      case 'protection':
+      case "defense":
+      case "blind-fighting":
+      case "interception":
+      case "protection":
         return empty;
 
       default:
@@ -152,7 +168,7 @@ export class FightingStyleService {
    * o char tem armadura. Só Defense aplica (+1).
    */
   resolveAcBonus(ctx: AcFightingStyleContext): number {
-    if (ctx.fightingStyleSlug === 'defense' && ctx.hasArmor) return 1;
+    if (ctx.fightingStyleSlug === "defense" && ctx.hasArmor) return 1;
     return 0;
   }
 
@@ -173,6 +189,10 @@ export class FightingStyleService {
       }
       return r;
     });
-    return { rolls: finalRolls, total: finalRolls.reduce((s, v) => s + v, 0), rerolled };
+    return {
+      rolls: finalRolls,
+      total: finalRolls.reduce((s, v) => s + v, 0),
+      rerolled,
+    };
   }
 }

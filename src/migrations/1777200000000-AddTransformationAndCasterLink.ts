@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 — Transformation + Summoning pipeline.
@@ -16,7 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   de concentra\u00e7\u00e3o compartilhada. Null = participant aut\u00f4nomo.
  */
 export class AddTransformationAndCasterLink1777200000000 implements MigrationInterface {
-  name = 'AddTransformationAndCasterLink1777200000000';
+  name = "AddTransformationAndCasterLink1777200000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

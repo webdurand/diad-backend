@@ -1,11 +1,11 @@
-import { Module } from '@nestjs/common';
-import { CombatActionRegistry } from '../game-engine/services/combat-action-registry.service';
-import { GenericActionResolver } from '../game-engine/services/action-resolvers/generic-action.resolver';
-import { UnarmedStrikeResolver } from '../game-engine/services/action-resolvers/unarmed-strike.resolver';
-import { WeaponActionResolver } from '../game-engine/services/action-resolvers/weapon-action.resolver';
-import { MonsterActionAdapterResolver } from '../game-engine/services/action-resolvers/monster-action-adapter.resolver';
-import { ClassFeatureActionResolver } from '../game-engine/services/action-resolvers/class-feature.resolver';
-import { ACTION_RESOLVERS } from '../game-engine/services/action-resolvers/action-resolver.interface';
+import { Module } from "@nestjs/common";
+import { CombatActionRegistry } from "../game-engine/services/combat-action-registry.service";
+import { GenericActionResolver } from "../game-engine/services/action-resolvers/generic-action.resolver";
+import { UnarmedStrikeResolver } from "../game-engine/services/action-resolvers/unarmed-strike.resolver";
+import { WeaponActionResolver } from "../game-engine/services/action-resolvers/weapon-action.resolver";
+import { MonsterActionAdapterResolver } from "../game-engine/services/action-resolvers/monster-action-adapter.resolver";
+import { ClassFeatureActionResolver } from "../game-engine/services/action-resolvers/class-feature.resolver";
+import { ACTION_RESOLVERS } from "../game-engine/services/action-resolvers/action-resolver.interface";
 
 /**
  * Spec 003 — Combat Action Registry module.

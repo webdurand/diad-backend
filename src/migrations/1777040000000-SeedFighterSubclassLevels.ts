@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Fighter 100% — Data gap: as 3 subclasses Fighter alternativas
@@ -16,7 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - Psi Warrior: protective-field, psionic-power, psionic-strike, telekinetic-movement
  */
 export class SeedFighterSubclassLevels1777040000000 implements MigrationInterface {
-  name = 'SeedFighterSubclassLevels1777040000000';
+  name = "SeedFighterSubclassLevels1777040000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     // source_id pega o XPHB source
@@ -51,13 +51,7 @@ export class SeedFighterSubclassLevels1777040000000 implements MigrationInterfac
           `INSERT INTO levels (slug, level, url, ability_score_bonuses, class_id, subclass_id, source_id)
            VALUES ($1, 3, $2, 0, $3, $4, $5)
            RETURNING id`,
-          [
-            levelSlug,
-            `/spec-012/${levelSlug}`,
-            classId,
-            sc.id,
-            xphb.id,
-          ],
+          [levelSlug, `/spec-012/${levelSlug}`, classId, sc.id, xphb.id],
         )) as Array<{ id: string }>;
         levelId = inserted[0].id;
       }

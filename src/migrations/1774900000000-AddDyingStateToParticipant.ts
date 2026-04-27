@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Adds `dying_state` enum column to `encounter_participants`.
@@ -13,7 +13,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Monsters keep `dying_state='none'` (their "death" is is_defeated).
  */
 export class AddDyingStateToParticipant1774900000000 implements MigrationInterface {
-  name = 'AddDyingStateToParticipant1774900000000';
+  name = "AddDyingStateToParticipant1774900000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

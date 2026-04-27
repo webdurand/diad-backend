@@ -15,7 +15,7 @@
  * RestEventTemplateEntity weighted roll).
  */
 
-export type HitDieType = 'd6' | 'd8' | 'd10' | 'd12';
+export type HitDieType = "d6" | "d8" | "d10" | "d12";
 
 export type ExhaustionLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -64,13 +64,13 @@ export interface LongRestDelta {
  *   - encontrou local seguro (caller responsability)
  */
 export function validateShortRestEligibility(
-  snapshot: Pick<CharacterRestSnapshot, 'hp'>,
+  snapshot: Pick<CharacterRestSnapshot, "hp">,
 ): { ok: boolean; reason?: string } {
   if (snapshot.hp < 1) {
     return {
       ok: false,
       reason:
-        'Personagem inconsciente não pode descansar curto (RAW 2024 PHB p.103).',
+        "Personagem inconsciente não pode descansar curto (RAW 2024 PHB p.103).",
     };
   }
   return { ok: true };
@@ -102,12 +102,12 @@ export function computeShortRestDelta(
       hdSpent: {},
       hpRolls: [],
       featuresRestored: [],
-      errors: [eligibility.reason ?? 'short_rest_blocked'],
+      errors: [eligibility.reason ?? "short_rest_blocked"],
     };
   }
 
   const actuallySpent: Partial<Record<HitDieType, number>> = {};
-  const hpRolls: ShortRestDelta['hpRolls'] = [];
+  const hpRolls: ShortRestDelta["hpRolls"] = [];
   let totalHeal = 0;
 
   for (const [dieKey, requested] of Object.entries(hdToSpend) as Array<
@@ -171,7 +171,10 @@ export function computeLongRestDelta(
     slotsDelta[lvl] = max - current;
   }
 
-  const exhaustionTo = Math.max(0, snapshot.exhaustionLevel - 1) as ExhaustionLevel;
+  const exhaustionTo = Math.max(
+    0,
+    snapshot.exhaustionLevel - 1,
+  ) as ExhaustionLevel;
 
   return {
     hpDelta: snapshot.hpMax - snapshot.hp,

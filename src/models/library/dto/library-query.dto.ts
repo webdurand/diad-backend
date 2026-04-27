@@ -1,11 +1,5 @@
-import {
-  IsOptional,
-  IsString,
-  IsInt,
-  Min,
-  Max,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsInt, Min, Max } from "class-validator";
+import { Type } from "class-transformer";
 
 /**
  * Spec 007 — query params para GET /library/:entity.

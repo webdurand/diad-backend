@@ -1,18 +1,14 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterStateEntity,
   CampaignEntity,
-} from 'src/entities';
-import {
-  GameResult,
-  failure,
-  success,
-} from '../interfaces/result.type';
+} from "src/entities";
+import { GameResult, failure, success } from "../interfaces/result.type";
 import {
   buildPayPriceOutcome,
   DEFAULT_PRICE_TABLE,
@@ -22,7 +18,7 @@ import {
   RESURRECTION_TABLE,
   ResurrectionSpell,
   validateSacrificeBounded,
-} from './fate-ladder-helpers';
+} from "./fate-ladder-helpers";
 
 /**
  * Spec 016 M0 — Fate Ladder service stub.
@@ -43,13 +39,13 @@ import {
  * STUB M0 — métodos retornam `failure('not_implemented')`. M3 wira lógica.
  */
 export type FateLadderTrigger =
-  | 'three_failed_death_saves'
-  | 'massive_damage_2024'
-  | 'instant_kill_effect';
+  | "three_failed_death_saves"
+  | "massive_damage_2024"
+  | "instant_kill_effect";
 
-export type FateLadderOption = 'A' | 'B' | 'C' | 'D';
+export type FateLadderOption = "A" | "B" | "C" | "D";
 
-export type DeathHandlingMode = 'narrative' | 'hardcore';
+export type DeathHandlingMode = "narrative" | "hardcore";
 
 export interface FateLadderState {
   ladderId: string;
@@ -100,18 +96,18 @@ export class FateLadderService {
       where: { id: characterId },
     });
     if (!character) {
-      return failure('Personagem não encontrado.', 'NOT_FOUND');
+      return failure("Personagem não encontrado.", "NOT_FOUND");
     }
     const campaign = options?.campaignId
       ? await this.campaignRepo.findOne({ where: { id: options.campaignId } })
       : null;
     const mode: DeathHandlingMode =
       (campaign as { deathHandling?: DeathHandlingMode } | null)
-        ?.deathHandling ?? 'narrative';
+        ?.deathHandling ?? "narrative";
 
     // Em hardcore, apenas opção A.
     const baseOptions: FateLadderOption[] =
-      mode === 'hardcore' ? ['A'] : ['A', 'B', 'C'];
+      mode === "hardcore" ? ["A"] : ["A", "B", "C"];
 
     const eligibleSpells = eligibleResurrectionSpells({
       minutesSinceDeath: options?.minutesSinceDeath ?? 0,
@@ -119,8 +115,8 @@ export class FateLadderService {
     });
     const casterHas = options?.casterPartyHasSpell ?? [];
     const optionDAvailable = eligibleSpells.some((s) => casterHas.includes(s));
-    if (mode === 'narrative' && optionDAvailable) {
-      baseOptions.push('D');
+    if (mode === "narrative" && optionDAvailable) {
+      baseOptions.push("D");
     }
 
     return success({
@@ -128,7 +124,9 @@ export class FateLadderService {
       characterId,
       trigger,
       deathHandlingMode: mode,
-      ritualOfDeathMessage: this.defaultRitualMessage(character.name ?? 'O herói'),
+      ritualOfDeathMessage: this.defaultRitualMessage(
+        character.name ?? "O herói",
+      ),
       availableOptions: baseOptions,
     });
   }
@@ -141,60 +139,62 @@ export class FateLadderService {
     resolution: FateLadderResolution,
   ): Promise<GameResult<{ stateChanges: string[]; outcome?: unknown }>> {
     switch (resolution.chosenOption) {
-      case 'A':
+      case "A":
         return success({
           stateChanges: [
-            'arc_beat=CHANGE_forced',
-            'trigger_epilogue_modal',
-            'pc_status=dead_permanent',
+            "arc_beat=CHANGE_forced",
+            "trigger_epilogue_modal",
+            "pc_status=dead_permanent",
           ],
         });
-      case 'B': {
+      case "B": {
         if (!resolution.sacrificeDescription) {
-          return failure('Sacrifício requer descrição.', 'INVALID_ACTION');
+          return failure("Sacrifício requer descrição.", "INVALID_ACTION");
         }
-        const validation = validateSacrificeBounded(resolution.sacrificeDescription);
+        const validation = validateSacrificeBounded(
+          resolution.sacrificeDescription,
+        );
         if (!validation.ok) {
           return failure(
             `Sacrifício rejeitado: ${validation.reason}`,
-            'INVALID_ACTION',
+            "INVALID_ACTION",
           );
         }
         return success({
           stateChanges: [
-            'arc_beat=CHANGE_forced_via_sacrifice',
-            'trigger_epilogue_modal_celebrate',
-            'legacy_bond_for_next_pc=true',
-            'bonus_inspiration_next_pc=1',
+            "arc_beat=CHANGE_forced_via_sacrifice",
+            "trigger_epilogue_modal_celebrate",
+            "legacy_bond_for_next_pc=true",
+            "bonus_inspiration_next_pc=1",
           ],
           outcome: { description: resolution.sacrificeDescription.trim() },
         });
       }
-      case 'C': {
+      case "C": {
         const cost = pickRandomPrice(DEFAULT_PRICE_TABLE);
         const outcome = buildPayPriceOutcome(cost);
         return success({
           stateChanges: [
-            'pc_hp=1',
-            'pc_status=stable_unconscious',
-            'wakes_next_round',
+            "pc_hp=1",
+            "pc_status=stable_unconscious",
+            "wakes_next_round",
             `cost_applied=${cost.kind}`,
           ],
           outcome,
         });
       }
-      case 'D':
+      case "D":
         return success({
           stateChanges: [
-            'pc_hp=1',
-            'pc_status=alive',
-            'consume_diamond_component',
+            "pc_hp=1",
+            "pc_status=alive",
+            "consume_diamond_component",
           ],
         });
       default:
         return failure(
           `Opção ${resolution.chosenOption} desconhecida.`,
-          'INVALID_ACTION',
+          "INVALID_ACTION",
         );
     }
   }
@@ -219,13 +219,16 @@ export class FateLadderService {
       minutesSinceDeath: input.minutesSinceDeath,
       diamondsAvailableGp: input.diamondsAvailableGp,
     });
-    const usable = eligible.filter((s) => input.casterPartyHasSpell.includes(s));
+    const usable = eligible.filter((s) =>
+      input.casterPartyHasSpell.includes(s),
+    );
     if (usable.length === 0) {
       return { available: false };
     }
     // Prefer cheapest spell.
     const cheapest = usable.sort(
-      (a, b) => RESURRECTION_TABLE[a].diamondGp - RESURRECTION_TABLE[b].diamondGp,
+      (a, b) =>
+        RESURRECTION_TABLE[a].diamondGp - RESURRECTION_TABLE[b].diamondGp,
     )[0];
     return {
       available: true,

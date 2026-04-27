@@ -1,6 +1,6 @@
-import { CombatService } from '../services/combat.service';
-import { DiceService } from '../services/dice.service';
-import { ConditionEffectsService } from '../services/condition-effects.service';
+import { CombatService } from "../services/combat.service";
+import { DiceService } from "../services/dice.service";
+import { ConditionEffectsService } from "../services/condition-effects.service";
 
 /**
  * Unit tests for US1 (002-encounter-correctness) — death save flow.
@@ -20,7 +20,7 @@ import { ConditionEffectsService } from '../services/condition-effects.service';
 
 type MockParticipant = {
   id: string;
-  type: 'pc' | 'monster' | 'npc';
+  type: "pc" | "monster" | "npc";
   characterId?: string;
   monsterId?: string;
   encounterId: string;
@@ -42,8 +42,8 @@ type MockParticipant = {
   positionY?: number;
   isVisible: boolean;
   isDefeated: boolean;
-  dyingState: 'none' | 'dying' | 'stable' | 'dead';
-  faction: 'ally' | 'enemy' | 'neutral';
+  dyingState: "none" | "dying" | "stable" | "dead";
+  faction: "ally" | "enemy" | "neutral";
   monster?: any;
   spellSlotsUsed: any;
   initiativeRoll?: number;
@@ -60,13 +60,15 @@ type MockEncounter = {
   currentRound: number;
 };
 
-function makeParticipant(overrides: Partial<MockParticipant> = {}): MockParticipant {
+function makeParticipant(
+  overrides: Partial<MockParticipant> = {},
+): MockParticipant {
   return {
-    id: 'p-' + Math.random().toString(36).slice(2, 8),
-    type: 'pc',
-    characterId: 'char-1',
-    encounterId: 'enc-1',
-    displayName: 'Thorin',
+    id: "p-" + Math.random().toString(36).slice(2, 8),
+    type: "pc",
+    characterId: "char-1",
+    encounterId: "enc-1",
+    displayName: "Thorin",
     tempHp: 0,
     conditions: [],
     isConcentrating: false,
@@ -78,8 +80,8 @@ function makeParticipant(overrides: Partial<MockParticipant> = {}): MockParticip
     hasDisengaged: false,
     isVisible: true,
     isDefeated: false,
-    dyingState: 'none',
-    faction: 'ally',
+    dyingState: "none",
+    faction: "ally",
     spellSlotsUsed: {},
     ...overrides,
   };
@@ -88,15 +90,18 @@ function makeParticipant(overrides: Partial<MockParticipant> = {}): MockParticip
 function createHarness() {
   const participants = new Map<string, MockParticipant>();
   const encounter: MockEncounter = {
-    id: 'enc-1',
-    sessionId: 'sess-1',
-    status: 'active',
+    id: "enc-1",
+    sessionId: "sess-1",
+    status: "active",
     turnOrder: [],
     currentTurnIndex: 0,
     currentRound: 1,
   };
 
-  const deathSavesByChar: Record<string, { successes: number; failures: number }> = {};
+  const deathSavesByChar: Record<
+    string,
+    { successes: number; failures: number }
+  > = {};
   const hpByChar: Record<string, { current: number; max: number }> = {};
 
   const encounterRepo: any = {
@@ -105,7 +110,9 @@ function createHarness() {
   };
 
   const participantRepo: any = {
-    findOne: jest.fn(async ({ where: { id } }: any) => participants.get(id) ?? null),
+    findOne: jest.fn(
+      async ({ where: { id } }: any) => participants.get(id) ?? null,
+    ),
     save: jest.fn(async (p: any) => {
       participants.set(p.id, p);
       return p;
@@ -119,7 +126,9 @@ function createHarness() {
       return p;
     }),
     getById: jest.fn(async () => encounter),
-    resolveCharacterOwner: jest.fn(async (_cid: string, fallback: string) => fallback),
+    resolveCharacterOwner: jest.fn(
+      async (_cid: string, fallback: string) => fallback,
+    ),
   };
 
   const eventService: any = {
@@ -127,30 +136,37 @@ function createHarness() {
   };
 
   const stateService: any = {
-    updateHp: jest.fn(async (_uid: string, cid: string, dto: { damage?: number; healing?: number }) => {
-      const row = hpByChar[cid] ?? { current: 10, max: 10 };
-      if (dto.damage !== undefined) {
-        row.current = Math.max(0, row.current - dto.damage);
-      }
-      if (dto.healing !== undefined) {
-        row.current = Math.min(row.max, row.current + dto.healing);
-        if (row.current > 0) {
-          deathSavesByChar[cid] = { successes: 0, failures: 0 };
+    updateHp: jest.fn(
+      async (
+        _uid: string,
+        cid: string,
+        dto: { damage?: number; healing?: number },
+      ) => {
+        const row = hpByChar[cid] ?? { current: 10, max: 10 };
+        if (dto.damage !== undefined) {
+          row.current = Math.max(0, row.current - dto.damage);
         }
-      }
-      hpByChar[cid] = row;
-      const instantDeath = dto.damage !== undefined && dto.damage >= row.max * 2;
-      const isDown = row.current === 0 && !instantDeath;
-      const ds = deathSavesByChar[cid] ?? { successes: 0, failures: 0 };
-      return {
-        currentHp: row.current,
-        tempHp: 0,
-        maxHp: row.max,
-        isDown,
-        instantDeath,
-        deathSaves: ds,
-      };
-    }),
+        if (dto.healing !== undefined) {
+          row.current = Math.min(row.max, row.current + dto.healing);
+          if (row.current > 0) {
+            deathSavesByChar[cid] = { successes: 0, failures: 0 };
+          }
+        }
+        hpByChar[cid] = row;
+        const instantDeath =
+          dto.damage !== undefined && dto.damage >= row.max * 2;
+        const isDown = row.current === 0 && !instantDeath;
+        const ds = deathSavesByChar[cid] ?? { successes: 0, failures: 0 };
+        return {
+          currentHp: row.current,
+          tempHp: 0,
+          maxHp: row.max,
+          isDown,
+          instantDeath,
+          deathSaves: ds,
+        };
+      },
+    ),
     updateDeathSaves: jest.fn(async (_uid: string, cid: string, dto: any) => {
       const ds = deathSavesByChar[cid] ?? { successes: 0, failures: 0 };
       let revivedHp: number | undefined;
@@ -223,18 +239,96 @@ function createHarness() {
     sessionService,
     savingThrowService,
     monsterActionResolver,
-    { listActions: async () => [], resolveSlug: async () => null, listAvailableSlugs: async () => [] } as any,
-    { applyCondition: async () => ({ events: [], instance: {} as any, concentrationBroken: false }), removeConditionInstance: async () => ({ events: [], removed: false }) } as any,
-    { addEffect: async () => ({ effect: {} as any, events: [] }), removeEffect: async () => ({ removed: false, events: [] }), removeAllByConcentrationBreak: async () => ({ events: [] }), tickAtEndOfTurn: async () => ({ events: [], ticked: [], expired: [] }) } as any,
-    { startNew: async () => ({ events: [], broken: false }), break: async () => ({ events: [] }), breakDueToDeath: async () => ({ events: [] }), trackAppliedEffect: async () => {}, checkBreakOnCondition: async () => ({ events: [], broken: false }), decrementDurationFor: async () => ({ events: [] }) } as any,
+    {
+      listActions: async () => [],
+      resolveSlug: async () => null,
+      listAvailableSlugs: async () => [],
+    } as any,
+    {
+      applyCondition: async () => ({
+        events: [],
+        instance: {} as any,
+        concentrationBroken: false,
+      }),
+      removeConditionInstance: async () => ({ events: [], removed: false }),
+    } as any,
+    {
+      addEffect: async () => ({ effect: {} as any, events: [] }),
+      removeEffect: async () => ({ removed: false, events: [] }),
+      removeAllByConcentrationBreak: async () => ({ events: [] }),
+      tickAtEndOfTurn: async () => ({ events: [], ticked: [], expired: [] }),
+    } as any,
+    {
+      startNew: async () => ({ events: [], broken: false }),
+      break: async () => ({ events: [] }),
+      breakDueToDeath: async () => ({ events: [] }),
+      trackAppliedEffect: async () => {},
+      checkBreakOnCondition: async () => ({ events: [], broken: false }),
+      decrementDurationFor: async () => ({ events: [] }),
+    } as any,
     { resolveInvocation: async () => ({ resolved: false, events: [] }) } as any,
     { consumeIfArmed: async () => ({ consumed: false }) } as any,
-    { resolveOnHit: async () => ({ applied: [], extraDamage: 0, events: [] }), resolveOnMiss: () => ({ events: [] }) } as any,
-    { resolveAttackModifiers: () => ({ attackBonus: 0, damageBonus: 0, rerollLowDamage: false }), resolveAcBonus: () => 0, applyRerollLowDamage: (r: number[]) => ({ rolls: r, total: r.reduce((s, v) => s + v, 0), rerolled: false }) } as any,
-    { applyDamageToForm: async () => ({ absorbedByForm: 0, overflowToOriginal: 0, reverted: false }), isTransformed: () => false, getActiveForm: () => null, enterForm: async () => ({}), revertForm: async () => ({}), getEffectiveSpeed: () => null, getEffectiveAc: () => null, getEffectiveActions: () => null } as any,
-    { consumeBardicInspirationIfPresent: async () => ({ consumed: false, bonus: 0, events: [] }), grantBardicInspiration: async () => ({ events: [], dieSize: 6 }), getBardicInspirationDie: () => 6 } as any,
-    { getModifiers: () => ({ disadvAbility: false, disadvAttack: false, disadvSave: false, speedMultiplier: 1, speedPenaltyFt: 0, maxHpMultiplier: 1, dead: false, d20Penalty: 0 }), getLevelFromInstances: () => 0 } as any,
-    { runStartOfCombat: async () => ({ events: [] }), eldritchMaster: async () => ({ ok: false, code: 'TEST_STUB', events: [] }) } as any,
+    {
+      resolveOnHit: async () => ({ applied: [], extraDamage: 0, events: [] }),
+      resolveOnMiss: () => ({ events: [] }),
+    } as any,
+    {
+      resolveAttackModifiers: () => ({
+        attackBonus: 0,
+        damageBonus: 0,
+        rerollLowDamage: false,
+      }),
+      resolveAcBonus: () => 0,
+      applyRerollLowDamage: (r: number[]) => ({
+        rolls: r,
+        total: r.reduce((s, v) => s + v, 0),
+        rerolled: false,
+      }),
+    } as any,
+    {
+      applyDamageToForm: async () => ({
+        absorbedByForm: 0,
+        overflowToOriginal: 0,
+        reverted: false,
+      }),
+      isTransformed: () => false,
+      getActiveForm: () => null,
+      enterForm: async () => ({}),
+      revertForm: async () => ({}),
+      getEffectiveSpeed: () => null,
+      getEffectiveAc: () => null,
+      getEffectiveActions: () => null,
+    } as any,
+    {
+      consumeBardicInspirationIfPresent: async () => ({
+        consumed: false,
+        bonus: 0,
+        events: [],
+      }),
+      grantBardicInspiration: async () => ({ events: [], dieSize: 6 }),
+      getBardicInspirationDie: () => 6,
+    } as any,
+    {
+      getModifiers: () => ({
+        disadvAbility: false,
+        disadvAttack: false,
+        disadvSave: false,
+        speedMultiplier: 1,
+        speedPenaltyFt: 0,
+        maxHpMultiplier: 1,
+        dead: false,
+        d20Penalty: 0,
+      }),
+      getLevelFromInstances: () => 0,
+    } as any,
+    {
+      runStartOfCombat: async () => ({ events: [] }),
+      eldritchMaster: async () => ({
+        ok: false,
+        code: "TEST_STUB",
+        events: [],
+      }),
+    } as any,
     { shouldOfferShield: async () => null } as any,
   );
 
@@ -250,260 +344,311 @@ function createHarness() {
   };
 }
 
-describe('CombatService — US1 death-save flow', () => {
-  describe('applyDamage', () => {
-    it('transitions PC from none → dying when HP hits 0', async () => {
+describe("CombatService — US1 death-save flow", () => {
+  describe("applyDamage", () => {
+    it("transitions PC from none → dying when HP hits 0", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-1', characterId: 'char-1' });
+      const pc = makeParticipant({ id: "pc-1", characterId: "char-1" });
       h.participants.set(pc.id, pc);
-      h.hpByChar['char-1'] = { current: 5, max: 10 };
+      h.hpByChar["char-1"] = { current: 5, max: 10 };
 
       const res = await h.combat.applyDamage(h.encounter.id, {
         targetParticipantId: pc.id,
         amount: 5,
-        damageType: 'slashing',
-        ownerUserId: 'u1',
+        damageType: "slashing",
+        ownerUserId: "u1",
       });
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.value.hpAfter).toBe(0);
-      expect(res.value.dyingState).toBe('dying');
+      expect(res.value.dyingState).toBe("dying");
       expect(res.value.instantDeath).toBe(false);
-      expect(pc.dyingState).toBe('dying');
+      expect(pc.dyingState).toBe("dying");
       expect(pc.isDefeated).toBe(false);
-      expect(res.events.some((e) => e.event_type === 'fell_unconscious')).toBe(true);
+      expect(res.events.some((e) => e.event_type === "fell_unconscious")).toBe(
+        true,
+      );
     });
 
-    it('transitions directly to dead on massive damage (instantDeath)', async () => {
+    it("transitions directly to dead on massive damage (instantDeath)", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-2', characterId: 'char-2' });
+      const pc = makeParticipant({ id: "pc-2", characterId: "char-2" });
       h.participants.set(pc.id, pc);
-      h.hpByChar['char-2'] = { current: 5, max: 10 };
+      h.hpByChar["char-2"] = { current: 5, max: 10 };
 
       const res = await h.combat.applyDamage(h.encounter.id, {
         targetParticipantId: pc.id,
         amount: 25,
-        damageType: 'slashing',
-        ownerUserId: 'u1',
+        damageType: "slashing",
+        ownerUserId: "u1",
       });
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
-      expect(res.value.dyingState).toBe('dead');
+      expect(res.value.dyingState).toBe("dead");
       expect(res.value.instantDeath).toBe(true);
-      expect(pc.dyingState).toBe('dead');
+      expect(pc.dyingState).toBe("dead");
       expect(pc.isDefeated).toBe(true);
-      expect(res.events.some((e) => e.event_type === 'instant_death')).toBe(true);
+      expect(res.events.some((e) => e.event_type === "instant_death")).toBe(
+        true,
+      );
     });
 
-    it('adds 1 death-save failure when PC already dying takes damage', async () => {
+    it("adds 1 death-save failure when PC already dying takes damage", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-3', characterId: 'char-3', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-3",
+        characterId: "char-3",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.hpByChar['char-3'] = { current: 0, max: 10 };
-      h.deathSavesByChar['char-3'] = { successes: 0, failures: 0 };
+      h.hpByChar["char-3"] = { current: 0, max: 10 };
+      h.deathSavesByChar["char-3"] = { successes: 0, failures: 0 };
 
       const res = await h.combat.applyDamage(h.encounter.id, {
         targetParticipantId: pc.id,
         amount: 3,
-        damageType: 'slashing',
-        ownerUserId: 'u1',
+        damageType: "slashing",
+        ownerUserId: "u1",
       });
 
       expect(res.ok).toBe(true);
-      expect(h.deathSavesByChar['char-3'].failures).toBe(1);
-      expect(pc.dyingState).toBe('dying');
+      expect(h.deathSavesByChar["char-3"].failures).toBe(1);
+      expect(pc.dyingState).toBe("dying");
     });
 
-    it('adds 2 death-save failures on critical hit to dying PC', async () => {
+    it("adds 2 death-save failures on critical hit to dying PC", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-4', characterId: 'char-4', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-4",
+        characterId: "char-4",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.hpByChar['char-4'] = { current: 0, max: 10 };
-      h.deathSavesByChar['char-4'] = { successes: 0, failures: 0 };
+      h.hpByChar["char-4"] = { current: 0, max: 10 };
+      h.deathSavesByChar["char-4"] = { successes: 0, failures: 0 };
 
       const res = await h.combat.applyDamage(h.encounter.id, {
         targetParticipantId: pc.id,
         amount: 8,
-        damageType: 'slashing',
-        ownerUserId: 'u1',
+        damageType: "slashing",
+        ownerUserId: "u1",
         fromCriticalHit: true,
       });
 
       expect(res.ok).toBe(true);
-      expect(h.deathSavesByChar['char-4'].failures).toBe(2);
-      expect(pc.dyingState).toBe('dying');
+      expect(h.deathSavesByChar["char-4"].failures).toBe(2);
+      expect(pc.dyingState).toBe("dying");
     });
 
-    it('transitions dying → dead when failures reach 3', async () => {
+    it("transitions dying → dead when failures reach 3", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-5', characterId: 'char-5', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-5",
+        characterId: "char-5",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.hpByChar['char-5'] = { current: 0, max: 10 };
-      h.deathSavesByChar['char-5'] = { successes: 0, failures: 2 };
+      h.hpByChar["char-5"] = { current: 0, max: 10 };
+      h.deathSavesByChar["char-5"] = { successes: 0, failures: 2 };
 
       const res = await h.combat.applyDamage(h.encounter.id, {
         targetParticipantId: pc.id,
         amount: 1,
-        damageType: 'slashing',
-        ownerUserId: 'u1',
+        damageType: "slashing",
+        ownerUserId: "u1",
       });
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
-      expect(res.value.dyingState).toBe('dead');
-      expect(pc.dyingState).toBe('dead');
+      expect(res.value.dyingState).toBe("dead");
+      expect(pc.dyingState).toBe("dead");
       expect(pc.isDefeated).toBe(true);
     });
   });
 
-  describe('applyHealing', () => {
-    it('resets dying PC to none and zeroes death saves', async () => {
+  describe("applyHealing", () => {
+    it("resets dying PC to none and zeroes death saves", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-6', characterId: 'char-6', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-6",
+        characterId: "char-6",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.hpByChar['char-6'] = { current: 0, max: 10 };
-      h.deathSavesByChar['char-6'] = { successes: 1, failures: 1 };
+      h.hpByChar["char-6"] = { current: 0, max: 10 };
+      h.deathSavesByChar["char-6"] = { successes: 1, failures: 1 };
 
       const res = await h.combat.applyHealing(h.encounter.id, {
         targetParticipantId: pc.id,
         amount: 5,
-        ownerUserId: 'u1',
+        ownerUserId: "u1",
       });
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.value.hpAfter).toBe(5);
-      expect(res.value.dyingState).toBe('none');
+      expect(res.value.dyingState).toBe("none");
       expect(res.value.deathSavesReset).toBe(true);
-      expect(pc.dyingState).toBe('none');
-      expect(h.deathSavesByChar['char-6']).toEqual({ successes: 0, failures: 0 });
+      expect(pc.dyingState).toBe("none");
+      expect(h.deathSavesByChar["char-6"]).toEqual({
+        successes: 0,
+        failures: 0,
+      });
     });
 
-    it('refuses to heal a dead PC', async () => {
+    it("refuses to heal a dead PC", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-7', characterId: 'char-7', dyingState: 'dead' });
+      const pc = makeParticipant({
+        id: "pc-7",
+        characterId: "char-7",
+        dyingState: "dead",
+      });
       h.participants.set(pc.id, pc);
 
       const res = await h.combat.applyHealing(h.encounter.id, {
         targetParticipantId: pc.id,
         amount: 10,
-        ownerUserId: 'u1',
+        ownerUserId: "u1",
       });
 
       expect(res.ok).toBe(false);
       if (res.ok) return;
-      expect(res.code).toBe('ALREADY_DEAD');
+      expect(res.code).toBe("ALREADY_DEAD");
     });
   });
 
-  describe('resolveDeathSave', () => {
-    it('rejects when participant is not dying', async () => {
+  describe("resolveDeathSave", () => {
+    it("rejects when participant is not dying", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-8', characterId: 'char-8', dyingState: 'none' });
+      const pc = makeParticipant({
+        id: "pc-8",
+        characterId: "char-8",
+        dyingState: "none",
+      });
       h.participants.set(pc.id, pc);
 
-      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, 'u1');
+      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, "u1");
 
       expect(res.ok).toBe(false);
       if (res.ok) return;
-      expect(res.code).toBe('NOT_DYING');
+      expect(res.code).toBe("NOT_DYING");
     });
 
-    it('rejects when participant is a monster', async () => {
+    it("rejects when participant is a monster", async () => {
       const h = createHarness();
       const m = makeParticipant({
-        id: 'm-1',
-        type: 'monster',
+        id: "m-1",
+        type: "monster",
         characterId: undefined,
-        monsterId: 'mon-1',
+        monsterId: "mon-1",
       });
       h.participants.set(m.id, m);
 
-      const res = await h.combat.resolveDeathSave(h.encounter.id, m.id, 'u1');
+      const res = await h.combat.resolveDeathSave(h.encounter.id, m.id, "u1");
 
       expect(res.ok).toBe(false);
       if (res.ok) return;
-      expect(res.code).toBe('INVALID_PARTICIPANT');
+      expect(res.code).toBe("INVALID_PARTICIPANT");
     });
 
-    it('natural 20 revives PC with 1 HP and zeroes death saves', async () => {
+    it("natural 20 revives PC with 1 HP and zeroes death saves", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-9', characterId: 'char-9', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-9",
+        characterId: "char-9",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.deathSavesByChar['char-9'] = { successes: 0, failures: 1 };
-      jest.spyOn(h.diceService, 'roll').mockReturnValueOnce(20);
+      h.deathSavesByChar["char-9"] = { successes: 0, failures: 1 };
+      jest.spyOn(h.diceService, "roll").mockReturnValueOnce(20);
 
-      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, 'u1');
+      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, "u1");
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.value.roll).toBe(20);
       expect(res.value.naturalTwenty).toBe(true);
       expect(res.value.revivedHp).toBe(1);
-      expect(res.value.dyingState).toBe('none');
-      expect(pc.dyingState).toBe('none');
+      expect(res.value.dyingState).toBe("none");
+      expect(pc.dyingState).toBe("none");
       expect(pc.isDefeated).toBe(false);
     });
 
-    it('natural 1 counts as two failures', async () => {
+    it("natural 1 counts as two failures", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-10', characterId: 'char-10', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-10",
+        characterId: "char-10",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.deathSavesByChar['char-10'] = { successes: 0, failures: 0 };
-      jest.spyOn(h.diceService, 'roll').mockReturnValueOnce(1);
+      h.deathSavesByChar["char-10"] = { successes: 0, failures: 0 };
+      jest.spyOn(h.diceService, "roll").mockReturnValueOnce(1);
 
-      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, 'u1');
+      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, "u1");
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.value.naturalOne).toBe(true);
       expect(res.value.failures).toBe(2);
-      expect(res.value.dyingState).toBe('dying');
+      expect(res.value.dyingState).toBe("dying");
     });
 
-    it('third successful save stabilizes PC', async () => {
+    it("third successful save stabilizes PC", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-11', characterId: 'char-11', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-11",
+        characterId: "char-11",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.deathSavesByChar['char-11'] = { successes: 2, failures: 1 };
-      jest.spyOn(h.diceService, 'roll').mockReturnValueOnce(15);
+      h.deathSavesByChar["char-11"] = { successes: 2, failures: 1 };
+      jest.spyOn(h.diceService, "roll").mockReturnValueOnce(15);
 
-      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, 'u1');
+      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, "u1");
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.value.successes).toBe(3);
       expect(res.value.stabilized).toBe(true);
-      expect(res.value.dyingState).toBe('stable');
-      expect(pc.dyingState).toBe('stable');
+      expect(res.value.dyingState).toBe("stable");
+      expect(pc.dyingState).toBe("stable");
     });
 
-    it('third failure marks PC dead', async () => {
+    it("third failure marks PC dead", async () => {
       const h = createHarness();
-      const pc = makeParticipant({ id: 'pc-12', characterId: 'char-12', dyingState: 'dying' });
+      const pc = makeParticipant({
+        id: "pc-12",
+        characterId: "char-12",
+        dyingState: "dying",
+      });
       h.participants.set(pc.id, pc);
-      h.deathSavesByChar['char-12'] = { successes: 0, failures: 2 };
-      jest.spyOn(h.diceService, 'roll').mockReturnValueOnce(5);
+      h.deathSavesByChar["char-12"] = { successes: 0, failures: 2 };
+      jest.spyOn(h.diceService, "roll").mockReturnValueOnce(5);
 
-      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, 'u1');
+      const res = await h.combat.resolveDeathSave(h.encounter.id, pc.id, "u1");
 
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.value.failures).toBe(3);
       expect(res.value.dead).toBe(true);
-      expect(res.value.dyingState).toBe('dead');
-      expect(pc.dyingState).toBe('dead');
+      expect(res.value.dyingState).toBe("dead");
+      expect(pc.dyingState).toBe("dead");
       expect(pc.isDefeated).toBe(true);
     });
   });
 
-  describe('endTurn', () => {
-    it('delivers turn to a dying PC (not skipped)', async () => {
+  describe("endTurn", () => {
+    it("delivers turn to a dying PC (not skipped)", async () => {
       const h = createHarness();
-      const actor = makeParticipant({ id: 'a', type: 'monster' });
-      const dying = makeParticipant({ id: 'b', characterId: 'cb', dyingState: 'dying' });
+      const actor = makeParticipant({ id: "a", type: "monster" });
+      const dying = makeParticipant({
+        id: "b",
+        characterId: "cb",
+        dyingState: "dying",
+      });
       h.participants.set(actor.id, actor);
       h.participants.set(dying.id, dying);
       h.encounter.turnOrder = [actor.id, dying.id];
@@ -514,14 +659,18 @@ describe('CombatService — US1 death-save flow', () => {
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.value.participantId).toBe(dying.id);
-      expect(res.value.dyingState).toBe('dying');
+      expect(res.value.dyingState).toBe("dying");
       expect(res.value.autoSkip).toBeFalsy();
     });
 
-    it('marks autoSkip when turn lands on stable PC', async () => {
+    it("marks autoSkip when turn lands on stable PC", async () => {
       const h = createHarness();
-      const actor = makeParticipant({ id: 'a2', type: 'monster' });
-      const stable = makeParticipant({ id: 'b2', characterId: 'cb2', dyingState: 'stable' });
+      const actor = makeParticipant({ id: "a2", type: "monster" });
+      const stable = makeParticipant({
+        id: "b2",
+        characterId: "cb2",
+        dyingState: "stable",
+      });
       h.participants.set(actor.id, actor);
       h.participants.set(stable.id, stable);
       h.encounter.turnOrder = [actor.id, stable.id];
@@ -535,11 +684,16 @@ describe('CombatService — US1 death-save flow', () => {
       expect(res.value.autoSkip).toBe(true);
     });
 
-    it('skips dead PC in turn rotation', async () => {
+    it("skips dead PC in turn rotation", async () => {
       const h = createHarness();
-      const actor = makeParticipant({ id: 'a3', type: 'monster' });
-      const dead = makeParticipant({ id: 'b3', characterId: 'cb3', dyingState: 'dead', isDefeated: true });
-      const alive = makeParticipant({ id: 'c3', characterId: 'cc3' });
+      const actor = makeParticipant({ id: "a3", type: "monster" });
+      const dead = makeParticipant({
+        id: "b3",
+        characterId: "cb3",
+        dyingState: "dead",
+        isDefeated: true,
+      });
+      const alive = makeParticipant({ id: "c3", characterId: "cc3" });
       h.participants.set(actor.id, actor);
       h.participants.set(dead.id, dead);
       h.participants.set(alive.id, alive);
@@ -553,11 +707,16 @@ describe('CombatService — US1 death-save flow', () => {
       expect(res.value.participantId).toBe(alive.id);
     });
 
-    it('removes dead PC from turnOrder at round boundary', async () => {
+    it("removes dead PC from turnOrder at round boundary", async () => {
       const h = createHarness();
-      const monster = makeParticipant({ id: 'a4', type: 'monster' });
-      const dead = makeParticipant({ id: 'b4', characterId: 'cb4', dyingState: 'dead', isDefeated: true });
-      const alive = makeParticipant({ id: 'c4', characterId: 'cc4' });
+      const monster = makeParticipant({ id: "a4", type: "monster" });
+      const dead = makeParticipant({
+        id: "b4",
+        characterId: "cb4",
+        dyingState: "dead",
+        isDefeated: true,
+      });
+      const alive = makeParticipant({ id: "c4", characterId: "cc4" });
       h.participants.set(monster.id, monster);
       h.participants.set(dead.id, dead);
       h.participants.set(alive.id, alive);

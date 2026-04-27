@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddSessionCampaignId1774700000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -15,6 +15,8 @@ export class AddSessionCampaignId1774700000000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX "IDX_game_sessions_campaign_id";`);
-    await queryRunner.query(`ALTER TABLE "game_sessions" DROP COLUMN "campaign_id";`);
+    await queryRunner.query(
+      `ALTER TABLE "game_sessions" DROP COLUMN "campaign_id";`,
+    );
   }
 }

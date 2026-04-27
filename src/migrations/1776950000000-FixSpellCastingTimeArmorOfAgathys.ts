@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 #3 — corrigir `casting_time` de Armor of Agathys.
@@ -15,10 +15,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Migration pontual pra esse spell. Um audit completo de outras magias
  * com casting_time malformado fica no backlog (spec 012 investigation).
  */
-export class FixSpellCastingTimeArmorOfAgathys1776950000000
-  implements MigrationInterface
-{
-  name = 'FixSpellCastingTimeArmorOfAgathys1776950000000';
+export class FixSpellCastingTimeArmorOfAgathys1776950000000 implements MigrationInterface {
+  name = "FixSpellCastingTimeArmorOfAgathys1776950000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

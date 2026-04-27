@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 004 — Effect Resolution Engine.
@@ -9,10 +9,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * (que é tracker de concentração, legacy) por SRP: cada tipo tem uma
  * responsabilidade única.
  */
-export class AddEffectInstancesToParticipant1776400000000
-  implements MigrationInterface
-{
-  name = 'AddEffectInstancesToParticipant1776400000000';
+export class AddEffectInstancesToParticipant1776400000000 implements MigrationInterface {
+  name = "AddEffectInstancesToParticipant1776400000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

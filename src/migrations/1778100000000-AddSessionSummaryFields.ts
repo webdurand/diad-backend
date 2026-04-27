@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M2.C — cross-session recap.
@@ -11,10 +11,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - previous_session_id: self-FK; permite trace cross-session da campanha.
  * - ended_at: timestamp do /finalize (não confunde com updated_at).
  */
-export class AddSessionSummaryFields1778100000000
-  implements MigrationInterface
-{
-  name = 'AddSessionSummaryFields1778100000000';
+export class AddSessionSummaryFields1778100000000 implements MigrationInterface {
+  name = "AddSessionSummaryFields1778100000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

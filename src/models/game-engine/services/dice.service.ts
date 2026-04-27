@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 import {
   AdvantageResult,
   DiceModifierBreakdown,
@@ -11,7 +11,7 @@ import {
   DiceRollResolved,
   DiceVerdict,
   InitiativeResult,
-} from '../interfaces/dice.interfaces';
+} from "../interfaces/dice.interfaces";
 
 /**
  * Deterministic dice rolling service.
@@ -60,7 +60,7 @@ export class DiceService {
    * Also accepts literal numerics like "1" or "5" (spells with flat damage).
    */
   rollExpression(expr: string): DiceResult {
-    const trimmed = expr.replace(/\s/g, '').toLowerCase();
+    const trimmed = expr.replace(/\s/g, "").toLowerCase();
 
     // Literal numeric ("1", "5", "10") — fixed damage spells (Magic Missile base, Acid Splash 1 HP min).
     if (/^\d+$/.test(trimmed)) {
@@ -73,9 +73,7 @@ export class DiceService {
       };
     }
 
-    const match = trimmed.match(
-      /^(\d+)d(\d+)(?:(kh|kl)(\d+))?([+-]\d+)?$/,
-    );
+    const match = trimmed.match(/^(\d+)d(\d+)(?:(kh|kl)(\d+))?([+-]\d+)?$/);
 
     if (!match) {
       return {
@@ -88,7 +86,7 @@ export class DiceService {
 
     const count = parseInt(match[1], 10);
     const sides = parseInt(match[2], 10);
-    const keepMode = match[3] as 'kh' | 'kl' | undefined;
+    const keepMode = match[3] as "kh" | "kl" | undefined;
     const keepCount = match[4] ? parseInt(match[4], 10) : undefined;
     const modifier = match[5] ? parseInt(match[5], 10) : 0;
 
@@ -99,7 +97,7 @@ export class DiceService {
 
     if (keepMode && keepCount !== undefined && keepCount < count) {
       const sorted = [...allRolls].sort((a, b) => b - a);
-      if (keepMode === 'kh') {
+      if (keepMode === "kh") {
         kept = sorted.slice(0, keepCount);
         dropped = sorted.slice(keepCount);
       } else {
@@ -146,7 +144,10 @@ export class DiceService {
   /**
    * Roll initiative: 1d20 + modifier.
    */
-  rollInitiative(modifier: number, options?: { advantage?: boolean }): InitiativeResult {
+  rollInitiative(
+    modifier: number,
+    options?: { advantage?: boolean },
+  ): InitiativeResult {
     let roll = this.roll(20);
     // Barbarian L7 Feral Instinct (RAW 2024) — advantage em initiative
     if (options?.advantage) {
@@ -169,7 +170,7 @@ export class DiceService {
    */
   buildDiceRollRequest(input: {
     kind: DiceRollKind;
-    ability: DiceRollRequest['ability'];
+    ability: DiceRollRequest["ability"];
     skill?: string | null;
     dc: number;
     modifiers: DiceModifierBreakdown[];
@@ -178,10 +179,7 @@ export class DiceService {
     narrativeFraming?: string;
     rollId?: string;
   }): DiceRollRequest {
-    const totalModifier = input.modifiers.reduce(
-      (sum, m) => sum + m.value,
-      0,
-    );
+    const totalModifier = input.modifiers.reduce((sum, m) => sum + m.value, 0);
     const rawTarget = input.dc - totalModifier;
     const targetD20 = Math.max(2, Math.min(30, rawTarget));
     return {
@@ -191,7 +189,7 @@ export class DiceService {
       ability: input.ability,
       skill: input.skill ?? null,
       dc: input.dc,
-      advantage: input.advantage ?? 'normal',
+      advantage: input.advantage ?? "normal",
       modifiers: input.modifiers,
       totalModifier,
       targetD20,
@@ -228,17 +226,17 @@ export class DiceService {
 
     let verdict: DiceVerdict;
     if (isNat20 && passes) {
-      verdict = 'crit_success';
+      verdict = "crit_success";
     } else if (isNat1 && !passes) {
-      verdict = 'crit_failure';
-    } else if (input.kind === 'attack_roll' && isNat20) {
-      verdict = 'crit_success';
-    } else if (input.kind === 'attack_roll' && isNat1) {
-      verdict = 'crit_failure';
+      verdict = "crit_failure";
+    } else if (input.kind === "attack_roll" && isNat20) {
+      verdict = "crit_success";
+    } else if (input.kind === "attack_roll" && isNat1) {
+      verdict = "crit_failure";
     } else if (passes) {
-      verdict = 'success';
+      verdict = "success";
     } else {
-      verdict = 'failure';
+      verdict = "failure";
     }
 
     return {

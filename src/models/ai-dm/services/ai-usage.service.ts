@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   AiAgentRole,
   AiUsageLogEntity,
-} from 'src/entities/ai-usage-log.entity';
+} from "src/entities/ai-usage-log.entity";
 
 /**
  * Preços Anthropic (por 1M tokens, USD). Spec §8 cost-aware.
@@ -16,25 +16,25 @@ const PRICING: Record<
   string,
   { input: number; output: number; cacheWrite: number; cacheRead: number }
 > = {
-  'claude-haiku-4-5-20251001': {
+  "claude-haiku-4-5-20251001": {
     input: 1.0, // $1.00 / 1M input
     output: 5.0,
     cacheWrite: 1.25,
     cacheRead: 0.1,
   },
-  'claude-haiku-4-5': {
+  "claude-haiku-4-5": {
     input: 1.0,
     output: 5.0,
     cacheWrite: 1.25,
     cacheRead: 0.1,
   },
-  'claude-sonnet-4-6': {
+  "claude-sonnet-4-6": {
     input: 3.0,
     output: 15.0,
     cacheWrite: 3.75,
     cacheRead: 0.3,
   },
-  'claude-opus-4-7': {
+  "claude-opus-4-7": {
     input: 15.0,
     output: 75.0,
     cacheWrite: 18.75,
@@ -42,7 +42,7 @@ const PRICING: Record<
   },
 };
 
-const DEFAULT_PRICE = PRICING['claude-haiku-4-5-20251001'];
+const DEFAULT_PRICE = PRICING["claude-haiku-4-5-20251001"];
 
 export interface LogAiUsageDto {
   campaignId?: string;
@@ -128,7 +128,7 @@ export class AiUsageService {
   ): Promise<CampaignCostSummary> {
     const rows = await this.repo.find({
       where: { campaignId },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: "ASC" },
     });
 
     const totals = emptyBucket();
@@ -143,7 +143,8 @@ export class AiUsageService {
       if (!sessionMap.has(sKey)) sessionMap.set(sKey, emptyBucket());
       accumulate(sessionMap.get(sKey)!, row, cost);
 
-      if (!agentMap.has(row.agentRole)) agentMap.set(row.agentRole, emptyBucket());
+      if (!agentMap.has(row.agentRole))
+        agentMap.set(row.agentRole, emptyBucket());
       accumulate(agentMap.get(row.agentRole)!, row, cost);
     }
 

@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID } from 'class-validator';
+import { IsOptional, IsUUID } from "class-validator";
 
 /**
  * Body for POST /encounters/:id/death-save/:participantId.

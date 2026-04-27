@@ -1,5 +1,5 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
-import { parseMultiattackFromDescription } from './utils/parse-multiattack';
+import { MigrationInterface, QueryRunner } from "typeorm";
+import { parseMultiattackFromDescription } from "./utils/parse-multiattack";
 
 /**
  * Populates `monsters.multiattack` for every monster whose `actions` array
@@ -11,12 +11,13 @@ import { parseMultiattackFromDescription } from './utils/parse-multiattack';
  * DOWN: clears all populated rows (preserves schema).
  */
 export class PopulateMonsterMultiattackData1774920000000 implements MigrationInterface {
-  name = 'PopulateMonsterMultiattackData1774920000000';
+  name = "PopulateMonsterMultiattackData1774920000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const monsters: Array<{ id: string; actions: any }> = await queryRunner.query(
-      `SELECT id, actions FROM monsters WHERE actions IS NOT NULL`,
-    );
+    const monsters: Array<{ id: string; actions: any }> =
+      await queryRunner.query(
+        `SELECT id, actions FROM monsters WHERE actions IS NOT NULL`,
+      );
 
     let populated = 0;
     let skipped = 0;
@@ -24,14 +25,17 @@ export class PopulateMonsterMultiattackData1774920000000 implements MigrationInt
     for (const m of monsters) {
       const actions = Array.isArray(m.actions) ? m.actions : [];
       const multiattackAction = actions.find(
-        (a: any) => typeof a?.name === 'string' && /multiattack/i.test(a.name),
+        (a: any) => typeof a?.name === "string" && /multiattack/i.test(a.name),
       );
       if (!multiattackAction) {
         skipped++;
         continue;
       }
 
-      const desc = typeof multiattackAction.desc === 'string' ? multiattackAction.desc : '';
+      const desc =
+        typeof multiattackAction.desc === "string"
+          ? multiattackAction.desc
+          : "";
       const parsed = parseMultiattackFromDescription(desc, actions);
       if (!parsed) {
         skipped++;
@@ -45,8 +49,9 @@ export class PopulateMonsterMultiattackData1774920000000 implements MigrationInt
       populated++;
     }
 
-    // eslint-disable-next-line no-console
-    console.log(`[PopulateMonsterMultiattackData] populated=${populated} skipped=${skipped}`);
+    console.log(
+      `[PopulateMonsterMultiattackData] populated=${populated} skipped=${skipped}`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

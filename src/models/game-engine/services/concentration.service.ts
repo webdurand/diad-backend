@@ -1,30 +1,30 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { PersistentAreaEffectEntity } from 'src/entities/persistent-area-effect.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
 import type {
   AppliedEffect,
   ConditionInstance,
   ConditionSlug,
-} from '../interfaces/combat.interfaces';
-import type { GameEventData } from '../interfaces/result.type';
-import { narrativeForConditionRemoval } from './narrative-condition-removal';
+} from "../interfaces/combat.interfaces";
+import type { GameEventData } from "../interfaces/result.type";
+import { narrativeForConditionRemoval } from "./narrative-condition-removal";
 
 export type ConcentrationBreakReason =
-  | 'damage'
-  | 'incapacitated'
-  | 'replaced'
-  | 'expired'
-  | 'death'
-  | 'manual';
+  | "damage"
+  | "incapacitated"
+  | "replaced"
+  | "expired"
+  | "death"
+  | "manual";
 
 const INCAPACITATING: ConditionSlug[] = [
-  'incapacitated',
-  'paralyzed',
-  'petrified',
-  'stunned',
-  'unconscious',
+  "incapacitated",
+  "paralyzed",
+  "petrified",
+  "stunned",
+  "unconscious",
 ];
 
 /**
@@ -62,7 +62,7 @@ export class ConcentrationService {
     const events: GameEventData[] = [];
     let broken = false;
     if (caster.isConcentrating) {
-      const r = await this.break(caster, 'replaced');
+      const r = await this.break(caster, "replaced");
       events.push(...r.events);
       broken = true;
     }
@@ -73,7 +73,7 @@ export class ConcentrationService {
     caster.appliedEffects = caster.appliedEffects ?? [];
     await this.participants.save(caster);
     events.push({
-      event_type: 'concentration_started',
+      event_type: "concentration_started",
       actor_participant_id: caster.id,
       data: { spellName, durationRounds, saveDc },
     });
@@ -108,7 +108,7 @@ export class ConcentrationService {
 
     // Buscar todos os participantes alvo de uma vez
     const targetIds = effects
-      .filter((e) => e.kind === 'condition' && e.targetParticipantId)
+      .filter((e) => e.kind === "condition" && e.targetParticipantId)
       .map((e) => e.targetParticipantId as string);
     const uniqueIds = Array.from(new Set(targetIds));
     const targets = uniqueIds.length
@@ -116,7 +116,7 @@ export class ConcentrationService {
       : [];
 
     for (const eff of effects) {
-      if (eff.kind === 'condition' && eff.targetParticipantId) {
+      if (eff.kind === "condition" && eff.targetParticipantId) {
         const tgt = targets.find((t) => t.id === eff.targetParticipantId);
         if (!tgt) continue;
         const removed = (tgt.conditionInstances ?? []).find(
@@ -132,22 +132,22 @@ export class ConcentrationService {
           // Spec 015 Eixo 3 — event enriquecido com source + narrativeDescriptor
           const slug = removed?.slug ?? null;
           const narrative = slug
-            ? narrativeForConditionRemoval(slug, 'concentration_broken')
-            : '';
+            ? narrativeForConditionRemoval(slug, "concentration_broken")
+            : "";
           events.push({
-            event_type: 'condition_removed',
+            event_type: "condition_removed",
             target_participant_id: tgt.id,
             data: {
               instanceId: eff.refId,
               slug,
-              source: removed?.source ?? 'manual',
-              removalReason: 'concentration_broken',
+              source: removed?.source ?? "manual",
+              removalReason: "concentration_broken",
               narrativeDescriptor: narrative,
-              reason: 'concentration_broken',
+              reason: "concentration_broken",
             },
           });
         }
-      } else if (eff.kind === 'persistent-area') {
+      } else if (eff.kind === "persistent-area") {
         // Spec 013 — emite tile_effect_concentration_broken pra registros catalog-aware,
         // mantém persistent_area_removed pra legacy (Princípio X: Narrator consome
         // narrativeDescriptor; CombatAgent consome tactical metadata).
@@ -155,14 +155,14 @@ export class ConcentrationService {
         await this.areas.delete({ id: eff.refId });
         events.push({
           event_type: area?.effectKind
-            ? 'tile_effect_concentration_broken'
-            : 'persistent_area_removed',
+            ? "tile_effect_concentration_broken"
+            : "persistent_area_removed",
           data: {
             areaId: eff.refId,
             sourceSpell: area?.sourceSpell,
             effectKind: area?.effectKind,
             casterId: caster.id,
-            reason: 'concentration_broken',
+            reason: "concentration_broken",
             narrativeDescriptor: area?.narrativeDescriptor,
             tactical: area?.tacticalMetadata,
           },
@@ -182,19 +182,19 @@ export class ConcentrationService {
       for (const a of orphanAreas) {
         // Skip se já cleanup-ed acima (kind:'persistent-area' em appliedEffects).
         const alreadyHandled = effects.some(
-          (e) => e.kind === 'persistent-area' && e.refId === a.id,
+          (e) => e.kind === "persistent-area" && e.refId === a.id,
         );
         if (alreadyHandled) continue;
         events.push({
           event_type: a.effectKind
-            ? 'tile_effect_concentration_broken'
-            : 'persistent_area_removed',
+            ? "tile_effect_concentration_broken"
+            : "persistent_area_removed",
           data: {
             areaId: a.id,
             sourceSpell: a.sourceSpell,
             effectKind: a.effectKind,
             casterId: caster.id,
-            reason: 'concentration_broken',
+            reason: "concentration_broken",
             narrativeDescriptor: a.narrativeDescriptor,
             tactical: a.tacticalMetadata,
           },
@@ -215,8 +215,7 @@ export class ConcentrationService {
       const kept = before.filter(
         (e) =>
           !(
-            e.requiresConcentration &&
-            e.sourceCasterParticipantId === caster.id
+            e.requiresConcentration && e.sourceCasterParticipantId === caster.id
           ),
       );
       if (kept.length !== before.length) {
@@ -226,11 +225,11 @@ export class ConcentrationService {
             e.sourceCasterParticipantId === caster.id
           ) {
             events.push({
-              event_type: 'effect_expired',
+              event_type: "effect_expired",
               target_participant_id: p.id,
               data: {
                 effectId: e.id,
-                reason: 'concentration_broken',
+                reason: "concentration_broken",
                 kind: e.kind,
               },
             });
@@ -259,11 +258,11 @@ export class ConcentrationService {
         p.transformationState = null;
         await this.participants.save(p);
         events.push({
-          event_type: 'transformation_reverted',
+          event_type: "transformation_reverted",
           target_participant_id: p.id,
           actor_participant_id: caster.id,
           data: {
-            reason: 'concentration_broken',
+            reason: "concentration_broken",
             formName,
             source: tState.source,
           },
@@ -279,7 +278,7 @@ export class ConcentrationService {
     await this.participants.save(caster);
 
     events.push({
-      event_type: 'concentration_lost',
+      event_type: "concentration_lost",
       actor_participant_id: caster.id,
       data: { reason, spellName: prev },
     });
@@ -289,7 +288,7 @@ export class ConcentrationService {
   async breakDueToDeath(
     caster: EncounterParticipantEntity,
   ): Promise<{ events: GameEventData[] }> {
-    return this.break(caster, 'death');
+    return this.break(caster, "death");
   }
 
   /**
@@ -304,7 +303,7 @@ export class ConcentrationService {
     if (!INCAPACITATING.includes(addedSlug)) {
       return { events: [], broken: false };
     }
-    const r = await this.break(target, 'incapacitated');
+    const r = await this.break(target, "incapacitated");
     return { events: r.events, broken: true };
   }
 
@@ -319,7 +318,7 @@ export class ConcentrationService {
     if (caster.concentrationRoundsRemaining == null) return { events: [] };
     caster.concentrationRoundsRemaining -= 1;
     if (caster.concentrationRoundsRemaining <= 0) {
-      return this.break(caster, 'expired');
+      return this.break(caster, "expired");
     }
     await this.participants.save(caster);
     return { events: [] };

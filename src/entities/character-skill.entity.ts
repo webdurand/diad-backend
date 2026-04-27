@@ -5,30 +5,30 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { CharacterEntity } from './character.entity';
-import { SkillEntity } from './skill.entity';
+} from "typeorm";
+import { CharacterEntity } from "./character.entity";
+import { SkillEntity } from "./skill.entity";
 
-@Entity('character_skills')
+@Entity("character_skills")
 export class CharacterSkillEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   character_id: string;
 
-  @ManyToOne(() => CharacterEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'character_id' })
+  @ManyToOne(() => CharacterEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "character_id" })
   character: CharacterEntity;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   skill_id: string;
 
   @ManyToOne(() => SkillEntity, { eager: true })
-  @JoinColumn({ name: 'skill_id' })
+  @JoinColumn({ name: "skill_id" })
   skill: SkillEntity;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   expertise: boolean;
 }

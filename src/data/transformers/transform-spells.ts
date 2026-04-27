@@ -1,9 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntries } from './entries-parser';
-import { stripTags } from './tag-stripper';
-import { SPELL_SCHOOL_MAP } from './code-maps';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntries } from "./entries-parser";
+import { stripTags } from "./tag-stripper";
+import { SPELL_SCHOOL_MAP } from "./code-maps";
 
 // ────────────────────────────────────────────────────────────────
 // 5etools input types
@@ -22,7 +22,11 @@ interface FiveToolsSpell {
     type: string;
     distance?: { type: string; amount?: number };
   };
-  components: { v?: boolean; s?: boolean; m?: string | boolean | { text: string; cost?: number; consume?: boolean } };
+  components: {
+    v?: boolean;
+    s?: boolean;
+    m?: string | boolean | { text: string; cost?: number; consume?: boolean };
+  };
   duration: {
     type: string;
     duration?: { type: string; amount: number };
@@ -51,7 +55,12 @@ interface ScalingLevelDice {
 
 interface SpellSourceEntry {
   class?: { name: string; source: string }[];
-  subclass?: { name: string; source: string; subSubclass?: string; class: { name: string; source: string } }[];
+  subclass?: {
+    name: string;
+    source: string;
+    subSubclass?: string;
+    class: { name: string; source: string };
+  }[];
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -71,7 +80,7 @@ export interface TransformedSpell {
   concentration: boolean;
   casting_time: string;
   level: number;
-  attack_type: 'melee' | 'ranged' | null;
+  attack_type: "melee" | "ranged" | null;
   damage: Record<string, unknown> | null;
   dc: Record<string, unknown> | null;
   heal_at_slot_level: Record<string, unknown> | null;
@@ -91,101 +100,121 @@ export interface SpellClassMapping {
 // ────────────────────────────────────────────────────────────────
 
 const AREA_TAG_MAP: Record<string, string> = {
-  S: 'sphere',
-  N: 'cone',
-  L: 'line',
-  R: 'cube',
-  Q: 'square',
-  Y: 'cylinder',
-  H: 'hemisphere',
-  W: 'wall',
-  MT: 'multiple targets',
-  ST: 'single target',
+  S: "sphere",
+  N: "cone",
+  L: "line",
+  R: "cube",
+  Q: "square",
+  Y: "cylinder",
+  H: "hemisphere",
+  W: "wall",
+  MT: "multiple targets",
+  ST: "single target",
 };
 
 // ────────────────────────────────────────────────────────────────
 // Conversion helpers
 // ────────────────────────────────────────────────────────────────
 
-function convertRange(range: FiveToolsSpell['range']): string {
-  if (!range) return 'Self';
+function convertRange(range: FiveToolsSpell["range"]): string {
+  if (!range) return "Self";
 
   const distance = range.distance;
-  if (!distance) return 'Special';
+  if (!distance) return "Special";
 
   switch (distance.type) {
-    case 'self': return 'Self';
-    case 'touch': return 'Touch';
-    case 'sight': return 'Sight';
-    case 'unlimited': return 'Unlimited';
-    case 'feet':
-      if (range.type !== 'point' && distance.amount) {
-        return 'Self';
+    case "self":
+      return "Self";
+    case "touch":
+      return "Touch";
+    case "sight":
+      return "Sight";
+    case "unlimited":
+      return "Unlimited";
+    case "feet":
+      if (range.type !== "point" && distance.amount) {
+        return "Self";
       }
-      return distance.amount ? `${distance.amount} feet` : 'Self';
-    case 'miles':
+      return distance.amount ? `${distance.amount} feet` : "Self";
+    case "miles":
       return distance.amount
-        ? `${distance.amount} mile${distance.amount > 1 ? 's' : ''}`
-        : 'Special';
+        ? `${distance.amount} mile${distance.amount > 1 ? "s" : ""}`
+        : "Special";
     default:
-      return 'Special';
+      return "Special";
   }
 }
 
-function convertDuration(duration: FiveToolsSpell['duration']): { text: string; concentration: boolean } {
-  if (!duration || !duration[0]) return { text: 'Instantaneous', concentration: false };
+function convertDuration(duration: FiveToolsSpell["duration"]): {
+  text: string;
+  concentration: boolean;
+} {
+  if (!duration || !duration[0])
+    return { text: "Instantaneous", concentration: false };
 
   const d = duration[0];
   const concentration = d.concentration ?? false;
 
   switch (d.type) {
-    case 'instant':
-      return { text: 'Instantaneous', concentration };
-    case 'timed': {
-      if (!d.duration) return { text: 'Special', concentration };
+    case "instant":
+      return { text: "Instantaneous", concentration };
+    case "timed": {
+      if (!d.duration) return { text: "Special", concentration };
       const amount = d.duration.amount;
       const unit = d.duration.type;
-      const prefix = concentration ? 'Concentration, up to ' : '';
-      return { text: `${prefix}${amount} ${unit}${amount > 1 ? 's' : ''}`, concentration };
+      const prefix = concentration ? "Concentration, up to " : "";
+      return {
+        text: `${prefix}${amount} ${unit}${amount > 1 ? "s" : ""}`,
+        concentration,
+      };
     }
-    case 'permanent': {
+    case "permanent": {
       const ends = d.ends ?? [];
-      if (ends.includes('dispel') && ends.includes('trigger')) {
-        return { text: 'Until dispelled or triggered', concentration };
+      if (ends.includes("dispel") && ends.includes("trigger")) {
+        return { text: "Until dispelled or triggered", concentration };
       }
-      if (ends.includes('dispel')) return { text: 'Until dispelled', concentration };
-      if (ends.includes('trigger')) return { text: 'Until triggered', concentration };
-      return { text: 'Permanent', concentration };
+      if (ends.includes("dispel"))
+        return { text: "Until dispelled", concentration };
+      if (ends.includes("trigger"))
+        return { text: "Until triggered", concentration };
+      return { text: "Permanent", concentration };
     }
-    case 'special':
-      return { text: 'Special', concentration };
+    case "special":
+      return { text: "Special", concentration };
     default:
-      return { text: 'Special', concentration };
+      return { text: "Special", concentration };
   }
 }
 
-function convertCastingTime(time: FiveToolsSpell['time']): string {
-  if (!time || !time[0]) return '1 action';
+function convertCastingTime(time: FiveToolsSpell["time"]): string {
+  if (!time || !time[0]) return "1 action";
   const t = time[0];
-  const base = `${t.number} ${t.unit}${t.number > 1 ? 's' : ''}`;
+  const base = `${t.number} ${t.unit}${t.number > 1 ? "s" : ""}`;
   if (t.condition) {
     return `${base}, ${stripTags(t.condition)}`;
   }
   return base;
 }
 
-function convertComponents(comp: FiveToolsSpell['components']): { components: string[]; material: string | null } {
+function convertComponents(comp: FiveToolsSpell["components"]): {
+  components: string[];
+  material: string | null;
+} {
   if (!comp) return { components: [], material: null };
 
   const components: string[] = [];
-  if (comp.v) components.push('V');
-  if (comp.s) components.push('S');
-  if (comp.m) components.push('M');
+  if (comp.v) components.push("V");
+  if (comp.s) components.push("S");
+  if (comp.m) components.push("M");
 
   let material: string | null = null;
-  if (typeof comp.m === 'string') {
+  if (typeof comp.m === "string") {
     material = comp.m;
-  } else if (typeof comp.m === 'object' && comp.m !== null && 'text' in comp.m) {
+  } else if (
+    typeof comp.m === "object" &&
+    comp.m !== null &&
+    "text" in comp.m
+  ) {
     material = (comp.m as { text: string }).text;
   }
 
@@ -217,22 +246,22 @@ function convertDc(spell: FiveToolsSpell): Record<string, unknown> | null {
   if (!spell.savingThrow || spell.savingThrow.length === 0) return null;
   return {
     dc_type: spell.savingThrow,
-    dc_success: 'half',
+    dc_success: "half",
   };
 }
 
-function convertAreaOfEffect(spell: FiveToolsSpell): Record<string, unknown> | null {
+function convertAreaOfEffect(
+  spell: FiveToolsSpell,
+): Record<string, unknown> | null {
   if (!spell.areaTags || spell.areaTags.length === 0) return null;
 
-  const tags = spell.areaTags
-    .map((t) => AREA_TAG_MAP[t] ?? t)
-    .filter(Boolean);
+  const tags = spell.areaTags.map((t) => AREA_TAG_MAP[t] ?? t).filter(Boolean);
 
   if (tags.length === 0) return null;
 
   // If the range is "self" with area, try to extract size from range
   const range = spell.range;
-  if (range && range.type !== 'point' && range.distance?.amount) {
+  if (range && range.type !== "point" && range.distance?.amount) {
     return {
       type: AREA_TAG_MAP[range.type?.charAt(0)?.toUpperCase()] ?? tags[0],
       size: range.distance.amount,
@@ -243,10 +272,10 @@ function convertAreaOfEffect(spell: FiveToolsSpell): Record<string, unknown> | n
   return { tags };
 }
 
-function detectAttackType(spell: FiveToolsSpell): 'melee' | 'ranged' | null {
+function detectAttackType(spell: FiveToolsSpell): "melee" | "ranged" | null {
   if (spell.spellAttack) {
-    if (spell.spellAttack.includes('M')) return 'melee';
-    if (spell.spellAttack.includes('R')) return 'ranged';
+    if (spell.spellAttack.includes("M")) return "melee";
+    if (spell.spellAttack.includes("R")) return "ranged";
   }
   return null;
 }
@@ -255,17 +284,21 @@ function detectAttackType(spell: FiveToolsSpell): 'melee' | 'ranged' | null {
 // Main transformer
 // ────────────────────────────────────────────────────────────────
 
-const SPELLS_DIR = path.resolve(__dirname, '../../../../5etools-src/data/spells');
+const SPELLS_DIR = path.resolve(
+  __dirname,
+  "../../../../5etools-src/data/spells",
+);
 
 function loadSpellFiles(): FiveToolsSpell[] {
   const spells: FiveToolsSpell[] = [];
 
-  const files = fs.readdirSync(SPELLS_DIR)
-    .filter((f) => f.startsWith('spells-') && f.endsWith('.json'));
+  const files = fs
+    .readdirSync(SPELLS_DIR)
+    .filter((f) => f.startsWith("spells-") && f.endsWith(".json"));
 
   for (const file of files) {
     const filePath = path.join(SPELLS_DIR, file);
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     const entries: FiveToolsSpell[] = data.spell ?? [];
     spells.push(...entries.filter((s) => !s._copy));
   }
@@ -319,23 +352,32 @@ export function transformSpells(): TransformedSpell[] {
 // ────────────────────────────────────────────────────────────────
 
 export function loadSpellClassMappings(): SpellClassMapping[] {
-  const filePath = path.join(SPELLS_DIR, 'sources.json');
+  const filePath = path.join(SPELLS_DIR, "sources.json");
   if (!fs.existsSync(filePath)) return [];
 
-  const data: Record<string, Record<string, SpellSourceEntry>> =
-    JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const data: Record<string, Record<string, SpellSourceEntry>> = JSON.parse(
+    fs.readFileSync(filePath, "utf-8"),
+  );
 
   const mappings: SpellClassMapping[] = [];
   const seen = new Set<string>();
 
   for (const [sourceCode, spellMap] of Object.entries(data)) {
     for (const [spellName, entry] of Object.entries(spellMap)) {
-      const spellSlug = generateSlug(spellName, sourceCode, sourceCode === 'XPHB');
+      const spellSlug = generateSlug(
+        spellName,
+        sourceCode,
+        sourceCode === "XPHB",
+      );
 
       if (!entry.class) continue;
 
       for (const cls of entry.class) {
-        const classSlug = generateSlug(cls.name, cls.source, cls.source === 'XPHB');
+        const classSlug = generateSlug(
+          cls.name,
+          cls.source,
+          cls.source === "XPHB",
+        );
         const key = `${spellSlug}::${classSlug}`;
         if (seen.has(key)) continue;
         seen.add(key);

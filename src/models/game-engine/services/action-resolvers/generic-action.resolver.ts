@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import type { ActionResolver } from './action-resolver.interface';
+import { Injectable } from "@nestjs/common";
+import type { ActionResolver } from "./action-resolver.interface";
 import type {
   ActionDescriptor,
   ActionKind,
   ParticipantContext,
   DisabledReason,
-} from '../../interfaces/combat-action.interfaces';
+} from "../../interfaces/combat-action.interfaces";
 
 /**
  * Spec 003 — resolver das 8 ações genéricas PHB (kind: 'generic').
@@ -16,19 +16,63 @@ import type {
  */
 @Injectable()
 export class GenericActionResolver implements ActionResolver {
-  readonly kind: ActionKind = 'generic';
+  readonly kind: ActionKind = "generic";
 
   private readonly descriptors: ReadonlyArray<
-    Pick<ActionDescriptor, 'slug' | 'displayName' | 'actionCost' | 'targetShape' | 'targetRange'>
+    Pick<
+      ActionDescriptor,
+      "slug" | "displayName" | "actionCost" | "targetShape" | "targetRange"
+    >
   > = [
-    { slug: 'dodge', displayName: 'Esquivar', actionCost: 'action', targetShape: 'self' },
-    { slug: 'dash', displayName: 'Correr (Dash)', actionCost: 'action', targetShape: 'self' },
-    { slug: 'disengage', displayName: 'Desengajar', actionCost: 'action', targetShape: 'self' },
-    { slug: 'help', displayName: 'Ajudar', actionCost: 'action', targetShape: 'single-creature', targetRange: 5 },
-    { slug: 'hide', displayName: 'Esconder', actionCost: 'action', targetShape: 'self' },
-    { slug: 'ready', displayName: 'Preparar Ação', actionCost: 'action', targetShape: 'none' },
-    { slug: 'search', displayName: 'Procurar', actionCost: 'action', targetShape: 'none' },
-    { slug: 'use-object', displayName: 'Usar Objeto', actionCost: 'action', targetShape: 'none' },
+    {
+      slug: "dodge",
+      displayName: "Esquivar",
+      actionCost: "action",
+      targetShape: "self",
+    },
+    {
+      slug: "dash",
+      displayName: "Correr (Dash)",
+      actionCost: "action",
+      targetShape: "self",
+    },
+    {
+      slug: "disengage",
+      displayName: "Desengajar",
+      actionCost: "action",
+      targetShape: "self",
+    },
+    {
+      slug: "help",
+      displayName: "Ajudar",
+      actionCost: "action",
+      targetShape: "single-creature",
+      targetRange: 5,
+    },
+    {
+      slug: "hide",
+      displayName: "Esconder",
+      actionCost: "action",
+      targetShape: "self",
+    },
+    {
+      slug: "ready",
+      displayName: "Preparar Ação",
+      actionCost: "action",
+      targetShape: "none",
+    },
+    {
+      slug: "search",
+      displayName: "Procurar",
+      actionCost: "action",
+      targetShape: "none",
+    },
+    {
+      slug: "use-object",
+      displayName: "Usar Objeto",
+      actionCost: "action",
+      targetShape: "none",
+    },
   ];
 
   async list(ctx: ParticipantContext): Promise<ActionDescriptor[]> {
@@ -45,7 +89,10 @@ export class GenericActionResolver implements ActionResolver {
   }
 
   private toDescriptor(
-    base: Pick<ActionDescriptor, 'slug' | 'displayName' | 'actionCost' | 'targetShape' | 'targetRange'>,
+    base: Pick<
+      ActionDescriptor,
+      "slug" | "displayName" | "actionCost" | "targetShape" | "targetRange"
+    >,
     ctx: ParticipantContext,
   ): ActionDescriptor {
     const economy = ctx.actionEconomy;
@@ -56,20 +103,20 @@ export class GenericActionResolver implements ActionResolver {
 
     if (conditionBlocked) {
       available = false;
-      disabledReason = 'PREREQUISITE_NOT_MET';
+      disabledReason = "PREREQUISITE_NOT_MET";
     } else if (economy) {
       if (!economy.isOnTurn) {
         available = false;
-        disabledReason = 'NOT_YOUR_TURN';
+        disabledReason = "NOT_YOUR_TURN";
       } else if (economy.actionUsed) {
         available = false;
-        disabledReason = 'ACTION_ALREADY_USED';
+        disabledReason = "ACTION_ALREADY_USED";
       }
     }
 
     return {
       ...base,
-      kind: 'generic',
+      kind: "generic",
       available,
       disabledReason,
     };
@@ -78,11 +125,11 @@ export class GenericActionResolver implements ActionResolver {
   private isBlockedByCondition(ctx: ParticipantContext): boolean {
     if (!ctx.conditions || ctx.conditions.length === 0) return false;
     const blocking = new Set([
-      'incapacitated',
-      'paralyzed',
-      'stunned',
-      'unconscious',
-      'petrified',
+      "incapacitated",
+      "paralyzed",
+      "stunned",
+      "unconscious",
+      "petrified",
     ]);
     return ctx.conditions.some((c) => blocking.has(c.toLowerCase()));
   }

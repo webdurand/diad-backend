@@ -20,35 +20,43 @@ export interface ClassAvailability {
 }
 
 export const CLASS_AVAILABILITY: Record<string, ClassAvailability> = {
-  fighter: { available: true, canonicalSubclasses: ['champion'] },
-  barbarian: { available: true, canonicalSubclasses: ['berserker'] },
-  cleric: { available: true, canonicalSubclasses: ['life'] },
-  paladin: { available: true, canonicalSubclasses: ['devotion'] },
-  wizard: { available: true, canonicalSubclasses: ['evocation'] },
-  sorcerer: { available: true, canonicalSubclasses: ['draconic'] },
+  fighter: { available: true, canonicalSubclasses: ["champion"] },
+  barbarian: { available: true, canonicalSubclasses: ["berserker"] },
+  cleric: { available: true, canonicalSubclasses: ["life"] },
+  paladin: { available: true, canonicalSubclasses: ["devotion"] },
+  wizard: { available: true, canonicalSubclasses: ["evocation"] },
+  sorcerer: { available: true, canonicalSubclasses: ["draconic"] },
   // Druid L1-L20 + Land canonical liberado (Sprint C+D do spec 012).
   // Wild Shape (Transformation) + Conjure Animals (Summoning) em tela.
-  druid: { available: true, canonicalSubclasses: ['druid-land', 'land'] },
+  druid: { available: true, canonicalSubclasses: ["druid-land", "land"] },
   // Bard L1-L20 + Lore canonical liberado. Bardic Inspiration + spellcasting em tela.
-  bard: { available: true, canonicalSubclasses: ['bard-lore', 'lore'] },
+  bard: { available: true, canonicalSubclasses: ["bard-lore", "lore"] },
   // Warlock: Pact Magic + Fiend canonical (Dark One's Blessing + Dark One's Own Luck).
-  warlock: { available: true, canonicalSubclasses: ['warlock-fiend', 'fiend'] },
+  warlock: { available: true, canonicalSubclasses: ["warlock-fiend", "fiend"] },
   // Monk: Focus Points (Flurry/Patient/Step) + Stunning Strike + Open Hand canonical
-  monk: { available: true, canonicalSubclasses: ['monk-open-hand', 'open-hand'] },
+  monk: {
+    available: true,
+    canonicalSubclasses: ["monk-open-hand", "open-hand"],
+  },
   // Rogue: Cunning Action (Dash/Disengage/Hide) + Steady Aim + Uncanny Dodge + Thief canonical
-  rogue: { available: true, canonicalSubclasses: ['rogue-thief', 'thief'] },
+  rogue: { available: true, canonicalSubclasses: ["rogue-thief", "thief"] },
   // Ranger: Hunter's Mark + Tireless + Nature's Veil + Hunter canonical
-  ranger: { available: true, canonicalSubclasses: ['ranger-hunter', 'hunter'] },
+  ranger: { available: true, canonicalSubclasses: ["ranger-hunter", "hunter"] },
 };
 
 function canonicalizeClassSlug(slug: string): string {
-  return slug.replace(/-phb$/, '');
+  return slug.replace(/-phb$/, "");
 }
 
 export function isClassAvailable(classSlug: string): boolean {
-  return CLASS_AVAILABILITY[canonicalizeClassSlug(classSlug)]?.available ?? false;
+  return (
+    CLASS_AVAILABILITY[canonicalizeClassSlug(classSlug)]?.available ?? false
+  );
 }
 
 export function getCanonicalSubclassSlugs(classSlug: string): string[] {
-  return CLASS_AVAILABILITY[canonicalizeClassSlug(classSlug)]?.canonicalSubclasses ?? [];
+  return (
+    CLASS_AVAILABILITY[canonicalizeClassSlug(classSlug)]?.canonicalSubclasses ??
+    []
+  );
 }

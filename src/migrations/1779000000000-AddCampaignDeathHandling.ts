@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 016 M0 — Hardcore mode toggle.
@@ -10,10 +10,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Ver `specs/016-play-shell-foundation/spec.md` §5.6 e §7.1.
  */
-export class AddCampaignDeathHandling1779000000000
-  implements MigrationInterface
-{
-  name = 'AddCampaignDeathHandling1779000000000';
+export class AddCampaignDeathHandling1779000000000 implements MigrationInterface {
+  name = "AddCampaignDeathHandling1779000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

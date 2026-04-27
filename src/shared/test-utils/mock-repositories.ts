@@ -1,4 +1,4 @@
-import { ObjectLiteral, Repository } from 'typeorm';
+import { ObjectLiteral, Repository } from "typeorm";
 
 type MockRepository<T extends ObjectLiteral = ObjectLiteral> = Partial<
   Record<keyof Repository<T>, jest.Mock>
@@ -15,7 +15,7 @@ export function createMockRepository<
     save: jest
       .fn()
       .mockImplementation((entity) =>
-        Promise.resolve({ id: 'mock-id', ...entity }),
+        Promise.resolve({ id: "mock-id", ...entity }),
       ),
     create: jest.fn().mockImplementation((entity) => entity),
     remove: jest.fn().mockResolvedValue(undefined),
@@ -47,7 +47,7 @@ export function createMockDataSource() {
               .fn()
               .mockImplementation((_entityClass: unknown, entity: unknown) =>
                 Promise.resolve({
-                  id: 'mock-id',
+                  id: "mock-id",
                   ...(entity as Record<string, unknown>),
                 }),
               ),

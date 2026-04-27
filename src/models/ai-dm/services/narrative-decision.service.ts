@@ -1,26 +1,26 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   NarrativeDecisionAffectedEntityType,
   NarrativeDecisionEntity,
   NarrativeDecisionPayoffWindow,
   NarrativeDecisionProvenance,
   NarrativeDecisionTag,
-} from 'src/entities/narrative-decision.entity';
-import { EventLogService } from 'src/models/session/services/event-log.service';
+} from "src/entities/narrative-decision.entity";
+import { EventLogService } from "src/models/session/services/event-log.service";
 
 const CANONICAL_TAGS: readonly NarrativeDecisionTag[] = [
-  'violence',
-  'mercy',
-  'alliance_formed',
-  'betrayal',
-  'oath_sworn',
-  'moral_gray',
-  'heroic',
-  'cowardly',
-  'secret_kept',
-  'bond_forged',
+  "violence",
+  "mercy",
+  "alliance_formed",
+  "betrayal",
+  "oath_sworn",
+  "moral_gray",
+  "heroic",
+  "cowardly",
+  "secret_kept",
+  "bond_forged",
 ];
 
 export interface CreateNarrativeDecisionDto {
@@ -62,10 +62,10 @@ export class NarrativeDecisionService {
       affectedEntityId: dto.affectedEntityId,
       tags,
       impactWeight,
-      payoffWindow: dto.payoffWindow ?? 'act',
+      payoffWindow: dto.payoffWindow ?? "act",
       payoffSceneTarget: dto.payoffSceneTarget,
       provenance: dto.provenance ?? {
-        extractedBy: 'player_explicit',
+        extractedBy: "player_explicit",
         confidence: 1,
       },
     });
@@ -76,7 +76,7 @@ export class NarrativeDecisionService {
       await this.eventLog.logEvent({
         sessionId: dto.sessionId,
         sceneId: dto.sceneId,
-        eventType: 'player_decision',
+        eventType: "player_decision",
         summary: dto.decisionText.slice(0, 240),
         details: {
           narrativeDecisionId: saved.id,
@@ -101,19 +101,16 @@ export class NarrativeDecisionService {
   ): Promise<NarrativeDecisionEntity[]> {
     return this.repo.find({
       where: { campaignId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
       skip: opts.offset ?? 0,
       take: opts.limit ?? 100,
     });
   }
 
-  async top(
-    campaignId: string,
-    limit = 5,
-  ): Promise<NarrativeDecisionEntity[]> {
+  async top(campaignId: string, limit = 5): Promise<NarrativeDecisionEntity[]> {
     return this.repo.find({
       where: { campaignId },
-      order: { impactWeight: 'DESC', createdAt: 'DESC' },
+      order: { impactWeight: "DESC", createdAt: "DESC" },
       take: limit,
     });
   }

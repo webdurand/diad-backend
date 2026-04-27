@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Wizard — Data gap: subclasses alternativas `wizard-abjurer`,
@@ -15,7 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - Illusionist: improved-minor-illusion
  */
 export class SeedWizardSubclassLevels1777130000000 implements MigrationInterface {
-  name = 'SeedWizardSubclassLevels1777130000000';
+  name = "SeedWizardSubclassLevels1777130000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     const [xphb] = (await queryRunner.query(

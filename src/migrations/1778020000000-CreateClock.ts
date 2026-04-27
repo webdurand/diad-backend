@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M1 — Blades in the Dark progress clocks.
@@ -7,7 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Quando filled == segments, on_full_action dispara evento via EventLogService.
  */
 export class CreateClock1778020000000 implements MigrationInterface {
-  name = 'CreateClock1778020000000';
+  name = "CreateClock1778020000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

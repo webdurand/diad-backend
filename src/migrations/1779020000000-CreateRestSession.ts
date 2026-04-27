@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 016 M0 — RestSession entity (audit + state delta + event triggered).
@@ -11,7 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Ver `specs/016-play-shell-foundation/spec.md` §6 e contract `rest-session.json`.
  */
 export class CreateRestSession1779020000000 implements MigrationInterface {
-  name = 'CreateRestSession1779020000000';
+  name = "CreateRestSession1779020000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
@@ -48,7 +48,9 @@ export class CreateRestSession1779020000000 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS idx_rest_sessions_campaign`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_rest_sessions_character_started`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_rest_sessions_character_started`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS rest_sessions`);
   }
 }

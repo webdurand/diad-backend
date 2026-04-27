@@ -1,23 +1,23 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { randomUUID } from 'crypto';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CharacterClassEntity } from 'src/entities/character-class.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { randomUUID } from "crypto";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterClassEntity } from "src/entities/character-class.entity";
 import type {
   ConditionInstance,
   ConditionSlug,
   ConditionSource,
   RepeatSaveTiming,
   SaveAbility,
-} from '../interfaces/combat.interfaces';
-import type { GameEventData } from '../interfaces/result.type';
-import { ConcentrationService } from './concentration.service';
-import { DiceService } from './dice.service';
+} from "../interfaces/combat.interfaces";
+import type { GameEventData } from "../interfaces/result.type";
+import { ConcentrationService } from "./concentration.service";
+import { DiceService } from "./dice.service";
 import {
   narrativeForConditionRemoval,
   type RemovalReason,
-} from './narrative-condition-removal';
+} from "./narrative-condition-removal";
 
 export interface ApplyConditionInput {
   slug: ConditionSlug;
@@ -50,7 +50,7 @@ function resolveSource(input: ApplyConditionInput): ConditionSource {
   if (input.sourceSpell) {
     return `spell:${input.sourceSpell}` as ConditionSource;
   }
-  return 'manual';
+  return "manual";
 }
 
 /**
@@ -80,16 +80,20 @@ export class ConditionLifecycleService {
     target: EncounterParticipantEntity,
     slug: string,
   ): Promise<boolean> {
-    if (target.type !== 'pc' || !target.characterId) return false;
-    if (!['charmed', 'frightened', 'poisoned'].includes(slug)) return false;
+    if (target.type !== "pc" || !target.characterId) return false;
+    if (!["charmed", "frightened", "poisoned"].includes(slug)) return false;
     const classes = await this.characterClasses.find({
       where: { character_id: target.characterId },
-      relations: ['class', 'subclass'],
+      relations: ["class", "subclass"],
     });
-    const druid = classes.find((c) => c.class?.slug === 'druid' || c.class?.slug === 'druid-phb');
+    const druid = classes.find(
+      (c) => c.class?.slug === "druid" || c.class?.slug === "druid-phb",
+    );
     if (!druid || druid.class_level < 10) return false;
-    const sub = (druid.subclass as { slug?: string } | undefined)?.slug?.replace(/-(phb|xphb)$/, '');
-    return sub === 'land';
+    const sub = (
+      druid.subclass as { slug?: string } | undefined
+    )?.slug?.replace(/-(phb|xphb)$/, "");
+    return sub === "land";
   }
 
   /**
@@ -116,7 +120,7 @@ export class ConditionLifecycleService {
         source: resolveSource(input),
         saveAbility: null,
         saveDc: null,
-        repeatSaveTiming: 'never',
+        repeatSaveTiming: "never",
         durationRoundsRemaining: 0,
         level: input.level,
         appliedAt: new Date().toISOString(),
@@ -124,9 +128,13 @@ export class ConditionLifecycleService {
       return {
         events: [
           {
-            event_type: 'condition_blocked_by_immunity',
+            event_type: "condition_blocked_by_immunity",
             target_participant_id: target.id,
-            data: { slug: input.slug, source: 'natures-ward', feature: 'Land Druid L10' },
+            data: {
+              slug: input.slug,
+              source: "natures-ward",
+              feature: "Land Druid L10",
+            },
           },
         ],
         instance: stubInstance,
@@ -143,17 +151,20 @@ export class ConditionLifecycleService {
       source: resolveSource(input),
       saveAbility: input.saveAbility ?? null,
       saveDc: input.saveDc ?? null,
-      repeatSaveTiming: input.repeatSaveTiming ?? 'never',
+      repeatSaveTiming: input.repeatSaveTiming ?? "never",
       durationRoundsRemaining: input.durationRoundsRemaining ?? null,
       level: input.level,
       appliedAt: new Date().toISOString(),
     };
 
-    target.conditionInstances = [...(target.conditionInstances ?? []), instance];
+    target.conditionInstances = [
+      ...(target.conditionInstances ?? []),
+      instance,
+    ];
     target.conditions = this.deriveSlugs(target.conditionInstances);
 
     // Vínculo grappledByParticipantId quando aplica grappled com appliedBy
-    if (input.slug === 'grappled' && input.appliedBy) {
+    if (input.slug === "grappled" && input.appliedBy) {
       target.grappledByParticipantId = input.appliedBy;
     }
 
@@ -161,7 +172,7 @@ export class ConditionLifecycleService {
 
     const events: GameEventData[] = [
       {
-        event_type: 'condition_applied',
+        event_type: "condition_applied",
         target_participant_id: target.id,
         actor_participant_id: input.appliedBy ?? undefined,
         data: {
@@ -191,7 +202,7 @@ export class ConditionLifecycleService {
   async removeConditionInstance(
     target: EncounterParticipantEntity,
     instanceId: string,
-    reason: RemovalReason | string = 'manual',
+    reason: RemovalReason | string = "manual",
   ): Promise<{ events: GameEventData[]; removed: boolean }> {
     const before = (target.conditionInstances ?? []).length;
     const removed = (target.conditionInstances ?? []).find(
@@ -206,23 +217,23 @@ export class ConditionLifecycleService {
     target.conditions = this.deriveSlugs(target.conditionInstances);
 
     // Se a instância removida era 'grappled', limpar vínculo
-    if (!target.conditionInstances.some((ci) => ci.slug === 'grappled')) {
+    if (!target.conditionInstances.some((ci) => ci.slug === "grappled")) {
       target.grappledByParticipantId = null;
     }
 
     await this.participants.save(target);
     const narrativeDescriptor = removed
       ? narrativeForConditionRemoval(removed.slug, reason)
-      : '';
+      : "";
     return {
       events: [
         {
-          event_type: 'condition_removed',
+          event_type: "condition_removed",
           target_participant_id: target.id,
           data: {
             instanceId,
             slug: removed?.slug ?? null,
-            source: removed?.source ?? 'manual',
+            source: removed?.source ?? "manual",
             removalReason: reason,
             narrativeDescriptor,
             // legado — manter `reason` por retrocompat com listeners antigos
@@ -253,30 +264,30 @@ export class ConditionLifecycleService {
       return { events: [], removed: [] };
     }
     const before = target.conditionInstances ?? [];
-    const toRemove = before.filter((ci) => ci.source === 'hp_zero');
+    const toRemove = before.filter((ci) => ci.source === "hp_zero");
     if (toRemove.length === 0) {
       return { events: [], removed: [] };
     }
-    target.conditionInstances = before.filter((ci) => ci.source !== 'hp_zero');
+    target.conditionInstances = before.filter((ci) => ci.source !== "hp_zero");
     target.conditions = this.deriveSlugs(target.conditionInstances);
-    if (!target.conditionInstances.some((ci) => ci.slug === 'grappled')) {
+    if (!target.conditionInstances.some((ci) => ci.slug === "grappled")) {
       target.grappledByParticipantId = null;
     }
     await this.participants.save(target);
 
     const events: GameEventData[] = toRemove.map((ci) => ({
-      event_type: 'condition_removed',
+      event_type: "condition_removed",
       target_participant_id: target.id,
       data: {
         instanceId: ci.id,
         slug: ci.slug,
         source: ci.source,
-        removalReason: 'hp_restored' as RemovalReason,
+        removalReason: "hp_restored" as RemovalReason,
         narrativeDescriptor: narrativeForConditionRemoval(
           ci.slug,
-          'hp_restored',
+          "hp_restored",
         ),
-        reason: 'hp_restored',
+        reason: "hp_restored",
       },
     }));
     return { events, removed: toRemove };
@@ -292,7 +303,7 @@ export class ConditionLifecycleService {
   async removeConditionsBySource(
     targets: EncounterParticipantEntity[],
     source: ConditionSource,
-    reason: RemovalReason = 'source_ended',
+    reason: RemovalReason = "source_ended",
   ): Promise<{ events: GameEventData[]; removedCount: number }> {
     const events: GameEventData[] = [];
     let removedCount = 0;
@@ -302,13 +313,13 @@ export class ConditionLifecycleService {
       if (toRemove.length === 0) continue;
       target.conditionInstances = before.filter((ci) => ci.source !== source);
       target.conditions = this.deriveSlugs(target.conditionInstances);
-      if (!target.conditionInstances.some((ci) => ci.slug === 'grappled')) {
+      if (!target.conditionInstances.some((ci) => ci.slug === "grappled")) {
         target.grappledByParticipantId = null;
       }
       await this.participants.save(target);
       for (const ci of toRemove) {
         events.push({
-          event_type: 'condition_removed',
+          event_type: "condition_removed",
           target_participant_id: target.id,
           data: {
             instanceId: ci.id,
@@ -332,15 +343,17 @@ export class ConditionLifecycleService {
    */
   async processEndOfTurn(
     target: EncounterParticipantEntity,
-    getSaveModifier: (
-      ability: SaveAbility,
-    ) => Promise<{ modifier: number; advantage: boolean; disadvantage: boolean }>,
+    getSaveModifier: (ability: SaveAbility) => Promise<{
+      modifier: number;
+      advantage: boolean;
+      disadvantage: boolean;
+    }>,
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
     const remaining: ConditionInstance[] = [];
     for (const ci of target.conditionInstances ?? []) {
       if (
-        ci.repeatSaveTiming === 'end_of_turn' &&
+        ci.repeatSaveTiming === "end_of_turn" &&
         ci.saveAbility &&
         ci.saveDc != null
       ) {
@@ -356,7 +369,7 @@ export class ConditionLifecycleService {
         const total = rolled + mod.modifier;
         const passed = total >= ci.saveDc;
         events.push({
-          event_type: 'end_of_turn_save_rolled',
+          event_type: "end_of_turn_save_rolled",
           target_participant_id: target.id,
           data: {
             instanceId: ci.id,
@@ -378,7 +391,7 @@ export class ConditionLifecycleService {
           ci.durationRoundsRemaining -= 1;
           if (ci.durationRoundsRemaining <= 0) {
             events.push({
-              event_type: 'condition_expired',
+              event_type: "condition_expired",
               target_participant_id: target.id,
               data: { instanceId: ci.id, slug: ci.slug },
             });
@@ -391,7 +404,7 @@ export class ConditionLifecycleService {
     if (remaining.length !== (target.conditionInstances ?? []).length) {
       target.conditionInstances = remaining;
       target.conditions = this.deriveSlugs(remaining);
-      if (!remaining.some((ci) => ci.slug === 'grappled')) {
+      if (!remaining.some((ci) => ci.slug === "grappled")) {
         target.grappledByParticipantId = null;
       }
       await this.participants.save(target);
@@ -412,14 +425,14 @@ export class ConditionLifecycleService {
       let changed = false;
       for (const ci of p.conditionInstances ?? []) {
         if (
-          ci.repeatSaveTiming !== 'end_of_turn' &&
+          ci.repeatSaveTiming !== "end_of_turn" &&
           ci.durationRoundsRemaining != null
         ) {
           ci.durationRoundsRemaining -= 1;
           if (ci.durationRoundsRemaining <= 0) {
             changed = true;
             events.push({
-              event_type: 'condition_expired',
+              event_type: "condition_expired",
               target_participant_id: p.id,
               data: { instanceId: ci.id, slug: ci.slug },
             });
@@ -432,7 +445,7 @@ export class ConditionLifecycleService {
       if (changed) {
         p.conditionInstances = remaining;
         p.conditions = this.deriveSlugs(remaining);
-        if (!remaining.some((ci) => ci.slug === 'grappled')) {
+        if (!remaining.some((ci) => ci.slug === "grappled")) {
           p.grappledByParticipantId = null;
         }
         await this.participants.save(p);

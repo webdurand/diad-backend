@@ -16,11 +16,11 @@
  */
 
 export type FateLadderTriggerKind =
-  | 'three_failed_death_saves'
-  | 'massive_damage_2024'
-  | 'instant_kill_effect';
+  | "three_failed_death_saves"
+  | "massive_damage_2024"
+  | "instant_kill_effect";
 
-export type DeathHandlingMode = 'narrative' | 'hardcore';
+export type DeathHandlingMode = "narrative" | "hardcore";
 
 export interface DamageEvent {
   /** HP antes do golpe. */
@@ -58,10 +58,10 @@ export function isMassiveDamage2024(event: DamageEvent): boolean {
 export function detectFateLadderTrigger(
   event: DamageEvent,
 ): FateLadderTriggerKind | null {
-  if (event.isInstantKillEffect) return 'instant_kill_effect';
-  if (isMassiveDamage2024(event)) return 'massive_damage_2024';
+  if (event.isInstantKillEffect) return "instant_kill_effect";
+  if (isMassiveDamage2024(event)) return "massive_damage_2024";
   if (event.wasDying && (event.failuresAfter ?? 0) >= 3) {
-    return 'three_failed_death_saves';
+    return "three_failed_death_saves";
   }
   return null;
 }
@@ -78,6 +78,6 @@ export function shouldOpenFateLadder(
   mode: DeathHandlingMode,
 ): boolean {
   if (trigger === null) return false;
-  if (mode === 'hardcore') return false;
+  if (mode === "hardcore") return false;
   return true;
 }

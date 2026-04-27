@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 import {
   AttackModifiers,
   DefenseModifiers,
   SaveModifiers,
   ConditionTurnEffect,
   HelpingState,
-} from '../interfaces/combat.interfaces';
+} from "../interfaces/combat.interfaces";
 
 /** Forma mínima de participant consumida pelos modificadores reativos (spec 003).
  * Definida localmente pra evitar coupling com a entity completa. */
@@ -35,20 +35,20 @@ export interface ReactiveAttackModifiers {
 @Injectable()
 export class ConditionEffectsService {
   private static readonly INCAPACITATED_CONDITIONS = [
-    'incapacitated',
-    'stunned',
-    'paralyzed',
-    'petrified',
-    'unconscious',
+    "incapacitated",
+    "stunned",
+    "paralyzed",
+    "petrified",
+    "unconscious",
   ];
 
   private static readonly NO_MOVE_CONDITIONS = [
-    'grappled',
-    'restrained',
-    'stunned',
-    'paralyzed',
-    'petrified',
-    'unconscious',
+    "grappled",
+    "restrained",
+    "stunned",
+    "paralyzed",
+    "petrified",
+    "unconscious",
   ];
 
   /**
@@ -57,19 +57,19 @@ export class ConditionEffectsService {
   getAttackModifiers(conditions: string[]): AttackModifiers {
     const set = new Set(conditions);
     return {
-      hasAdvantage: set.has('invisible'),
+      hasAdvantage: set.has("invisible"),
       hasDisadvantage:
-        set.has('blinded') ||
-        set.has('frightened') ||
-        set.has('poisoned') ||
-        set.has('prone') ||
-        set.has('restrained'),
+        set.has("blinded") ||
+        set.has("frightened") ||
+        set.has("poisoned") ||
+        set.has("prone") ||
+        set.has("restrained"),
       autoFail:
-        set.has('incapacitated') ||
-        set.has('stunned') ||
-        set.has('paralyzed') ||
-        set.has('petrified') ||
-        set.has('unconscious'),
+        set.has("incapacitated") ||
+        set.has("stunned") ||
+        set.has("paralyzed") ||
+        set.has("petrified") ||
+        set.has("unconscious"),
       autoCrit: false,
     };
   }
@@ -81,16 +81,15 @@ export class ConditionEffectsService {
     const set = new Set(conditions);
     return {
       attacksHaveAdvantage:
-        set.has('blinded') ||
-        set.has('paralyzed') ||
-        set.has('petrified') ||
-        set.has('restrained') ||
-        set.has('stunned') ||
-        set.has('unconscious'),
-      attacksHaveDisadvantage: set.has('invisible'),
+        set.has("blinded") ||
+        set.has("paralyzed") ||
+        set.has("petrified") ||
+        set.has("restrained") ||
+        set.has("stunned") ||
+        set.has("unconscious"),
+      attacksHaveDisadvantage: set.has("invisible"),
       autoHit: false,
-      autoCritIfMelee:
-        set.has('paralyzed') || set.has('unconscious'),
+      autoCritIfMelee: set.has("paralyzed") || set.has("unconscious"),
     };
   }
 
@@ -102,16 +101,16 @@ export class ConditionEffectsService {
     ability: string,
   ): SaveModifiers {
     const set = new Set(conditions);
-    const isStrOrDex = ability === 'str' || ability === 'dex';
+    const isStrOrDex = ability === "str" || ability === "dex";
     return {
       hasAdvantage: false,
       hasDisadvantage: false,
       autoFail:
         isStrOrDex &&
-        (set.has('paralyzed') ||
-          set.has('petrified') ||
-          set.has('stunned') ||
-          set.has('unconscious')),
+        (set.has("paralyzed") ||
+          set.has("petrified") ||
+          set.has("stunned") ||
+          set.has("unconscious")),
     };
   }
 
@@ -163,12 +162,12 @@ export class ConditionEffectsService {
     const effects: ConditionTurnEffect[] = [];
     const set = new Set(conditions);
 
-    if (set.has('frightened')) {
+    if (set.has("frightened")) {
       effects.push({
-        condition: 'frightened',
-        effect: 'check_source_visible',
+        condition: "frightened",
+        effect: "check_source_visible",
         description:
-          'Must check if source of fear is visible. Cannot willingly move closer.',
+          "Must check if source of fear is visible. Cannot willingly move closer.",
       });
     }
 
@@ -182,37 +181,37 @@ export class ConditionEffectsService {
     const effects: ConditionTurnEffect[] = [];
     const set = new Set(conditions);
 
-    if (set.has('frightened')) {
+    if (set.has("frightened")) {
       effects.push({
-        condition: 'frightened',
-        effect: 'repeat_save',
-        description: 'Can repeat saving throw to end the frightened condition.',
+        condition: "frightened",
+        effect: "repeat_save",
+        description: "Can repeat saving throw to end the frightened condition.",
       });
     }
 
-    if (set.has('stunned')) {
+    if (set.has("stunned")) {
       effects.push({
-        condition: 'stunned',
-        effect: 'repeat_save',
-        description: 'Can repeat saving throw to end the stunned condition.',
+        condition: "stunned",
+        effect: "repeat_save",
+        description: "Can repeat saving throw to end the stunned condition.",
       });
     }
 
-    if (set.has('charmed')) {
+    if (set.has("charmed")) {
       effects.push({
-        condition: 'charmed',
-        effect: 'repeat_save',
+        condition: "charmed",
+        effect: "repeat_save",
         description:
-          'Can repeat saving throw to end the charmed condition (if applicable).',
+          "Can repeat saving throw to end the charmed condition (if applicable).",
       });
     }
 
-    if (set.has('restrained')) {
+    if (set.has("restrained")) {
       effects.push({
-        condition: 'restrained',
-        effect: 'repeat_save',
+        condition: "restrained",
+        effect: "repeat_save",
         description:
-          'Can attempt to break free (STR check or DEX save, depending on source).',
+          "Can attempt to break free (STR check or DEX save, depending on source).",
       });
     }
 
@@ -223,14 +222,14 @@ export class ConditionEffectsService {
    * Check if the creature is blinded.
    */
   isBlinded(conditions: string[]): boolean {
-    return conditions.includes('blinded');
+    return conditions.includes("blinded");
   }
 
   /**
    * Check if the creature is charmed.
    */
   isCharmed(conditions: string[]): boolean {
-    return conditions.includes('charmed');
+    return conditions.includes("charmed");
   }
 
   /**
@@ -261,15 +260,15 @@ export class ConditionEffectsService {
     // em condições que zeram percepção (blinded/unconscious/petrified). Sight
     // system completo fica pra spec 005.
     const attackerBlinded =
-      attacker.conditions.includes('blinded') ||
-      attacker.conditions.includes('unconscious') ||
-      attacker.conditions.includes('petrified');
+      attacker.conditions.includes("blinded") ||
+      attacker.conditions.includes("unconscious") ||
+      attacker.conditions.includes("petrified");
     const attackerIncapacitated =
-      attacker.conditions.includes('incapacitated') ||
-      attacker.conditions.includes('stunned') ||
-      attacker.conditions.includes('paralyzed') ||
-      attacker.conditions.includes('unconscious') ||
-      attacker.conditions.includes('petrified');
+      attacker.conditions.includes("incapacitated") ||
+      attacker.conditions.includes("stunned") ||
+      attacker.conditions.includes("paralyzed") ||
+      attacker.conditions.includes("unconscious") ||
+      attacker.conditions.includes("petrified");
 
     if (
       target.dodgingUntilTurnOfParticipantId === target.id &&
@@ -280,10 +279,10 @@ export class ConditionEffectsService {
     }
 
     // Hidden — atacante escondido tem vantagem; alvo escondido dá desvantagem ao ataque.
-    if (attacker.conditions.includes('hidden')) {
+    if (attacker.conditions.includes("hidden")) {
       out.advantage = true;
     }
-    if (target.conditions.includes('hidden')) {
+    if (target.conditions.includes("hidden")) {
       out.disadvantage = true;
     }
 
@@ -309,59 +308,56 @@ export class ConditionEffectsService {
     const summaries: string[] = [];
     const set = new Set(conditions);
 
-    if (set.has('blinded'))
+    if (set.has("blinded"))
       summaries.push(
-        'Blinded: Disadvantage on attacks, attacks against have advantage.',
+        "Blinded: Disadvantage on attacks, attacks against have advantage.",
       );
-    if (set.has('charmed'))
+    if (set.has("charmed"))
       summaries.push(
         "Charmed: Can't attack the charmer. Charmer has advantage on social checks.",
       );
-    if (set.has('deafened'))
+    if (set.has("deafened"))
       summaries.push(
         "Deafened: Can't hear. Automatically fails hearing-based checks.",
       );
-    if (set.has('frightened'))
+    if (set.has("frightened"))
       summaries.push(
         "Frightened: Disadvantage on ability checks and attacks while source is visible. Can't move closer.",
       );
-    if (set.has('grappled'))
-      summaries.push('Grappled: Speed is 0.');
-    if (set.has('incapacitated'))
+    if (set.has("grappled")) summaries.push("Grappled: Speed is 0.");
+    if (set.has("incapacitated"))
+      summaries.push("Incapacitated: Can't take actions or reactions.");
+    if (set.has("invisible"))
       summaries.push(
-        "Incapacitated: Can't take actions or reactions.",
+        "Invisible: Advantage on attacks, attacks against have disadvantage.",
       );
-    if (set.has('invisible'))
+    if (set.has("paralyzed"))
       summaries.push(
-        'Invisible: Advantage on attacks, attacks against have disadvantage.',
+        "Paralyzed: Incapacitated. Auto-fail STR/DEX saves. Attacks have advantage. Melee hits are auto-crits.",
       );
-    if (set.has('paralyzed'))
+    if (set.has("petrified"))
       summaries.push(
-        'Paralyzed: Incapacitated. Auto-fail STR/DEX saves. Attacks have advantage. Melee hits are auto-crits.',
+        "Petrified: Incapacitated. Auto-fail STR/DEX saves. Resistance to all damage. Immune to poison/disease.",
       );
-    if (set.has('petrified'))
+    if (set.has("poisoned"))
       summaries.push(
-        'Petrified: Incapacitated. Auto-fail STR/DEX saves. Resistance to all damage. Immune to poison/disease.',
+        "Poisoned: Disadvantage on attack rolls and ability checks.",
       );
-    if (set.has('poisoned'))
+    if (set.has("prone"))
       summaries.push(
-        'Poisoned: Disadvantage on attack rolls and ability checks.',
+        "Prone: Disadvantage on attacks. Melee attacks against have advantage, ranged have disadvantage. Standing costs half movement.",
       );
-    if (set.has('prone'))
+    if (set.has("restrained"))
       summaries.push(
-        'Prone: Disadvantage on attacks. Melee attacks against have advantage, ranged have disadvantage. Standing costs half movement.',
+        "Restrained: Speed 0. Disadvantage on attacks and DEX saves. Attacks against have advantage.",
       );
-    if (set.has('restrained'))
+    if (set.has("stunned"))
       summaries.push(
-        'Restrained: Speed 0. Disadvantage on attacks and DEX saves. Attacks against have advantage.',
+        "Stunned: Incapacitated. Auto-fail STR/DEX saves. Attacks against have advantage.",
       );
-    if (set.has('stunned'))
+    if (set.has("unconscious"))
       summaries.push(
-        'Stunned: Incapacitated. Auto-fail STR/DEX saves. Attacks against have advantage.',
-      );
-    if (set.has('unconscious'))
-      summaries.push(
-        'Unconscious: Incapacitated, drops prone. Auto-fail STR/DEX saves. Attacks have advantage. Melee auto-crits.',
+        "Unconscious: Incapacitated, drops prone. Auto-fail STR/DEX saves. Attacks have advantage. Melee auto-crits.",
       );
 
     return summaries;

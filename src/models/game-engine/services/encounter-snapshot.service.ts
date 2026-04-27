@@ -1,23 +1,23 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { PersistentAreaEffectEntity } from 'src/entities/persistent-area-effect.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
 import {
   failure,
   GameErrorCode,
   GameResult,
   success,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 import type {
   EncounterSnapshot,
   SnapshotParticipant,
   TileEffectSnapshot,
-} from '../interfaces/encounter-snapshot.interface';
-import { CombatService } from './combat.service';
-import { PersistentAreaService } from './persistent-area.service';
-import type { TurnActionBlock } from '../interfaces/combat.interfaces';
+} from "../interfaces/encounter-snapshot.interface";
+import { CombatService } from "./combat.service";
+import { PersistentAreaService } from "./persistent-area.service";
+import type { TurnActionBlock } from "../interfaces/combat.interfaces";
 
 /**
  * Spec 003 T049 — monta `EncounterSnapshot` auto-contido para consumo de IA.
@@ -50,11 +50,11 @@ export class EncounterSnapshotService {
 
     const participants = await this.participantRepo.find({
       where: { encounterId: encounter.id },
-      relations: ['monster'],
+      relations: ["monster"],
     });
 
     const currentTurnParticipantId =
-      encounter.turnOrder[encounter.currentTurnIndex] ?? '';
+      encounter.turnOrder[encounter.currentTurnIndex] ?? "";
 
     const snapParticipants: SnapshotParticipant[] = await Promise.all(
       participants.map(async (p) => {
@@ -80,10 +80,10 @@ export class EncounterSnapshotService {
 
         return {
           id: p.id,
-          type: p.type as 'pc' | 'monster' | 'npc',
+          type: p.type,
           faction: p.faction,
           displayName: p.displayName,
-          controlledBy: p.controlledBy ?? 'pc',
+          controlledBy: p.controlledBy ?? "pc",
           position: {
             x: p.positionX ?? 0,
             y: p.positionY ?? 0,
@@ -108,12 +108,12 @@ export class EncounterSnapshotService {
           helpingAllyParticipantId: p.helpingAllyParticipantId,
           helpingTargetParticipantId: p.helpingTargetParticipantId,
           readiedAction: p.readiedAction,
-          hidden: (p.conditions ?? []).includes('hidden'),
+          hidden: (p.conditions ?? []).includes("hidden"),
           isConcentrating: p.isConcentrating ?? false,
           concentratingOn: p.concentratingOn ?? null,
           statblockRef:
-            p.type === 'monster' && p.monster
-              ? { monsterSlug: p.monster.slug ?? p.monster.name ?? '' }
+            p.type === "monster" && p.monster
+              ? { monsterSlug: p.monster.slug ?? p.monster.name ?? "" }
               : undefined,
           availableActions,
           distances: computeDistances(p, participants),
@@ -215,7 +215,7 @@ function computeVisibility(
   // completo fica pra 005.
   for (const other of all) {
     if (other.id === self.id) continue;
-    const otherHidden = (other.conditions ?? []).includes('hidden');
+    const otherHidden = (other.conditions ?? []).includes("hidden");
     // `self` vê `other` se other não está escondido
     out[other.id] = !otherHidden;
   }

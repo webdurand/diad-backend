@@ -1,6 +1,6 @@
-import { generateSlug } from './slug-generator';
-import { parseEntries } from './entries-parser';
-import { extractTraitEntries, type RaceTraitEntry } from './transform-races';
+import { generateSlug } from "./slug-generator";
+import { parseEntries } from "./entries-parser";
+import { extractTraitEntries, type RaceTraitEntry } from "./transform-races";
 
 // ────────────────────────────────────────────────────────────────
 // Output type
@@ -23,39 +23,55 @@ export interface TransformedTrait {
 // Enrich traits with additional race-level data
 // ────────────────────────────────────────────────────────────────
 
-function resolveTraitSpecific(entry: RaceTraitEntry, raceRaw: Record<string, unknown>): Record<string, unknown> | null {
+function resolveTraitSpecific(
+  entry: RaceTraitEntry,
+  raceRaw: Record<string, unknown>,
+): Record<string, unknown> | null {
   const nameLower = entry.name.toLowerCase();
 
   // Detect breath weapon tables
-  if (nameLower.includes('breath weapon')) {
+  if (nameLower.includes("breath weapon")) {
     return { breath_weapon: true };
   }
 
   // Detect spell-related traits (additionalSpells on the race)
-  if (raceRaw.additionalSpells && (nameLower.includes('spell') || nameLower.includes('magic') || nameLower.includes('caller') || nameLower.includes('cantrip'))) {
+  if (
+    raceRaw.additionalSpells &&
+    (nameLower.includes("spell") ||
+      nameLower.includes("magic") ||
+      nameLower.includes("caller") ||
+      nameLower.includes("cantrip"))
+  ) {
     return { spell_options: raceRaw.additionalSpells };
   }
 
   return null;
 }
 
-function resolveLanguageOptions(entry: RaceTraitEntry): Record<string, unknown> | null {
+function resolveLanguageOptions(
+  entry: RaceTraitEntry,
+): Record<string, unknown> | null {
   const nameLower = entry.name.toLowerCase();
-  if (nameLower.includes('language')) {
-    const text = entry.description.join(' ').toLowerCase();
-    if (text.includes('choose') || text.includes('additional')) {
-      return { choose: 1, type: 'languages' };
+  if (nameLower.includes("language")) {
+    const text = entry.description.join(" ").toLowerCase();
+    if (text.includes("choose") || text.includes("additional")) {
+      return { choose: 1, type: "languages" };
     }
   }
   return null;
 }
 
-function resolveProficiencyChoices(entry: RaceTraitEntry): Record<string, unknown> | null {
+function resolveProficiencyChoices(
+  entry: RaceTraitEntry,
+): Record<string, unknown> | null {
   const nameLower = entry.name.toLowerCase();
-  const text = entry.description.join(' ').toLowerCase();
+  const text = entry.description.join(" ").toLowerCase();
 
-  if ((nameLower.includes('proficiency') || nameLower.includes('tool')) && (text.includes('choose') || text.includes('your choice'))) {
-    return { choose: 1, type: 'proficiencies' };
+  if (
+    (nameLower.includes("proficiency") || nameLower.includes("tool")) &&
+    (text.includes("choose") || text.includes("your choice"))
+  ) {
+    return { choose: 1, type: "proficiencies" };
   }
 
   return null;
@@ -73,7 +89,9 @@ export interface TraitExtractionInput {
   raw: Record<string, unknown>;
 }
 
-export function extractTraitsFromRace(input: TraitExtractionInput): TransformedTrait[] {
+export function extractTraitsFromRace(
+  input: TraitExtractionInput,
+): TransformedTrait[] {
   const traitEntries = extractTraitEntries(input.entries);
   if (traitEntries.length === 0) return [];
 
@@ -82,8 +100,15 @@ export function extractTraitsFromRace(input: TraitExtractionInput): TransformedT
   for (const entry of traitEntries) {
     // Skip generic size/speed entries that aren't real traits
     const nameLower = entry.name.toLowerCase();
-    if (nameLower === 'size' || nameLower === 'size:' || nameLower === 'speed' || nameLower === 'speed:') continue;
-    if (nameLower === 'creature type' || nameLower === 'creature type:') continue;
+    if (
+      nameLower === "size" ||
+      nameLower === "size:" ||
+      nameLower === "speed" ||
+      nameLower === "speed:"
+    )
+      continue;
+    if (nameLower === "creature type" || nameLower === "creature type:")
+      continue;
 
     const slug = generateSlug(entry.name, input.sourceCode, input.srd52);
 
@@ -97,7 +122,11 @@ export function extractTraitsFromRace(input: TraitExtractionInput): TransformedT
       source_code: input.sourceCode,
       race_slug: input.raceSlug,
       parent_slug: null,
-      raw: { name: entry.name, entries: entry.description, source: input.sourceCode },
+      raw: {
+        name: entry.name,
+        entries: entry.description,
+        source: input.sourceCode,
+      },
     });
   }
 
@@ -119,7 +148,7 @@ export function extractTraitsFromSubrace(input: {
 
   for (const entry of traitEntries) {
     const nameLower = entry.name.toLowerCase();
-    if (nameLower === 'size' || nameLower === 'size:') continue;
+    if (nameLower === "size" || nameLower === "size:") continue;
 
     const slug = generateSlug(entry.name, input.sourceCode, input.srd52);
 
@@ -133,7 +162,11 @@ export function extractTraitsFromSubrace(input: {
       source_code: input.sourceCode,
       race_slug: input.raceSlug,
       parent_slug: null,
-      raw: { name: entry.name, entries: entry.description, source: input.sourceCode },
+      raw: {
+        name: entry.name,
+        entries: entry.description,
+        source: input.sourceCode,
+      },
     });
   }
 

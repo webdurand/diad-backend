@@ -1,5 +1,9 @@
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { ROOM_AUTHORIZER, RoomAuthorizer, parseRoomKey } from './room-authorizer.interface';
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import {
+  ROOM_AUTHORIZER,
+  RoomAuthorizer,
+  parseRoomKey,
+} from "./room-authorizer.interface";
 
 @Injectable()
 export class RoomAuthorizerRegistry {
@@ -7,7 +11,8 @@ export class RoomAuthorizerRegistry {
   private readonly byPrefix = new Map<string, RoomAuthorizer>();
 
   constructor(
-    @Optional() @Inject(ROOM_AUTHORIZER)
+    @Optional()
+    @Inject(ROOM_AUTHORIZER)
     injected?: RoomAuthorizer | RoomAuthorizer[] | null,
   ) {
     const list: RoomAuthorizer[] = Array.isArray(injected)
@@ -37,13 +42,13 @@ export class RoomAuthorizerRegistry {
 
   async canJoin(userId: string, roomKey: string): Promise<AuthorizationResult> {
     const parsed = parseRoomKey(roomKey);
-    if (!parsed) return { ok: false, reason: 'INVALID_ROOM_KEY' };
+    if (!parsed) return { ok: false, reason: "INVALID_ROOM_KEY" };
 
     const authorizer = this.byPrefix.get(parsed.prefix);
-    if (!authorizer) return { ok: false, reason: 'UNKNOWN_PREFIX' };
+    if (!authorizer) return { ok: false, reason: "UNKNOWN_PREFIX" };
 
     const allowed = await authorizer.canJoin(userId, roomKey);
-    return allowed ? { ok: true } : { ok: false, reason: 'UNAUTHORIZED' };
+    return allowed ? { ok: true } : { ok: false, reason: "UNAUTHORIZED" };
   }
 
   getRegisteredPrefixes(): string[] {
@@ -53,4 +58,7 @@ export class RoomAuthorizerRegistry {
 
 export type AuthorizationResult =
   | { ok: true }
-  | { ok: false; reason: 'INVALID_ROOM_KEY' | 'UNKNOWN_PREFIX' | 'UNAUTHORIZED' };
+  | {
+      ok: false;
+      reason: "INVALID_ROOM_KEY" | "UNKNOWN_PREFIX" | "UNAUTHORIZED";
+    };

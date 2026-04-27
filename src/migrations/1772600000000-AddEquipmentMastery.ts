@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddEquipmentMastery1772600000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -8,8 +8,6 @@ export class AddEquipmentMastery1772600000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "equipments" DROP COLUMN "mastery"`,
-    );
+    await queryRunner.query(`ALTER TABLE "equipments" DROP COLUMN "mastery"`);
   }
 }

@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateWorldTables1774100000000 implements MigrationInterface {
-  name = 'CreateWorldTables1774100000000';
+  name = "CreateWorldTables1774100000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- campaigns ---
@@ -28,7 +28,9 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "users"("id") ON DELETE CASCADE
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_campaigns_dm" ON "campaigns" ("dm_user_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_campaigns_dm" ON "campaigns" ("dm_user_id")`,
+    );
 
     // --- campaign_players ---
     await queryRunner.query(`
@@ -49,8 +51,12 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "characters"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_cp_campaign" ON "campaign_players" ("campaign_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_cp_user" ON "campaign_players" ("user_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cp_campaign" ON "campaign_players" ("campaign_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_cp_user" ON "campaign_players" ("user_id")`,
+    );
 
     // --- locations ---
     await queryRunner.query(`
@@ -77,8 +83,12 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "locations"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_loc_campaign" ON "locations" ("campaign_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_loc_parent" ON "locations" ("parent_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_loc_campaign" ON "locations" ("campaign_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_loc_parent" ON "locations" ("parent_id")`,
+    );
 
     // --- location_connections ---
     await queryRunner.query(`
@@ -124,7 +134,9 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "locations"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_fac_campaign" ON "factions" ("campaign_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_fac_campaign" ON "factions" ("campaign_id")`,
+    );
 
     // --- npcs ---
     await queryRunner.query(`
@@ -159,8 +171,12 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "monsters"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_npc_campaign" ON "npcs" ("campaign_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_npc_location" ON "npcs" ("current_location_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_npc_campaign" ON "npcs" ("campaign_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_npc_location" ON "npcs" ("current_location_id")`,
+    );
 
     // --- npc_relationships ---
     await queryRunner.query(`
@@ -183,7 +199,9 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "factions"("id") ON DELETE CASCADE
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_nr_source" ON "npc_relationships" ("source_npc_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_nr_source" ON "npc_relationships" ("source_npc_id")`,
+    );
 
     // --- faction_relations ---
     await queryRunner.query(`
@@ -222,7 +240,9 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "campaigns"("id") ON DELETE CASCADE
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_sa_campaign" ON "story_arcs" ("campaign_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_sa_campaign" ON "story_arcs" ("campaign_id")`,
+    );
 
     // --- quests ---
     await queryRunner.query(`
@@ -254,7 +274,9 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "locations"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_q_campaign" ON "quests" ("campaign_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_q_campaign" ON "quests" ("campaign_id")`,
+    );
 
     // --- quest_objectives ---
     await queryRunner.query(`
@@ -309,7 +331,9 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "npcs"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_lt_campaign" ON "loot_tables" ("campaign_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_lt_campaign" ON "loot_tables" ("campaign_id")`,
+    );
 
     // --- loot_table_items ---
     await queryRunner.query(`
@@ -357,7 +381,9 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
           REFERENCES "loot_tables"("id") ON DELETE SET NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_et_campaign" ON "encounter_templates" ("campaign_id")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_et_campaign" ON "encounter_templates" ("campaign_id")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

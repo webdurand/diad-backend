@@ -1,26 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { EncounterEntity } from 'src/entities/encounter.entity';
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
 import {
   failure,
   GameErrorCode,
   GameResult,
   success,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 import type {
   ActionStep,
   PlannedActionStep,
   TurnExecutionResult,
-} from '../interfaces/combat.interfaces';
-import { AiTurnExecutor } from './ai-turn-executor.interface';
-import { EncounterSnapshotService } from './encounter-snapshot.service';
-import { CombatService } from './combat.service';
-import { GenericActionsService } from './generic-actions.service';
-import { MovementService } from './movement.service';
-import { SpellCastingService } from './spell-casting.service';
-import type { GenericActionDto } from '../dto/generic-action.dto';
+} from "../interfaces/combat.interfaces";
+import { AiTurnExecutor } from "./ai-turn-executor.interface";
+import { EncounterSnapshotService } from "./encounter-snapshot.service";
+import { CombatService } from "./combat.service";
+import { GenericActionsService } from "./generic-actions.service";
+import { MovementService } from "./movement.service";
+import { SpellCastingService } from "./spell-casting.service";
+import type { GenericActionDto } from "../dto/generic-action.dto";
 
 /**
  * Spec 003 T050 — orquestrador de `POST /encounters/:id/ai-turn`.
@@ -62,7 +62,7 @@ export class AiTurnService {
       where: { id: encounterId },
     });
     if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
-    if (encounter.status !== 'active')
+    if (encounter.status !== "active")
       return failure(GameErrorCode.ENCOUNTER_NOT_ACTIVE);
 
     const participant = await this.participantRepo.findOne({
@@ -75,10 +75,10 @@ export class AiTurnService {
       participant.lastAiTurnRound === encounter.currentRound &&
       participant.lastAiTurnResult
     ) {
-      return success(participant.lastAiTurnResult as TurnExecutionResult);
+      return success(participant.lastAiTurnResult);
     }
 
-    if (participant.controlledBy !== 'ai') {
+    if (participant.controlledBy !== "ai") {
       return failure(GameErrorCode.NOT_AI_CONTROLLED);
     }
     if (encounter.turnOrder[encounter.currentTurnIndex] !== participant.id) {
@@ -100,7 +100,7 @@ export class AiTurnService {
           encounter,
           participant,
           start,
-          'ai_timeout',
+          "ai_timeout",
         );
       }
       return planRes;
@@ -118,7 +118,7 @@ export class AiTurnService {
       executedSteps.push(executed);
       // Se step falhou criticamente (ex: TARGET_DEFEATED), para — o
       // frontend/executor pode re-chamar com continuationFrom.
-      if (!executed.result.ok && step.kind !== 'end-turn') {
+      if (!executed.result.ok && step.kind !== "end-turn") {
         this.logger.warn(
           `Step ${step.kind} falhou: ${executed.result.error?.code}`,
         );
@@ -127,15 +127,17 @@ export class AiTurnService {
     }
 
     // Garante end-turn
-    if (!executedSteps.some((s) => s.kind === 'end-turn')) {
+    if (!executedSteps.some((s) => s.kind === "end-turn")) {
       const endRes = await this.combatService.endTurn(encounter.id);
       executedSteps.push({
-        kind: 'end-turn',
+        kind: "end-turn",
         payload: {},
         result: {
           ok: endRes.ok,
-          summary: endRes.ok ? 'Turno encerrado' : (endRes as { error?: string }).error ?? 'Falhou',
-          events: [{ type: 'turn_ended', participantId }],
+          summary: endRes.ok
+            ? "Turno encerrado"
+            : ((endRes as { error?: string }).error ?? "Falhou"),
+          events: [{ type: "turn_ended", participantId }],
         },
         timestamp: new Date().toISOString(),
       });
@@ -156,7 +158,7 @@ export class AiTurnService {
           max: finalParticipant?.maxHp ?? 0,
         },
         conditions: finalParticipant?.conditions ?? [],
-        dyingState: finalParticipant?.dyingState ?? 'none',
+        dyingState: finalParticipant?.dyingState ?? "none",
       },
       tookMs: Date.now() - start,
       rationale: planRes.value.rationale,
@@ -182,7 +184,7 @@ export class AiTurnService {
     const ts = new Date().toISOString();
     try {
       switch (step.kind) {
-        case 'move': {
+        case "move": {
           const res = await this.movementService.moveParticipant(
             encounter.id,
             participantId,
@@ -191,22 +193,25 @@ export class AiTurnService {
             authUserId,
           );
           return {
-            kind: 'move',
+            kind: "move",
             payload: { to: step.to },
             result: {
               ok: res.ok,
               summary: res.ok
                 ? `Movimento para (${step.to.x},${step.to.y})`
-                : (res as { error?: string }).error ?? 'Falhou',
+                : ((res as { error?: string }).error ?? "Falhou"),
               events: [],
               error: res.ok
                 ? undefined
-                : { code: res.code, message: (res as { error?: string }).error ?? '' },
+                : {
+                    code: res.code,
+                    message: (res as { error?: string }).error ?? "",
+                  },
             },
             timestamp: ts,
           };
         }
-        case 'attack': {
+        case "attack": {
           const target = step.targetParticipantIds[0];
           const res = await this.combatService.resolveAttack(encounter.id, {
             attackerParticipantId: participantId,
@@ -215,7 +220,7 @@ export class AiTurnService {
             ownerUserId: authUserId,
           } as Parameters<typeof this.combatService.resolveAttack>[1]);
           return {
-            kind: 'attack',
+            kind: "attack",
             payload: {
               actionName: step.actionName,
               targetParticipantIds: step.targetParticipantIds,
@@ -224,16 +229,19 @@ export class AiTurnService {
               ok: res.ok,
               summary: res.ok
                 ? `Atacou com ${step.actionName}`
-                : (res as { error?: string }).error ?? 'Falhou',
+                : ((res as { error?: string }).error ?? "Falhou"),
               events: [],
               error: res.ok
                 ? undefined
-                : { code: res.code, message: (res as { error?: string }).error ?? '' },
+                : {
+                    code: res.code,
+                    message: (res as { error?: string }).error ?? "",
+                  },
             },
             timestamp: ts,
           };
         }
-        case 'cast-spell': {
+        case "cast-spell": {
           const res = await this.spellCastingService.castSpellInCombat({
             encounterId: encounter.id,
             participantId,
@@ -245,29 +253,32 @@ export class AiTurnService {
             typeof this.spellCastingService.castSpellInCombat
           >[0]);
           return {
-            kind: 'cast-spell',
+            kind: "cast-spell",
             payload: { spellSlug: step.spellSlug },
             result: {
               ok: res.ok,
               summary: res.ok
                 ? `Conjurou ${step.spellSlug}`
-                : (res as { error?: string }).error ?? 'Falhou',
+                : ((res as { error?: string }).error ?? "Falhou"),
               events: [],
               error: res.ok
                 ? undefined
-                : { code: res.code, message: (res as { error?: string }).error ?? '' },
+                : {
+                    code: res.code,
+                    message: (res as { error?: string }).error ?? "",
+                  },
             },
             timestamp: ts,
           };
         }
-        case 'dodge':
-        case 'dash':
-        case 'disengage':
-        case 'help':
-        case 'hide':
-        case 'ready':
-        case 'search':
-        case 'use-object': {
+        case "dodge":
+        case "dash":
+        case "disengage":
+        case "help":
+        case "hide":
+        case "ready":
+        case "search":
+        case "use-object": {
           const dto = toGenericActionDto(participantId, step);
           const res = await this.genericActionsService.execute(
             encounter.id,
@@ -280,25 +291,31 @@ export class AiTurnService {
                 payload: dto as unknown as Record<string, unknown>,
                 result: {
                   ok: false,
-                  summary: (res as { error?: string }).error ?? 'Falhou',
+                  summary: (res as { error?: string }).error ?? "Falhou",
                   events: [],
-                  error: { code: res.code, message: (res as { error?: string }).error ?? '' },
+                  error: {
+                    code: res.code,
+                    message: (res as { error?: string }).error ?? "",
+                  },
                 },
                 timestamp: ts,
               };
         }
-        case 'end-turn': {
+        case "end-turn": {
           const res = await this.combatService.endTurn(encounter.id);
           return {
-            kind: 'end-turn',
+            kind: "end-turn",
             payload: {},
             result: {
               ok: res.ok,
-              summary: 'Turno encerrado',
-              events: [{ type: 'turn_ended', participantId }],
+              summary: "Turno encerrado",
+              events: [{ type: "turn_ended", participantId }],
               error: res.ok
                 ? undefined
-                : { code: res.code, message: (res as { error?: string }).error ?? '' },
+                : {
+                    code: res.code,
+                    message: (res as { error?: string }).error ?? "",
+                  },
             },
             timestamp: ts,
           };
@@ -313,7 +330,7 @@ export class AiTurnService {
           ok: false,
           summary: `Erro: ${msg}`,
           events: [],
-          error: { code: 'INTERNAL', message: msg },
+          error: { code: "INTERNAL", message: msg },
         },
         timestamp: ts,
       };
@@ -330,14 +347,14 @@ export class AiTurnService {
     const result: TurnExecutionResult = {
       steps: [
         {
-          kind: 'end-turn',
+          kind: "end-turn",
           payload: { reason },
           result: {
             ok: true,
             summary: `Turno encerrado por ${reason}`,
             events: [
               { type: reason, participantId: participant.id },
-              { type: 'turn_ended', participantId: participant.id },
+              { type: "turn_ended", participantId: participant.id },
             ],
           },
           timestamp: new Date().toISOString(),
@@ -367,45 +384,46 @@ function toGenericActionDto(
   step: PlannedActionStep,
 ): GenericActionDto {
   switch (step.kind) {
-    case 'dodge':
-    case 'dash':
-    case 'disengage':
-    case 'hide':
+    case "dodge":
+    case "dash":
+    case "disengage":
+    case "hide":
       return { kind: step.kind, participantId } as GenericActionDto;
-    case 'help':
+    case "help":
       return {
-        kind: 'help',
+        kind: "help",
         participantId,
         allyParticipantId: step.allyParticipantId,
         targetParticipantId: step.targetParticipantId,
       } as GenericActionDto;
-    case 'ready':
+    case "ready":
       return {
-        kind: 'ready',
+        kind: "ready",
         participantId,
         trigger: step.trigger,
         readiedAction:
-          step.readiedAction.kind === 'attack'
+          step.readiedAction.kind === "attack"
             ? {
-                kind: 'attack',
-                actionName: (step.readiedAction as { actionName?: string })
-                  .actionName ?? '',
+                kind: "attack",
+                actionName:
+                  (step.readiedAction as { actionName?: string }).actionName ??
+                  "",
               }
             : {
-                kind: 'move',
+                kind: "move",
                 to: (step.readiedAction as { to?: { x: number; y: number } })
                   .to ?? { x: 0, y: 0 },
               },
       } as unknown as GenericActionDto;
-    case 'search':
+    case "search":
       return {
-        kind: 'search',
+        kind: "search",
         participantId,
         ability: step.ability,
       } as GenericActionDto;
-    case 'use-object':
+    case "use-object":
       return {
-        kind: 'use-object',
+        kind: "use-object",
         participantId,
         objectRef: step.objectRef,
       } as GenericActionDto;

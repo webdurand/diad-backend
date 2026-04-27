@@ -1,18 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterStateEntity,
   CampaignEntity,
   XpAwardEventEntity,
-} from 'src/entities';
-import type { XpAwardSource } from 'src/entities/xp-award-event.entity';
-import { CharacterStateService } from '../../characters/services/character-state.service';
-import {
-  GameResult,
-  failure,
-  success,
-} from '../interfaces/result.type';
+} from "src/entities";
+import type { XpAwardSource } from "src/entities/xp-award-event.entity";
+import { CharacterStateService } from "../../characters/services/character-state.service";
+import { GameResult, failure, success } from "../interfaces/result.type";
 
 /**
  * Spec 016 M4 — XP Award service granular.
@@ -52,7 +48,7 @@ export interface XpAwardResult {
   nextLevelXp: number | null;
   levelUpReady: boolean;
   eventId: string;
-  modeApplied: 'rules' | 'milestone' | 'hybrid';
+  modeApplied: "rules" | "milestone" | "hybrid";
 }
 
 @Injectable()
@@ -67,11 +63,9 @@ export class XpAwardService {
     private readonly characterStateService: CharacterStateService,
   ) {}
 
-  async awardXp(
-    request: XpAwardRequest,
-  ): Promise<GameResult<XpAwardResult>> {
+  async awardXp(request: XpAwardRequest): Promise<GameResult<XpAwardResult>> {
     if (request.amount < 0) {
-      return failure('Amount de XP deve ser positivo.', 'INVALID_ACTION');
+      return failure("Amount de XP deve ser positivo.", "INVALID_ACTION");
     }
 
     const mode = await this.resolveXpMode(request.campaignId);
@@ -84,7 +78,7 @@ export class XpAwardService {
           characterId: request.characterId,
           amount: 0,
           source: request.source,
-          reason: request.reason + ' [skipped:' + mode + ']',
+          reason: request.reason + " [skipped:" + mode + "]",
           encounterId: request.encounterId,
           questStepId: request.questStepId,
           narrativeJustification: request.narrativeJustification,
@@ -135,35 +129,36 @@ export class XpAwardService {
 
   private async resolveXpMode(
     campaignId?: string,
-  ): Promise<'rules' | 'milestone' | 'hybrid'> {
-    if (!campaignId) return 'rules';
+  ): Promise<"rules" | "milestone" | "hybrid"> {
+    if (!campaignId) return "rules";
     const campaign = (await this.campaignRepo.findOne({
       where: { id: campaignId },
     })) as (CampaignEntity & { xpMode?: string }) | null;
-    const mode = (campaign as any)?.xp_mode ?? (campaign as any)?.xpMode ?? 'rules';
-    if (mode === 'milestone' || mode === 'hybrid') return mode;
-    return 'rules';
+    const mode =
+      (campaign as any)?.xp_mode ?? (campaign as any)?.xpMode ?? "rules";
+    if (mode === "milestone" || mode === "hybrid") return mode;
+    return "rules";
   }
 
   private adjustForMode(
     amount: number,
     source: XpAwardSource,
-    mode: 'rules' | 'milestone' | 'hybrid',
+    mode: "rules" | "milestone" | "hybrid",
   ): number {
-    if (mode === 'rules') return amount;
-    if (mode === 'milestone') {
+    if (mode === "rules") return amount;
+    if (mode === "milestone") {
       // Só quest_step e quest_completion contam. Outros skip.
-      return source === 'quest_step' || source === 'quest_completion'
+      return source === "quest_step" || source === "quest_completion"
         ? amount
         : 0;
     }
     // hybrid: combat + skill_challenge passam; roleplay/exploration skip.
     if (
-      source === 'combat_kill' ||
-      source === 'combat_resolved_peacefully' ||
-      source === 'skill_challenge' ||
-      source === 'quest_step' ||
-      source === 'quest_completion'
+      source === "combat_kill" ||
+      source === "combat_resolved_peacefully" ||
+      source === "skill_challenge" ||
+      source === "quest_step" ||
+      source === "quest_completion"
     ) {
       return amount;
     }

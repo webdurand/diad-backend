@@ -9,23 +9,23 @@
  * é puro em relação a HTTP/DB exceto nos `.save()`.
  */
 
-import { GenericActionsService } from '../generic-actions.service';
-import { ConditionEffectsService } from '../condition-effects.service';
-import { DiceService } from '../dice.service';
-import type { EncounterEntity } from 'src/entities/encounter.entity';
-import type { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { GenericActionsService } from "../generic-actions.service";
+import { ConditionEffectsService } from "../condition-effects.service";
+import { DiceService } from "../dice.service";
+import type { EncounterEntity } from "src/entities/encounter.entity";
+import type { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 
 function makeEncounter(
   turnOrder: string[],
   currentTurnIndex = 0,
 ): Partial<EncounterEntity> {
   return {
-    id: 'enc-1',
-    status: 'active',
+    id: "enc-1",
+    status: "active",
     turnOrder,
     currentTurnIndex,
     currentRound: 1,
-    sessionId: 'sess-1',
+    sessionId: "sess-1",
   } as Partial<EncounterEntity>;
 }
 
@@ -36,8 +36,8 @@ function makeParticipant(
   return {
     id,
     displayName: id,
-    type: 'monster',
-    faction: 'enemy',
+    type: "monster",
+    faction: "enemy",
     conditions: [],
     actionUsed: false,
     bonusActionUsed: false,
@@ -47,7 +47,7 @@ function makeParticipant(
     currentHp: 10,
     maxHp: 10,
     reactionsUsed: 0,
-    dyingState: 'none',
+    dyingState: "none",
     dodgingUntilTurnOfParticipantId: null,
     helpingAllyParticipantId: null,
     helpingTargetParticipantId: null,
@@ -68,7 +68,7 @@ function makeService(
   };
   const participantRepo = {
     findOne: jest.fn(async ({ where }: { where: Record<string, unknown> }) => {
-      if ('id' in where) return participants[where.id as string] ?? null;
+      if ("id" in where) return participants[where.id as string] ?? null;
       return null;
     }),
     save: jest.fn(async (p: EncounterParticipantEntity) => {
@@ -79,166 +79,191 @@ function makeService(
   const diceService = new DiceService();
   const conditionEffects = new ConditionEffectsService();
   const svc = new GenericActionsService(
-    encounterRepo as unknown as import('typeorm').Repository<EncounterEntity>,
-    participantRepo as unknown as import('typeorm').Repository<EncounterParticipantEntity>,
+    encounterRepo as unknown as import("typeorm").Repository<EncounterEntity>,
+    participantRepo as unknown as import("typeorm").Repository<EncounterParticipantEntity>,
     diceService,
     conditionEffects,
   );
   return { svc, encounterRepo, participantRepo };
 }
 
-describe('GenericActionsService', () => {
-  describe('dodge', () => {
-    it('marca actionUsed + dodgingUntilTurnOfParticipantId=self.id', async () => {
-      const actor = makeParticipant('a');
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
-      const r = await svc.execute('enc-1', { kind: 'dodge', participantId: 'a' });
+describe("GenericActionsService", () => {
+  describe("dodge", () => {
+    it("marca actionUsed + dodgingUntilTurnOfParticipantId=self.id", async () => {
+      const actor = makeParticipant("a");
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const r = await svc.execute("enc-1", {
+        kind: "dodge",
+        participantId: "a",
+      });
       expect(r.ok).toBe(true);
       if (r.ok) {
-        expect(r.value.step.kind).toBe('dodge');
+        expect(r.value.step.kind).toBe("dodge");
         expect(r.value.finalState.actionUsed).toBe(true);
       }
-      expect(actor.dodgingUntilTurnOfParticipantId).toBe('a');
+      expect(actor.dodgingUntilTurnOfParticipantId).toBe("a");
     });
 
-    it('rejeita com NO_ACTION_AVAILABLE se actionUsed=true', async () => {
-      const actor = makeParticipant('a', { actionUsed: true });
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
-      const r = await svc.execute('enc-1', { kind: 'dodge', participantId: 'a' });
+    it("rejeita com NO_ACTION_AVAILABLE se actionUsed=true", async () => {
+      const actor = makeParticipant("a", { actionUsed: true });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const r = await svc.execute("enc-1", {
+        kind: "dodge",
+        participantId: "a",
+      });
       expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.code).toBe('NO_ACTION_AVAILABLE');
+      if (!r.ok) expect(r.code).toBe("NO_ACTION_AVAILABLE");
     });
 
-    it('rejeita com CONDITION_PREVENTS_ACTION se incapacitated', async () => {
-      const actor = makeParticipant('a', { conditions: ['incapacitated'] });
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
-      const r = await svc.execute('enc-1', { kind: 'dodge', participantId: 'a' });
+    it("rejeita com CONDITION_PREVENTS_ACTION se incapacitated", async () => {
+      const actor = makeParticipant("a", { conditions: ["incapacitated"] });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const r = await svc.execute("enc-1", {
+        kind: "dodge",
+        participantId: "a",
+      });
       expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.code).toBe('CONDITION_PREVENTS_ACTION');
+      if (!r.ok) expect(r.code).toBe("CONDITION_PREVENTS_ACTION");
     });
   });
 
-  describe('help', () => {
-    it('setta a tríade helping* no ajudante', async () => {
-      const helper = makeParticipant('helper', { faction: 'ally' });
-      const ally = makeParticipant('ally', { faction: 'ally' });
-      const enemy = makeParticipant('enemy', { faction: 'enemy' });
-      const { svc } = makeService(makeEncounter(['helper']), {
+  describe("help", () => {
+    it("setta a tríade helping* no ajudante", async () => {
+      const helper = makeParticipant("helper", { faction: "ally" });
+      const ally = makeParticipant("ally", { faction: "ally" });
+      const enemy = makeParticipant("enemy", { faction: "enemy" });
+      const { svc } = makeService(makeEncounter(["helper"]), {
         helper,
         ally,
         enemy,
       });
-      const r = await svc.execute('enc-1', {
-        kind: 'help',
-        participantId: 'helper',
-        allyParticipantId: 'ally',
-        targetParticipantId: 'enemy',
+      const r = await svc.execute("enc-1", {
+        kind: "help",
+        participantId: "helper",
+        allyParticipantId: "ally",
+        targetParticipantId: "enemy",
       });
       expect(r.ok).toBe(true);
-      expect(helper.helpingAllyParticipantId).toBe('ally');
-      expect(helper.helpingTargetParticipantId).toBe('enemy');
-      expect(helper.helpingUntilTurnOfParticipantId).toBe('helper');
+      expect(helper.helpingAllyParticipantId).toBe("ally");
+      expect(helper.helpingTargetParticipantId).toBe("enemy");
+      expect(helper.helpingUntilTurnOfParticipantId).toBe("helper");
     });
 
-    it('rejeita se ally é faction diferente', async () => {
-      const helper = makeParticipant('helper', { faction: 'ally' });
-      const wrongAlly = makeParticipant('wrong', { faction: 'enemy' });
-      const enemy = makeParticipant('enemy', { faction: 'enemy' });
-      const { svc } = makeService(makeEncounter(['helper']), {
+    it("rejeita se ally é faction diferente", async () => {
+      const helper = makeParticipant("helper", { faction: "ally" });
+      const wrongAlly = makeParticipant("wrong", { faction: "enemy" });
+      const enemy = makeParticipant("enemy", { faction: "enemy" });
+      const { svc } = makeService(makeEncounter(["helper"]), {
         helper,
         wrong: wrongAlly,
         enemy,
       });
-      const r = await svc.execute('enc-1', {
-        kind: 'help',
-        participantId: 'helper',
-        allyParticipantId: 'wrong',
-        targetParticipantId: 'enemy',
+      const r = await svc.execute("enc-1", {
+        kind: "help",
+        participantId: "helper",
+        allyParticipantId: "wrong",
+        targetParticipantId: "enemy",
       });
       expect(r.ok).toBe(false);
     });
   });
 
-  describe('hide', () => {
-    it('adiciona hidden às conditions quando passa o check', async () => {
-      const actor = makeParticipant('a');
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
+  describe("hide", () => {
+    it("adiciona hidden às conditions quando passa o check", async () => {
+      const actor = makeParticipant("a");
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
       // Força roll alto via mock
       const spy = jest
-        .spyOn(DiceService.prototype, 'rollExpression')
-        .mockReturnValue({ expression: '1d20', rolls: [18], modifier: 0, total: 18 });
-      const r = await svc.execute('enc-1', { kind: 'hide', participantId: 'a' });
+        .spyOn(DiceService.prototype, "rollExpression")
+        .mockReturnValue({
+          expression: "1d20",
+          rolls: [18],
+          modifier: 0,
+          total: 18,
+        });
+      const r = await svc.execute("enc-1", {
+        kind: "hide",
+        participantId: "a",
+      });
       expect(r.ok).toBe(true);
-      expect(actor.conditions).toContain('hidden');
+      expect(actor.conditions).toContain("hidden");
       spy.mockRestore();
     });
 
-    it('NÃO adiciona hidden quando falha (mas ainda consome ação)', async () => {
-      const actor = makeParticipant('a');
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
+    it("NÃO adiciona hidden quando falha (mas ainda consome ação)", async () => {
+      const actor = makeParticipant("a");
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
       const spy = jest
-        .spyOn(DiceService.prototype, 'rollExpression')
-        .mockReturnValue({ expression: '1d20', rolls: [3], modifier: 0, total: 3 });
-      const r = await svc.execute('enc-1', { kind: 'hide', participantId: 'a' });
+        .spyOn(DiceService.prototype, "rollExpression")
+        .mockReturnValue({
+          expression: "1d20",
+          rolls: [3],
+          modifier: 0,
+          total: 3,
+        });
+      const r = await svc.execute("enc-1", {
+        kind: "hide",
+        participantId: "a",
+      });
       expect(r.ok).toBe(true);
-      expect(actor.conditions).not.toContain('hidden');
+      expect(actor.conditions).not.toContain("hidden");
       expect(actor.actionUsed).toBe(true);
       spy.mockRestore();
     });
   });
 
-  describe('ready', () => {
-    it('persiste readiedAction com trigger enemy_enters_range', async () => {
-      const actor = makeParticipant('a');
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
-      const r = await svc.execute('enc-1', {
-        kind: 'ready',
-        participantId: 'a',
-        trigger: { kind: 'enemy_enters_range', rangeFt: 5 },
-        readiedAction: { kind: 'attack', actionName: 'Longsword' },
+  describe("ready", () => {
+    it("persiste readiedAction com trigger enemy_enters_range", async () => {
+      const actor = makeParticipant("a");
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const r = await svc.execute("enc-1", {
+        kind: "ready",
+        participantId: "a",
+        trigger: { kind: "enemy_enters_range", rangeFt: 5 },
+        readiedAction: { kind: "attack", actionName: "Longsword" },
       } as Parameters<typeof svc.execute>[1]);
       expect(r.ok).toBe(true);
       expect(actor.readiedAction).toBeDefined();
-      expect(actor.readiedAction?.trigger.kind).toBe('enemy_enters_range');
+      expect(actor.readiedAction?.trigger.kind).toBe("enemy_enters_range");
     });
 
-    it('rejeita com INVALID_READY_TRIGGER se rangeFt ausente', async () => {
-      const actor = makeParticipant('a');
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
-      const r = await svc.execute('enc-1', {
-        kind: 'ready',
-        participantId: 'a',
-        trigger: { kind: 'enemy_enters_range', rangeFt: 0 },
-        readiedAction: { kind: 'attack', actionName: 'Longsword' },
+    it("rejeita com INVALID_READY_TRIGGER se rangeFt ausente", async () => {
+      const actor = makeParticipant("a");
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const r = await svc.execute("enc-1", {
+        kind: "ready",
+        participantId: "a",
+        trigger: { kind: "enemy_enters_range", rangeFt: 0 },
+        readiedAction: { kind: "attack", actionName: "Longsword" },
       } as Parameters<typeof svc.execute>[1]);
       expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.code).toBe('INVALID_READY_TRIGGER');
+      if (!r.ok) expect(r.code).toBe("INVALID_READY_TRIGGER");
     });
   });
 
-  describe('use-object', () => {
-    it('aplica poção de cura', async () => {
-      const actor = makeParticipant('a', { currentHp: 5, maxHp: 20 });
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
-      const r = await svc.execute('enc-1', {
-        kind: 'use-object',
-        participantId: 'a',
-        objectRef: { source: 'inventory', slug: 'potion-of-healing' },
+  describe("use-object", () => {
+    it("aplica poção de cura", async () => {
+      const actor = makeParticipant("a", { currentHp: 5, maxHp: 20 });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const r = await svc.execute("enc-1", {
+        kind: "use-object",
+        participantId: "a",
+        objectRef: { source: "inventory", slug: "potion-of-healing" },
       });
       expect(r.ok).toBe(true);
       expect(actor.currentHp).toBeGreaterThan(5);
     });
 
-    it('rejeita com ITEM_NOT_USABLE pra slug desconhecido', async () => {
-      const actor = makeParticipant('a');
-      const { svc } = makeService(makeEncounter(['a']), { a: actor });
-      const r = await svc.execute('enc-1', {
-        kind: 'use-object',
-        participantId: 'a',
-        objectRef: { source: 'inventory', slug: 'banana' },
+    it("rejeita com ITEM_NOT_USABLE pra slug desconhecido", async () => {
+      const actor = makeParticipant("a");
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const r = await svc.execute("enc-1", {
+        kind: "use-object",
+        participantId: "a",
+        objectRef: { source: "inventory", slug: "banana" },
       });
       expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.code).toBe('ITEM_NOT_USABLE');
+      if (!r.ok) expect(r.code).toBe("ITEM_NOT_USABLE");
     });
   });
 });

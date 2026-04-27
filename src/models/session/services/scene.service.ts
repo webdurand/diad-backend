@@ -1,15 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { SceneEntity } from 'src/entities/scene.entity';
-import { SceneNpcEntity } from 'src/entities/scene-npc.entity';
-import {
-  ArcBeat,
-  CampaignEntity,
-} from 'src/entities/campaign.entity';
-import { GameSessionEntity } from 'src/entities/game-session.entity';
-import { VowEntity } from 'src/entities/vow.entity';
-import { CampaignService } from 'src/models/world/services/campaign.service';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { SceneEntity } from "src/entities/scene.entity";
+import { SceneNpcEntity } from "src/entities/scene-npc.entity";
+import { ArcBeat, CampaignEntity } from "src/entities/campaign.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
+import { VowEntity } from "src/entities/vow.entity";
+import { CampaignService } from "src/models/world/services/campaign.service";
 
 export interface CreateSceneDto {
   locationId?: string;
@@ -19,14 +16,14 @@ export interface CreateSceneDto {
 }
 
 const BEAT_ORDER: ArcBeat[] = [
-  'YOU',
-  'NEED',
-  'GO',
-  'SEARCH',
-  'FIND',
-  'TAKE',
-  'RETURN',
-  'CHANGE',
+  "YOU",
+  "NEED",
+  "GO",
+  "SEARCH",
+  "FIND",
+  "TAKE",
+  "RETURN",
+  "CHANGE",
 ];
 
 @Injectable()
@@ -45,10 +42,7 @@ export class SceneService {
     private readonly campaignService: CampaignService,
   ) {}
 
-  async create(
-    sessionId: string,
-    dto: CreateSceneDto,
-  ): Promise<SceneEntity> {
+  async create(sessionId: string, dto: CreateSceneDto): Promise<SceneEntity> {
     // Deactivate current active scene
     await this.sceneRepo.update(
       { sessionId, isActive: true },
@@ -63,7 +57,7 @@ export class SceneService {
     const campaign = await this.resolveCampaign(sessionId);
     let arcBeat: ArcBeat | undefined;
     if (campaign) {
-      await this.campaignService.incrementCount(campaign.id, 'scenes');
+      await this.campaignService.incrementCount(campaign.id, "scenes");
       arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber);
     }
 
@@ -96,8 +90,10 @@ export class SceneService {
     campaignId: string,
     sceneNumber: number,
   ): Promise<ArcBeat> {
-    const campaign = await this.campaignRepo.findOne({ where: { id: campaignId } });
-    if (!campaign) throw new NotFoundException('Campanha nao encontrada.');
+    const campaign = await this.campaignRepo.findOne({
+      where: { id: campaignId },
+    });
+    if (!campaign) throw new NotFoundException("Campanha nao encontrada.");
 
     const max = campaign.contentBudget.maxScenes;
     const current = campaign.arcState.currentBeat;
@@ -105,23 +101,23 @@ export class SceneService {
     let reason: string;
 
     if (sceneNumber === 1) {
-      next = 'YOU';
-      reason = 'first_scene';
+      next = "YOU";
+      reason = "first_scene";
     } else if (sceneNumber >= max) {
-      next = 'CHANGE';
-      reason = 'budget_final_scene';
+      next = "CHANGE";
+      reason = "budget_final_scene";
     } else if (sceneNumber === max - 1) {
-      next = 'RETURN';
-      reason = 'budget_penultimate_forced_return';
+      next = "RETURN";
+      reason = "budget_penultimate_forced_return";
     } else if (campaign.questionAnswered) {
-      next = 'RETURN';
-      reason = 'central_question_answered';
+      next = "RETURN";
+      reason = "central_question_answered";
     } else if (await this.mainVowFulfilled(campaignId)) {
-      next = 'RETURN';
-      reason = 'main_vow_fulfilled';
+      next = "RETURN";
+      reason = "main_vow_fulfilled";
     } else {
       next = this.nextBeatLinear(current);
-      reason = 'linear_advance';
+      reason = "linear_advance";
     }
 
     if (next !== current) {
@@ -139,7 +135,7 @@ export class SceneService {
 
   private nextBeatLinear(current: ArcBeat): ArcBeat {
     const idx = BEAT_ORDER.indexOf(current);
-    if (idx < 0 || idx >= BEAT_ORDER.length - 1) return 'CHANGE';
+    if (idx < 0 || idx >= BEAT_ORDER.length - 1) return "CHANGE";
     return BEAT_ORDER[idx + 1];
   }
 
@@ -159,11 +155,13 @@ export class SceneService {
       throw new NotFoundException({
         ok: false,
         error: `Arc beat inválido: ${newBeat}.`,
-        code: 'ARC_BEAT_INVALID',
+        code: "ARC_BEAT_INVALID",
       });
     }
-    const campaign = await this.campaignRepo.findOne({ where: { id: campaignId } });
-    if (!campaign) throw new NotFoundException('Campanha nao encontrada.');
+    const campaign = await this.campaignRepo.findOne({
+      where: { id: campaignId },
+    });
+    if (!campaign) throw new NotFoundException("Campanha nao encontrada.");
 
     const sceneNumber = atScene ?? campaign.currentCounts.scenes;
     const current = campaign.arcState.currentBeat;
@@ -192,29 +190,34 @@ export class SceneService {
       summaryKeyFacts?: Record<string, any>;
     },
   ): Promise<GameSessionEntity> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+    });
     if (!session) {
       throw new NotFoundException({
         ok: false,
-        error: 'Sessão não encontrada.',
-        code: 'SESSION_NOT_FOUND',
+        error: "Sessão não encontrada.",
+        code: "SESSION_NOT_FOUND",
       });
     }
-    if (payload.summaryText !== undefined) session.summaryText = payload.summaryText;
+    if (payload.summaryText !== undefined)
+      session.summaryText = payload.summaryText;
     if (payload.summaryKeyFacts !== undefined)
       session.summaryKeyFacts = payload.summaryKeyFacts;
-    session.status = 'completed';
+    session.status = "completed";
     if (!session.endedAt) session.endedAt = new Date();
     return this.sessionRepo.save(session);
   }
 
   async getSession(sessionId: string): Promise<GameSessionEntity> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+    });
     if (!session) {
       throw new NotFoundException({
         ok: false,
-        error: 'Sessão não encontrada.',
-        code: 'SESSION_NOT_FOUND',
+        error: "Sessão não encontrada.",
+        code: "SESSION_NOT_FOUND",
       });
     }
     return session;
@@ -222,13 +225,17 @@ export class SceneService {
 
   private async mainVowFulfilled(campaignId: string): Promise<boolean> {
     const vow = await this.vowRepo.findOne({
-      where: { campaignId, isMainVow: true, status: 'fulfilled' },
+      where: { campaignId, isMainVow: true, status: "fulfilled" },
     });
     return !!vow;
   }
 
-  private async resolveCampaign(sessionId: string): Promise<CampaignEntity | null> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+  private async resolveCampaign(
+    sessionId: string,
+  ): Promise<CampaignEntity | null> {
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+    });
     if (!session?.campaignId) return null;
     return this.campaignRepo.findOne({ where: { id: session.campaignId } });
   }
@@ -236,7 +243,7 @@ export class SceneService {
   async getActive(sessionId: string): Promise<SceneEntity | null> {
     return this.sceneRepo.findOne({
       where: { sessionId, isActive: true },
-      relations: ['location'],
+      relations: ["location"],
     });
   }
 
@@ -245,7 +252,7 @@ export class SceneService {
     dto: Partial<CreateSceneDto>,
   ): Promise<SceneEntity> {
     const scene = await this.sceneRepo.findOne({ where: { id: sceneId } });
-    if (!scene) throw new NotFoundException('Cena nao encontrada.');
+    if (!scene) throw new NotFoundException("Cena nao encontrada.");
     Object.assign(scene, dto);
     return this.sceneRepo.save(scene);
   }
@@ -274,22 +281,22 @@ export class SceneService {
   async getSceneNpcs(sceneId: string): Promise<SceneNpcEntity[]> {
     return this.sceneNpcRepo.find({
       where: { sceneId },
-      relations: ['npc'],
+      relations: ["npc"],
     });
   }
 
   async listBySession(sessionId: string): Promise<SceneEntity[]> {
     return this.sceneRepo.find({
       where: { sessionId },
-      order: { sceneNumber: 'ASC' },
+      order: { sceneNumber: "ASC" },
     });
   }
 
   private async getNextSceneNumber(sessionId: string): Promise<number> {
     const result = await this.sceneRepo
-      .createQueryBuilder('s')
-      .select('COALESCE(MAX(s.scene_number), 0)', 'max')
-      .where('s.session_id = :sessionId', { sessionId })
+      .createQueryBuilder("s")
+      .select("COALESCE(MAX(s.scene_number), 0)", "max")
+      .where("s.session_id = :sessionId", { sessionId })
       .getRawOne();
     return (parseInt(result.max, 10) || 0) + 1;
   }

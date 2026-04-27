@@ -7,26 +7,26 @@ import {
   Logger,
   NotFoundException,
   forwardRef,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { MonsterEntity } from 'src/entities/monster.entity';
-import { CharacterEntity } from 'src/entities/character.entity';
-import { EquipmentEntity } from 'src/entities/equipment.entity';
-import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { CharacterStateService } from 'src/models/characters/services/character-state.service';
-import { InventoryService } from 'src/models/characters/services/inventory.service';
-import { DiceService } from './dice.service';
-import { EventService } from './event.service';
-import { SessionService } from './session.service';
-import { CampaignService } from 'src/models/world/services/campaign.service';
-import { CapstonesService } from './capstones.service';
-import { getAbilityModifier } from 'src/shared/srd-utils';
-import { XP_THRESHOLDS } from 'src/shared/srd-constants';
-import { EquipmentSourceEnum } from 'src/entities/enums';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { MonsterEntity } from "src/entities/monster.entity";
+import { CharacterEntity } from "src/entities/character.entity";
+import { EquipmentEntity } from "src/entities/equipment.entity";
+import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import { InventoryService } from "src/models/characters/services/inventory.service";
+import { DiceService } from "./dice.service";
+import { EventService } from "./event.service";
+import { SessionService } from "./session.service";
+import { CampaignService } from "src/models/world/services/campaign.service";
+import { CapstonesService } from "./capstones.service";
+import { getAbilityModifier } from "src/shared/srd-utils";
+import { XP_THRESHOLDS } from "src/shared/srd-constants";
+import { EquipmentSourceEnum } from "src/entities/enums";
 
 export interface CreateEncounterDto {
   name: string;
@@ -34,10 +34,21 @@ export interface CreateEncounterDto {
 
 /** Spec 007: shape interno normalizado (após normalizeResolvePayload) */
 export interface NormalizedResolveDto {
-  outcome: 'victory' | 'retreat' | 'negotiation' | 'defeat';
+  outcome: "victory" | "retreat" | "negotiation" | "defeat";
   xpRewards: Array<{ characterId: string; xp: number }>;
-  goldRewards: Array<{ characterId: string; gp: number; cp?: number; sp?: number; pp?: number }>;
-  itemRewards: Array<{ characterId: string; equipmentId?: string; magicItemId?: string; quantity?: number }>;
+  goldRewards: Array<{
+    characterId: string;
+    gp: number;
+    cp?: number;
+    sp?: number;
+    pp?: number;
+  }>;
+  itemRewards: Array<{
+    characterId: string;
+    equipmentId?: string;
+    magicItemId?: string;
+    quantity?: number;
+  }>;
   ownerUserId: string;
 }
 
@@ -65,7 +76,7 @@ export interface InitiativeRollResult {
 export interface EncounterDifficulty {
   totalMonsterXp: number;
   adjustedXp: number;
-  threshold: 'trivial' | 'easy' | 'medium' | 'hard' | 'deadly';
+  threshold: "trivial" | "easy" | "medium" | "hard" | "deadly";
   partySize: number;
   partyAverageLevel: number;
 }
@@ -102,7 +113,7 @@ export class EncounterService {
     const encounter = this.encounterRepo.create({
       sessionId,
       name: dto.name,
-      status: 'preparing',
+      status: "preparing",
     });
     const saved = await this.encounterRepo.save(encounter);
 
@@ -118,7 +129,9 @@ export class EncounterService {
       // 2. Add PCs from campaign players (their chosen characters)
       if (session.campaignId) {
         try {
-          const players = await this.campaignService.getPlayers(session.campaignId);
+          const players = await this.campaignService.getPlayers(
+            session.campaignId,
+          );
           for (const player of players) {
             if (player.characterId) {
               charIds.add(player.characterId);
@@ -175,21 +188,18 @@ export class EncounterService {
     }
     const character = await this.characterRepo.findOne({
       where: { id: characterId },
-      select: ['id', 'userId'],
+      select: ["id", "userId"],
     });
     if (character?.userId) return character.userId;
     return fallbackUserId;
   }
 
-  async getById(
-    encounterId: string,
-  ): Promise<EncounterEntity> {
+  async getById(encounterId: string): Promise<EncounterEntity> {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
-      relations: ['participants'],
+      relations: ["participants"],
     });
-    if (!encounter)
-      throw new NotFoundException('Encontro nao encontrado.');
+    if (!encounter) throw new NotFoundException("Encontro nao encontrado.");
     await this.enrichPcParticipants(encounter);
     return encounter;
   }
@@ -198,18 +208,20 @@ export class EncounterService {
    * Spec 006: enriquece PC participants com dados do sheet (HP, AC, speed, init).
    * Resolve ownerId em batch para evitar N queries.
    */
-  private async enrichPcParticipants(encounter: EncounterEntity): Promise<void> {
+  private async enrichPcParticipants(
+    encounter: EncounterEntity,
+  ): Promise<void> {
     const pcParticipants = (encounter.participants ?? []).filter(
-      (p) => p.type === 'pc' && p.characterId,
+      (p) => p.type === "pc" && p.characterId,
     );
     if (pcParticipants.length === 0) return;
 
     // Batch: buscar owners dos characterIds
     const charIds = pcParticipants.map((p) => p.characterId!);
     const characters = await this.characterRepo
-      .createQueryBuilder('c')
-      .select(['c.id', 'c.userId'])
-      .where('c.id IN (:...ids)', { ids: charIds })
+      .createQueryBuilder("c")
+      .select(["c.id", "c.userId"])
+      .where("c.id IN (:...ids)", { ids: charIds })
       .getMany();
     const ownerMap = new Map<string, string>();
     for (const c of characters) {
@@ -217,10 +229,14 @@ export class EncounterService {
     }
 
     // Se tem campanha, complementar com CampaignPlayer
-    const session = await this.sessionService.getById(encounter.sessionId).catch(() => null);
+    const session = await this.sessionService
+      .getById(encounter.sessionId)
+      .catch(() => null);
     if (session?.campaignId) {
       try {
-        const players = await this.campaignService.getPlayers(session.campaignId);
+        const players = await this.campaignService.getPlayers(
+          session.campaignId,
+        );
         for (const pl of players) {
           if (pl.characterId && pl.userId && !ownerMap.has(pl.characterId)) {
             ownerMap.set(pl.characterId, pl.userId);
@@ -237,7 +253,10 @@ export class EncounterService {
         const ownerId = ownerMap.get(p.characterId!);
         if (!ownerId) return;
         try {
-          const sheet = await this.sheetService.computeSheet(ownerId, p.characterId!);
+          const sheet = await this.sheetService.computeSheet(
+            ownerId,
+            p.characterId!,
+          );
           // Spec 012 \u2014 PC transformado: overlay de HP/AC/speed do form
           // (Wild Shape, Polymorph, etc). Display reflete a criatura ativa.
           if (p.transformationState) {
@@ -256,7 +275,10 @@ export class EncounterService {
           // False Life, Heroism, etc). Participant.tempHp podia ficar stale. Overlay do
           // sheet garante que combat e /sheet usem a mesma fonte.
           (p as any).tempHp = sheet.tempHp ?? 0;
-          if (p.initiativeModifier == null || p.initiativeModifier !== sheet.initiative) {
+          if (
+            p.initiativeModifier == null ||
+            p.initiativeModifier !== sheet.initiative
+          ) {
             (p as any).initiativeModifier = sheet.initiative;
           }
           (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
@@ -281,24 +303,27 @@ export class EncounterService {
   async listBySession(sessionId: string): Promise<EncounterEntity[]> {
     return this.encounterRepo.find({
       where: { sessionId },
-      relations: ['participants'],
-      order: { createdAt: 'DESC' },
+      relations: ["participants"],
+      order: { createdAt: "DESC" },
     });
   }
 
   async listByCampaign(campaignId: string): Promise<EncounterEntity[]> {
     // Find all sessions for this campaign, then all encounters
-    const sessions = await this.encounterRepo.manager.find('GameSessionEntity' as any, {
-      where: { campaignId },
-    } as any);
+    const sessions = await this.encounterRepo.manager.find(
+      "GameSessionEntity" as any,
+      {
+        where: { campaignId },
+      } as any,
+    );
     const sessionIds = sessions.map((s: any) => s.id);
     if (sessionIds.length === 0) return [];
 
     return this.encounterRepo
-      .createQueryBuilder('e')
-      .leftJoinAndSelect('e.participants', 'p')
-      .where('e.session_id IN (:...sessionIds)', { sessionIds })
-      .orderBy('e.createdAt', 'DESC')
+      .createQueryBuilder("e")
+      .leftJoinAndSelect("e.participants", "p")
+      .where("e.session_id IN (:...sessionIds)", { sessionIds })
+      .orderBy("e.createdAt", "DESC")
       .getMany();
   }
 
@@ -309,7 +334,7 @@ export class EncounterService {
     const monster = await this.monsterRepo.findOne({
       where: { id: dto.monsterId },
     });
-    if (!monster) throw new NotFoundException('Monstro nao encontrado.');
+    if (!monster) throw new NotFoundException("Monstro nao encontrado.");
 
     const existingCount = await this.participantRepo.count({
       where: { encounterId, monsterId: dto.monsterId },
@@ -322,21 +347,17 @@ export class EncounterService {
     for (let i = 0; i < dto.count; i++) {
       const index = existingCount + i + 1;
       const displayName =
-        dto.count === 1 && existingCount === 0
-          ? prefix
-          : `${prefix} ${index}`;
+        dto.count === 1 && existingCount === 0 ? prefix : `${prefix} ${index}`;
 
       let hp = dto.hpOverride ?? monster.hit_points;
       if (!dto.hpOverride && monster.hit_points_roll) {
-        const rolled = this.diceService.rollExpression(
-          monster.hit_points_roll,
-        );
+        const rolled = this.diceService.rollExpression(monster.hit_points_roll);
         hp = Math.max(1, rolled.total);
       }
 
       const participant = this.participantRepo.create({
         encounterId,
-        type: 'monster',
+        type: "monster",
         monsterId: dto.monsterId,
         displayName,
         initiativeModifier: dexMod,
@@ -345,10 +366,10 @@ export class EncounterService {
         tempHp: 0,
         conditions: [],
         isDefeated: false,
-        faction: 'enemy',
+        faction: "enemy",
         // Spec 003 FR-018 — monstros default 'dm' (backfill da migration só
         // pega rows existentes; novos precisam explícito).
-        controlledBy: 'dm',
+        controlledBy: "dm",
       });
       participants.push(participant);
     }
@@ -370,26 +391,26 @@ export class EncounterService {
   ): Promise<EncounterParticipantEntity> {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
-      relations: ['participants'],
+      relations: ["participants"],
     });
     if (!encounter) {
       throw new NotFoundException({
         ok: false,
-        code: 'ENCOUNTER_NOT_FOUND',
-        error: 'Encontro nao encontrado.',
+        code: "ENCOUNTER_NOT_FOUND",
+        error: "Encontro nao encontrado.",
       });
     }
     this.assertStatusAllowsDirectAdd(encounter.status);
 
     const character = await this.characterRepo.findOne({
       where: { id: characterId },
-      select: ['id', 'userId'],
+      select: ["id", "userId"],
     });
     if (!character) {
       throw new NotFoundException({
         ok: false,
-        code: 'CHARACTER_NOT_FOUND',
-        error: 'Personagem nao encontrado.',
+        code: "CHARACTER_NOT_FOUND",
+        error: "Personagem nao encontrado.",
       });
     }
 
@@ -403,13 +424,13 @@ export class EncounterService {
     );
 
     const dup = (encounter.participants ?? []).find(
-      (p) => p.type === 'pc' && p.characterId === characterId,
+      (p) => p.type === "pc" && p.characterId === characterId,
     );
     if (dup) {
       throw new ConflictException({
         ok: false,
-        code: 'CHARACTER_ALREADY_IN_ENCOUNTER',
-        error: 'Este personagem ja participa deste encontro.',
+        code: "CHARACTER_ALREADY_IN_ENCOUNTER",
+        error: "Este personagem ja participa deste encontro.",
       });
     }
 
@@ -448,8 +469,8 @@ export class EncounterService {
     }
     throw new ForbiddenException({
       ok: false,
-      code: 'FORBIDDEN_CAMPAIGN_MEMBER',
-      error: 'Voce nao e um membro autorizado desta campanha.',
+      code: "FORBIDDEN_CAMPAIGN_MEMBER",
+      error: "Voce nao e um membro autorizado desta campanha.",
     });
   }
 
@@ -459,19 +480,19 @@ export class EncounterService {
    * join-requests for players).
    */
   private assertStatusAllowsDirectAdd(status: string): void {
-    if (status === 'active' || status === 'rolling_initiative') {
+    if (status === "active" || status === "rolling_initiative") {
       throw new ConflictException({
         ok: false,
-        code: 'ENCOUNTER_ALREADY_ACTIVE',
-        error: 'O combate ja esta em andamento.',
-        hint: 'Players devem usar POST /encounters/:id/join-requests. DM pode forcar entrada via POST /encounters/:id/late-join/character.',
+        code: "ENCOUNTER_ALREADY_ACTIVE",
+        error: "O combate ja esta em andamento.",
+        hint: "Players devem usar POST /encounters/:id/join-requests. DM pode forcar entrada via POST /encounters/:id/late-join/character.",
       });
     }
-    if (status === 'completed') {
+    if (status === "completed") {
       throw new ConflictException({
         ok: false,
-        code: 'ENCOUNTER_COMPLETED',
-        error: 'Este combate ja foi encerrado.',
+        code: "ENCOUNTER_COMPLETED",
+        error: "Este combate ja foi encerrado.",
       });
     }
   }
@@ -486,10 +507,13 @@ export class EncounterService {
     characterId: string,
     ownerUserId: string,
   ): Promise<EncounterParticipantEntity> {
-    const sheet = await this.sheetService.computeSheet(ownerUserId, characterId);
+    const sheet = await this.sheetService.computeSheet(
+      ownerUserId,
+      characterId,
+    );
     const participant = this.participantRepo.create({
       encounterId,
-      type: 'pc',
+      type: "pc",
       characterId,
       displayName: sheet.name,
       initiativeModifier: sheet.initiative,
@@ -497,7 +521,7 @@ export class EncounterService {
       tempHp: 0,
       conditions: [],
       isDefeated: false,
-      faction: 'ally',
+      faction: "ally",
     });
     return this.participantRepo.save(participant);
   }
@@ -517,32 +541,32 @@ export class EncounterService {
   ): Promise<EncounterParticipantEntity> {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
-      relations: ['participants'],
+      relations: ["participants"],
     });
     if (!encounter) {
       throw new NotFoundException({
         ok: false,
-        code: 'ENCOUNTER_NOT_FOUND',
-        error: 'Encontro nao encontrado.',
+        code: "ENCOUNTER_NOT_FOUND",
+        error: "Encontro nao encontrado.",
       });
     }
-    if (encounter.status !== 'active') {
+    if (encounter.status !== "active") {
       throw new ConflictException({
         ok: false,
-        code: 'ENCOUNTER_NOT_ACTIVE',
-        error: 'Late-join so e permitido em encontros ativos.',
+        code: "ENCOUNTER_NOT_ACTIVE",
+        error: "Late-join so e permitido em encontros ativos.",
       });
     }
 
     const character = await this.characterRepo.findOne({
       where: { id: characterId },
-      select: ['id', 'userId'],
+      select: ["id", "userId"],
     });
     if (!character) {
       throw new NotFoundException({
         ok: false,
-        code: 'CHARACTER_NOT_FOUND',
-        error: 'Personagem nao encontrado.',
+        code: "CHARACTER_NOT_FOUND",
+        error: "Personagem nao encontrado.",
       });
     }
 
@@ -555,13 +579,13 @@ export class EncounterService {
     );
 
     const dup = (encounter.participants ?? []).find(
-      (p) => p.type === 'pc' && p.characterId === characterId,
+      (p) => p.type === "pc" && p.characterId === characterId,
     );
     if (dup) {
       throw new ConflictException({
         ok: false,
-        code: 'CHARACTER_ALREADY_IN_ENCOUNTER',
-        error: 'Este personagem ja participa deste encontro.',
+        code: "CHARACTER_ALREADY_IN_ENCOUNTER",
+        error: "Este personagem ja participa deste encontro.",
       });
     }
 
@@ -583,7 +607,9 @@ export class EncounterService {
     } catch {
       /* fallback sem sheet */
     }
-    const init = this.diceService.rollInitiative(mod, { advantage: initAdvantage });
+    const init = this.diceService.rollInitiative(mod, {
+      advantage: initAdvantage,
+    });
     participant.initiativeRoll = init.roll;
     participant.initiativeTotal = init.total;
     await this.participantRepo.save(participant);
@@ -596,7 +622,9 @@ export class EncounterService {
     // Find where to insert based on initiative
     let insertIndex = encounter.turnOrder.length;
     for (let i = 0; i < encounter.turnOrder.length; i++) {
-      const existing = allParticipants.find((p) => p.id === encounter.turnOrder[i]);
+      const existing = allParticipants.find(
+        (p) => p.id === encounter.turnOrder[i],
+      );
       if (existing && (existing.initiativeTotal ?? 0) < init.total) {
         insertIndex = i;
         break;
@@ -627,8 +655,8 @@ export class EncounterService {
     dto: AddMonsterDto,
   ): Promise<EncounterParticipantEntity[]> {
     const encounter = await this.getById(encounterId);
-    if (encounter.status !== 'active') {
-      throw new Error('Late join so e permitido em encontros ativos.');
+    if (encounter.status !== "active") {
+      throw new Error("Late join so e permitido em encontros ativos.");
     }
 
     const newParticipants = await this.addMonster(encounterId, dto);
@@ -648,7 +676,9 @@ export class EncounterService {
       // Insert into turnOrder
       let insertIndex = encounter.turnOrder.length;
       for (let i = 0; i < encounter.turnOrder.length; i++) {
-        const existing = allParticipants.find((p) => p.id === encounter.turnOrder[i]);
+        const existing = allParticipants.find(
+          (p) => p.id === encounter.turnOrder[i],
+        );
         if (existing && (existing.initiativeTotal ?? 0) < init.total) {
           insertIndex = i;
           break;
@@ -691,11 +721,13 @@ export class EncounterService {
     const encounter = await this.getById(encounterId);
     const participants = encounter.participants ?? [];
 
-    const hasPc = participants.some((p) => p.type === 'pc' && !p.isDefeated);
-    const hasEnemy = participants.some((p) => p.type === 'monster' && !p.isDefeated);
+    const hasPc = participants.some((p) => p.type === "pc" && !p.isDefeated);
+    const hasEnemy = participants.some(
+      (p) => p.type === "monster" && !p.isDefeated,
+    );
     if (!hasPc || !hasEnemy) {
       throw new Error(
-        'O encontro precisa de pelo menos 1 jogador e 1 monstro para rolar iniciativa.',
+        "O encontro precisa de pelo menos 1 jogador e 1 monstro para rolar iniciativa.",
       );
     }
 
@@ -719,7 +751,7 @@ export class EncounterService {
     await this.participantRepo.save(participants);
 
     await this.encounterRepo.update(encounterId, {
-      status: 'rolling_initiative',
+      status: "rolling_initiative",
     });
 
     return results;
@@ -750,7 +782,7 @@ export class EncounterService {
     encounter.turnOrder = participants.map((p) => p.id);
     encounter.currentTurnIndex = 0;
     encounter.currentRound = 1;
-    encounter.status = 'active';
+    encounter.status = "active";
 
     await this.encounterRepo.save(encounter);
     await this.sessionService.setActiveEncounter(
@@ -759,9 +791,11 @@ export class EncounterService {
     );
 
     // Spec 012 Lote C — Capstones start-of-combat pro primeiro participante.
-    const startEvents: Array<import('../interfaces/result.type').GameEventData> = [
+    const startEvents: Array<
+      import("../interfaces/result.type").GameEventData
+    > = [
       {
-        event_type: 'encounter_start',
+        event_type: "encounter_start",
         data: {
           name: encounter.name,
           round: 1,
@@ -769,7 +803,7 @@ export class EncounterService {
         },
       },
       {
-        event_type: 'turn_start',
+        event_type: "turn_start",
         actor_participant_id: encounter.turnOrder[0],
         data: { round: 1 },
       },
@@ -777,13 +811,16 @@ export class EncounterService {
     try {
       const firstPid = encounter.turnOrder[0];
       const firstParticipant = participants.find((p) => p.id === firstPid);
-      if (firstParticipant?.type === 'pc' && firstParticipant.characterId) {
+      if (firstParticipant?.type === "pc" && firstParticipant.characterId) {
         // Resolve ownerUserId via characterRepo
         const char = await this.characterRepo.findOne({
           where: { id: firstParticipant.characterId },
         });
         if (char?.userId) {
-          const capRes = await this.capstones.runStartOfCombat(firstParticipant, char.userId);
+          const capRes = await this.capstones.runStartOfCombat(
+            firstParticipant,
+            char.userId,
+          );
           startEvents.push(...capRes.events);
         }
       }
@@ -791,7 +828,11 @@ export class EncounterService {
       // capstones nunca aborta start
     }
 
-    await this.eventService.emit(encounter.sessionId, encounter.id, startEvents);
+    await this.eventService.emit(
+      encounter.sessionId,
+      encounter.id,
+      startEvents,
+    );
 
     return this.getById(encounterId);
   }
@@ -802,10 +843,8 @@ export class EncounterService {
     const encounter = await this.getById(encounterId);
     const participants = encounter.participants ?? [];
 
-    const monsters = participants.filter((p) => p.type === 'monster');
-    const pcs = participants.filter(
-      (p) => p.type === 'pc' && !p.isDefeated,
-    );
+    const monsters = participants.filter((p) => p.type === "monster");
+    const pcs = participants.filter((p) => p.type === "pc" && !p.isDefeated);
 
     let totalXp = 0;
     for (const m of monsters) {
@@ -814,18 +853,16 @@ export class EncounterService {
       }
     }
 
-    const xpPerCharacter = pcs.length > 0 ? Math.floor(totalXp / pcs.length) : 0;
+    const xpPerCharacter =
+      pcs.length > 0 ? Math.floor(totalXp / pcs.length) : 0;
 
-    encounter.status = 'completed';
+    encounter.status = "completed";
     await this.encounterRepo.save(encounter);
-    await this.sessionService.setActiveEncounter(
-      encounter.sessionId,
-      null,
-    );
+    await this.sessionService.setActiveEncounter(encounter.sessionId, null);
 
     await this.eventService.emit(encounter.sessionId, encounterId, [
       {
-        event_type: 'encounter_end',
+        event_type: "encounter_end",
         data: {
           name: encounter.name,
           totalXp,
@@ -844,7 +881,7 @@ export class EncounterService {
   ): Promise<EncounterDifficulty> {
     const encounter = await this.getById(encounterId);
     const monsters = (encounter.participants ?? []).filter(
-      (p) => p.type === 'monster' && p.monster,
+      (p) => p.type === "monster" && p.monster,
     );
 
     let totalXp = 0;
@@ -871,25 +908,49 @@ export class EncounterService {
 
     // DMG XP thresholds per character level
     const thresholds: Record<string, number[]> = {
-      easy: [25, 50, 75, 125, 250, 300, 350, 450, 550, 600, 800, 1000, 1100, 1250, 1400, 1600, 2000, 2100, 2400, 2800],
-      medium: [50, 100, 150, 250, 500, 600, 750, 900, 1100, 1200, 1600, 2000, 2200, 2500, 2800, 3200, 3900, 4200, 4900, 5700],
-      hard: [75, 150, 225, 375, 750, 900, 1100, 1400, 1600, 1900, 2400, 3000, 3400, 3800, 4300, 4800, 5900, 6300, 7300, 8500],
-      deadly: [100, 200, 400, 500, 1100, 1400, 1700, 2100, 2400, 2800, 3600, 4500, 5100, 5700, 6400, 7200, 8800, 9500, 10900, 12700],
+      easy: [
+        25, 50, 75, 125, 250, 300, 350, 450, 550, 600, 800, 1000, 1100, 1250,
+        1400, 1600, 2000, 2100, 2400, 2800,
+      ],
+      medium: [
+        50, 100, 150, 250, 500, 600, 750, 900, 1100, 1200, 1600, 2000, 2200,
+        2500, 2800, 3200, 3900, 4200, 4900, 5700,
+      ],
+      hard: [
+        75, 150, 225, 375, 750, 900, 1100, 1400, 1600, 1900, 2400, 3000, 3400,
+        3800, 4300, 4800, 5900, 6300, 7300, 8500,
+      ],
+      deadly: [
+        100, 200, 400, 500, 1100, 1400, 1700, 2100, 2400, 2800, 3600, 4500,
+        5100, 5700, 6400, 7200, 8800, 9500, 10900, 12700,
+      ],
     };
 
     const getThreshold = (level: number, tier: string) =>
       thresholds[tier]?.[Math.min(level, 20) - 1] ?? 0;
 
-    const partyEasy = partyLevels.reduce((s, l) => s + getThreshold(l, 'easy'), 0);
-    const partyMedium = partyLevels.reduce((s, l) => s + getThreshold(l, 'medium'), 0);
-    const partyHard = partyLevels.reduce((s, l) => s + getThreshold(l, 'hard'), 0);
-    const partyDeadly = partyLevels.reduce((s, l) => s + getThreshold(l, 'deadly'), 0);
+    const partyEasy = partyLevels.reduce(
+      (s, l) => s + getThreshold(l, "easy"),
+      0,
+    );
+    const partyMedium = partyLevels.reduce(
+      (s, l) => s + getThreshold(l, "medium"),
+      0,
+    );
+    const partyHard = partyLevels.reduce(
+      (s, l) => s + getThreshold(l, "hard"),
+      0,
+    );
+    const partyDeadly = partyLevels.reduce(
+      (s, l) => s + getThreshold(l, "deadly"),
+      0,
+    );
 
-    let threshold: EncounterDifficulty['threshold'] = 'trivial';
-    if (adjustedXp >= partyDeadly) threshold = 'deadly';
-    else if (adjustedXp >= partyHard) threshold = 'hard';
-    else if (adjustedXp >= partyMedium) threshold = 'medium';
-    else if (adjustedXp >= partyEasy) threshold = 'easy';
+    let threshold: EncounterDifficulty["threshold"] = "trivial";
+    if (adjustedXp >= partyDeadly) threshold = "deadly";
+    else if (adjustedXp >= partyHard) threshold = "hard";
+    else if (adjustedXp >= partyMedium) threshold = "medium";
+    else if (adjustedXp >= partyEasy) threshold = "easy";
 
     return {
       totalMonsterXp: totalXp,
@@ -910,66 +971,118 @@ export class EncounterService {
     ownerUserId: string,
   ): Promise<NormalizedResolveDto> {
     const pcParticipants = (encounter.participants ?? []).filter(
-      (p) => p.type === 'pc' && p.characterId,
+      (p) => p.type === "pc" && p.characterId,
     );
     const pcCharacterIds = pcParticipants.map((p) => p.characterId!);
 
     // --- XP ---
-    let xpRewards: NormalizedResolveDto['xpRewards'] = [];
+    let xpRewards: NormalizedResolveDto["xpRewards"] = [];
     if (rawBody.xpRewards != null) {
       if (Array.isArray(rawBody.xpRewards)) {
         // Legacy shape
         for (const r of rawBody.xpRewards) {
-          if (!r.characterId || typeof r.xp !== 'number')
-            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'Each entry must have characterId (string) and xp (number)' });
+          if (!r.characterId || typeof r.xp !== "number")
+            throw new BadRequestException({
+              code: "RESOLVE_INVALID_PAYLOAD",
+              field: "xpRewards",
+              error:
+                "Each entry must have characterId (string) and xp (number)",
+            });
           if (r.xp < 0)
-            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'xp must be >= 0' });
+            throw new BadRequestException({
+              code: "RESOLVE_INVALID_PAYLOAD",
+              field: "xpRewards",
+              error: "xp must be >= 0",
+            });
           xpRewards.push({ characterId: r.characterId, xp: r.xp });
         }
-      } else if (typeof rawBody.xpRewards === 'object' && rawBody.xpRewards.mode) {
+      } else if (
+        typeof rawBody.xpRewards === "object" &&
+        rawBody.xpRewards.mode
+      ) {
         const { mode, value } = rawBody.xpRewards;
-        if (mode === 'equal-split') {
-          if (typeof value !== 'number' || value < 0)
-            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'equal-split mode requires value as a non-negative number' });
+        if (mode === "equal-split") {
+          if (typeof value !== "number" || value < 0)
+            throw new BadRequestException({
+              code: "RESOLVE_INVALID_PAYLOAD",
+              field: "xpRewards",
+              error: "equal-split mode requires value as a non-negative number",
+            });
           if (pcCharacterIds.length === 0)
-            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'No PC participants to split XP among' });
+            throw new BadRequestException({
+              code: "RESOLVE_INVALID_PAYLOAD",
+              field: "xpRewards",
+              error: "No PC participants to split XP among",
+            });
           const perPc = Math.floor(value / pcCharacterIds.length);
           const remainder = value - perPc * pcCharacterIds.length;
           xpRewards = pcCharacterIds.map((id, i) => ({
             characterId: id,
             xp: perPc + (i === 0 ? remainder : 0),
           }));
-        } else if (mode === 'per-pc') {
-          if (typeof value !== 'object' || Array.isArray(value) || value == null)
-            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'per-pc mode requires value as { pcId: xpAmount }' });
+        } else if (mode === "per-pc") {
+          if (
+            typeof value !== "object" ||
+            Array.isArray(value) ||
+            value == null
+          )
+            throw new BadRequestException({
+              code: "RESOLVE_INVALID_PAYLOAD",
+              field: "xpRewards",
+              error: "per-pc mode requires value as { pcId: xpAmount }",
+            });
           for (const [pcId, xp] of Object.entries(value)) {
-            if (typeof xp !== 'number' || xp < 0)
-              throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: `Invalid XP value for PC ${pcId}` });
-            xpRewards.push({ characterId: pcId, xp: xp as number });
+            if (typeof xp !== "number" || xp < 0)
+              throw new BadRequestException({
+                code: "RESOLVE_INVALID_PAYLOAD",
+                field: "xpRewards",
+                error: `Invalid XP value for PC ${pcId}`,
+              });
+            xpRewards.push({ characterId: pcId, xp: xp });
           }
         } else {
-          throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'mode must be "equal-split" or "per-pc"' });
+          throw new BadRequestException({
+            code: "RESOLVE_INVALID_PAYLOAD",
+            field: "xpRewards",
+            error: 'mode must be "equal-split" or "per-pc"',
+          });
         }
       } else {
-        throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'xpRewards', error: 'Expected array or { mode, value } object' });
+        throw new BadRequestException({
+          code: "RESOLVE_INVALID_PAYLOAD",
+          field: "xpRewards",
+          error: "Expected array or { mode, value } object",
+        });
       }
     }
 
     // --- Gold ---
-    let goldRewards: NormalizedResolveDto['goldRewards'] = [];
+    const goldRewards: NormalizedResolveDto["goldRewards"] = [];
     if (rawBody.goldRewards != null) {
       if (Array.isArray(rawBody.goldRewards)) {
         // Legacy shape
         for (const r of rawBody.goldRewards) {
-          if (!r.characterId || typeof r.gp !== 'number')
-            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'goldRewards', error: 'Each entry must have characterId (string) and gp (number)' });
+          if (!r.characterId || typeof r.gp !== "number")
+            throw new BadRequestException({
+              code: "RESOLVE_INVALID_PAYLOAD",
+              field: "goldRewards",
+              error:
+                "Each entry must have characterId (string) and gp (number)",
+            });
           goldRewards.push({ characterId: r.characterId, gp: r.gp });
         }
-      } else if (typeof rawBody.goldRewards === 'object' && !Array.isArray(rawBody.goldRewards)) {
+      } else if (
+        typeof rawBody.goldRewards === "object" &&
+        !Array.isArray(rawBody.goldRewards)
+      ) {
         // Simplified shape: { cp?, sp?, gp?, pp? } — split equally among PCs
         const { cp, sp, gp, pp } = rawBody.goldRewards;
         if (pcCharacterIds.length === 0)
-          throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'goldRewards', error: 'No PC participants to split gold among' });
+          throw new BadRequestException({
+            code: "RESOLVE_INVALID_PAYLOAD",
+            field: "goldRewards",
+            error: "No PC participants to split gold among",
+          });
         for (const id of pcCharacterIds) {
           goldRewards.push({
             characterId: id,
@@ -980,17 +1093,27 @@ export class EncounterService {
           });
         }
         // Remainder goes to first PC
-        if (gp != null) goldRewards[0].gp += gp - Math.floor(gp / pcCharacterIds.length) * pcCharacterIds.length;
+        if (gp != null)
+          goldRewards[0].gp +=
+            gp - Math.floor(gp / pcCharacterIds.length) * pcCharacterIds.length;
       } else {
-        throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'goldRewards', error: 'Expected array or { cp?, sp?, gp?, pp? } object' });
+        throw new BadRequestException({
+          code: "RESOLVE_INVALID_PAYLOAD",
+          field: "goldRewards",
+          error: "Expected array or { cp?, sp?, gp?, pp? } object",
+        });
       }
     }
 
     // --- Items ---
-    let itemRewards: NormalizedResolveDto['itemRewards'] = [];
+    const itemRewards: NormalizedResolveDto["itemRewards"] = [];
     if (rawBody.itemRewards != null) {
       if (!Array.isArray(rawBody.itemRewards))
-        throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'itemRewards', error: 'Expected array' });
+        throw new BadRequestException({
+          code: "RESOLVE_INVALID_PAYLOAD",
+          field: "itemRewards",
+          error: "Expected array",
+        });
       for (const r of rawBody.itemRewards) {
         if (r.equipmentId || r.magicItemId) {
           // Legacy shape
@@ -1002,19 +1125,31 @@ export class EncounterService {
           });
         } else if (r.equipmentSlug) {
           // Simplified shape — resolve slug to ID
-          const equipment = await this.characterRepo.manager.findOne(EquipmentEntity, {
-            where: { slug: r.equipmentSlug },
-            select: ['id', 'name'],
-          });
+          const equipment = await this.characterRepo.manager.findOne(
+            EquipmentEntity,
+            {
+              where: { slug: r.equipmentSlug },
+              select: ["id", "name"],
+            },
+          );
           if (!equipment)
-            throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'itemRewards', error: `Equipment slug "${r.equipmentSlug}" not found` });
+            throw new BadRequestException({
+              code: "RESOLVE_INVALID_PAYLOAD",
+              field: "itemRewards",
+              error: `Equipment slug "${r.equipmentSlug}" not found`,
+            });
           itemRewards.push({
             characterId: r.pcId ?? r.characterId,
             equipmentId: equipment.id,
             quantity: r.quantity ?? 1,
           });
         } else {
-          throw new BadRequestException({ code: 'RESOLVE_INVALID_PAYLOAD', field: 'itemRewards', error: 'Each item must have equipmentId, magicItemId, or equipmentSlug' });
+          throw new BadRequestException({
+            code: "RESOLVE_INVALID_PAYLOAD",
+            field: "itemRewards",
+            error:
+              "Each item must have equipmentId, magicItemId, or equipmentSlug",
+          });
         }
       }
     }
@@ -1039,19 +1174,43 @@ export class EncounterService {
     ok: true;
     value: {
       outcome: string;
-      xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }>;
-      goldApplied: Array<{ characterId: string; gp: number; cp?: number; sp?: number; pp?: number }>;
-      itemsApplied: Array<{ characterId: string; itemName: string; quantity: number }>;
+      xpApplied: Array<{
+        characterId: string;
+        xp: number;
+        newTotal: number;
+        levelUpAvailable: boolean;
+      }>;
+      goldApplied: Array<{
+        characterId: string;
+        gp: number;
+        cp?: number;
+        sp?: number;
+        pp?: number;
+      }>;
+      itemsApplied: Array<{
+        characterId: string;
+        itemName: string;
+        quantity: number;
+      }>;
       warnings: string[];
     };
     events: any[];
   }> {
     const encounter = await this.getById(encounterId);
-    const dto = await this.normalizeResolvePayload(rawBody, encounter, ownerUserId);
+    const dto = await this.normalizeResolvePayload(
+      rawBody,
+      encounter,
+      ownerUserId,
+    );
     const warnings: string[] = [];
 
     // Apply XP
-    const xpApplied: Array<{ characterId: string; xp: number; newTotal: number; levelUpAvailable: boolean }> = [];
+    const xpApplied: Array<{
+      characterId: string;
+      xp: number;
+      newTotal: number;
+      levelUpAvailable: boolean;
+    }> = [];
     for (const reward of dto.xpRewards) {
       if (reward.xp <= 0) continue;
       try {
@@ -1067,13 +1226,19 @@ export class EncounterService {
           levelUpAvailable: result.levelUpAvailable,
         });
       } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : 'unknown error';
+        const msg = error instanceof Error ? error.message : "unknown error";
         warnings.push(`XP for ${reward.characterId}: ${msg}`);
       }
     }
 
     // Apply Gold
-    const goldApplied: Array<{ characterId: string; gp: number; cp?: number; sp?: number; pp?: number }> = [];
+    const goldApplied: Array<{
+      characterId: string;
+      gp: number;
+      cp?: number;
+      sp?: number;
+      pp?: number;
+    }> = [];
     for (const reward of dto.goldRewards) {
       try {
         await this.inventoryService.updateGold(
@@ -1083,13 +1248,17 @@ export class EncounterService {
         );
         goldApplied.push(reward);
       } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : 'unknown error';
+        const msg = error instanceof Error ? error.message : "unknown error";
         warnings.push(`Gold for ${reward.characterId}: ${msg}`);
       }
     }
 
     // Apply Items
-    const itemsApplied: Array<{ characterId: string; itemName: string; quantity: number }> = [];
+    const itemsApplied: Array<{
+      characterId: string;
+      itemName: string;
+      quantity: number;
+    }> = [];
     for (const reward of dto.itemRewards) {
       try {
         if (reward.equipmentId) {
@@ -1104,7 +1273,7 @@ export class EncounterService {
           );
           itemsApplied.push({
             characterId: reward.characterId,
-            itemName: (result as any).equipment?.name ?? 'Item',
+            itemName: (result as any).equipment?.name ?? "Item",
             quantity: reward.quantity ?? 1,
           });
         }
@@ -1116,44 +1285,52 @@ export class EncounterService {
           );
           itemsApplied.push({
             characterId: reward.characterId,
-            itemName: 'Magic Item',
+            itemName: "Magic Item",
             quantity: 1,
           });
         }
       } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : 'unknown error';
+        const msg = error instanceof Error ? error.message : "unknown error";
         warnings.push(`Item for ${reward.characterId}: ${msg}`);
       }
     }
 
     // Mark encounter as completed
-    encounter.status = 'completed';
+    encounter.status = "completed";
     await this.encounterRepo.save(encounter);
     await this.sessionService.setActiveEncounter(encounter.sessionId, null);
 
     // Emit event
-    const events = [{
-      event_type: 'encounter_resolved',
-      data: {
-        name: encounter.name,
-        outcome: dto.outcome,
-        xpApplied,
-        goldApplied,
-        itemsApplied,
+    const events = [
+      {
+        event_type: "encounter_resolved",
+        data: {
+          name: encounter.name,
+          outcome: dto.outcome,
+          xpApplied,
+          goldApplied,
+          itemsApplied,
+        },
       },
-    }];
+    ];
     await this.eventService.emit(encounter.sessionId, encounterId, events);
 
     return {
       ok: true,
-      value: { outcome: dto.outcome, xpApplied, goldApplied, itemsApplied, warnings },
+      value: {
+        outcome: dto.outcome,
+        xpApplied,
+        goldApplied,
+        itemsApplied,
+        warnings,
+      },
       events,
     };
   }
 
   async updateMapData(
     encounterId: string,
-    mapData: Partial<EncounterEntity['mapData']>,
+    mapData: Partial<EncounterEntity["mapData"]>,
   ): Promise<EncounterEntity> {
     const encounter = await this.getById(encounterId);
     encounter.mapData = { ...encounter.mapData, ...mapData };
@@ -1192,9 +1369,7 @@ export class EncounterService {
     for (const pos of positions) {
       const key = `${pos.x},${pos.y}`;
       if (cellKeys.has(key)) {
-        throw new Error(
-          `Posicao duplicada no batch: (${pos.x}, ${pos.y}).`,
-        );
+        throw new Error(`Posicao duplicada no batch: (${pos.x}, ${pos.y}).`);
       }
       cellKeys.add(key);
     }
@@ -1236,8 +1411,10 @@ export class EncounterService {
     y: number,
     encounter: EncounterEntity,
   ): void {
-    const gridColumns = encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
-    const gridRows = encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+    const gridColumns =
+      encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+    const gridRows =
+      encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
 
     if (x < 0 || x >= gridColumns || y < 0 || y >= gridRows) {
       throw new Error(
@@ -1253,14 +1430,14 @@ export class EncounterService {
     excludeParticipantId?: string,
   ): Promise<void> {
     const qb = this.participantRepo
-      .createQueryBuilder('p')
-      .where('p.encounter_id = :encounterId', { encounterId })
-      .andWhere('p.position_x = :x', { x })
-      .andWhere('p.position_y = :y', { y })
-      .andWhere('p.is_defeated = false');
+      .createQueryBuilder("p")
+      .where("p.encounter_id = :encounterId", { encounterId })
+      .andWhere("p.position_x = :x", { x })
+      .andWhere("p.position_y = :y", { y })
+      .andWhere("p.is_defeated = false");
 
     if (excludeParticipantId) {
-      qb.andWhere('p.id != :excludeId', { excludeId: excludeParticipantId });
+      qb.andWhere("p.id != :excludeId", { excludeId: excludeParticipantId });
     }
 
     const occupant = await qb.getOne();
@@ -1299,23 +1476,25 @@ export class EncounterService {
     code?: string;
   }> {
     const p = await this.getParticipant(participantId);
-    if (p.type !== 'pc' || !p.characterId) {
+    if (p.type !== "pc" || !p.characterId) {
       return {
         ok: false,
         inspirationArmed: p.inspirationArmed,
         hasInspiration: false,
-        error: 'Inspiração só se aplica a PCs.',
-        code: 'INVALID_PARTICIPANT',
+        error: "Inspiração só se aplica a PCs.",
+        code: "INVALID_PARTICIPANT",
       };
     }
-    const hasInspiration = await this.stateService.getInspiration(p.characterId);
+    const hasInspiration = await this.stateService.getInspiration(
+      p.characterId,
+    );
     if (arm && !hasInspiration) {
       return {
         ok: false,
         inspirationArmed: false,
         hasInspiration: false,
-        error: 'Personagem não possui Inspiração disponível — peça ao DM.',
-        code: 'NO_INSPIRATION',
+        error: "Personagem não possui Inspiração disponível — peça ao DM.",
+        code: "NO_INSPIRATION",
       };
     }
     p.inspirationArmed = arm;
@@ -1337,12 +1516,12 @@ export class EncounterService {
     code?: string;
   }> {
     const p = await this.getParticipant(participantId);
-    if (p.type !== 'pc' || !p.characterId) {
+    if (p.type !== "pc" || !p.characterId) {
       return {
         ok: false,
         hasInspiration: false,
-        error: 'Inspiração só se aplica a PCs.',
-        code: 'INVALID_PARTICIPANT',
+        error: "Inspiração só se aplica a PCs.",
+        code: "INVALID_PARTICIPANT",
       };
     }
     const result = await this.stateService.setInspiration(p.characterId, grant);
@@ -1359,9 +1538,9 @@ export class EncounterService {
   ): Promise<EncounterParticipantEntity> {
     const p = await this.participantRepo.findOne({
       where: { id: participantId },
-      relations: ['monster'],
+      relations: ["monster"],
     });
-    if (!p) throw new NotFoundException('Participante nao encontrado.');
+    if (!p) throw new NotFoundException("Participante nao encontrado.");
     return p;
   }
 
@@ -1377,7 +1556,7 @@ export class EncounterService {
     encounterId: string,
     participantId: string,
     equipmentId: string,
-    hand: 'main' | 'off' | null,
+    hand: "main" | "off" | null,
   ): Promise<{
     ok: boolean;
     freeObjectInteractionsUsed?: number;
@@ -1388,33 +1567,46 @@ export class EncounterService {
       where: { id: encounterId },
     });
     if (!encounter) {
-      return { ok: false, error: 'Encontro nao encontrado.', code: 'ENCOUNTER_NOT_FOUND' };
+      return {
+        ok: false,
+        error: "Encontro nao encontrado.",
+        code: "ENCOUNTER_NOT_FOUND",
+      };
     }
     const p = await this.getParticipant(participantId);
-    if (p.type !== 'pc' || !p.characterId) {
-      return { ok: false, error: 'Apenas PCs podem sacar/guardar.', code: 'INVALID_PARTICIPANT' };
+    if (p.type !== "pc" || !p.characterId) {
+      return {
+        ok: false,
+        error: "Apenas PCs podem sacar/guardar.",
+        code: "INVALID_PARTICIPANT",
+      };
     }
     const currentPid = encounter.turnOrder?.[encounter.currentTurnIndex];
     if (currentPid !== participantId) {
       return {
         ok: false,
-        error: 'Você só pode sacar/guardar no seu turno.',
-        code: 'NOT_YOUR_TURN',
+        error: "Você só pode sacar/guardar no seu turno.",
+        code: "NOT_YOUR_TURN",
       };
     }
     if ((p.freeObjectInteractionsUsed ?? 0) >= 1) {
       return {
         ok: false,
-        error: 'Free object interaction já usada neste turno.',
-        code: 'FREE_INTERACTION_EXHAUSTED',
+        error: "Free object interaction já usada neste turno.",
+        code: "FREE_INTERACTION_EXHAUSTED",
       };
     }
 
     // Delega pro inventory service (aplica validações 2H+shield, dual-wield light, etc.)
-    await this.inventoryService.setHand(userId, p.characterId, equipmentId, { hand });
+    await this.inventoryService.setHand(userId, p.characterId, equipmentId, {
+      hand,
+    });
     p.freeObjectInteractionsUsed = (p.freeObjectInteractionsUsed ?? 0) + 1;
     await this.participantRepo.save(p);
-    return { ok: true, freeObjectInteractionsUsed: p.freeObjectInteractionsUsed };
+    return {
+      ok: true,
+      freeObjectInteractionsUsed: p.freeObjectInteractionsUsed,
+    };
   }
 
   /**
@@ -1426,40 +1618,41 @@ export class EncounterService {
   async updateControlMode(
     encounterId: string,
     participantId: string,
-    rawMode: 'pc' | 'ai' | 'dm' | 'human',
+    rawMode: "pc" | "ai" | "dm" | "human",
     authUserId: string,
   ): Promise<{
     participantId: string;
-    previousMode: 'pc' | 'ai' | 'dm';
-    newMode: 'pc' | 'ai' | 'dm';
-    effectiveFrom: 'immediate' | 'next_turn_of_participant';
+    previousMode: "pc" | "ai" | "dm";
+    newMode: "pc" | "ai" | "dm";
+    effectiveFrom: "immediate" | "next_turn_of_participant";
   }> {
     // Spec 006: normalizar 'human' → 'pc'
-    const mode: 'pc' | 'ai' | 'dm' = rawMode === 'human' ? 'pc' : rawMode;
+    const mode: "pc" | "ai" | "dm" = rawMode === "human" ? "pc" : rawMode;
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) throw new NotFoundException('Encontro nao encontrado.');
+    if (!encounter) throw new NotFoundException("Encontro nao encontrado.");
 
     // Permissão: DM da sessão
     const session = await this.sessionService.getById(encounter.sessionId);
-    if (!session) throw new NotFoundException('Sessao nao encontrada.');
+    if (!session) throw new NotFoundException("Sessao nao encontrada.");
     if (session.ownerId !== authUserId) {
       throw new ForbiddenException(
-        'Apenas o DM da sessao pode alterar o controle de um participante.',
+        "Apenas o DM da sessao pode alterar o controle de um participante.",
       );
     }
 
     const participant = await this.getParticipant(participantId);
-    const prev = participant.controlledBy ?? 'pc';
-    const previousMode: 'pc' | 'ai' | 'dm' = prev === ('human' as string) ? 'pc' : prev as 'pc' | 'ai' | 'dm';
+    const prev = participant.controlledBy ?? "pc";
+    const previousMode: "pc" | "ai" | "dm" =
+      prev === ("human" as string) ? "pc" : prev;
 
     if (previousMode === mode) {
       return {
         participantId,
         previousMode,
         newMode: mode,
-        effectiveFrom: 'immediate',
+        effectiveFrom: "immediate",
       };
     }
 
@@ -1470,7 +1663,7 @@ export class EncounterService {
 
     await this.eventService.emit(encounter.sessionId, encounter.id, [
       {
-        event_type: 'control_changed',
+        event_type: "control_changed",
         actor_participant_id: participant.id,
         data: {
           previousMode,
@@ -1484,9 +1677,7 @@ export class EncounterService {
       participantId,
       previousMode,
       newMode: mode,
-      effectiveFrom: isActiveTurn
-        ? 'next_turn_of_participant'
-        : 'immediate',
+      effectiveFrom: isActiveTurn ? "next_turn_of_participant" : "immediate",
     };
   }
 }

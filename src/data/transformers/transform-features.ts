@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { generateSlug } from './slug-generator';
-import { parseEntries } from './entries-parser';
+import * as fs from "fs";
+import * as path from "path";
+import { generateSlug } from "./slug-generator";
+import { parseEntries } from "./entries-parser";
 
 // ────────────────────────────────────────────────────────────────
 // 5etools input types
@@ -62,15 +62,33 @@ export interface TransformedFeature {
 // ────────────────────────────────────────────────────────────────
 
 const CORE_CLASSES = new Set([
-  'barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk',
-  'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard',
+  "barbarian",
+  "bard",
+  "cleric",
+  "druid",
+  "fighter",
+  "monk",
+  "paladin",
+  "ranger",
+  "rogue",
+  "sorcerer",
+  "warlock",
+  "wizard",
 ]);
 
 const CLASS_FILES = [
-  'class-barbarian.json', 'class-bard.json', 'class-cleric.json',
-  'class-druid.json', 'class-fighter.json', 'class-monk.json',
-  'class-paladin.json', 'class-ranger.json', 'class-rogue.json',
-  'class-sorcerer.json', 'class-warlock.json', 'class-wizard.json',
+  "class-barbarian.json",
+  "class-bard.json",
+  "class-cleric.json",
+  "class-druid.json",
+  "class-fighter.json",
+  "class-monk.json",
+  "class-paladin.json",
+  "class-ranger.json",
+  "class-rogue.json",
+  "class-sorcerer.json",
+  "class-warlock.json",
+  "class-wizard.json",
 ];
 
 // ────────────────────────────────────────────────────────────────
@@ -82,12 +100,15 @@ function loadClassFile(filename: string): {
   subclassFeature: FiveToolsSubclassFeature[];
   [key: string]: unknown;
 } {
-  const filePath = path.resolve(process.cwd(), `../5etools-src/data/class/${filename}`);
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const filePath = path.resolve(
+    process.cwd(),
+    `../5etools-src/data/class/${filename}`,
+  );
+  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
 
 function resolveClassSlug(className: string, classSource: string): string {
-  const srd52 = classSource === 'XPHB';
+  const srd52 = classSource === "XPHB";
   return generateSlug(className, classSource, srd52);
 }
 
@@ -97,7 +118,11 @@ function resolveSubclassSlug(
   subclassSource: string,
   srd52?: boolean,
 ): string {
-  return generateSlug(`${className} ${subclassShortName}`, subclassSource, srd52);
+  return generateSlug(
+    `${className} ${subclassShortName}`,
+    subclassSource,
+    srd52,
+  );
 }
 
 function buildFeatureSlug(
@@ -151,7 +176,11 @@ export function transformFeatures(): TransformedFeature[] {
       if (!CORE_CLASSES.has(feat.className.toLowerCase())) continue;
 
       const slug = buildFeatureSlug(
-        feat.name, feat.className, feat.source, feat.level, feat.srd52,
+        feat.name,
+        feat.className,
+        feat.source,
+        feat.level,
+        feat.srd52,
       );
 
       // Deduplicate by slug
@@ -160,7 +189,10 @@ export function transformFeatures(): TransformedFeature[] {
 
       const classSlug = resolveClassSlug(feat.className, feat.classSource);
       const reference = buildReference(
-        feat.name, feat.className, feat.classSource, feat.level,
+        feat.name,
+        feat.className,
+        feat.classSource,
+        feat.level,
       );
 
       results.push({
@@ -186,7 +218,11 @@ export function transformFeatures(): TransformedFeature[] {
       if (!CORE_CLASSES.has(feat.className.toLowerCase())) continue;
 
       const slug = buildFeatureSlug(
-        feat.name, feat.className, feat.source, feat.level, feat.srd52,
+        feat.name,
+        feat.className,
+        feat.source,
+        feat.level,
+        feat.srd52,
         feat.subclassShortName,
       );
 
@@ -195,11 +231,18 @@ export function transformFeatures(): TransformedFeature[] {
 
       const classSlug = resolveClassSlug(feat.className, feat.classSource);
       const subclassSlug = resolveSubclassSlug(
-        feat.className, feat.subclassShortName, feat.subclassSource, feat.srd52,
+        feat.className,
+        feat.subclassShortName,
+        feat.subclassSource,
+        feat.srd52,
       );
       const reference = buildReference(
-        feat.name, feat.className, feat.classSource, feat.level,
-        feat.subclassShortName, feat.subclassSource,
+        feat.name,
+        feat.className,
+        feat.classSource,
+        feat.level,
+        feat.subclassShortName,
+        feat.subclassSource,
       );
 
       results.push({
@@ -209,7 +252,8 @@ export function transformFeatures(): TransformedFeature[] {
         description: resolveDescription(feat.entries),
         prerequisites: { level: feat.level },
         reference,
-        feature_specific: feat.header !== undefined ? { header: feat.header } : null,
+        feature_specific:
+          feat.header !== undefined ? { header: feat.header } : null,
         class_slug: classSlug,
         subclass_slug: subclassSlug,
         source_code: feat.source,

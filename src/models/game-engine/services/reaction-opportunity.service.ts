@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { CharacterStateService } from 'src/models/characters/services/character-state.service';
+import { Injectable, Logger } from "@nestjs/common";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
 
 /**
  * Spec 015 Eixo 7 — ReactionOpportunityService.
@@ -44,24 +44,31 @@ export class ReactionOpportunityService {
     targetAc: number,
     ownerUserId: string,
   ): Promise<{ slotLevel: number; reactorName: string } | null> {
-    if (target.type !== 'pc' || !target.characterId) return null;
+    if (target.type !== "pc" || !target.characterId) return null;
     if ((target.reactionsUsed ?? 0) > 0) return null;
     if ((target.currentHp ?? 0) <= 0) return null;
     // Shield só vale se viraria miss (+5 AC).
     if (attackTotal >= targetAc + 5) return null;
 
-    let sheet: Awaited<ReturnType<CharacterSheetService['computeSheet']>>;
+    let sheet: Awaited<ReturnType<CharacterSheetService["computeSheet"]>>;
     try {
-      sheet = await this.sheetService.computeSheet(ownerUserId, target.characterId);
+      sheet = await this.sheetService.computeSheet(
+        ownerUserId,
+        target.characterId,
+      );
     } catch (err) {
-      this.logger.debug(`[shouldOfferShield] sheet fetch fail: ${err instanceof Error ? err.message : err}`);
+      this.logger.debug(
+        `[shouldOfferShield] sheet fetch fail: ${err instanceof Error ? err.message : err}`,
+      );
       return null;
     }
 
     // Shield no repertório (prepared OU always-prepared cantrip-like).
     const shieldSpell = (sheet.spells ?? []).find((s) => {
-      const slugNorm = s.slug.replace(/-(phb|xphb|tce|xge|fttod)$/, '');
-      return slugNorm === 'shield' && (s.status === 'prepared' || s.alwaysPrepared);
+      const slugNorm = s.slug.replace(/-(phb|xphb|tce|xge|fttod)$/, "");
+      return (
+        slugNorm === "shield" && (s.status === "prepared" || s.alwaysPrepared)
+      );
     });
     if (!shieldSpell) return null;
 

@@ -1,5 +1,5 @@
-import { stripTags } from './tag-stripper';
-import { ABILITY_MAP } from './code-maps';
+import { stripTags } from "./tag-stripper";
+import { ABILITY_MAP } from "./code-maps";
 
 type Entry = string | EntryObject;
 
@@ -25,11 +25,11 @@ interface ItemObject {
 }
 
 function parseEntry(entry: Entry): string[] {
-  if (typeof entry === 'string') {
+  if (typeof entry === "string") {
     return [stripTags(entry)];
   }
 
-  if (typeof entry !== 'object' || entry === null) {
+  if (typeof entry !== "object" || entry === null) {
     return [];
   }
 
@@ -40,10 +40,10 @@ function parseEntryObject(obj: EntryObject): string[] {
   const lines: string[] = [];
 
   switch (obj.type) {
-    case 'entries':
-    case 'section':
-    case 'inset':
-    case 'insetReadaloud': {
+    case "entries":
+    case "section":
+    case "inset":
+    case "insetReadaloud": {
       if (obj.name) {
         lines.push(`**${stripTags(obj.name)}**`);
       }
@@ -55,20 +55,24 @@ function parseEntryObject(obj: EntryObject): string[] {
       break;
     }
 
-    case 'list': {
+    case "list": {
       if (obj.items) {
         for (const item of obj.items) {
-          if (typeof item === 'string') {
+          if (typeof item === "string") {
             lines.push(`- ${stripTags(item)}`);
-          } else if (typeof item === 'object' && item !== null) {
+          } else if (typeof item === "object" && item !== null) {
             const itemObj = item as ItemObject;
-            if (itemObj.type === 'item' && itemObj.name) {
+            if (itemObj.type === "item" && itemObj.name) {
               const entryText = itemObj.entry
                 ? stripTags(itemObj.entry)
                 : itemObj.entries
-                  ? itemObj.entries.map((e) => parseEntry(e).join(' ')).join(' ')
-                  : '';
-              lines.push(`- **${stripTags(itemObj.name)}** ${entryText}`.trim());
+                  ? itemObj.entries
+                      .map((e) => parseEntry(e).join(" "))
+                      .join(" ")
+                  : "";
+              lines.push(
+                `- **${stripTags(itemObj.name)}** ${entryText}`.trim(),
+              );
             } else {
               lines.push(...parseEntry(item as Entry));
             }
@@ -78,46 +82,50 @@ function parseEntryObject(obj: EntryObject): string[] {
       break;
     }
 
-    case 'table': {
+    case "table": {
       if (obj.caption) {
         lines.push(`**${stripTags(obj.caption)}**`);
       }
       if (obj.colLabels && obj.colLabels.length > 0) {
         const headers = obj.colLabels.map((h) => stripTags(h));
-        lines.push(`| ${headers.join(' | ')} |`);
-        lines.push(`| ${headers.map(() => '---').join(' | ')} |`);
+        lines.push(`| ${headers.join(" | ")} |`);
+        lines.push(`| ${headers.map(() => "---").join(" | ")} |`);
       }
       if (obj.rows) {
         for (const row of obj.rows) {
           const cells = row.map((cell) => {
-            if (typeof cell === 'string') return stripTags(cell);
-            return parseEntry(cell as Entry).join(' ');
+            if (typeof cell === "string") return stripTags(cell);
+            return parseEntry(cell as Entry).join(" ");
           });
-          lines.push(`| ${cells.join(' | ')} |`);
+          lines.push(`| ${cells.join(" | ")} |`);
         }
       }
       break;
     }
 
-    case 'abilityDc': {
-      const name = obj.name ? stripTags(obj.name) : 'Spell';
+    case "abilityDc": {
+      const name = obj.name ? stripTags(obj.name) : "Spell";
       const attrs = (obj.attributes ?? [])
         .map((a) => ABILITY_MAP[a] ?? a)
         .map((a) => a.charAt(0).toUpperCase() + a.slice(1));
-      lines.push(`**${name} save DC** = 8 + your proficiency bonus + your ${attrs.join('/')} modifier`);
+      lines.push(
+        `**${name} save DC** = 8 + your proficiency bonus + your ${attrs.join("/")} modifier`,
+      );
       break;
     }
 
-    case 'abilityAttackMod': {
-      const name = obj.name ? stripTags(obj.name) : 'Spell';
+    case "abilityAttackMod": {
+      const name = obj.name ? stripTags(obj.name) : "Spell";
       const attrs = (obj.attributes ?? [])
         .map((a) => ABILITY_MAP[a] ?? a)
         .map((a) => a.charAt(0).toUpperCase() + a.slice(1));
-      lines.push(`**${name} attack modifier** = your proficiency bonus + your ${attrs.join('/')} modifier`);
+      lines.push(
+        `**${name} attack modifier** = your proficiency bonus + your ${attrs.join("/")} modifier`,
+      );
       break;
     }
 
-    case 'quote': {
+    case "quote": {
       if (obj.entries) {
         for (const child of obj.entries) {
           const parsed = parseEntry(child);
@@ -130,7 +138,7 @@ function parseEntryObject(obj: EntryObject): string[] {
       break;
     }
 
-    case 'cell': {
+    case "cell": {
       if (obj.entry) {
         lines.push(...parseEntry(obj.entry as Entry));
       } else if (obj.entries) {
@@ -171,5 +179,5 @@ export function parseEntries(entries: Entry[]): string[] {
 }
 
 export function parseEntriesAsText(entries: Entry[]): string {
-  return parseEntries(entries).join('\n');
+  return parseEntries(entries).join("\n");
 }

@@ -1,24 +1,24 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { EncounterEntity } from 'src/entities/encounter.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
 import {
   GameErrorCode,
   GameResult,
   failure,
   success,
   GameEventData,
-} from '../interfaces/result.type';
-import { DiceService } from './dice.service';
-import { ConditionEffectsService } from './condition-effects.service';
+} from "../interfaces/result.type";
+import { DiceService } from "./dice.service";
+import { ConditionEffectsService } from "./condition-effects.service";
 import type {
   ActionStep,
   ReadyTrigger,
   ReadiedAction,
   PlannedActionStep,
-} from '../interfaces/combat.interfaces';
-import type { GenericActionDto } from '../dto/generic-action.dto';
+} from "../interfaces/combat.interfaces";
+import type { GenericActionDto } from "../dto/generic-action.dto";
 
 /**
  * Spec 003 T030 — executor das 8 ações genéricas PHB (cap. 9 "Actions in Combat").
@@ -54,16 +54,14 @@ export class GenericActionsService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter)
-      return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
-    if (encounter.status !== 'active')
+    if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
+    if (encounter.status !== "active")
       return failure(GameErrorCode.ENCOUNTER_NOT_ACTIVE);
 
     const participant = await this.participantRepo.findOne({
       where: { id: dto.participantId },
     });
-    if (!participant)
-      return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
+    if (!participant) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
 
     // É o turno dele?
     if (encounter.turnOrder[encounter.currentTurnIndex] !== participant.id)
@@ -82,21 +80,21 @@ export class GenericActionsService {
     }
 
     switch (dto.kind) {
-      case 'dodge':
+      case "dodge":
         return this.handleDodge(participant);
-      case 'dash':
+      case "dash":
         return this.handleDash(participant);
-      case 'disengage':
+      case "disengage":
         return this.handleDisengage(participant);
-      case 'help':
+      case "help":
         return this.handleHelp(participant, dto);
-      case 'hide':
+      case "hide":
         return this.handleHide(participant);
-      case 'ready':
+      case "ready":
         return this.handleReady(participant, dto, encounter.currentRound);
-      case 'search':
+      case "search":
         return this.handleSearch(participant, dto);
-      case 'use-object':
+      case "use-object":
         return this.handleUseObject(participant, dto);
       default:
         return failure(GameErrorCode.INVALID_PAYLOAD);
@@ -113,14 +111,14 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'dodge',
+      kind: "dodge",
       payload: { participantId: p.id },
       result: {
         ok: true,
         summary: `${p.displayName} está esquivando até o próximo turno`,
         events: [
           {
-            type: 'dodge_taken',
+            type: "dodge_taken",
             participantId: p.id,
             expiresAt: `next_turn_of:${p.id}`,
           },
@@ -129,10 +127,9 @@ export class GenericActionsService {
       timestamp: new Date().toISOString(),
     };
 
-    return success(
-      { step, finalState: this.snapshotState(p) },
-      [this.toGameEvent('dodge_taken', p.id)],
-    );
+    return success({ step, finalState: this.snapshotState(p) }, [
+      this.toGameEvent("dodge_taken", p.id),
+    ]);
   }
 
   private async handleDash(
@@ -152,17 +149,17 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'dash',
+      kind: "dash",
       payload: { participantId: p.id },
       result: {
         ok: true,
         summary: `${p.displayName} usou Disparada (movimento dobrado)`,
-        events: [{ type: 'dash_taken', participantId: p.id }],
+        events: [{ type: "dash_taken", participantId: p.id }],
       },
       timestamp: new Date().toISOString(),
     };
     return success({ step, finalState: this.snapshotState(p) }, [
-      this.toGameEvent('dash_taken', p.id),
+      this.toGameEvent("dash_taken", p.id),
     ]);
   }
 
@@ -177,17 +174,17 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'disengage',
+      kind: "disengage",
       payload: { participantId: p.id },
       result: {
         ok: true,
         summary: `${p.displayName} se desengajou (imune a attacks of opportunity neste turno)`,
-        events: [{ type: 'disengage_taken', participantId: p.id }],
+        events: [{ type: "disengage_taken", participantId: p.id }],
       },
       timestamp: new Date().toISOString(),
     };
     return success({ step, finalState: this.snapshotState(p) }, [
-      this.toGameEvent('disengage_taken', p.id),
+      this.toGameEvent("disengage_taken", p.id),
     ]);
   }
 
@@ -205,8 +202,10 @@ export class GenericActionsService {
       where: { id: dto.targetParticipantId },
     });
     if (!ally || !target) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
-    if (ally.faction !== p.faction) return failure(GameErrorCode.INVALID_TARGET);
-    if (target.faction === p.faction) return failure(GameErrorCode.INVALID_TARGET);
+    if (ally.faction !== p.faction)
+      return failure(GameErrorCode.INVALID_TARGET);
+    if (target.faction === p.faction)
+      return failure(GameErrorCode.INVALID_TARGET);
 
     p.helpingAllyParticipantId = ally.id;
     p.helpingTargetParticipantId = target.id;
@@ -215,7 +214,7 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'help',
+      kind: "help",
       payload: {
         participantId: p.id,
         allyParticipantId: ally.id,
@@ -226,7 +225,7 @@ export class GenericActionsService {
         summary: `${p.displayName} está ajudando ${ally.displayName} contra ${target.displayName}`,
         events: [
           {
-            type: 'help_given',
+            type: "help_given",
             participantId: p.id,
             allyParticipantId: ally.id,
             targetParticipantId: target.id,
@@ -236,7 +235,10 @@ export class GenericActionsService {
       timestamp: new Date().toISOString(),
     };
     return success({ step, finalState: this.snapshotState(p) }, [
-      this.toGameEvent('help_given', p.id, { ally: ally.id, target: target.id }),
+      this.toGameEvent("help_given", p.id, {
+        ally: ally.id,
+        target: target.id,
+      }),
     ]);
   }
 
@@ -247,7 +249,7 @@ export class GenericActionsService {
     // cálculo RAW completo com proficiências de skill fica em 004).
     // Usa 10 como Passive Perception default pra inimigos — modelo simplificado
     // descrito em research.md D11. Sight system completo é 005.
-    const stealthRoll = this.diceService.rollExpression('1d20').total;
+    const stealthRoll = this.diceService.rollExpression("1d20").total;
     const stealthMod = 3; // TODO(004): integrar com skill proficiencies da ficha
     const stealthTotal = stealthRoll + stealthMod;
     const passivePerception = 10;
@@ -256,7 +258,7 @@ export class GenericActionsService {
     let summary: string;
     const events: Array<{ type: string; [k: string]: unknown }> = [
       {
-        type: 'stealth_roll',
+        type: "stealth_roll",
         participantId: p.id,
         roll: stealthRoll,
         modifier: stealthMod,
@@ -266,13 +268,13 @@ export class GenericActionsService {
     ];
 
     if (stealthTotal >= passivePerception) {
-      if (!conditions.includes('hidden')) conditions.push('hidden');
+      if (!conditions.includes("hidden")) conditions.push("hidden");
       p.conditions = conditions;
       summary = `${p.displayName} escondeu-se (Stealth ${stealthTotal} vs Passive Perception ${passivePerception}): sucesso`;
       events.push({
-        type: 'condition_applied',
+        type: "condition_applied",
         participantId: p.id,
-        condition: 'hidden',
+        condition: "hidden",
       });
     } else {
       summary = `${p.displayName} tentou esconder-se (Stealth ${stealthTotal} vs Passive Perception ${passivePerception}): falhou`;
@@ -282,13 +284,13 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'hide',
+      kind: "hide",
       payload: { participantId: p.id },
       result: { ok: true, summary, events },
       timestamp: new Date().toISOString(),
     };
     return success({ step, finalState: this.snapshotState(p) }, [
-      this.toGameEvent('stealth_roll', p.id, { roll: stealthTotal }),
+      this.toGameEvent("stealth_roll", p.id, { roll: stealthTotal }),
     ]);
   }
 
@@ -304,15 +306,12 @@ export class GenericActionsService {
     // dupla checagem pra variantes).
     const trigger = dto.trigger as ReadyTrigger;
     if (
-      trigger.kind === 'enemy_enters_range' &&
+      trigger.kind === "enemy_enters_range" &&
       (trigger.rangeFt == null || trigger.rangeFt <= 0)
     ) {
       return failure(GameErrorCode.INVALID_READY_TRIGGER);
     }
-    if (
-      trigger.kind === 'enemy_attacks_ally' &&
-      !trigger.allyParticipantId
-    ) {
+    if (trigger.kind === "enemy_attacks_ally" && !trigger.allyParticipantId) {
       return failure(GameErrorCode.INVALID_READY_TRIGGER);
     }
 
@@ -320,9 +319,9 @@ export class GenericActionsService {
       trigger,
       actionDescriptor: {
         kind: dto.readiedAction.kind,
-        ...(dto.readiedAction.kind === 'attack'
+        ...(dto.readiedAction.kind === "attack"
           ? {
-              actionName: dto.readiedAction.actionName ?? '',
+              actionName: dto.readiedAction.actionName ?? "",
               targetParticipantIds:
                 dto.readiedAction.targetParticipantIds ?? [],
             }
@@ -336,7 +335,7 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'ready',
+      kind: "ready",
       payload: {
         participantId: p.id,
         trigger,
@@ -345,12 +344,12 @@ export class GenericActionsService {
       result: {
         ok: true,
         summary: `${p.displayName} preparou ação (gatilho: ${trigger.kind})`,
-        events: [{ type: 'ready_armed', participantId: p.id, trigger }],
+        events: [{ type: "ready_armed", participantId: p.id, trigger }],
       },
       timestamp: new Date().toISOString(),
     };
     return success({ step, finalState: this.snapshotState(p) }, [
-      this.toGameEvent('ready_armed', p.id, { trigger }),
+      this.toGameEvent("ready_armed", p.id, { trigger }),
     ]);
   }
 
@@ -358,24 +357,24 @@ export class GenericActionsService {
     p: EncounterParticipantEntity,
     dto: GenericActionDto,
   ): Promise<GameResult<ExecuteResult>> {
-    const ability = dto.ability ?? 'perception';
+    const ability = dto.ability ?? "perception";
     // Modificador simples (RAW usa skill proficiency — integração em 004).
-    const roll = this.diceService.rollExpression('1d20').total;
-    const mod = ability === 'perception' ? 2 : 1;
+    const roll = this.diceService.rollExpression("1d20").total;
+    const mod = ability === "perception" ? 2 : 1;
     const total = roll + mod;
 
     p.actionUsed = true;
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'search',
+      kind: "search",
       payload: { participantId: p.id, ability },
       result: {
         ok: true,
         summary: `${p.displayName} procurou (${ability}): ${total} (${roll}+${mod})`,
         events: [
           {
-            type: 'search_roll',
+            type: "search_roll",
             participantId: p.id,
             ability,
             roll,
@@ -387,7 +386,7 @@ export class GenericActionsService {
       timestamp: new Date().toISOString(),
     };
     return success({ step, finalState: this.snapshotState(p) }, [
-      this.toGameEvent('search_roll', p.id, { ability, total }),
+      this.toGameEvent("search_roll", p.id, { ability, total }),
     ]);
   }
 
@@ -403,16 +402,16 @@ export class GenericActionsService {
     let appliedSummary: string;
     const events: Array<{ type: string; [k: string]: unknown }> = [];
 
-    if (slug === 'potion-of-healing') {
-      const healing = this.diceService.rollExpression('2d4+2').total;
+    if (slug === "potion-of-healing") {
+      const healing = this.diceService.rollExpression("2d4+2").total;
       p.currentHp = Math.min(
         (p.currentHp ?? 0) + healing,
         p.maxHp ?? (p.currentHp ?? 0) + healing,
       );
       appliedSummary = `${p.displayName} usou Poção de Cura (+${healing} HP)`;
       events.push(
-        { type: 'item_used', participantId: p.id, slug },
-        { type: 'healing_applied', participantId: p.id, amount: healing },
+        { type: "item_used", participantId: p.id, slug },
+        { type: "healing_applied", participantId: p.id, amount: healing },
       );
     } else {
       return failure(GameErrorCode.ITEM_NOT_USABLE);
@@ -422,13 +421,13 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
-      kind: 'use-object',
+      kind: "use-object",
       payload: { participantId: p.id, objectRef: dto.objectRef },
       result: { ok: true, summary: appliedSummary, events },
       timestamp: new Date().toISOString(),
     };
     return success({ step, finalState: this.snapshotState(p) }, [
-      this.toGameEvent('item_used', p.id, { slug }),
+      this.toGameEvent("item_used", p.id, { slug }),
     ]);
   }
 
@@ -468,6 +467,6 @@ export interface ExecuteResult {
     reactionUsed: boolean;
     hp: { current: number; max: number };
     conditions: string[];
-    dyingState: 'none' | 'dying' | 'stable' | 'dead';
+    dyingState: "none" | "dying" | "stable" | "dead";
   };
 }

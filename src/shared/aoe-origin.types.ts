@@ -6,13 +6,11 @@
  * Duplicação proposital — qualquer divergência entre backend/frontend é bug.
  */
 
-export type AoEOriginType = 'self' | 'point' | 'fixed';
+export type AoEOriginType = "self" | "point" | "fixed";
 
-export type AoEShape = 'sphere' | 'cone' | 'line' | 'cube' | 'cylinder';
+export type AoEShape = "sphere" | "cone" | "line" | "cube" | "cylinder";
 
-export type AoEDirection =
-  | 'N' | 'NE' | 'E' | 'SE'
-  | 'S' | 'SW' | 'W' | 'NW';
+export type AoEDirection = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
 
 export interface GridCell {
   col: number;

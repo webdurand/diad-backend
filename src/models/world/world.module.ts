@@ -1,5 +1,5 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   CampaignEntity,
   CampaignPlayerEntity,
@@ -21,14 +21,14 @@ import {
   MonsterEntity,
   EquipmentEntity,
   MagicItemEntity,
-} from 'src/entities';
-import { AuthModule } from '../auth/auth.module';
-import { WorldController } from './world.controller';
-import { CampaignService } from './services/campaign.service';
-import { LocationService } from './services/location.service';
-import { NpcService } from './services/npc.service';
-import { FactionService } from './services/faction.service';
-import { QuestService } from './services/quest.service';
+} from "src/entities";
+import { AuthModule } from "../auth/auth.module";
+import { WorldController } from "./world.controller";
+import { CampaignService } from "./services/campaign.service";
+import { LocationService } from "./services/location.service";
+import { NpcService } from "./services/npc.service";
+import { FactionService } from "./services/faction.service";
+import { QuestService } from "./services/quest.service";
 
 @Module({
   imports: [

@@ -21,13 +21,13 @@
 export type MonsterActionLike = Record<string, unknown>;
 
 export type TransformationSource =
-  | 'wild-shape'
-  | 'polymorph-spell'
-  | 'true-polymorph-spell'
-  | 'shapechange-spell'
-  | 'alter-self-spell'
-  | 'form-of-dread'
-  | 'draconic-transformation';
+  | "wild-shape"
+  | "polymorph-spell"
+  | "true-polymorph-spell"
+  | "shapechange-spell"
+  | "alter-self-spell"
+  | "form-of-dread"
+  | "draconic-transformation";
 
 export interface TransformationForm {
   /** Slug do monster usado como template (quando formKind='monster'). */
@@ -41,8 +41,21 @@ export interface TransformationForm {
   maxHp: number;
   currentHp: number;
   tempHp: number;
-  speed: { walk: number; fly?: number; swim?: number; climb?: number; burrow?: number };
-  stats: { str: number; dex: number; con: number; int: number; wis: number; cha: number };
+  speed: {
+    walk: number;
+    fly?: number;
+    swim?: number;
+    climb?: number;
+    burrow?: number;
+  };
+  stats: {
+    str: number;
+    dex: number;
+    con: number;
+    int: number;
+    wis: number;
+    cha: number;
+  };
   actions: MonsterActionLike[];
   senses?: Record<string, unknown>;
   challengeRating?: number;
@@ -80,10 +93,12 @@ export interface TransformationState {
    * 'speech' (falar se form permite), 'mental-stats' (manter WIS/INT/CHA),
    * 'class-features' (features n\u00e3o-f\u00edsicas), 'spellcasting'.
    */
-  retainedAbilities: Array<'speech' | 'mental-stats' | 'class-features' | 'spellcasting'>;
+  retainedAbilities: Array<
+    "speech" | "mental-stats" | "class-features" | "spellcasting"
+  >;
 
   /** RAW 2024: como tratar equipment empunhado/vestido. */
-  equipmentHandling: 'merge' | 'drop' | 'keep';
+  equipmentHandling: "merge" | "drop" | "keep";
 
   /** Condi\u00e7\u00f5es pra reverter. */
   revertTriggers: {
@@ -95,8 +110,8 @@ export interface TransformationState {
 }
 
 export type TransformationRevertReason =
-  | 'player-dismiss'
-  | 'hp-zero'
-  | 'duration-end'
-  | 'concentration-broken'
-  | 'caster-death';
+  | "player-dismiss"
+  | "hp-zero"
+  | "duration-end"
+  | "concentration-broken"
+  | "caster-death";

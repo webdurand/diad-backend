@@ -3,7 +3,7 @@ import type {
   MonsterKnownSpell,
   SpellSlotLevel,
   InnateUsage,
-} from '../../models/game-engine/interfaces/monster-typed';
+} from "../../models/game-engine/interfaces/monster-typed";
 
 /**
  * Parses a monster's Spellcasting or Innate Spellcasting `special_ability`
@@ -32,34 +32,34 @@ import type {
  * NULL and the runtime will report the monster as having no spells.
  */
 
-const ABILITY_MAP: Record<string, 'int' | 'wis' | 'cha'> = {
-  intelligence: 'int',
-  wisdom: 'wis',
-  charisma: 'cha',
-  int: 'int',
-  wis: 'wis',
-  cha: 'cha',
+const ABILITY_MAP: Record<string, "int" | "wis" | "cha"> = {
+  intelligence: "int",
+  wisdom: "wis",
+  charisma: "cha",
+  int: "int",
+  wis: "wis",
+  cha: "cha",
 };
 
 const SLOT_LEVELS: Record<string, SpellSlotLevel> = {
   cantrip: 0 as unknown as SpellSlotLevel,
-  '1st': 1,
-  '2nd': 2,
-  '3rd': 3,
-  '4th': 4,
-  '5th': 5,
-  '6th': 6,
-  '7th': 7,
-  '8th': 8,
-  '9th': 9,
+  "1st": 1,
+  "2nd": 2,
+  "3rd": 3,
+  "4th": 4,
+  "5th": 5,
+  "6th": 6,
+  "7th": 7,
+  "8th": 8,
+  "9th": 9,
 };
 
 const INNATE_USAGE_MAP: Record<string, InnateUsage> = {
-  'at will': 'at-will',
-  'at-will': 'at-will',
-  '1/day': '1/day',
-  '2/day': '2/day',
-  '3/day': '3/day',
+  "at will": "at-will",
+  "at-will": "at-will",
+  "1/day": "1/day",
+  "2/day": "2/day",
+  "3/day": "3/day",
 };
 
 /**
@@ -70,10 +70,10 @@ function slugifySpellName(name: string): string {
   return name
     .trim()
     .toLowerCase()
-    .replace(/\([^)]*\)/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
     .trim();
 }
 
@@ -84,20 +84,21 @@ export function parseSpellcastingFromSpecialAbilities(
   if (abilities.length === 0) return null;
 
   const innateAbility = abilities.find(
-    (a: any) => typeof a?.name === 'string' && /innate\s+spellcasting/i.test(a.name),
+    (a: any) =>
+      typeof a?.name === "string" && /innate\s+spellcasting/i.test(a.name),
   );
-  if (innateAbility && typeof innateAbility.desc === 'string') {
+  if (innateAbility && typeof innateAbility.desc === "string") {
     const parsed = parseInnate(innateAbility.desc);
     if (parsed) return parsed;
   }
 
   const standardAbility = abilities.find(
     (a: any) =>
-      typeof a?.name === 'string' &&
+      typeof a?.name === "string" &&
       /spellcasting/i.test(a.name) &&
       !/innate/i.test(a.name),
   );
-  if (standardAbility && typeof standardAbility.desc === 'string') {
+  if (standardAbility && typeof standardAbility.desc === "string") {
     const parsed = parseStandard(standardAbility.desc);
     if (parsed) return parsed;
   }
@@ -106,9 +107,7 @@ export function parseSpellcastingFromSpecialAbilities(
 }
 
 function parseStandard(desc: string): MonsterSpellcasting | null {
-  const abilityMatch = desc.match(
-    /spellcasting ability is\s+(\w+)/i,
-  );
+  const abilityMatch = desc.match(/spellcasting ability is\s+(\w+)/i);
   const dcMatch = desc.match(/spell save DC\s+(\d+)/i);
   const attackMatch = desc.match(/([+-]?\d+)\s+to hit with spell attacks/i);
   const levelMatch = desc.match(/(\d+)(?:st|nd|rd|th)-level spellcaster/i);
@@ -153,7 +152,7 @@ function parseStandard(desc: string): MonsterSpellcasting | null {
   if (knownSpells.length === 0) return null;
 
   return {
-    type: 'standard',
+    type: "standard",
     ability,
     saveDc,
     attackBonus,
@@ -190,8 +189,11 @@ function parseInnate(desc: string): MonsterSpellcasting | null {
     );
     if (!usageMatch) continue;
 
-    const usageKey = usageMatch[1].toLowerCase().replace(/\s+each/, '').replace(/\s+/g, ' ');
-    const usage = INNATE_USAGE_MAP[usageKey as keyof typeof INNATE_USAGE_MAP];
+    const usageKey = usageMatch[1]
+      .toLowerCase()
+      .replace(/\s+each/, "")
+      .replace(/\s+/g, " ");
+    const usage = INNATE_USAGE_MAP[usageKey];
     if (!usage) continue;
 
     for (const slug of extractSpellSlugs(usageMatch[2])) {
@@ -203,7 +205,7 @@ function parseInnate(desc: string): MonsterSpellcasting | null {
   if (knownSpells.length === 0) return null;
 
   return {
-    type: 'innate',
+    type: "innate",
     ability,
     saveDc,
     attackBonus,
@@ -216,7 +218,7 @@ function extractSpellSlugs(raw: string): string[] {
   return raw
     .split(/,|;/)
     .map((s) => s.trim())
-    .map((s) => s.replace(/\*+$/, '').trim())
+    .map((s) => s.replace(/\*+$/, "").trim())
     .filter(Boolean)
     .map(slugifySpellName)
     .filter(Boolean);

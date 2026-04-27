@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 016 M4 — XP award audit log.
@@ -10,7 +10,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Ver `specs/016-play-shell-foundation/spec.md` §7.1.
  */
 export class CreateXpAwardEvent1779100000000 implements MigrationInterface {
-  name = 'CreateXpAwardEvent1779100000000';
+  name = "CreateXpAwardEvent1779100000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

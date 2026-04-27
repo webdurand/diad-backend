@@ -1,11 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { CampaignPlayerEntity } from 'src/entities/campaign-player.entity';
-import { parseRoomKey, RoomAuthorizer } from 'src/realtime/room-authorizer.interface';
-import { CampaignService } from 'src/models/world/services/campaign.service';
-import { SessionService } from '../services/session.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import {
+  parseRoomKey,
+  RoomAuthorizer,
+} from "src/realtime/room-authorizer.interface";
+import { CampaignService } from "src/models/world/services/campaign.service";
+import { SessionService } from "../services/session.service";
 
 /**
  * Authorizes WS joins to `encounter:<encounterId>` rooms.
@@ -14,7 +17,7 @@ import { SessionService } from '../services/session.service';
  */
 @Injectable()
 export class EncounterRoomAuthorizer implements RoomAuthorizer {
-  readonly prefix = 'encounter';
+  readonly prefix = "encounter";
 
   constructor(
     @InjectRepository(EncounterEntity)
@@ -30,7 +33,7 @@ export class EncounterRoomAuthorizer implements RoomAuthorizer {
 
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
-      select: ['id', 'sessionId'],
+      select: ["id", "sessionId"],
     });
     if (!encounter) return false;
 

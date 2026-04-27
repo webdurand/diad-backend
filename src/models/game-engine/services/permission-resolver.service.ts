@@ -1,7 +1,7 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { EncounterService } from './encounter.service';
-import { SessionService } from './session.service';
-import { CampaignService } from '../../world/services/campaign.service';
+import { ForbiddenException, Injectable } from "@nestjs/common";
+import { EncounterService } from "./encounter.service";
+import { SessionService } from "./session.service";
+import { CampaignService } from "../../world/services/campaign.service";
 
 /**
  * Central permission policy for combat mutations.
@@ -31,12 +31,15 @@ export class PermissionResolver {
     encounterId: string,
   ): Promise<string> {
     if (!authUserId) {
-      throw new ForbiddenException('Sessao ausente.');
+      throw new ForbiddenException("Sessao ausente.");
     }
 
-    const participant = await this.encounterService.getParticipant(participantId);
+    const participant =
+      await this.encounterService.getParticipant(participantId);
     if (participant.encounterId !== encounterId) {
-      throw new ForbiddenException('Participante nao pertence a este encontro.');
+      throw new ForbiddenException(
+        "Participante nao pertence a este encontro.",
+      );
     }
 
     const encounter = await this.encounterService.getById(encounterId);
@@ -45,9 +48,11 @@ export class PermissionResolver {
 
     const isDm = await this.isCampaignDm(campaignId, authUserId);
 
-    if (participant.type !== 'pc' || !participant.characterId) {
+    if (participant.type !== "pc" || !participant.characterId) {
       if (isDm) return authUserId;
-      throw new ForbiddenException('Apenas o DM pode controlar este participante.');
+      throw new ForbiddenException(
+        "Apenas o DM pode controlar este participante.",
+      );
     }
 
     const characterOwner = await this.encounterService.resolveCharacterOwner(
@@ -59,7 +64,7 @@ export class PermissionResolver {
     if (characterOwner === authUserId) return authUserId;
     if (isDm) return characterOwner;
 
-    throw new ForbiddenException('Voce nao controla este personagem.');
+    throw new ForbiddenException("Voce nao controla este personagem.");
   }
 
   private async isCampaignDm(

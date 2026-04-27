@@ -1,4 +1,7 @@
-import type { MonsterMultiattack, MonsterMultiattackSubAttack } from '../../models/game-engine/interfaces/monster-typed';
+import type {
+  MonsterMultiattack,
+  MonsterMultiattackSubAttack,
+} from "../../models/game-engine/interfaces/monster-typed";
 
 /**
  * Parses a monster's Multiattack description into a structured `MonsterMultiattack`.
@@ -43,28 +46,29 @@ function findActionName(
 ): string | null {
   const target = needle.trim().toLowerCase();
   if (!target) return null;
-  const singular = target.replace(/s$/i, '');
+  const singular = target.replace(/s$/i, "");
   for (const a of actions) {
     if (!a?.name) continue;
     const nameLower = a.name.toLowerCase();
     if (nameLower === target || nameLower === singular) return a.name;
     if (nameLower.includes(target) || target.includes(nameLower)) return a.name;
-    if (nameLower.includes(singular) || singular.includes(nameLower)) return a.name;
+    if (nameLower.includes(singular) || singular.includes(nameLower))
+      return a.name;
   }
   return null;
 }
 
 function normalizeSubName(raw: string): string {
   const clean = raw
-    .replace(/\bweapon\b/gi, '')
-    .replace(/\bmelee\b/gi, '')
-    .replace(/\branged\b/gi, '')
-    .replace(/\battack(?:s)?\b/gi, '')
-    .replace(/\bits\b/gi, '')
-    .replace(/\bwith\b/gi, '')
-    .replace(/\s+/g, ' ')
+    .replace(/\bweapon\b/gi, "")
+    .replace(/\bmelee\b/gi, "")
+    .replace(/\branged\b/gi, "")
+    .replace(/\battack(?:s)?\b/gi, "")
+    .replace(/\bits\b/gi, "")
+    .replace(/\bwith\b/gi, "")
+    .replace(/\s+/g, " ")
     .trim();
-  return clean.replace(/\.$/, '');
+  return clean.replace(/\.$/, "");
 }
 
 export function parseMultiattackFromDescription(
@@ -147,7 +151,9 @@ export function parseMultiattackFromDescription(
   return null;
 }
 
-function mergeDuplicates(seq: MonsterMultiattackSubAttack[]): MonsterMultiattackSubAttack[] {
+function mergeDuplicates(
+  seq: MonsterMultiattackSubAttack[],
+): MonsterMultiattackSubAttack[] {
   const map = new Map<string, MonsterMultiattackSubAttack>();
   for (const s of seq) {
     const existing = map.get(s.actionName);
@@ -161,6 +167,6 @@ function toTitleCase(s: string): string {
   return s
     .trim()
     .split(/\s+/)
-    .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ''))
-    .join(' ');
+    .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ""))
+    .join(" ");
 }

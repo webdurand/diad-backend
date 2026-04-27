@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class EnablePgvector1774500000000 implements MigrationInterface {
-  name = 'EnablePgvector1774500000000';
+  name = "EnablePgvector1774500000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);

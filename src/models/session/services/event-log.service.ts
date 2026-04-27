@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { SessionEventEntity } from 'src/entities/session-event.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { SessionEventEntity } from "src/entities/session-event.entity";
 
 export interface LogEventDto {
   sessionId: string;
@@ -46,7 +46,7 @@ export class EventLogService {
   ): Promise<SessionEventEntity[]> {
     return this.eventRepo.find({
       where: { sessionId },
-      order: { sequence: 'ASC' },
+      order: { sequence: "ASC" },
       skip: offset,
       take: limit,
     });
@@ -58,7 +58,7 @@ export class EventLogService {
   ): Promise<SessionEventEntity[]> {
     return this.eventRepo.find({
       where: { sessionId },
-      order: { sequence: 'DESC' },
+      order: { sequence: "DESC" },
       take: limit,
     });
   }
@@ -66,15 +66,15 @@ export class EventLogService {
   async getSceneEvents(sceneId: string): Promise<SessionEventEntity[]> {
     return this.eventRepo.find({
       where: { sceneId },
-      order: { sequence: 'ASC' },
+      order: { sequence: "ASC" },
     });
   }
 
   private async getNextSequence(sessionId: string): Promise<number> {
     const result = await this.eventRepo
-      .createQueryBuilder('e')
-      .select('COALESCE(MAX(e.sequence), 0)', 'max')
-      .where('e.session_id = :sessionId', { sessionId })
+      .createQueryBuilder("e")
+      .select("COALESCE(MAX(e.sequence), 0)", "max")
+      .where("e.session_id = :sessionId", { sessionId })
       .getRawOne();
     return (parseInt(result.max, 10) || 0) + 1;
   }

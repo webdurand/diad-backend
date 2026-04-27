@@ -11,7 +11,7 @@ export interface EditionRules {
   casterTypes?: Record<string, string>;
 
   /** Override prepared spell formula per class */
-  preparedFormulas?: Record<string, 'level+mod' | 'halfLevel+mod'>;
+  preparedFormulas?: Record<string, "level+mod" | "halfLevel+mod">;
 
   /** Whether this edition supports weapon mastery */
   hasWeaponMastery?: boolean;
@@ -33,7 +33,7 @@ export interface EditionRules {
    *  - '2024_ten_levels': 10 níveis com -2×level em d20s e -5×level em speed (XPHB)
    *  Default: '2014_six_levels' se não especificado.
    */
-  exhaustionVariant?: '2014_six_levels' | '2024_ten_levels';
+  exhaustionVariant?: "2014_six_levels" | "2024_ten_levels";
 
   /**
    * Spec 005 — Source code (CompSourceEntity.code) a consultar quando
@@ -62,22 +62,22 @@ export const PHB_RULES: EditionRules = {
     default: 3,
   },
   casterTypes: {
-    ranger: 'known',
+    ranger: "known",
   },
   preparedFormulas: {
-    paladin: 'halfLevel+mod',
+    paladin: "halfLevel+mod",
   },
   hasWeaponMastery: false,
   hasDivineOrder: false,
   hasPrimalOrder: false,
   backgroundGrantsFeat: false,
   backgroundGrantsAbilityBonuses: false,
-  exhaustionVariant: '2014_six_levels',
+  exhaustionVariant: "2014_six_levels",
   // Spec 005 — while PHB seed doesn't cover all (class, level) rows, resolve
   // missing features/classes through XPHB. Delivers correct level-up for PHB
   // PCs out of the box; spec 006 closes the seed gap later.
-  featureFallbackSource: 'XPHB',
-  classFallbackSource: 'XPHB',
+  featureFallbackSource: "XPHB",
+  classFallbackSource: "XPHB",
 };
 
 /** Default rules for 2024 (XPHB) edition */
@@ -86,17 +86,17 @@ export const XPHB_RULES: EditionRules = {
     default: 3,
   },
   casterTypes: {
-    ranger: 'total_access',
+    ranger: "total_access",
   },
   preparedFormulas: {
-    paladin: 'level+mod',
+    paladin: "level+mod",
   },
   hasWeaponMastery: true,
   hasDivineOrder: true,
   hasPrimalOrder: true,
   backgroundGrantsFeat: true,
   backgroundGrantsAbilityBonuses: true,
-  exhaustionVariant: '2024_ten_levels',
+  exhaustionVariant: "2024_ten_levels",
 };
 
 /**
@@ -108,7 +108,9 @@ export function getSubclassLevel(
   rules?: EditionRules,
 ): number {
   if (!rules?.subclassLevels) return 3;
-  return rules.subclassLevels[classSlug] ?? rules.subclassLevels['default'] ?? 3;
+  return (
+    rules.subclassLevels[classSlug] ?? rules.subclassLevels["default"] ?? 3
+  );
 }
 
 /**
@@ -127,6 +129,6 @@ export function getCasterTypeOverride(
 export function getPreparedFormula(
   classSlug: string,
   rules?: EditionRules,
-): 'level+mod' | 'halfLevel+mod' | undefined {
+): "level+mod" | "halfLevel+mod" | undefined {
   return rules?.preparedFormulas?.[classSlug];
 }

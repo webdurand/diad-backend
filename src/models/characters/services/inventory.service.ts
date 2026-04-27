@@ -2,9 +2,9 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterEquipmentEntity,
@@ -13,10 +13,10 @@ import {
   CharacterAbilityScoreEntity,
   EquipmentEntity,
   MagicItemEntity,
-} from 'src/entities';
-import { EquipmentSourceEnum } from 'src/entities/enums';
-import { CharacterStateService } from './character-state.service';
-import { ensureCharacterOwnership } from 'src/shared/character-guard';
+} from "src/entities";
+import { EquipmentSourceEnum } from "src/entities/enums";
+import { CharacterStateService } from "./character-state.service";
+import { ensureCharacterOwnership } from "src/shared/character-guard";
 
 // ---- DTOs ----
 
@@ -41,7 +41,7 @@ export interface EquipToggleDto {
   equipped: boolean;
 }
 
-export type HandSlot = 'main' | 'off' | null;
+export type HandSlot = "main" | "off" | null;
 
 export interface SetHandDto {
   /** 'main' = empunha em main hand; 'off' = em off-hand; null = guarda (stow) */
@@ -137,8 +137,8 @@ function isTwoHanded(equipment: EquipmentEntity | undefined | null): boolean {
   if (!Array.isArray(props)) return false;
   return props.some(
     (p) =>
-      (p.slug ?? p.index ?? '').toLowerCase() === 'two-handed' ||
-      (p.name ?? '').toLowerCase() === 'two-handed',
+      (p.slug ?? p.index ?? "").toLowerCase() === "two-handed" ||
+      (p.name ?? "").toLowerCase() === "two-handed",
   );
 }
 
@@ -175,7 +175,7 @@ export class InventoryService {
     const abilities = await this.charAbilityRepo.find({
       where: { character_id: characterId },
     });
-    const str = abilities.find((a) => a.ability_score.slug === 'str');
+    const str = abilities.find((a) => a.ability_score.slug === "str");
     return str ? str.base_score + str.bonus : 10;
   }
 
@@ -269,7 +269,7 @@ export class InventoryService {
       id: dto.equipmentId,
     });
     if (!equipment) {
-      throw new NotFoundException('Equipamento nao encontrado na biblioteca.');
+      throw new NotFoundException("Equipamento nao encontrado na biblioteca.");
     }
 
     const existing = await this.charEquipRepo.findOne({
@@ -312,11 +312,11 @@ export class InventoryService {
       where: { id: itemId, character_id: characterId },
     });
     if (!item) {
-      throw new NotFoundException('Item nao encontrado no inventario.');
+      throw new NotFoundException("Item nao encontrado no inventario.");
     }
 
     if (dto.quantity < 0) {
-      throw new BadRequestException('Quantidade deve ser >= 0.');
+      throw new BadRequestException("Quantidade deve ser >= 0.");
     }
     if (dto.quantity === 0) {
       await this.charEquipRepo.remove(item);
@@ -339,7 +339,7 @@ export class InventoryService {
       where: { id: itemId, character_id: characterId },
     });
     if (!item) {
-      throw new NotFoundException('Item nao encontrado no inventario.');
+      throw new NotFoundException("Item nao encontrado no inventario.");
     }
 
     await this.charEquipRepo.remove(item);
@@ -358,7 +358,7 @@ export class InventoryService {
       where: { character_id: characterId },
     });
     if (!state) {
-      throw new NotFoundException('Estado do personagem nao encontrado.');
+      throw new NotFoundException("Estado do personagem nao encontrado.");
     }
 
     if (dto.cp !== undefined) state.cp += dto.cp;
@@ -367,7 +367,7 @@ export class InventoryService {
     if (dto.pp !== undefined) state.pp += dto.pp;
 
     if (state.cp < 0 || state.sp < 0 || state.gp < 0 || state.pp < 0) {
-      throw new BadRequestException('Moedas nao podem ficar negativas.');
+      throw new BadRequestException("Moedas nao podem ficar negativas.");
     }
 
     await this.charStateRepo.save(state);
@@ -389,7 +389,7 @@ export class InventoryService {
       where: { id: itemId, character_id: characterId },
     });
     if (!item) {
-      throw new NotFoundException('Item nao encontrado no inventario.');
+      throw new NotFoundException("Item nao encontrado no inventario.");
     }
 
     if (dto.equipped) {
@@ -413,8 +413,8 @@ export class InventoryService {
     const isShield =
       ac && !(ac.base as number) && ac.base !== undefined
         ? false
-        : eq.slug?.includes('shield') ||
-          eq.name?.toLowerCase().includes('shield');
+        : eq.slug?.includes("shield") ||
+          eq.name?.toLowerCase().includes("shield");
     const isShieldByAc = ac && (ac.base as number) === 0;
 
     const equippedItems = await this.charEquipRepo.find({
@@ -429,7 +429,7 @@ export class InventoryService {
       });
       if (hasArmor) {
         throw new BadRequestException(
-          'Ja existe uma armadura equipada. Desequipe-a primeiro.',
+          "Ja existe uma armadura equipada. Desequipe-a primeiro.",
         );
       }
     }
@@ -438,13 +438,13 @@ export class InventoryService {
       const hasShield = equippedItems.some((ei) => {
         if (ei.id === item.id) return false;
         return (
-          ei.equipment.slug?.includes('shield') ||
-          ei.equipment.name?.toLowerCase().includes('shield')
+          ei.equipment.slug?.includes("shield") ||
+          ei.equipment.name?.toLowerCase().includes("shield")
         );
       });
       if (hasShield) {
         throw new BadRequestException(
-          'Ja existe um escudo equipado. Desequipe-o primeiro.',
+          "Ja existe um escudo equipado. Desequipe-o primeiro.",
         );
       }
     }
@@ -491,7 +491,7 @@ export class InventoryService {
       where: { id: itemId, character_id: characterId },
     });
     if (!item) {
-      throw new NotFoundException('Item nao encontrado no inventario.');
+      throw new NotFoundException("Item nao encontrado no inventario.");
     }
 
     if (dto.hand === null) {
@@ -509,7 +509,7 @@ export class InventoryService {
     const allInHand = await this.charEquipRepo.find({
       where: { character_id: characterId },
     });
-    const targetCol = dto.hand === 'main' ? 'mainHand' : 'offHand';
+    const targetCol = dto.hand === "main" ? "mainHand" : "offHand";
     for (const other of allInHand) {
       if (other.id === item.id) continue;
       if (other[targetCol]) {
@@ -517,16 +517,16 @@ export class InventoryService {
         await this.charEquipRepo.save(other);
       }
       // Se o NOVO item é 2H e vai em main, também zera o off_hand dos outros
-      if (dto.hand === 'main' && isTwoHanded(item.equipment) && other.offHand) {
+      if (dto.hand === "main" && isTwoHanded(item.equipment) && other.offHand) {
         other.offHand = false;
         await this.charEquipRepo.save(other);
       }
     }
 
-    item.mainHand = dto.hand === 'main';
-    item.offHand = dto.hand === 'off';
+    item.mainHand = dto.hand === "main";
+    item.offHand = dto.hand === "off";
     // Se é 2H em main, também marca off (ocupa ambas)
-    if (dto.hand === 'main' && isTwoHanded(item.equipment)) {
+    if (dto.hand === "main" && isTwoHanded(item.equipment)) {
       item.offHand = true;
     }
     const saved = await this.charEquipRepo.save(item);
@@ -536,38 +536,42 @@ export class InventoryService {
   private async validateSetHand(
     characterId: string,
     item: CharacterEquipmentEntity,
-    hand: 'main' | 'off',
+    hand: "main" | "off",
   ): Promise<void> {
     const eq = item.equipment;
-    const props = (eq.properties ?? []) as Array<{ slug?: string; index?: string; name?: string }>;
+    const props = (eq.properties ?? []) as Array<{
+      slug?: string;
+      index?: string;
+      name?: string;
+    }>;
     const propSlugs = new Set(
       (Array.isArray(props) ? props : [])
-        .map((p) => (p.slug ?? p.index ?? '').toLowerCase())
+        .map((p) => (p.slug ?? p.index ?? "").toLowerCase())
         .filter(Boolean),
     );
     const isWeapon = !!eq.damage;
     const isShield =
-      eq.slug?.includes('shield') || eq.name?.toLowerCase().includes('shield');
+      eq.slug?.includes("shield") || eq.name?.toLowerCase().includes("shield");
     const isArmor = (() => {
       const ac = eq.armor_class as Record<string, unknown> | null;
-      return ac && typeof ac.base === 'number' && (ac.base as number) > 0;
+      return ac && typeof ac.base === "number" && ac.base > 0;
     })();
 
     if (!isWeapon && !isShield) {
       throw new BadRequestException(
-        'Apenas armas e escudos podem ser empunhados.',
+        "Apenas armas e escudos podem ser empunhados.",
       );
     }
 
     if (isArmor && !isShield) {
       throw new BadRequestException(
-        'Armaduras nao sao empunhadas (use o toggle de equipar).',
+        "Armaduras nao sao empunhadas (use o toggle de equipar).",
       );
     }
 
-    if (hand === 'off') {
+    if (hand === "off") {
       // Off hand: light weapon (dual-wielding) OU shield
-      const isLight = propSlugs.has('light');
+      const isLight = propSlugs.has("light");
       if (!isShield && !isLight) {
         throw new BadRequestException(
           'Mao secundaria exige arma com propriedade "Light" ou escudo.',
@@ -581,15 +585,15 @@ export class InventoryService {
       if (mainHandItem && mainHandItem.id !== item.id) {
         if (isTwoHanded(mainHandItem.equipment)) {
           throw new BadRequestException(
-            'Mao principal empunha arma de duas maos. Guarde-a antes de usar a secundaria.',
+            "Mao principal empunha arma de duas maos. Guarde-a antes de usar a secundaria.",
           );
         }
       }
     }
 
-    if (hand === 'main' && isShield) {
+    if (hand === "main" && isShield) {
       throw new BadRequestException(
-        'Escudo nao pode ser empunhado na mao principal. Use a secundaria.',
+        "Escudo nao pode ser empunhado na mao principal. Use a secundaria.",
       );
     }
   }
@@ -607,7 +611,7 @@ export class InventoryService {
       id: dto.magicItemId,
     });
     if (!magicItem) {
-      throw new NotFoundException('Item magico nao encontrado na biblioteca.');
+      throw new NotFoundException("Item magico nao encontrado na biblioteca.");
     }
 
     const entry = this.charMagicItemRepo.create({
@@ -634,7 +638,7 @@ export class InventoryService {
       where: { id: itemId, character_id: characterId },
     });
     if (!item) {
-      throw new NotFoundException('Item magico nao encontrado no inventario.');
+      throw new NotFoundException("Item magico nao encontrado no inventario.");
     }
 
     await this.charMagicItemRepo.remove(item);
@@ -652,7 +656,7 @@ export class InventoryService {
       where: { id: itemId, character_id: characterId },
     });
     if (!item) {
-      throw new NotFoundException('Item magico nao encontrado no inventario.');
+      throw new NotFoundException("Item magico nao encontrado no inventario.");
     }
 
     if (dto.attuned) {
@@ -698,7 +702,7 @@ export class InventoryService {
       where: { id: itemId, character_id: characterId },
     });
     if (!item) {
-      throw new NotFoundException('Item nao encontrado no inventario.');
+      throw new NotFoundException("Item nao encontrado no inventario.");
     }
 
     // Decrement quantity (remove if 0)
@@ -715,7 +719,7 @@ export class InventoryService {
       unknown
     > | null;
 
-    if (effect?.autoApply && effect?.type === 'healing' && effect?.dice) {
+    if (effect?.autoApply && effect?.type === "healing" && effect?.dice) {
       const rolled = this.rollDice(effect.dice as string);
       const hpResult = await this.stateService.updateHp(userId, characterId, {
         healing: rolled,
@@ -724,7 +728,7 @@ export class InventoryService {
         consumed: true,
         remainingQuantity: Math.max(0, item.quantity),
         effect: {
-          type: 'healing',
+          type: "healing",
           healingApplied: rolled,
           newCurrentHp: hpResult.currentHp,
           maxHp: hpResult.maxHp,
@@ -737,7 +741,7 @@ export class InventoryService {
       consumed: true,
       remainingQuantity: Math.max(0, item.quantity),
       effect: {
-        type: 'consumed',
+        type: "consumed",
         message: `${item.equipment.name} usado.`,
       },
     };

@@ -1,6 +1,6 @@
-import type { GameResult } from '../interfaces/result.type';
-import type { PlannedActionStep } from '../interfaces/combat.interfaces';
-import type { EncounterSnapshot } from '../interfaces/encounter-snapshot.interface';
+import type { GameResult } from "../interfaces/result.type";
+import type { PlannedActionStep } from "../interfaces/combat.interfaces";
+import type { EncounterSnapshot } from "../interfaces/encounter-snapshot.interface";
 
 /**
  * Spec 003 (FR-028..030) — contrato de domínio para executores de IA.

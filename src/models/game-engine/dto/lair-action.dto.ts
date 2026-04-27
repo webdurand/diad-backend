@@ -6,7 +6,7 @@ import {
   IsUUID,
   Min,
   ValidateIf,
-} from 'class-validator';
+} from "class-validator";
 
 export class LairActionDto {
   @IsUUID()
@@ -21,6 +21,6 @@ export class LairActionDto {
   @IsArray()
   @IsOptional()
   @ArrayMaxSize(20)
-  @IsUUID('all', { each: true })
+  @IsUUID("all", { each: true })
   targetParticipantIds?: string[];
 }

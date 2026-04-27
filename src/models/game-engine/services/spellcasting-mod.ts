@@ -1,4 +1,4 @@
-import type { CharacterSheet } from '../../characters/services/character-sheet.service';
+import type { CharacterSheet } from "../../characters/services/character-sheet.service";
 
 /**
  * Helpers pra normalizar expressões de dano/cura vindas do catálogo SRD.
@@ -17,14 +17,14 @@ import type { CharacterSheet } from '../../characters/services/character-sheet.s
  * caster (e.g., Fighter 1 / Wizard 5) escolhe o caster.
  */
 export function getSpellcastingModifier(sheet: CharacterSheet): number {
-  const casterClass = sheet.classes?.find(
-    (c) => c.spellcastingAbility != null,
-  );
+  const casterClass = sheet.classes?.find((c) => c.spellcastingAbility != null);
   if (!casterClass?.spellcastingAbility) return 0;
 
   const abilityName = casterClass.spellcastingAbility.toLowerCase();
   const entry = sheet.abilityScores?.find(
-    (a) => a.slug?.toLowerCase() === abilityName || a.name?.toLowerCase() === abilityName,
+    (a) =>
+      a.slug?.toLowerCase() === abilityName ||
+      a.name?.toLowerCase() === abilityName,
   );
   if (!entry) return 0;
 

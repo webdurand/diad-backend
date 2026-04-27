@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Fighter Battle Master (RAW 2024) — pool de Superiority Dice.
@@ -10,7 +10,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * atual = pool max se ainda não setado, ou mantém se já consumido.
  */
 export class AddSuperiorityDicePool1777030000000 implements MigrationInterface {
-  name = 'AddSuperiorityDicePool1777030000000';
+  name = "AddSuperiorityDicePool1777030000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

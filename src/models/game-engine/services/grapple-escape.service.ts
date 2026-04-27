@@ -1,34 +1,34 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { DiceService } from './dice.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { DiceService } from "./dice.service";
 import {
   failure,
   GameErrorCode,
   GameEventData,
   GameResult,
   success,
-} from '../interfaces/result.type';
-import { ConditionLifecycleService } from './condition-lifecycle.service';
+} from "../interfaces/result.type";
+import { ConditionLifecycleService } from "./condition-lifecycle.service";
 
 const INCAPACITATING_SLUGS = new Set([
-  'incapacitated',
-  'paralyzed',
-  'petrified',
-  'stunned',
-  'unconscious',
+  "incapacitated",
+  "paralyzed",
+  "petrified",
+  "stunned",
+  "unconscious",
 ]);
 
 export interface GrappleEscapeResult {
   participantId: string;
   grapplerId: string;
-  ability: 'athletics' | 'acrobatics';
+  ability: "athletics" | "acrobatics";
   rolls: {
     target: { d20: number; modifier: number; total: number };
     grappler: { d20: number; modifier: number; total: number };
   };
-  outcome: 'escaped' | 'failed';
+  outcome: "escaped" | "failed";
   actionConsumed: boolean;
 }
 
@@ -51,7 +51,7 @@ export class GrappleEscapeService {
 
   async attemptEscape(
     target: EncounterParticipantEntity,
-    ability: 'athletics' | 'acrobatics',
+    ability: "athletics" | "acrobatics",
     targetModifier: number,
     grapplerModifier: number,
   ): Promise<GameResult<GrappleEscapeResult>> {
@@ -79,31 +79,31 @@ export class GrappleEscapeService {
     if (escaped) {
       // Remove ConditionInstance grappled aplicada por este grappler
       const grappledInst = (target.conditionInstances ?? []).find(
-        (ci) => ci.slug === 'grappled' && ci.appliedBy === grappler.id,
+        (ci) => ci.slug === "grappled" && ci.appliedBy === grappler.id,
       );
       if (grappledInst) {
         const r = await this.conditions.removeConditionInstance(
           target,
           grappledInst.id,
-          'grapple_escape',
+          "grapple_escape",
         );
         events.push(...r.events);
       } else {
         // Fallback: remove pela slug em legacy + zera vínculo
         target.conditions = (target.conditions ?? []).filter(
-          (s) => s !== 'grappled',
+          (s) => s !== "grappled",
         );
         target.grappledByParticipantId = null;
       }
       events.push({
-        event_type: 'grapple_escape_success',
+        event_type: "grapple_escape_success",
         actor_participant_id: target.id,
         target_participant_id: grappler.id,
         data: { ability, tTotal, gTotal },
       });
     } else {
       events.push({
-        event_type: 'grapple_escape_failed',
+        event_type: "grapple_escape_failed",
         actor_participant_id: target.id,
         target_participant_id: grappler.id,
         data: { ability, tTotal, gTotal },
@@ -120,7 +120,7 @@ export class GrappleEscapeService {
           target: { d20: tD20, modifier: targetModifier, total: tTotal },
           grappler: { d20: gD20, modifier: grapplerModifier, total: gTotal },
         },
-        outcome: escaped ? 'escaped' : 'failed',
+        outcome: escaped ? "escaped" : "failed",
         actionConsumed: true,
       }),
       events,
@@ -138,22 +138,22 @@ export class GrappleEscapeService {
     const events: GameEventData[] = [];
     for (const v of victims) {
       const inst = (v.conditionInstances ?? []).find(
-        (ci) => ci.slug === 'grappled' && ci.appliedBy === grapplerId,
+        (ci) => ci.slug === "grappled" && ci.appliedBy === grapplerId,
       );
       if (inst) {
         const r = await this.conditions.removeConditionInstance(
           v,
           inst.id,
-          'grapple_auto_release',
+          "grapple_auto_release",
         );
         events.push(...r.events);
       } else {
-        v.conditions = (v.conditions ?? []).filter((s) => s !== 'grappled');
+        v.conditions = (v.conditions ?? []).filter((s) => s !== "grappled");
         v.grappledByParticipantId = null;
         await this.participants.save(v);
       }
       events.push({
-        event_type: 'grapple_auto_release',
+        event_type: "grapple_auto_release",
         actor_participant_id: grapplerId,
         target_participant_id: v.id,
         data: {},

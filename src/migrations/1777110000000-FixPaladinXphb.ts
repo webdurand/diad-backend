@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Paladin — Fix data XPHB 2024:
@@ -13,13 +13,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Mesmo pattern da gotcha #21 (Barbarian Brutal Critical, Cleric Destroy Undead).
  */
 export class FixPaladinXphb1777110000000 implements MigrationInterface {
-  name = 'FixPaladinXphb1777110000000';
+  name = "FixPaladinXphb1777110000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    const slugsToUnlink = [
-      'improved-divine-smite',
-      'cleansing-touch',
-    ];
+    const slugsToUnlink = ["improved-divine-smite", "cleansing-touch"];
 
     await queryRunner.query(
       `DELETE FROM level_features
@@ -37,8 +34,8 @@ export class FixPaladinXphb1777110000000 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     const mapping: Array<{ slug: string; level: number }> = [
-      { slug: 'improved-divine-smite', level: 11 },
-      { slug: 'cleansing-touch', level: 14 },
+      { slug: "improved-divine-smite", level: 11 },
+      { slug: "cleansing-touch", level: 14 },
     ];
     for (const m of mapping) {
       await queryRunner.query(

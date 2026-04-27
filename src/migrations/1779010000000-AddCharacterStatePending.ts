@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 016 M0 — Pending state em character_state.
@@ -9,10 +9,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Ver `specs/016-play-shell-foundation/spec.md` §7.5 e §8.2.
  */
-export class AddCharacterStatePending1779010000000
-  implements MigrationInterface
-{
-  name = 'AddCharacterStatePending1779010000000';
+export class AddCharacterStatePending1779010000000 implements MigrationInterface {
+  name = "AddCharacterStatePending1779010000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

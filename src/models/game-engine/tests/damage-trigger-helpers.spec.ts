@@ -8,10 +8,10 @@ import {
   detectFateLadderTrigger,
   isMassiveDamage2024,
   shouldOpenFateLadder,
-} from '../services/damage-trigger-helpers';
+} from "../services/damage-trigger-helpers";
 
-describe('isMassiveDamage2024', () => {
-  it('true when remaining damage zeroes HP + excess >= hpMax', () => {
+describe("isMassiveDamage2024", () => {
+  it("true when remaining damage zeroes HP + excess >= hpMax", () => {
     // PC com 5 HP, hpMax 10, recebe 18 dano → 5 zerados + 13 excess >= 10 → massive
     expect(
       isMassiveDamage2024({
@@ -23,7 +23,7 @@ describe('isMassiveDamage2024', () => {
     ).toBe(true);
   });
 
-  it('false when excess < hpMax (regular drop to 0)', () => {
+  it("false when excess < hpMax (regular drop to 0)", () => {
     // PC com 5 HP, hpMax 50, recebe 10 dano → 5 excess << 50 → dying not dead
     expect(
       isMassiveDamage2024({
@@ -35,7 +35,7 @@ describe('isMassiveDamage2024', () => {
     ).toBe(false);
   });
 
-  it('false when excess exactly < hpMax', () => {
+  it("false when excess exactly < hpMax", () => {
     // hpBefore 10, hpMax 30, dmg 35 → excess 25 < 30
     expect(
       isMassiveDamage2024({
@@ -47,7 +47,7 @@ describe('isMassiveDamage2024', () => {
     ).toBe(false);
   });
 
-  it('true when excess EQUALS hpMax (>=)', () => {
+  it("true when excess EQUALS hpMax (>=)", () => {
     // hpBefore 10, hpMax 30, dmg 40 → excess 30 == 30 → massive (RAW: >=)
     expect(
       isMassiveDamage2024({
@@ -59,7 +59,7 @@ describe('isMassiveDamage2024', () => {
     ).toBe(true);
   });
 
-  it('false when wasDying (different rule applies — death saves)', () => {
+  it("false when wasDying (different rule applies — death saves)", () => {
     expect(
       isMassiveDamage2024({
         hpBefore: 0,
@@ -70,7 +70,7 @@ describe('isMassiveDamage2024', () => {
     ).toBe(false);
   });
 
-  it('false when damage does not zero HP', () => {
+  it("false when damage does not zero HP", () => {
     expect(
       isMassiveDamage2024({
         hpBefore: 50,
@@ -81,7 +81,7 @@ describe('isMassiveDamage2024', () => {
     ).toBe(false);
   });
 
-  it('handles hpMax 0 gracefully', () => {
+  it("handles hpMax 0 gracefully", () => {
     expect(
       isMassiveDamage2024({
         hpBefore: 0,
@@ -93,8 +93,8 @@ describe('isMassiveDamage2024', () => {
   });
 });
 
-describe('detectFateLadderTrigger', () => {
-  it('returns instant_kill_effect when flag set', () => {
+describe("detectFateLadderTrigger", () => {
+  it("returns instant_kill_effect when flag set", () => {
     const t = detectFateLadderTrigger({
       hpBefore: 50,
       hpMax: 50,
@@ -102,20 +102,20 @@ describe('detectFateLadderTrigger', () => {
       wasDying: false,
       isInstantKillEffect: true,
     });
-    expect(t).toBe('instant_kill_effect');
+    expect(t).toBe("instant_kill_effect");
   });
 
-  it('returns massive_damage_2024 when massive', () => {
+  it("returns massive_damage_2024 when massive", () => {
     const t = detectFateLadderTrigger({
       hpBefore: 5,
       hpMax: 10,
       damageRemaining: 18,
       wasDying: false,
     });
-    expect(t).toBe('massive_damage_2024');
+    expect(t).toBe("massive_damage_2024");
   });
 
-  it('returns three_failed_death_saves when dying + 3 fails', () => {
+  it("returns three_failed_death_saves when dying + 3 fails", () => {
     const t = detectFateLadderTrigger({
       hpBefore: 0,
       hpMax: 30,
@@ -123,10 +123,10 @@ describe('detectFateLadderTrigger', () => {
       wasDying: true,
       failuresAfter: 3,
     });
-    expect(t).toBe('three_failed_death_saves');
+    expect(t).toBe("three_failed_death_saves");
   });
 
-  it('returns null when dying with <3 failures', () => {
+  it("returns null when dying with <3 failures", () => {
     const t = detectFateLadderTrigger({
       hpBefore: 0,
       hpMax: 30,
@@ -137,7 +137,7 @@ describe('detectFateLadderTrigger', () => {
     expect(t).toBeNull();
   });
 
-  it('returns null when regular damage (not massive, not dying)', () => {
+  it("returns null when regular damage (not massive, not dying)", () => {
     const t = detectFateLadderTrigger({
       hpBefore: 30,
       hpMax: 30,
@@ -147,7 +147,7 @@ describe('detectFateLadderTrigger', () => {
     expect(t).toBeNull();
   });
 
-  it('instant_kill_effect overrides massive_damage', () => {
+  it("instant_kill_effect overrides massive_damage", () => {
     const t = detectFateLadderTrigger({
       hpBefore: 5,
       hpMax: 10,
@@ -155,29 +155,29 @@ describe('detectFateLadderTrigger', () => {
       wasDying: false,
       isInstantKillEffect: true,
     });
-    expect(t).toBe('instant_kill_effect');
+    expect(t).toBe("instant_kill_effect");
   });
 });
 
-describe('shouldOpenFateLadder', () => {
-  it('hardcore mode never opens Fate Ladder', () => {
-    expect(shouldOpenFateLadder('massive_damage_2024', 'hardcore')).toBe(false);
-    expect(shouldOpenFateLadder('three_failed_death_saves', 'hardcore')).toBe(
+describe("shouldOpenFateLadder", () => {
+  it("hardcore mode never opens Fate Ladder", () => {
+    expect(shouldOpenFateLadder("massive_damage_2024", "hardcore")).toBe(false);
+    expect(shouldOpenFateLadder("three_failed_death_saves", "hardcore")).toBe(
       false,
     );
-    expect(shouldOpenFateLadder('instant_kill_effect', 'hardcore')).toBe(false);
+    expect(shouldOpenFateLadder("instant_kill_effect", "hardcore")).toBe(false);
   });
 
-  it('narrative mode opens for any non-null trigger', () => {
-    expect(shouldOpenFateLadder('massive_damage_2024', 'narrative')).toBe(true);
-    expect(shouldOpenFateLadder('three_failed_death_saves', 'narrative')).toBe(
+  it("narrative mode opens for any non-null trigger", () => {
+    expect(shouldOpenFateLadder("massive_damage_2024", "narrative")).toBe(true);
+    expect(shouldOpenFateLadder("three_failed_death_saves", "narrative")).toBe(
       true,
     );
-    expect(shouldOpenFateLadder('instant_kill_effect', 'narrative')).toBe(true);
+    expect(shouldOpenFateLadder("instant_kill_effect", "narrative")).toBe(true);
   });
 
-  it('null trigger never opens, regardless of mode', () => {
-    expect(shouldOpenFateLadder(null, 'narrative')).toBe(false);
-    expect(shouldOpenFateLadder(null, 'hardcore')).toBe(false);
+  it("null trigger never opens, regardless of mode", () => {
+    expect(shouldOpenFateLadder(null, "narrative")).toBe(false);
+    expect(shouldOpenFateLadder(null, "hardcore")).toBe(false);
   });
 });

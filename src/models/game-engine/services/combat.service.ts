@@ -1,25 +1,25 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { randomUUID } from 'crypto';
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CharacterStateService } from 'src/models/characters/services/character-state.service';
-import { InspirationService } from './inspiration.service';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { ActionsService } from 'src/models/characters/services/actions.service';
-import { DiceService } from './dice.service';
-import { ConditionEffectsService } from './condition-effects.service';
-import { EventService } from './event.service';
-import { EncounterService } from './encounter.service';
-import { MovementService } from './movement.service';
-import { SessionService } from './session.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { randomUUID } from "crypto";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import { InspirationService } from "./inspiration.service";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { ActionsService } from "src/models/characters/services/actions.service";
+import { DiceService } from "./dice.service";
+import { ConditionEffectsService } from "./condition-effects.service";
+import { EventService } from "./event.service";
+import { EncounterService } from "./encounter.service";
+import { MovementService } from "./movement.service";
+import { SessionService } from "./session.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
+} from "../interfaces/result.type";
 import {
   AttackResult,
   TurnInfo,
@@ -30,28 +30,31 @@ import {
   TurnActionBlock,
   AoEResolveResult,
   SavingThrowResult,
-} from '../interfaces/combat.interfaces';
-import { SavingThrowService } from './saving-throw.service';
-import { getAbilityModifier } from 'src/shared/srd-utils';
-import { MonsterActionResolver } from './monster-action-resolver.service';
-import { CombatActionRegistry } from './combat-action-registry.service';
-import { ConditionLifecycleService } from './condition-lifecycle.service';
-import { EffectInstanceService } from './effect-instance.service';
-import { ConcentrationService } from './concentration.service';
-import { ClassFeatureResolverService } from './class-feature-resolver.service';
-import { WeaponMasteryService } from './weapon-mastery.service';
-import { FightingStyleService } from './fighting-style.service';
-import { TransformationService } from './transformation.service';
-import { BardFeaturesService } from './bard-features.service';
-import { ExhaustionService } from './exhaustion.service';
-import { CapstonesService } from './capstones.service';
-import { ReactionOpportunityService } from './reaction-opportunity.service';
-import type { ConditionSlug, EffectInstance } from '../interfaces/combat.interfaces';
+} from "../interfaces/combat.interfaces";
+import { SavingThrowService } from "./saving-throw.service";
+import { getAbilityModifier } from "src/shared/srd-utils";
+import { MonsterActionResolver } from "./monster-action-resolver.service";
+import { CombatActionRegistry } from "./combat-action-registry.service";
+import { ConditionLifecycleService } from "./condition-lifecycle.service";
+import { EffectInstanceService } from "./effect-instance.service";
+import { ConcentrationService } from "./concentration.service";
+import { ClassFeatureResolverService } from "./class-feature-resolver.service";
+import { WeaponMasteryService } from "./weapon-mastery.service";
+import { FightingStyleService } from "./fighting-style.service";
+import { TransformationService } from "./transformation.service";
+import { BardFeaturesService } from "./bard-features.service";
+import { ExhaustionService } from "./exhaustion.service";
+import { CapstonesService } from "./capstones.service";
+import { ReactionOpportunityService } from "./reaction-opportunity.service";
+import type {
+  ConditionSlug,
+  EffectInstance,
+} from "../interfaces/combat.interfaces";
 import {
   parseRangeString,
   checkAttackRange,
   type Position as GridPosition,
-} from './combat-range';
+} from "./combat-range";
 
 // --- DTOs ---
 
@@ -87,19 +90,22 @@ export interface AttackDto {
 export interface SubAttackResult {
   subActionName: string;
   targetParticipantId: string;
-  attackRoll: AttackResult['attackRoll'];
-  damageRoll?: AttackResult['damageRoll'];
+  attackRoll: AttackResult["attackRoll"];
+  damageRoll?: AttackResult["damageRoll"];
   targetHpAfter?: number;
   targetDefeated: boolean;
-  targetDyingState?: 'none' | 'dying' | 'stable' | 'dead';
+  targetDyingState?: "none" | "dying" | "stable" | "dead";
   concentrationBroken?: boolean;
 }
 
 export interface MultiattackResult {
-  kind: 'multiattack';
+  kind: "multiattack";
   actionConsumed: boolean;
   subAttacks: SubAttackResult[];
-  interruptedAt: { index: number; reason: 'target_defeated' | 'action_cancelled' } | null;
+  interruptedAt: {
+    index: number;
+    reason: "target_defeated" | "action_cancelled";
+  } | null;
 }
 
 export interface DamageDto {
@@ -168,27 +174,59 @@ export class CombatService {
     ownerUserId: string,
   ): Promise<{ currentHp: number; isDown: boolean; instantDeath: boolean }> {
     if (damage <= 0) {
-      const st = await this.stateService.updateHp(ownerUserId, target.characterId!, { damage: 0 });
-      return { currentHp: st.currentHp, isDown: st.isDown, instantDeath: st.instantDeath ?? false };
+      const st = await this.stateService.updateHp(
+        ownerUserId,
+        target.characterId!,
+        { damage: 0 },
+      );
+      return {
+        currentHp: st.currentHp,
+        isDown: st.isDown,
+        instantDeath: st.instantDeath ?? false,
+      };
     }
     if (target.transformationState) {
-      const res = await this.transformation.applyDamageToForm(target.id, damage);
+      const res = await this.transformation.applyDamageToForm(
+        target.id,
+        damage,
+      );
       if (!res.reverted) {
         // Form absorveu tudo. N\u00e3o toca o HP original.
         // Retorna a cabe\u00e7a do form como "currentHp" pra logs/eventos externos.
-        const formHp = target.transformationState.form.currentHp - res.absorbedByForm;
-        return { currentHp: Math.max(0, formHp), isDown: false, instantDeath: false };
+        const formHp =
+          target.transformationState.form.currentHp - res.absorbedByForm;
+        return {
+          currentHp: Math.max(0, formHp),
+          isDown: false,
+          instantDeath: false,
+        };
       }
       // Reverteu. Overflow j\u00e1 foi aplicado no char_state pelo service.
       // Reload state pra refletir mudan\u00e7a atual.
       if (res.overflowToOriginal > 0) {
-        const st = await this.stateService.updateHp(ownerUserId, target.characterId!, { damage: 0 });
-        return { currentHp: st.currentHp, isDown: st.isDown, instantDeath: st.instantDeath ?? false };
+        const st = await this.stateService.updateHp(
+          ownerUserId,
+          target.characterId!,
+          { damage: 0 },
+        );
+        return {
+          currentHp: st.currentHp,
+          isDown: st.isDown,
+          instantDeath: st.instantDeath ?? false,
+        };
       }
       return { currentHp: 0, isDown: false, instantDeath: false };
     }
-    const st = await this.stateService.updateHp(ownerUserId, target.characterId!, { damage });
-    return { currentHp: st.currentHp, isDown: st.isDown, instantDeath: st.instantDeath ?? false };
+    const st = await this.stateService.updateHp(
+      ownerUserId,
+      target.characterId!,
+      { damage },
+    );
+    return {
+      currentHp: st.currentHp,
+      isDown: st.isDown,
+      instantDeath: st.instantDeath ?? false,
+    };
   }
 
   /**
@@ -210,17 +248,28 @@ export class CombatService {
       .getParticipant(attackerParticipantId)
       .catch(() => null);
     if (!attacker) {
-      return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+      return failure("Participante nao encontrado.", "PARTICIPANT_NOT_FOUND");
     }
 
-    if (slug === 'unarmed-strike' || slug === 'unarmed-grapple' || slug === 'unarmed-shove') {
-      return success('Unarmed Strike' as string, []);
+    if (
+      slug === "unarmed-strike" ||
+      slug === "unarmed-grapple" ||
+      slug === "unarmed-shove"
+    ) {
+      return success("Unarmed Strike" as string, []);
     }
 
     // PC weapon-attack: `<equipmentSlug>-attack` → busca nome do equipment equipado.
-    if (attacker.type === 'pc' && attacker.characterId && slug.endsWith('-attack')) {
-      const equipSlug = slug.slice(0, -'-attack'.length);
-      const pcOwnerId = await this.resolveParticipantOwner(attacker, ownerUserId);
+    if (
+      attacker.type === "pc" &&
+      attacker.characterId &&
+      slug.endsWith("-attack")
+    ) {
+      const equipSlug = slug.slice(0, -"-attack".length);
+      const pcOwnerId = await this.resolveParticipantOwner(
+        attacker,
+        ownerUserId,
+      );
       const sheet = await this.sheetService.computeSheet(
         pcOwnerId,
         attacker.characterId,
@@ -231,7 +280,7 @@ export class CombatService {
       if (!eq) {
         return failure(
           `Arma '${equipSlug}' nao esta equipada.`,
-          'NOT_EQUIPPED',
+          "NOT_EQUIPPED",
         );
       }
       return success(eq.name, []);
@@ -240,11 +289,18 @@ export class CombatService {
     // Spec 012 — PC weapon via ActionBar: `weapon-<characterEquipmentId>` ou
     // `weapon-thrown-<characterEquipmentId>`. Shape populado por
     // actions.service.buildWeaponActions — bate com sheet.equipment[i].id.
-    if (attacker.type === 'pc' && attacker.characterId && slug.startsWith('weapon-')) {
-      const rest = slug.startsWith('weapon-thrown-')
-        ? slug.slice('weapon-thrown-'.length)
-        : slug.slice('weapon-'.length);
-      const pcOwnerId = await this.resolveParticipantOwner(attacker, ownerUserId);
+    if (
+      attacker.type === "pc" &&
+      attacker.characterId &&
+      slug.startsWith("weapon-")
+    ) {
+      const rest = slug.startsWith("weapon-thrown-")
+        ? slug.slice("weapon-thrown-".length)
+        : slug.slice("weapon-".length);
+      const pcOwnerId = await this.resolveParticipantOwner(
+        attacker,
+        ownerUserId,
+      );
       const sheet = await this.sheetService.computeSheet(
         pcOwnerId,
         attacker.characterId,
@@ -253,7 +309,7 @@ export class CombatService {
       if (!eq) {
         return failure(
           `Arma '${slug}' nao encontrada no inventário.`,
-          'INVALID_ACTION_SLUG',
+          "INVALID_ACTION_SLUG",
         );
       }
       return success(eq.name, []);
@@ -262,10 +318,10 @@ export class CombatService {
     // Spec 012 \u2014 PC transformado (Wild Shape, Polymorph). Slug \u00e9 formatado como
     // monsterSlug-<actionName> igual monster branch. Valida contra form.actions
     // do transformationState em vez da sheet.
-    if (attacker.type === 'pc' && attacker.transformationState) {
+    if (attacker.type === "pc" && attacker.transformationState) {
       const form = attacker.transformationState.form;
-      const formSlug = form.monsterSlug ?? '';
-      if (formSlug && slug.startsWith(formSlug + '-')) {
+      const formSlug = form.monsterSlug ?? "";
+      if (formSlug && slug.startsWith(formSlug + "-")) {
         const rest = slug.slice(formSlug.length + 1);
         const actions = (form.actions ?? []) as Array<{ name: string }>;
         const match = actions.find((a) => this.slugifyName(a.name) === rest);
@@ -274,25 +330,23 @@ export class CombatService {
     }
 
     // Monster: slug prefixado por monster.slug. Match por rest == action name (kebab).
-    if (attacker.type === 'monster' && attacker.monster) {
-      const monsterSlug: string = (attacker.monster as any).slug ?? '';
-      if (monsterSlug && slug.startsWith(monsterSlug + '-')) {
+    if (attacker.type === "monster" && attacker.monster) {
+      const monsterSlug: string = (attacker.monster as any).slug ?? "";
+      if (monsterSlug && slug.startsWith(monsterSlug + "-")) {
         const rest = slug.slice(monsterSlug.length + 1);
 
         // Multiattack é armazenado separado de monster.actions
-        if (rest === 'multiattack' || rest === 'multiataque') {
+        if (rest === "multiattack" || rest === "multiataque") {
           const ma = (attacker.monster as any).multiattack;
           if (ma) {
-            return success('Multiattack', []);
+            return success("Multiattack", []);
           }
         }
 
         const actions = ((attacker.monster as any).actions ?? []) as Array<{
           name: string;
         }>;
-        const match = actions.find(
-          (a) => this.slugifyName(a.name) === rest,
-        );
+        const match = actions.find((a) => this.slugifyName(a.name) === rest);
         if (match) {
           return success(match.name, []);
         }
@@ -301,15 +355,15 @@ export class CombatService {
 
     return failure(
       `Slug '${slug}' nao reconhecido para este atacante.`,
-      'INVALID_ACTION_SLUG',
+      "INVALID_ACTION_SLUG",
     );
   }
 
   private slugifyName(name: string): string {
     return name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   }
 
   /** Spec 012 #1 — extrai posição de grid de um participant (null se ausente). */
@@ -332,13 +386,13 @@ export class CombatService {
       where: { id: encounterId },
     });
     if (!encounter)
-      return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
+      return failure("Encontro nao encontrado.", "ENCOUNTER_NOT_FOUND");
 
     const participant = await this.encounterService
       .getParticipant(participantId)
       .catch(() => null);
     if (!participant)
-      return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+      return failure("Participante nao encontrado.", "PARTICIPANT_NOT_FOUND");
 
     const isOnTurn =
       encounter.turnOrder[encounter.currentTurnIndex] === participantId;
@@ -347,15 +401,16 @@ export class CombatService {
       actionUsed: participant.actionUsed,
       bonusActionUsed: participant.bonusActionUsed,
       reactionUsed: participant.reactionsUsed > 0,
-      movementUsed: (participant.movementRemaining ?? 0) < 30
-        ? 30 - (participant.movementRemaining ?? 30)
-        : 0,
+      movementUsed:
+        (participant.movementRemaining ?? 0) < 30
+          ? 30 - (participant.movementRemaining ?? 30)
+          : 0,
       attacksUsedThisTurn: participant.attacksUsedThisTurn,
       attacksMaxThisTurn: participant.attacksMaxThisTurn,
       isOnTurn,
     };
 
-    if (participant.type === 'pc' && participant.characterId) {
+    if (participant.type === "pc" && participant.characterId) {
       const pcOwnerId = await this.resolveParticipantOwner(
         participant,
         ownerUserId,
@@ -372,7 +427,7 @@ export class CombatService {
         {},
       );
       const descriptors = await this.combatActionRegistry.listActions({
-        type: 'pc',
+        type: "pc",
         participantId,
         characterId: participant.characterId,
         actionEconomy,
@@ -407,12 +462,17 @@ export class CombatService {
       return success(descriptors, []);
     }
 
-    if (participant.type === 'monster' && participant.monster) {
+    if (participant.type === "monster" && participant.monster) {
       const monster: any = participant.monster;
-      const monsterSlug: string = monster.slug ?? '';
-      const rawActions: any[] = Array.isArray(monster.actions) ? monster.actions : [];
+      const monsterSlug: string = monster.slug ?? "";
+      const rawActions: any[] = Array.isArray(monster.actions)
+        ? monster.actions
+        : [];
       const monsterActions = rawActions.map((a) => {
-        const resolved = this.monsterActionResolver.resolveByName(monster, a.name);
+        const resolved = this.monsterActionResolver.resolveByName(
+          monster,
+          a.name,
+        );
         return {
           name: a.name,
           desc: a.desc,
@@ -422,7 +482,7 @@ export class CombatService {
         };
       });
       const descriptors = await this.combatActionRegistry.listActions({
-        type: 'monster',
+        type: "monster",
         participantId,
         monsterSlug,
         monsterActions,
@@ -434,7 +494,7 @@ export class CombatService {
 
     // NPC: cobertura minima via generic resolver
     const descriptors = await this.combatActionRegistry.listActions({
-      type: 'npc',
+      type: "npc",
       participantId,
       actionEconomy,
       conditions: participant.conditions ?? [],
@@ -451,32 +511,49 @@ export class CombatService {
       ownerUserId: string;
     },
   ): Promise<GameResult<AoEResolveResult>> {
-    const encounter = await this.encounterRepo.findOne({ where: { id: encounterId } });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
-    const caster = await this.encounterService.getParticipant(dto.casterParticipantId);
+    const caster = await this.encounterService.getParticipant(
+      dto.casterParticipantId,
+    );
     if (caster.actionUsed)
-      return failure('Acao ja utilizada.', 'NO_ACTION_AVAILABLE');
+      return failure("Acao ja utilizada.", "NO_ACTION_AVAILABLE");
     if (encounter.turnOrder[encounter.currentTurnIndex] !== caster.id)
-      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
     // Find action definition
     let actionBlock: TurnActionBlock | undefined;
-    if (caster.type === 'monster' && caster.monster) {
+    if (caster.type === "monster" && caster.monster) {
       const all = [
         ...this.parseMonsterActions(caster.monster),
-        ...((caster.monster as any).legendary_actions ?? []).map((a: any, i: number) => {
-          const b = this.buildMonsterActionBlock(caster.monster, a, i, 'monster-legendary');
-          return { ...b, name: `⭐ ${b.name}` };
-        }),
+        ...((caster.monster as any).legendary_actions ?? []).map(
+          (a: any, i: number) => {
+            const b = this.buildMonsterActionBlock(
+              caster.monster,
+              a,
+              i,
+              "monster-legendary",
+            );
+            return { ...b, name: `⭐ ${b.name}` };
+          },
+        ),
       ];
       actionBlock = all.find(
         (a) => a.name.toLowerCase() === dto.actionName.toLowerCase(),
       );
-    } else if (caster.type === 'pc' && caster.characterId) {
-      const ownerId = await this.resolveParticipantOwner(caster, dto.ownerUserId);
-      const pc = await this.actionsService.getActions(ownerId, caster.characterId);
+    } else if (caster.type === "pc" && caster.characterId) {
+      const ownerId = await this.resolveParticipantOwner(
+        caster,
+        dto.ownerUserId,
+      );
+      const pc = await this.actionsService.getActions(
+        ownerId,
+        caster.characterId,
+      );
       const all = [...pc.actions, ...pc.bonusActions];
       actionBlock = all
         .map(this.toTurnActionBlock)
@@ -484,23 +561,28 @@ export class CombatService {
     }
 
     if (!actionBlock || !actionBlock.aoe || !actionBlock.damage) {
-      return failure('Acao em area invalida.', 'INVALID_ACTION');
+      return failure("Acao em area invalida.", "INVALID_ACTION");
     }
 
     const events: GameEventData[] = [];
-    const results: AoEResolveResult['results'] = [];
+    const results: AoEResolveResult["results"] = [];
 
     for (const targetId of dto.affectedParticipantIds) {
       if (targetId === caster.id) continue;
-      const target = await this.encounterService.getParticipant(targetId).catch(() => null);
+      const target = await this.encounterService
+        .getParticipant(targetId)
+        .catch(() => null);
       if (!target || target.isDefeated) continue;
 
       // Roll save
       let saveResult: SavingThrowResult | undefined;
       let saved = false;
       if (actionBlock.save) {
-        if (target.type === 'pc' && target.characterId) {
-          const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+        if (target.type === "pc" && target.characterId) {
+          const targetOwnerId = await this.resolveParticipantOwner(
+            target,
+            dto.ownerUserId,
+          );
           const sr = await this.savingThrowService.rollSavingThrow({
             characterId: target.characterId,
             userId: targetOwnerId,
@@ -513,14 +595,20 @@ export class CombatService {
             saveResult = sr.value;
             saved = sr.value.success;
           }
-        } else if (target.type === 'monster' && target.monster) {
+        } else if (target.type === "monster" && target.monster) {
           const m: any = target.monster;
           const abilityMap: Record<string, string> = {
-            str: 'strength', dex: 'dexterity', con: 'constitution',
-            int: 'intelligence', wis: 'wisdom', cha: 'charisma',
+            str: "strength",
+            dex: "dexterity",
+            con: "constitution",
+            int: "intelligence",
+            wis: "wisdom",
+            cha: "charisma",
           };
-          const fullName = abilityMap[actionBlock.save.ability] ?? actionBlock.save.ability;
-          const saveBonus = m[`${fullName}_save`] ?? getAbilityModifier(m[fullName] ?? 10);
+          const fullName =
+            abilityMap[actionBlock.save.ability] ?? actionBlock.save.ability;
+          const saveBonus =
+            m[`${fullName}_save`] ?? getAbilityModifier(m[fullName] ?? 10);
           const roll = this.diceService.roll(20);
           const total = roll + saveBonus;
           saved = total >= actionBlock.save.dc;
@@ -536,7 +624,9 @@ export class CombatService {
       }
 
       // Roll damage
-      const dmgResult = this.diceService.rollExpression(actionBlock.damage.dice);
+      const dmgResult = this.diceService.rollExpression(
+        actionBlock.damage.dice,
+      );
       let totalDamage = dmgResult.total;
       if (saved && actionBlock.save?.halfOnSuccess) {
         totalDamage = Math.floor(totalDamage / 2);
@@ -549,17 +639,20 @@ export class CombatService {
       let immune = false;
       let vulnerable = false;
       const dtLower = actionBlock.damage.type.toLowerCase();
-      if (target.type === 'monster' && target.monster) {
+      if (target.type === "monster" && target.monster) {
         const m: any = target.monster;
         const imms = (m.damage_immunities ?? []) as string[];
         const ress = (m.damage_resistances ?? []) as string[];
         const vuls = (m.damage_vulnerabilities ?? []) as string[];
         if (imms.some((i) => i.toLowerCase().includes(dtLower))) {
-          immune = true; finalDamage = 0;
+          immune = true;
+          finalDamage = 0;
         } else if (ress.some((r) => r.toLowerCase().includes(dtLower))) {
-          resisted = true; finalDamage = Math.floor(finalDamage / 2);
+          resisted = true;
+          finalDamage = Math.floor(finalDamage / 2);
         } else if (vuls.some((v) => v.toLowerCase().includes(dtLower))) {
-          vulnerable = true; finalDamage = finalDamage * 2;
+          vulnerable = true;
+          finalDamage = finalDamage * 2;
         }
       }
 
@@ -567,9 +660,12 @@ export class CombatService {
       let targetHpAfter: number | undefined;
       let targetDefeated = false;
       if (finalDamage > 0) {
-        if (target.type === 'pc' && target.characterId) {
-          const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
-          const wasDying = target.dyingState === 'dying';
+        if (target.type === "pc" && target.characterId) {
+          const targetOwnerId = await this.resolveParticipantOwner(
+            target,
+            dto.ownerUserId,
+          );
+          const wasDying = target.dyingState === "dying";
           const hpResult = await this.stateService.updateHp(
             targetOwnerId,
             target.characterId,
@@ -578,11 +674,11 @@ export class CombatService {
           targetHpAfter = hpResult.currentHp;
           targetDefeated = hpResult.isDown;
           if (hpResult.instantDeath) {
-            target.dyingState = 'dead';
+            target.dyingState = "dead";
             target.isDefeated = true;
             await this.participantRepo.save(target);
           } else if (targetDefeated && !wasDying) {
-            target.dyingState = 'dying';
+            target.dyingState = "dying";
             target.isDefeated = false;
             await this.participantRepo.save(target);
           } else if (wasDying) {
@@ -592,7 +688,7 @@ export class CombatService {
               { failuresDelta: 1 },
             );
             if (ds.dead) {
-              target.dyingState = 'dead';
+              target.dyingState = "dead";
               target.isDefeated = true;
               await this.participantRepo.save(target);
             }
@@ -617,7 +713,7 @@ export class CombatService {
       };
 
       events.push({
-        event_type: 'aoe_target_hit',
+        event_type: "aoe_target_hit",
         actor_participant_id: caster.id,
         target_participant_id: target.id,
         data: {
@@ -644,18 +740,24 @@ export class CombatService {
 
     await this.eventService.emit(encounter.sessionId, encounterId, events);
 
-    return success({
-      affectedParticipantIds: dto.affectedParticipantIds,
-      results,
-    }, events);
+    return success(
+      {
+        affectedParticipantIds: dto.affectedParticipantIds,
+        results,
+      },
+      events,
+    );
   }
 
   private async resolveParticipantOwner(
     participant: EncounterParticipantEntity,
     requesterUserId: string,
   ): Promise<string> {
-    if (participant.type !== 'pc' || !participant.characterId) return requesterUserId;
-    const encounter = await this.encounterRepo.findOne({ where: { id: participant.encounterId } });
+    if (participant.type !== "pc" || !participant.characterId)
+      return requesterUserId;
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: participant.encounterId },
+    });
     if (!encounter) return requesterUserId;
     const session = await this.sessionService.getById(encounter.sessionId);
     return this.encounterService.resolveCharacterOwner(
@@ -674,16 +776,33 @@ export class CombatService {
     attacker: EncounterParticipantEntity,
     requesterUserId: string,
   ): Promise<number> {
-    if (attacker.type !== 'pc' || !attacker.characterId) return 20;
+    if (attacker.type !== "pc" || !attacker.characterId) return 20;
     try {
-      const ownerId = await this.resolveParticipantOwner(attacker, requesterUserId);
-      const sheet = await this.sheetService.computeSheet(ownerId, attacker.characterId);
-      const features = (sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [];
-      const activeSlugs = features.filter((f) => f.active !== false).map((f) => f.slug);
+      const ownerId = await this.resolveParticipantOwner(
+        attacker,
+        requesterUserId,
+      );
+      const sheet = await this.sheetService.computeSheet(
+        ownerId,
+        attacker.characterId,
+      );
+      const features =
+        (
+          sheet as unknown as {
+            features?: Array<{ slug: string; active?: boolean }>;
+          }
+        ).features ?? [];
+      const activeSlugs = features
+        .filter((f) => f.active !== false)
+        .map((f) => f.slug);
       // DB tem variantes (improved-critical, improved-critical-fighter-champion-3,
       // improved-critical-fighter-champion-3-phb). Match por prefixo pra aceitar todas.
-      const hasSuperior = activeSlugs.some((s) => s.startsWith('superior-critical'));
-      const hasImproved = activeSlugs.some((s) => s.startsWith('improved-critical'));
+      const hasSuperior = activeSlugs.some((s) =>
+        s.startsWith("superior-critical"),
+      );
+      const hasImproved = activeSlugs.some((s) =>
+        s.startsWith("improved-critical"),
+      );
       if (hasSuperior) return 18;
       if (hasImproved) return 19;
       return 20;
@@ -701,14 +820,25 @@ export class CombatService {
     attacker: EncounterParticipantEntity,
     requesterUserId: string,
   ): Promise<boolean> {
-    if (attacker.type !== 'pc' || !attacker.characterId) return false;
+    if (attacker.type !== "pc" || !attacker.characterId) return false;
     try {
-      const ownerId = await this.resolveParticipantOwner(attacker, requesterUserId);
-      const sheet = await this.sheetService.computeSheet(ownerId, attacker.characterId);
-      const features = (sheet as unknown as { features?: Array<{ slug: string; active?: boolean }> }).features ?? [];
+      const ownerId = await this.resolveParticipantOwner(
+        attacker,
+        requesterUserId,
+      );
+      const sheet = await this.sheetService.computeSheet(
+        ownerId,
+        attacker.characterId,
+      );
+      const features =
+        (
+          sheet as unknown as {
+            features?: Array<{ slug: string; active?: boolean }>;
+          }
+        ).features ?? [];
       return features
         .filter((f) => f.active !== false)
-        .some((f) => f.slug.startsWith('studied-attacks'));
+        .some((f) => f.slug.startsWith("studied-attacks"));
     } catch {
       return false;
     }
@@ -722,9 +852,15 @@ export class CombatService {
     attacker: EncounterParticipantEntity,
     requesterUserId: string,
   ): Promise<number> {
-    if (attacker.type === 'pc' && attacker.characterId) {
-      const ownerId = await this.resolveParticipantOwner(attacker, requesterUserId);
-      const sheet = await this.sheetService.computeSheet(ownerId, attacker.characterId);
+    if (attacker.type === "pc" && attacker.characterId) {
+      const ownerId = await this.resolveParticipantOwner(
+        attacker,
+        requesterUserId,
+      );
+      const sheet = await this.sheetService.computeSheet(
+        ownerId,
+        attacker.characterId,
+      );
       return sheet?.proficiencyBonus ?? 2;
     }
     const m = attacker.monster as { proficiency_bonus?: number } | undefined;
@@ -738,11 +874,21 @@ export class CombatService {
    * Ray, Bolt com "ranged"). Spec 005 refina via metadata de action.
    */
   private isMeleeAttack(actionName?: string, actionSlug?: string): boolean {
-    const s = `${actionName ?? ''} ${actionSlug ?? ''}`.toLowerCase();
+    const s = `${actionName ?? ""} ${actionSlug ?? ""}`.toLowerCase();
     const rangedKeywords = [
-      'bow', 'crossbow', 'javelin', 'dart', 'sling', 'ray of', 'arrow',
-      'firebolt', 'fire bolt', 'eldritch-blast', 'eldritch blast',
-      'scorching ray', 'ranged',
+      "bow",
+      "crossbow",
+      "javelin",
+      "dart",
+      "sling",
+      "ray of",
+      "arrow",
+      "firebolt",
+      "fire bolt",
+      "eldritch-blast",
+      "eldritch blast",
+      "scorching ray",
+      "ranged",
     ];
     for (const kw of rangedKeywords) if (s.includes(kw)) return false;
     return true;
@@ -756,36 +902,40 @@ export class CombatService {
     attacker: EncounterParticipantEntity,
     target: EncounterParticipantEntity,
   ): Promise<void> {
-    const isOneShot = (e: EffectInstance, side: 'attacker' | 'target'): boolean => {
-      if (e.expiresAt.kind !== 'until_consumed') return false;
-      if (side === 'attacker') {
-        if (e.kind === 'self_advantage_next_attack') {
+    const isOneShot = (
+      e: EffectInstance,
+      side: "attacker" | "target",
+    ): boolean => {
+      if (e.expiresAt.kind !== "until_consumed") return false;
+      if (side === "attacker") {
+        if (e.kind === "self_advantage_next_attack") {
           // Vex: só consome se target match (Steady Aim não tem constraint).
-          const requiredTargetId = (e.payload as { requiredTargetId?: string } | undefined)
-            ?.requiredTargetId;
+          const requiredTargetId = (
+            e.payload as { requiredTargetId?: string } | undefined
+          )?.requiredTargetId;
           return !requiredTargetId || requiredTargetId === target.id;
         }
         // Sap: consome em qualquer attack do participant afetado
-        if (e.kind === 'self_disadvantage_next_attack') return true;
+        if (e.kind === "self_disadvantage_next_attack") return true;
         return false;
       }
       // target side: only consume advantage/disadvantage-grant kinds
       return (
-        e.kind === 'grant_advantage_to_attackers' ||
-        e.kind === 'grant_disadvantage_to_attackers'
+        e.kind === "grant_advantage_to_attackers" ||
+        e.kind === "grant_disadvantage_to_attackers"
       );
     };
     const toConsumeAttacker = (attacker.effectInstances ?? []).filter((e) =>
-      isOneShot(e, 'attacker'),
+      isOneShot(e, "attacker"),
     );
     const toConsumeTarget = (target.effectInstances ?? []).filter((e) =>
-      isOneShot(e, 'target'),
+      isOneShot(e, "target"),
     );
     for (const e of toConsumeAttacker) {
-      await this.effectInstances.removeEffect(attacker, e.id, 'consumed');
+      await this.effectInstances.removeEffect(attacker, e.id, "consumed");
     }
     for (const e of toConsumeTarget) {
-      await this.effectInstances.removeEffect(target, e.id, 'consumed');
+      await this.effectInstances.removeEffect(target, e.id, "consumed");
     }
   }
 
@@ -808,34 +958,41 @@ export class CombatService {
     const targetFx = target.effectInstances ?? [];
     let advantage = false;
     let disadvantage = false;
-    const attackBonuses: Array<{ source: string; dice?: string; amount?: number }> = [];
+    const attackBonuses: Array<{
+      source: string;
+      dice?: string;
+      amount?: number;
+    }> = [];
 
     // --- Attacker-side effects ---
     for (const e of attackerFx) {
-      if (e.kind === 'self_advantage') {
+      if (e.kind === "self_advantage") {
         // Escopo: 'melee' só vale se isMelee; 'any' sempre; default = any.
-        const scope = e.payload?.scope ?? 'any';
-        if (scope === 'any' || (scope === 'melee' && isMelee)) advantage = true;
+        const scope = e.payload?.scope ?? "any";
+        if (scope === "any" || (scope === "melee" && isMelee)) advantage = true;
       }
-      if (e.kind === 'self_disadvantage') disadvantage = true;
-      if (e.kind === 'self_advantage_next_attack') {
+      if (e.kind === "self_disadvantage") disadvantage = true;
+      if (e.kind === "self_advantage_next_attack") {
         // Spec 012 — Vex: requiredTargetId filtra pra mesmo alvo.
         // Sem o campo → qualquer alvo (Steady Aim default).
         const requiredTargetId = e.payload?.requiredTargetId;
-        if (!requiredTargetId || requiredTargetId === target.id) advantage = true;
+        if (!requiredTargetId || requiredTargetId === target.id)
+          advantage = true;
       }
-      if (e.kind === 'self_disadvantage_next_attack') disadvantage = true;
-      if (e.kind === 'attack_bonus') {
+      if (e.kind === "self_disadvantage_next_attack") disadvantage = true;
+      if (e.kind === "attack_bonus") {
         attackBonuses.push({
-          source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? 'effect',
+          source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? "effect",
           dice: e.payload?.diceExpression,
           amount: e.payload?.amount,
         });
       }
-      if (e.kind === 'attack_penalty') {
+      if (e.kind === "attack_penalty") {
         attackBonuses.push({
-          source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? 'effect',
-          dice: e.payload?.diceExpression ? `-${e.payload.diceExpression}` : undefined,
+          source: e.sourceSpellSlug ?? e.sourceFeatureSlug ?? "effect",
+          dice: e.payload?.diceExpression
+            ? `-${e.payload.diceExpression}`
+            : undefined,
           amount: e.payload?.amount != null ? -e.payload.amount : undefined,
         });
       }
@@ -844,15 +1001,15 @@ export class CombatService {
     // --- Target-side effects ---
     let targetAcBonus = 0;
     for (const e of targetFx) {
-      if (e.kind === 'ac_bonus') targetAcBonus += e.payload?.amount ?? 0;
-      if (e.kind === 'grant_advantage_to_attackers') advantage = true;
-      if (e.kind === 'grant_disadvantage_to_attackers') disadvantage = true;
+      if (e.kind === "ac_bonus") targetAcBonus += e.payload?.amount ?? 0;
+      if (e.kind === "grant_advantage_to_attackers") advantage = true;
+      if (e.kind === "grant_disadvantage_to_attackers") disadvantage = true;
     }
 
     // --- Condition special case: prone ---
     // Prone target: melee attacks have advantage, ranged have disadvantage.
     // (getDefenseModifiers nao sabe de isMelee; tratar aqui).
-    if ((target.conditions ?? []).includes('prone')) {
+    if ((target.conditions ?? []).includes("prone")) {
       if (isMelee) advantage = true;
       else disadvantage = true;
     }
@@ -866,24 +1023,27 @@ export class CombatService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
-    if (encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter)
+      return failure("Encontro nao encontrado.", "ENCOUNTER_NOT_FOUND");
+    if (encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
     const participantId = encounter.turnOrder[encounter.currentTurnIndex];
-    if (!participantId) return failure('Sem participante no turno.', 'INVALID_PARTICIPANT');
+    if (!participantId)
+      return failure("Sem participante no turno.", "INVALID_PARTICIPANT");
 
     const participant = await this.participantRepo.findOne({
       where: { id: participantId },
     });
-    if (!participant) return failure('Participante nao encontrado.', 'PARTICIPANT_NOT_FOUND');
+    if (!participant)
+      return failure("Participante nao encontrado.", "PARTICIPANT_NOT_FOUND");
 
     return success({
       encounterId,
       round: encounter.currentRound,
       participantId: participant.id,
       participantName: participant.displayName,
-      participantType: participant.type as 'pc' | 'monster' | 'npc',
+      participantType: participant.type,
       isDefeated: participant.isDefeated,
     });
   }
@@ -896,23 +1056,31 @@ export class CombatService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
-    const participant = await this.encounterService.getParticipant(participantId);
-    const resolvedOwnerId = await this.resolveParticipantOwner(participant, ownerUserId);
-    const speed = await this.movementService.getSpeed(participant, resolvedOwnerId);
+    const participant =
+      await this.encounterService.getParticipant(participantId);
+    const resolvedOwnerId = await this.resolveParticipantOwner(
+      participant,
+      ownerUserId,
+    );
+    const speed = await this.movementService.getSpeed(
+      participant,
+      resolvedOwnerId,
+    );
 
     let actions: TurnActionBlock[] = [];
     let bonusActions: TurnActionBlock[] = [];
     let reactions: TurnActionBlock[] = [];
 
-    if (participant.type === 'pc' && participant.characterId) {
+    if (participant.type === "pc" && participant.characterId) {
       // Spec 012 \u2014 quando PC est\u00e1 transformado (Wild Shape, Polymorph, etc),
       // ActionBar mostra as a\u00e7\u00f5es do form em vez das weapons do PC.
       if (participant.transformationState) {
         const formSynthetic = {
-          slug: participant.transformationState.form.monsterSlug ?? 'transformed',
+          slug:
+            participant.transformationState.form.monsterSlug ?? "transformed",
           name: participant.transformationState.form.formName,
           actions: participant.transformationState.form.actions,
         };
@@ -926,19 +1094,23 @@ export class CombatService {
         bonusActions = pcActions.bonusActions.map(this.toTurnActionBlock);
         reactions = pcActions.reactions.map(this.toTurnActionBlock);
       }
-    } else if (participant.type === 'monster' && participant.monster) {
+    } else if (participant.type === "monster" && participant.monster) {
       actions = this.parseMonsterActions(participant.monster);
       const multiattack = (participant.monster as any).multiattack;
-      if (multiattack && Array.isArray(multiattack.sequence) && multiattack.sequence.length > 0) {
+      if (
+        multiattack &&
+        Array.isArray(multiattack.sequence) &&
+        multiattack.sequence.length > 0
+      ) {
         actions = [
           {
-            id: `${(participant.monster as any).slug ?? 'monster'}-multiattack`,
-            name: 'Multiataque',
-            kind: 'multiattack',
-            timing: 'action',
-            source: 'base',
-            sourceLabel: 'Multiataque',
-            description: multiattack.description ?? '',
+            id: `${(participant.monster as any).slug ?? "monster"}-multiattack`,
+            name: "Multiataque",
+            kind: "multiattack",
+            timing: "action",
+            source: "base",
+            sourceLabel: "Multiataque",
+            description: multiattack.description ?? "",
             sequence: multiattack.sequence,
             rechargeRequired: multiattack.recharge ?? null,
           },
@@ -946,36 +1118,42 @@ export class CombatService {
         ];
       }
       const spellcasting = (participant.monster as any).spellcasting;
-      if (spellcasting && Array.isArray(spellcasting.knownSpells) && spellcasting.knownSpells.length > 0) {
+      if (
+        spellcasting &&
+        Array.isArray(spellcasting.knownSpells) &&
+        spellcasting.knownSpells.length > 0
+      ) {
         const spellBlocks: TurnActionBlock[] = spellcasting.knownSpells.map(
           (ks: any, i: number) => ({
             id: `monster-spell-${i}`,
             name: ks.slug,
-            timing: 'action',
-            source: 'spell',
-            sourceLabel: spellcasting.type === 'innate' ? 'Inata' : 'Preparada',
+            timing: "action",
+            source: "spell",
+            sourceLabel: spellcasting.type === "innate" ? "Inata" : "Preparada",
             description:
-              spellcasting.type === 'innate'
-                ? `Uso: ${spellcasting.dailyUses?.[ks.slug] ?? 'at-will'}`
-                : `Nível ${ks.level}${ks.level === 0 ? ' (cantrip)' : ''}`,
+              spellcasting.type === "innate"
+                ? `Uso: ${spellcasting.dailyUses?.[ks.slug] ?? "at-will"}`
+                : `Nível ${ks.level}${ks.level === 0 ? " (cantrip)" : ""}`,
             spellLevel: ks.level,
           }),
         );
         actions = [
           {
-            id: 'monster-spell-opener',
-            name: 'Magia',
-            kind: 'spell-opener',
-            timing: 'action',
-            source: 'base',
-            sourceLabel: 'Magia',
-            description: `${spellcasting.type === 'innate' ? 'Magia inata' : 'Conjuração'} — DC ${spellcasting.saveDc}, +${spellcasting.attackBonus} ataque mágico.`,
+            id: "monster-spell-opener",
+            name: "Magia",
+            kind: "spell-opener",
+            timing: "action",
+            source: "base",
+            sourceLabel: "Magia",
+            description: `${spellcasting.type === "innate" ? "Magia inata" : "Conjuração"} — DC ${spellcasting.saveDc}, +${spellcasting.attackBonus} ataque mágico.`,
           },
           ...actions,
           ...spellBlocks,
         ];
       }
-      const legendary = (participant.monster as any).legendary_actions as any[] | undefined;
+      const legendary = (participant.monster as any).legendary_actions as
+        | any[]
+        | undefined;
       if (legendary?.length) {
         actions = actions.concat(
           legendary.map((a: any, i: number) => {
@@ -983,36 +1161,38 @@ export class CombatService {
               participant.monster,
               a,
               i,
-              'monster-legendary',
+              "monster-legendary",
             );
             return { ...block, name: `⭐ ${block.name}` };
           }),
         );
       }
-      const monsterReactions = (participant.monster as any).reactions as any[] | undefined;
+      const monsterReactions = (participant.monster as any).reactions as
+        | any[]
+        | undefined;
       if (monsterReactions?.length) {
         reactions = monsterReactions.map((a: any, i: number) => {
           const block = this.buildMonsterActionBlock(
             participant.monster,
             a,
             i,
-            'monster-reaction',
+            "monster-reaction",
           );
-          return { ...block, timing: 'reaction' };
+          return { ...block, timing: "reaction" };
         });
       }
     }
 
     // Spec 003 T034 — as 8 ações genéricas PHB aparecem em qualquer participant.
     const genericActions: TurnActionBlock[] = [
-      this.makeGenericAction('dodge', 'Esquivar'),
-      this.makeGenericAction('dash', 'Disparada'),
-      this.makeGenericAction('disengage', 'Desengajar'),
-      this.makeGenericAction('help', 'Ajudar'),
-      this.makeGenericAction('hide', 'Esconder'),
-      this.makeGenericAction('ready', 'Preparar'),
-      this.makeGenericAction('search', 'Procurar'),
-      this.makeGenericAction('use-object', 'Usar Objeto'),
+      this.makeGenericAction("dodge", "Esquivar"),
+      this.makeGenericAction("dash", "Disparada"),
+      this.makeGenericAction("disengage", "Desengajar"),
+      this.makeGenericAction("help", "Ajudar"),
+      this.makeGenericAction("hide", "Esconder"),
+      this.makeGenericAction("ready", "Preparar"),
+      this.makeGenericAction("search", "Procurar"),
+      this.makeGenericAction("use-object", "Usar Objeto"),
     ];
 
     // Spec 005 US13 — `actions` contém apenas ataques/multiataque/ações de monstro
@@ -1021,7 +1201,7 @@ export class CombatService {
     return success({
       participantId: participant.id,
       participantName: participant.displayName,
-      participantType: participant.type as 'pc' | 'monster' | 'npc',
+      participantType: participant.type,
       actions,
       genericActions,
       bonusActions,
@@ -1039,14 +1219,14 @@ export class CombatService {
   /** Monta um TurnActionBlock para uma das 8 ações genéricas PHB (spec 003 T034). */
   private makeGenericAction(
     genericKind:
-      | 'dodge'
-      | 'dash'
-      | 'disengage'
-      | 'help'
-      | 'hide'
-      | 'ready'
-      | 'search'
-      | 'use-object',
+      | "dodge"
+      | "dash"
+      | "disengage"
+      | "help"
+      | "hide"
+      | "ready"
+      | "search"
+      | "use-object",
     label: string,
   ): TurnActionBlock {
     // Spec 005 US13 — não marcamos mais como `kind: 'attack'` porque essas ações
@@ -1055,9 +1235,9 @@ export class CombatService {
     return {
       id: `generic-${genericKind}`,
       name: label,
-      timing: 'action',
-      source: 'generic',
-      sourceLabel: 'Ação PHB',
+      timing: "action",
+      source: "generic",
+      sourceLabel: "Ação PHB",
       description: `Ação genérica: ${label}`,
     } as unknown as TurnActionBlock;
   }
@@ -1066,12 +1246,13 @@ export class CombatService {
     // Spec 011 Phase 2 — `ActionBlock` da actions.service expõe `saveDc` +
     // `saveAbility` flat; `TurnActionBlock` espera `save: {ability, dc, ...}`.
     // Deriva o objeto quando o handler a montante não fez.
-    const save = a.save
-      ?? (typeof a.saveDc === 'number' && a.saveAbility
+    const save =
+      a.save ??
+      (typeof a.saveDc === "number" && a.saveAbility
         ? {
             ability: String(a.saveAbility).toLowerCase().slice(0, 3),
             dc: a.saveDc,
-            halfOnSuccess: a.saveSuccess === 'half' || a.halfOnSuccess === true,
+            halfOnSuccess: a.saveSuccess === "half" || a.halfOnSuccess === true,
           }
         : undefined);
 
@@ -1109,7 +1290,7 @@ export class CombatService {
 
   private parseMonsterActions(monster: any): TurnActionBlock[] {
     const monsterActions = (monster.actions as any[]) ?? [];
-    const monsterSlug: string = monster.slug ?? '';
+    const monsterSlug: string = monster.slug ?? "";
     return monsterActions.map((a: any, i: number) =>
       this.buildMonsterActionBlock(monster, a, i, monsterSlug),
     );
@@ -1130,7 +1311,7 @@ export class CombatService {
     const damage = resolved.damageDice
       ? {
           dice: resolved.damageDice,
-          type: resolved.damageType ?? 'bludgeoning',
+          type: resolved.damageType ?? "bludgeoning",
           bonus: 0,
         }
       : undefined;
@@ -1144,19 +1325,19 @@ export class CombatService {
     const lineMatch = desc.match(/(\d+)[- ]?foot(?:\s+long)?\s+line/i);
     const sphereMatch = desc.match(/(\d+)[- ]?foot[- ]?radius/i);
     const cubeMatch = desc.match(/(\d+)[- ]?foot\s+cube/i);
-    let aoe: TurnActionBlock['aoe'];
+    let aoe: TurnActionBlock["aoe"];
     if (coneMatch) {
       const size = parseInt(coneMatch[1], 10);
-      aoe = { originType: 'self', shape: 'cone', sizeFt: size, rangeFt: 0 };
+      aoe = { originType: "self", shape: "cone", sizeFt: size, rangeFt: 0 };
     } else if (lineMatch) {
       const size = parseInt(lineMatch[1], 10);
-      aoe = { originType: 'self', shape: 'line', sizeFt: size, rangeFt: 0 };
+      aoe = { originType: "self", shape: "line", sizeFt: size, rangeFt: 0 };
     } else if (sphereMatch) {
       const size = parseInt(sphereMatch[1], 10);
-      aoe = { originType: 'self', shape: 'sphere', sizeFt: size, rangeFt: 0 };
+      aoe = { originType: "self", shape: "sphere", sizeFt: size, rangeFt: 0 };
     } else if (cubeMatch) {
       const size = parseInt(cubeMatch[1], 10);
-      aoe = { originType: 'self', shape: 'cube', sizeFt: size, rangeFt: 0 };
+      aoe = { originType: "self", shape: "cube", sizeFt: size, rangeFt: 0 };
     }
 
     // --- Save detection ---
@@ -1174,17 +1355,20 @@ export class CombatService {
     const range = resolved.reach ?? resolved.range;
 
     const actionSlug = idPrefix
-      ? `${idPrefix}-${(a.name ?? 'attack').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+      ? `${idPrefix}-${(a.name ?? "attack")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")}`
       : `monster-action-${i}`;
 
     const isAttack = resolved.hasAttack || damage != null;
 
     return {
       id: actionSlug,
-      name: a.name ?? 'Ataque',
-      timing: 'action',
-      source: isAttack ? 'base' : 'special',
-      sourceLabel: isAttack ? monster.name : 'Habilidade Especial',
+      name: a.name ?? "Ataque",
+      timing: "action",
+      source: isAttack ? "base" : "special",
+      sourceLabel: isAttack ? monster.name : "Habilidade Especial",
       description: desc,
       attackBonus,
       damage,
@@ -1198,16 +1382,17 @@ export class CombatService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
-    if (encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter)
+      return failure("Encontro nao encontrado.", "ENCOUNTER_NOT_FOUND");
+    if (encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
     const currentParticipantId =
       encounter.turnOrder[encounter.currentTurnIndex];
 
     const events: GameEventData[] = [
       {
-        event_type: 'turn_end',
+        event_type: "turn_end",
         actor_participant_id: currentParticipantId,
         data: { round: encounter.currentRound },
       },
@@ -1240,17 +1425,17 @@ export class CombatService {
         currentParticipant.helpingAllyParticipantId = null;
         currentParticipant.helpingTargetParticipantId = null;
         currentParticipant.helpingUntilTurnOfParticipantId = null;
-        expired.push('help');
+        expired.push("help");
       }
       if (currentParticipant.readiedAction) {
         currentParticipant.readiedAction = null;
-        expired.push('ready');
+        expired.push("ready");
       }
       if (expired.length > 0) {
         await this.participantRepo.save(currentParticipant);
         for (const state of expired) {
           events.push({
-            event_type: 'state_expired',
+            event_type: "state_expired",
             actor_participant_id: currentParticipantId,
             data: { state, round: encounter.currentRound },
           });
@@ -1264,7 +1449,7 @@ export class CombatService {
     if (nextIndex >= encounter.turnOrder.length) {
       nextIndex = 0;
       newRound += 1;
-      events.push({ event_type: 'round_start', data: { round: newRound } });
+      events.push({ event_type: "round_start", data: { round: newRound } });
       await this.pruneDeadFromTurnOrder(encounter);
     }
 
@@ -1283,7 +1468,7 @@ export class CombatService {
       }
 
       // Monster: skip when isDefeated.
-      if (p.type !== 'pc' && p.isDefeated) {
+      if (p.type !== "pc" && p.isDefeated) {
         nextIndex = (nextIndex + 1) % turnOrderLen;
         if (nextIndex === 0) newRound += 1;
         skipped++;
@@ -1291,7 +1476,7 @@ export class CombatService {
       }
 
       // PC dead: skip (participants-ordered removal happens at round boundary).
-      if (p.type === 'pc' && p.dyingState === 'dead') {
+      if (p.type === "pc" && p.dyingState === "dead") {
         nextIndex = (nextIndex + 1) % turnOrderLen;
         if (nextIndex === 0) newRound += 1;
         skipped++;
@@ -1299,7 +1484,7 @@ export class CombatService {
       }
 
       // PC stable: deliver turn but mark autoSkip so frontend calls end-turn immediately.
-      if (p.type === 'pc' && p.dyingState === 'stable') {
+      if (p.type === "pc" && p.dyingState === "stable") {
         autoSkip = true;
         break;
       }
@@ -1316,7 +1501,7 @@ export class CombatService {
 
     const nextParticipant = await this.participantRepo.findOne({
       where: { id: nextParticipantId },
-      relations: ['monster'],
+      relations: ["monster"],
     });
 
     // Spec 004 — Dodge expira no INICIO do proximo turno do dodger (RAW PHB p.192).
@@ -1328,14 +1513,17 @@ export class CombatService {
       nextParticipant.dodgingUntilTurnOfParticipantId = null;
       await this.participantRepo.save(nextParticipant);
       events.push({
-        event_type: 'state_expired',
+        event_type: "state_expired",
         actor_participant_id: nextParticipant.id,
-        data: { state: 'dodge', round: newRound },
+        data: { state: "dodge", round: newRound },
       });
     }
     if (nextParticipant) {
-      const ownerId = await this.resolveParticipantOwner(nextParticipant, '');
-      await this.movementService.initializeTurn(nextParticipant, ownerId || undefined);
+      const ownerId = await this.resolveParticipantOwner(nextParticipant, "");
+      await this.movementService.initializeTurn(
+        nextParticipant,
+        ownerId || undefined,
+      );
       // Spec 012 Lote C — Capstones start-of-combat (PC first turn).
       try {
         const capRes = await this.capstones.runStartOfCombat(
@@ -1349,7 +1537,7 @@ export class CombatService {
     }
 
     events.push({
-      event_type: 'turn_start',
+      event_type: "turn_start",
       actor_participant_id: nextParticipantId,
       data: {
         round: newRound,
@@ -1358,22 +1546,22 @@ export class CombatService {
       },
     });
 
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounterId,
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
+
+    return success(
+      {
+        encounterId,
+        round: newRound,
+        participantId: nextParticipantId,
+        participantName: nextParticipant?.displayName ?? "",
+        participantType:
+          (nextParticipant?.type as "pc" | "monster" | "npc") ?? "monster",
+        isDefeated: nextParticipant?.isDefeated ?? false,
+        dyingState: nextParticipant?.dyingState,
+        autoSkip,
+      },
       events,
     );
-
-    return success({
-      encounterId,
-      round: newRound,
-      participantId: nextParticipantId,
-      participantName: nextParticipant?.displayName ?? '',
-      participantType: (nextParticipant?.type as 'pc' | 'monster' | 'npc') ?? 'monster',
-      isDefeated: nextParticipant?.isDefeated ?? false,
-      dyingState: nextParticipant?.dyingState,
-      autoSkip,
-    }, events);
   }
 
   /**
@@ -1381,16 +1569,20 @@ export class CombatService {
    * stay stable during the round. Monsters are never removed (isDefeated
    * monsters stay indexed but are skipped each round).
    */
-  private async pruneDeadFromTurnOrder(encounter: EncounterEntity): Promise<void> {
+  private async pruneDeadFromTurnOrder(
+    encounter: EncounterEntity,
+  ): Promise<void> {
     const toRemove: string[] = [];
     for (const pid of encounter.turnOrder) {
       const p = await this.participantRepo.findOne({ where: { id: pid } });
-      if (p?.type === 'pc' && p.dyingState === 'dead') {
+      if (p?.type === "pc" && p.dyingState === "dead") {
         toRemove.push(pid);
       }
     }
     if (toRemove.length === 0) return;
-    encounter.turnOrder = encounter.turnOrder.filter((pid) => !toRemove.includes(pid));
+    encounter.turnOrder = encounter.turnOrder.filter(
+      (pid) => !toRemove.includes(pid),
+    );
     if (encounter.currentTurnIndex >= encounter.turnOrder.length) {
       encounter.currentTurnIndex = 0;
     }
@@ -1405,8 +1597,8 @@ export class CombatService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
     const attacker = await this.encounterService.getParticipant(
       dto.attackerParticipantId,
@@ -1416,14 +1608,14 @@ export class CombatService {
     );
 
     if (attacker.isDefeated)
-      return failure('Atacante esta derrotado.', 'CONDITION_PREVENTS_ACTION');
+      return failure("Atacante esta derrotado.", "CONDITION_PREVENTS_ACTION");
     if (target.isDefeated)
-      return failure('Alvo ja esta derrotado.', 'TARGET_DEFEATED');
+      return failure("Alvo ja esta derrotado.", "TARGET_DEFEATED");
 
     if (!dto._isSubAttack) {
       const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
       if (currentPid !== dto.attackerParticipantId)
-        return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+        return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
       // Spec 003 Fatia 6 — respeita Extra Attack: bloqueia só quando attacker
       // esgotou attacksMaxThisTurn (ou actionUsed foi setado por feature tipo
@@ -1432,14 +1624,14 @@ export class CombatService {
         attacker.actionUsed &&
         attacker.attacksUsedThisTurn >= attacker.attacksMaxThisTurn
       )
-        return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+        return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
 
     // Check if attacker can act (condition still applies even for sub-attacks).
     if (!this.conditionEffects.canTakeAction(attacker.conditions))
       return failure(
-        'Atacante nao pode agir devido a condicoes.',
-        'CONDITION_PREVENTS_ACTION',
+        "Atacante nao pode agir devido a condicoes.",
+        "CONDITION_PREVENTS_ACTION",
       );
 
     // Spec 012 — Nature's Sanctuary (Druid Land L14): if target has the feature
@@ -1447,36 +1639,57 @@ export class CombatService {
     // means attack is aborted (attacker cannot target caster).
     const naturesSanctuaryEvents: GameEventData[] = [];
     if (
-      target.type === 'pc' &&
+      target.type === "pc" &&
       target.characterId &&
-      attacker.type === 'monster' &&
+      attacker.type === "monster" &&
       attacker.monster
     ) {
-      const creatureType = (attacker.monster.type ?? '').toLowerCase();
-      if (creatureType === 'beast' || creatureType === 'plant') {
+      const creatureType = (attacker.monster.type ?? "").toLowerCase();
+      if (creatureType === "beast" || creatureType === "plant") {
         try {
-          const targetOwnerId = await this.resolveParticipantOwner(target, '');
+          const targetOwnerId = await this.resolveParticipantOwner(target, "");
           if (targetOwnerId) {
-            const targetSheet = await this.sheetService.computeSheet(targetOwnerId, target.characterId);
+            const targetSheet = await this.sheetService.computeSheet(
+              targetOwnerId,
+              target.characterId,
+            );
             if ((targetSheet as any).hasNaturesSanctuary) {
               const pb = targetSheet.proficiencyBonus ?? 2;
-              const wisBlock = (targetSheet.abilityScores ?? []).find((a: any) => a.slug === 'wis');
+              const wisBlock = (targetSheet.abilityScores ?? []).find(
+                (a: any) => a.slug === "wis",
+              );
               const wisMod = wisBlock?.modifier ?? 0;
               const dc = 8 + pb + wisMod;
-              const attackerWisMod = getAbilityModifier(attacker.monster.wisdom);
+              const attackerWisMod = getAbilityModifier(
+                attacker.monster.wisdom,
+              );
               const roll = this.diceService.roll(20);
               const saveTotal = roll + attackerWisMod;
               const saved = saveTotal >= dc;
               naturesSanctuaryEvents.push({
-                event_type: 'natures_sanctuary_save',
+                event_type: "natures_sanctuary_save",
                 actor_participant_id: attacker.id,
                 target_participant_id: target.id,
-                data: { dc, roll, modifier: attackerWisMod, total: saveTotal, success: saved },
+                data: {
+                  dc,
+                  roll,
+                  modifier: attackerWisMod,
+                  total: saveTotal,
+                  success: saved,
+                },
               });
               if (!saved) {
                 return success(
                   {
-                    attackRoll: { roll: 0, modifier: 0, total: 0, targetAc: 0, hit: false, critical: false, criticalMiss: false },
+                    attackRoll: {
+                      roll: 0,
+                      modifier: 0,
+                      total: 0,
+                      targetAc: 0,
+                      hit: false,
+                      critical: false,
+                      criticalMiss: false,
+                    },
                     targetDefeated: false,
                   } as AttackResult,
                   naturesSanctuaryEvents,
@@ -1492,8 +1705,8 @@ export class CombatService {
 
     // Get attack bonus and damage info
     let attackBonus = 0;
-    let damageDice = '1d4';
-    let damageType = 'bludgeoning';
+    let damageDice = "1d4";
+    let damageType = "bludgeoning";
     let damageBonus = 0;
     // Spec 012 #1 — range da ação, populado em cada branch (unarmed/pc/monster)
     // e consumido logo antes dos rolls.
@@ -1519,8 +1732,8 @@ export class CombatService {
     //   grapple  → STR save DC 8+prof+STR; falha aplica condition 'grappled' (Spec 4)
     //   shove    → STR save mesmo DC; falha = push 5ft OU prone (Spec 4)
     if (
-      dto.actionSlug === 'unarmed-strike' &&
-      attacker.type === 'pc' &&
+      dto.actionSlug === "unarmed-strike" &&
+      attacker.type === "pc" &&
       attacker.characterId
     ) {
       isWeaponOrUnarmedAttack = true;
@@ -1532,11 +1745,11 @@ export class CombatService {
         pcOwnerId,
         attacker.characterId,
       );
-      const strScore = sheet.abilityScores.find((a) => a.slug === 'str');
+      const strScore = sheet.abilityScores.find((a) => a.slug === "str");
       const strMod = strScore?.modifier ?? 0;
       const profBonus = sheet.proficiencyBonus ?? 2;
-      const mode = (dto.options?.mode as string | undefined) ?? 'damage';
-      actionRangeStr = '5 ft';
+      const mode = (dto.options?.mode as string | undefined) ?? "damage";
+      actionRangeStr = "5 ft";
 
       // Spec 012 #1 — Unarmed Strike (damage/grapple/shove) é sempre melee 5ft.
       // Valida aqui porque grapple/shove retornam antes do check unificado abaixo.
@@ -1549,12 +1762,12 @@ export class CombatService {
         if (!rangeCheck.ok) {
           return failure(
             `Alvo a ${rangeCheck.distanceFt}ft, Ataque Desarmado alcança ${rangeCheck.maxFt}ft.`,
-            'OUT_OF_RANGE',
+            "OUT_OF_RANGE",
           );
         }
       }
 
-      if (mode === 'grapple' || mode === 'shove') {
+      if (mode === "grapple" || mode === "shove") {
         // Short-circuit: sem attack roll; emite evento para a Spec 4 resolver o save.
         const saveDc = 8 + profBonus + strMod;
         if (!dto._isSubAttack) {
@@ -1566,38 +1779,34 @@ export class CombatService {
           await this.participantRepo.save(attacker);
         }
         const event: GameEventData = {
-          event_type: 'class_feature_invoked',
+          event_type: "class_feature_invoked",
           actor_participant_id: attacker.id,
           target_participant_id: target.id,
           data: {
             featureSlug: mode, // 'grapple' | 'shove'
-            actionCost: 'action',
+            actionCost: "action",
             targets: [target.id],
             saveDc,
-            saveAbility: 'str',
-            options: { mode, outcome: 'pending' },
+            saveAbility: "str",
+            options: { mode, outcome: "pending" },
             caster: {
               abilityMods: { str: strMod },
               profBonus,
             },
-            status: 'emitted_pending_resolution',
+            status: "emitted_pending_resolution",
           },
         };
-        await this.eventService.emit(
-          encounter.sessionId,
-          encounterId,
-          [event],
-        );
+        await this.eventService.emit(encounter.sessionId, encounterId, [event]);
         // Spec 004 — resolver consome o evento imediatamente
         const resolution = await this.classFeatureResolver.resolveInvocation(
           attacker.id,
           {
             featureSlug: mode,
-            actionCost: 'action',
+            actionCost: "action",
             targets: [target.id],
             saveDc,
-            saveAbility: 'str',
-            options: { mode, outcome: 'pending' },
+            saveAbility: "str",
+            options: { mode, outcome: "pending" },
             caster: { abilityMods: { str: strMod }, profBonus },
           },
         );
@@ -1612,13 +1821,13 @@ export class CombatService {
           {
             attackerParticipantId: attacker.id,
             targetParticipantId: target.id,
-            actionSlug: 'unarmed-strike',
+            actionSlug: "unarmed-strike",
             unarmedMode: mode,
             deferred: !resolution.resolved,
             resolved: resolution.resolved,
             featureSlug: mode,
             saveDc,
-            saveAbility: 'str',
+            saveAbility: "str",
             resolutionPayload: resolution.resolutionPayload,
           } as unknown as AttackResult,
           [event, ...resolution.events],
@@ -1627,33 +1836,47 @@ export class CombatService {
 
       // mode === 'damage' (default): populamos stats e seguimos o fluxo de attack roll.
       attackBonus = strMod + profBonus;
-      damageDice = '1';
-      damageType = 'bludgeoning';
+      damageDice = "1";
+      damageType = "bludgeoning";
       damageBonus = strMod;
 
       // Spec 012 Fase 0 — Fighting Style: Unarmed Fighting upgrade do damage die
       // (d6, d8 se 2 mãos livres). Sheet já foi buscada acima via sheetService.
-      const unarmedOrigin = (sheet as unknown as { originDetails?: { fightingStyleIndex?: string } })
-        .originDetails;
+      const unarmedOrigin = (
+        sheet as unknown as { originDetails?: { fightingStyleIndex?: string } }
+      ).originDetails;
       const unarmedFsSlug = unarmedOrigin?.fightingStyleIndex;
-      if (unarmedFsSlug === 'unarmed-fighting') {
+      if (unarmedFsSlug === "unarmed-fighting") {
         // "2 mãos livres" = sem arma equipada. Simplificação: consulta equip equipada.
-        const hasBothHandsFree = !((sheet as unknown as { equipment?: Array<{ equipped?: boolean; damage?: unknown }> })
-          .equipment ?? []).some((e) => e.equipped && !!e.damage);
-        damageDice = hasBothHandsFree ? '1d8' : '1d6';
-        appliedFightingStyle = 'unarmed-fighting';
+        const hasBothHandsFree = !(
+          (
+            sheet as unknown as {
+              equipment?: Array<{ equipped?: boolean; damage?: unknown }>;
+            }
+          ).equipment ?? []
+        ).some((e) => e.equipped && !!e.damage);
+        damageDice = hasBothHandsFree ? "1d8" : "1d6";
+        appliedFightingStyle = "unarmed-fighting";
       }
 
       // Spec 012 Sprint F \u2014 Monk Martial Arts (RAW 2024 XPHB).
       // Unarmed strike: upgrade damage die to dN (L1=d6, L5=d8, L11=d10, L17=d12)
       // + use max(STR, DEX) for attack bonus + damage.
-      const monkClass = (sheet as unknown as { classes?: Array<{ slug: string; level: number }> })
-        .classes?.find((c) => c.slug.replace(/-phb$/, '') === 'monk');
+      const monkClass = (
+        sheet as unknown as { classes?: Array<{ slug: string; level: number }> }
+      ).classes?.find((c) => c.slug.replace(/-phb$/, "") === "monk");
       if (monkClass) {
         const monkLvl = monkClass.level;
-        const maDie = monkLvl >= 17 ? 'd12' : monkLvl >= 11 ? 'd10' : monkLvl >= 5 ? 'd8' : 'd6';
+        const maDie =
+          monkLvl >= 17
+            ? "d12"
+            : monkLvl >= 11
+              ? "d10"
+              : monkLvl >= 5
+                ? "d8"
+                : "d6";
         damageDice = `1${maDie}`;
-        const dexScore = sheet.abilityScores.find((a) => a.slug === 'dex');
+        const dexScore = sheet.abilityScores.find((a) => a.slug === "dex");
         const dexMod = dexScore?.modifier ?? 0;
         // Usa DEX se maior que STR (RAW: Monk's choice)
         if (dexMod > strMod) {
@@ -1661,25 +1884,27 @@ export class CombatService {
           damageBonus = dexMod;
         }
       }
-    } else if (attacker.type === 'pc' && attacker.transformationState) {
+    } else if (attacker.type === "pc" && attacker.transformationState) {
       // Spec 012 \u2014 PC transformado: resolve a\u00e7\u00e3o via form.actions como se fosse
       // monster. Skip da PC weapon pipeline (sheet.equipment, fighting style,
       // weapon mastery) porque o PC n\u00e3o est\u00e1 empunhando weapon \u2014 est\u00e1 com as
       // actions do form (Bite do Wolf, Claws do Bear, etc).
       const form = attacker.transformationState.form;
       const syntheticMonster = {
-        slug: form.monsterSlug ?? 'transformed',
+        slug: form.monsterSlug ?? "transformed",
         name: form.formName,
         actions: form.actions,
       };
       const resolved = this.monsterActionResolver.resolveByName(
-        syntheticMonster as unknown as Parameters<typeof this.monsterActionResolver.resolveByName>[0],
+        syntheticMonster as unknown as Parameters<
+          typeof this.monsterActionResolver.resolveByName
+        >[0],
         dto.actionName,
       );
       if (!resolved) {
         return failure(
           `Acao "${dto.actionName}" nao encontrada no form "${form.formName}".`,
-          'INVALID_ACTION',
+          "INVALID_ACTION",
         );
       }
       attackBonus = resolved.attackBonus;
@@ -1687,15 +1912,12 @@ export class CombatService {
       if (resolved.damageType) damageType = resolved.damageType;
       damageBonus = resolved.damageBonus;
       actionRangeStr = resolved.range ?? resolved.reach ?? null;
-    } else if (attacker.type === 'pc' && attacker.characterId) {
+    } else if (attacker.type === "pc" && attacker.characterId) {
       const actions = await this.actionsService.getActions(
         dto.ownerUserId,
         attacker.characterId,
       );
-      const allActions = [
-        ...actions.actions,
-        ...actions.bonusActions,
-      ];
+      const allActions = [...actions.actions, ...actions.bonusActions];
       // Spec 012 Fase 0 — prioriza match por actionSlug (id) quando presente,
       // antes de cair pro match por nome. Sem isso, quando há 2 armas com mesmo
       // nome (ex: Greatsword PHB + XPHB no inventário), o find pegava a primeira
@@ -1711,9 +1933,9 @@ export class CombatService {
       if (!action)
         return failure(
           `Acao "${dto.actionName}" nao encontrada.`,
-          'INVALID_ACTION',
+          "INVALID_ACTION",
         );
-      if (action.source === 'weapon') isWeaponOrUnarmedAttack = true;
+      if (action.source === "weapon") isWeaponOrUnarmedAttack = true;
       attackBonus = action.attackBonus ?? 0;
       if (action.damage) {
         damageDice = action.damage.dice;
@@ -1722,7 +1944,7 @@ export class CombatService {
       }
       actionRangeStr = action.range ?? null;
       // Spec 012 Fase 0 — weapon mastery (só armas PC, nunca unarmed/spell)
-      if (action.source === 'weapon' && action.masterySlug) {
+      if (action.source === "weapon" && action.masterySlug) {
         masterySlug = action.masterySlug;
         masteryAbilityMod = action.damage?.bonus ?? 0;
       }
@@ -1730,26 +1952,37 @@ export class CombatService {
       // Fighter L9 Tactical Master (RAW 2024) — se attacker armou override,
       // substitui mastery original por push/sap/slow. Override é consumido
       // (limpo) após o attack resolver.
-      if (action.source === 'weapon' && attacker.tacticalMasterOverride && masterySlug) {
+      if (
+        action.source === "weapon" &&
+        attacker.tacticalMasterOverride &&
+        masterySlug
+      ) {
         masterySlug = attacker.tacticalMasterOverride;
       }
 
       // Spec 012 Fase 0 — Fighting Style (PC weapon attacks).
       // Busca slug do Fighting Style via sheet.originDetails, aplica bonus conforme contexto.
-      if (action.source === 'weapon') {
-        const pcOwnerId = await this.resolveParticipantOwner(attacker, dto.ownerUserId);
+      if (action.source === "weapon") {
+        const pcOwnerId = await this.resolveParticipantOwner(
+          attacker,
+          dto.ownerUserId,
+        );
         const sheet = await this.sheetService.computeSheet(
           pcOwnerId,
           attacker.characterId,
         );
-        const originDetails = (sheet as unknown as { originDetails?: { fightingStyleIndex?: string } })
-          .originDetails;
+        const originDetails = (
+          sheet as unknown as {
+            originDetails?: { fightingStyleIndex?: string };
+          }
+        ).originDetails;
         const fsSlug = originDetails?.fightingStyleIndex;
         if (fsSlug) {
           const props = (action.properties ?? []).map((p) => p.toLowerCase());
-          const isTwoHanded = props.includes('two-handed');
-          const isThrown = (dto.actionSlug ?? '').startsWith('weapon-thrown-')
-            || props.includes('thrown');
+          const isTwoHanded = props.includes("two-handed");
+          const isThrown =
+            (dto.actionSlug ?? "").startsWith("weapon-thrown-") ||
+            props.includes("thrown");
           const isMeleeCtx = this.isMeleeAttack(action.name, dto.actionSlug);
           // Offhand: simplificação — se actionSlug contém 'thrown' não é offhand;
           // TWF real exige light + offhand equipado (futuro). Por ora Offhand=false.
@@ -1773,7 +2006,7 @@ export class CombatService {
           if (fsRes.appliedStyle) appliedFightingStyle = fsRes.appliedStyle;
         }
       }
-    } else if (attacker.type === 'monster' && attacker.monster) {
+    } else if (attacker.type === "monster" && attacker.monster) {
       const resolved = this.monsterActionResolver.resolveByName(
         attacker.monster,
         dto.actionName,
@@ -1781,7 +2014,7 @@ export class CombatService {
       if (!resolved) {
         return failure(
           `Acao "${dto.actionName}" nao encontrada no statblock do monstro.`,
-          'INVALID_ACTION',
+          "INVALID_ACTION",
         );
       }
       attackBonus = resolved.attackBonus;
@@ -1790,7 +2023,6 @@ export class CombatService {
       damageBonus = resolved.damageBonus;
       actionRangeStr = resolved.range ?? resolved.reach ?? null;
     }
-
 
     // Spec 012 #1 — range check unificado (PC weapon + monster). Ficou depois
     // do unarmed check porque unarmed returns early em grapple/shove. Se
@@ -1804,10 +2036,10 @@ export class CombatService {
     // Spec 012 Lote B — OAs bypassam range check: trigger já foi computado
     // quando o mover ainda estava em reach.
     if (!rangeCheck.ok && !dto._bypassRangeCheck) {
-      const actionLabel = dto.actionName || 'Ataque';
+      const actionLabel = dto.actionName || "Ataque";
       return failure(
         `Alvo a ${rangeCheck.distanceFt}ft, ${actionLabel} alcança ${rangeCheck.maxFt}ft.`,
-        'OUT_OF_RANGE',
+        "OUT_OF_RANGE",
       );
     }
 
@@ -1848,8 +2080,7 @@ export class CombatService {
       {
         id: target.id,
         conditions: target.conditions ?? [],
-        dodgingUntilTurnOfParticipantId:
-          target.dodgingUntilTurnOfParticipantId,
+        dodgingUntilTurnOfParticipantId: target.dodgingUntilTurnOfParticipantId,
       },
       helpingState ? { helpingAgainst: helpingState } : undefined,
     );
@@ -1885,19 +2116,34 @@ export class CombatService {
     // Spec 012 Lote C — Rogue L18 Elusive (RAW 2024 XPHB).
     // "Enquanto não Incapacitated, attack rolls contra você não têm advantage."
     let elusiveCancelledAdvantage = false;
-    if (target.type === 'pc' && target.characterId && hasAdvantage) {
+    if (target.type === "pc" && target.characterId && hasAdvantage) {
       try {
-        const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
-        const targetSheet = await this.sheetService.computeSheet(targetOwnerId, target.characterId);
-        const hasElusive = (targetSheet as { hasElusive?: boolean }).hasElusive === true;
+        const targetOwnerId = await this.resolveParticipantOwner(
+          target,
+          dto.ownerUserId,
+        );
+        const targetSheet = await this.sheetService.computeSheet(
+          targetOwnerId,
+          target.characterId,
+        );
+        const hasElusive =
+          (targetSheet as { hasElusive?: boolean }).hasElusive === true;
         const incapacitated = (target.conditions ?? []).some((c) =>
-          ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'].includes(c),
+          [
+            "incapacitated",
+            "paralyzed",
+            "petrified",
+            "stunned",
+            "unconscious",
+          ].includes(c),
         );
         if (hasElusive && !incapacitated) {
           hasAdvantage = false;
           elusiveCancelledAdvantage = true;
         }
-      } catch { /* fallback */ }
+      } catch {
+        /* fallback */
+      }
     }
 
     // Advantage and disadvantage cancel out
@@ -1908,7 +2154,9 @@ export class CombatService {
 
     // Roll attack
     let attackRoll: number;
-    let advantageResult: { roll1: number; roll2: number; chosen: number; discarded: number } | undefined;
+    let advantageResult:
+      | { roll1: number; roll2: number; chosen: number; discarded: number }
+      | undefined;
 
     if (hasAdvantage) {
       const adv = this.diceService.rollWithAdvantage();
@@ -1924,23 +2172,28 @@ export class CombatService {
 
     // Spec 012 Fase 0 — Improved/Superior Critical (Champion Fighter):
     // L3+ crit em 19-20, L15+ crit em 18-20. Default 20.
-    const critThreshold = await this.computeCritThreshold(attacker, dto.ownerUserId);
+    const critThreshold = await this.computeCritThreshold(
+      attacker,
+      dto.ownerUserId,
+    );
     const isCritical = attackRoll >= critThreshold;
     const isCriticalMiss = attackRoll === 1;
 
     // Get target AC
     let targetAc = 10;
-    if (target.type === 'pc' && target.characterId) {
-      const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+    if (target.type === "pc" && target.characterId) {
+      const targetOwnerId = await this.resolveParticipantOwner(
+        target,
+        dto.ownerUserId,
+      );
       const sheet = await this.sheetService.computeSheet(
         targetOwnerId,
         target.characterId,
       );
       targetAc = sheet.armorClass;
-    } else if (target.type === 'monster' && target.monster) {
+    } else if (target.type === "monster" && target.monster) {
       const ac = target.monster.armor_class as any;
-      targetAc =
-        (Array.isArray(ac) ? ac[0]?.value : ac?.value) ?? 10;
+      targetAc = (Array.isArray(ac) ? ac[0]?.value : ac?.value) ?? 10;
     }
     // Spec 004 — somar ac_bonus dos EffectInstance do alvo
     targetAc += effectDec.targetAcBonus;
@@ -1949,7 +2202,7 @@ export class CombatService {
     // Bane usa dice com prefixo "-" (ex: "-1d4") — rolamos a expressão e negamos.
     const rolledEffectBonuses = effectDec.attackBonuses.map((b) => {
       if (b.dice) {
-        const negated = b.dice.startsWith('-');
+        const negated = b.dice.startsWith("-");
         const expr = negated ? b.dice.slice(1) : b.dice;
         const r = this.diceService.rollExpression(expr);
         const total = negated ? -r.total : r.total;
@@ -1968,13 +2221,13 @@ export class CombatService {
     let biBonus = 0;
     let biEvents: GameEventData[] = [];
     const hasBardicInspirationEffect = (attacker.effectInstances ?? []).some(
-      (e) => (e as unknown as { kind?: string }).kind === 'bardic_inspiration',
+      (e) => (e as unknown as { kind?: string }).kind === "bardic_inspiration",
     );
     if (hasBardicInspirationEffect) {
       try {
         const biResult = await this.bard.consumeBardicInspirationIfPresent(
           attacker.id,
-          'attack_roll',
+          "attack_roll",
           (sides) => this.diceService.roll(sides),
         );
         biBonus = biResult.consumed ? biResult.bonus : 0;
@@ -1988,16 +2241,23 @@ export class CombatService {
     // Monsters não sofrem exhaustion via mecânica RAW (apenas em NPCs especiais).
     let exhaustionAttackPenalty = 0;
     let attackerExhaustionLevel = 0;
-    if (attacker.type === 'pc' && attacker.characterId) {
+    if (attacker.type === "pc" && attacker.characterId) {
       try {
-        const ownerIdForExh = await this.resolveParticipantOwner(attacker, dto.ownerUserId);
+        const ownerIdForExh = await this.resolveParticipantOwner(
+          attacker,
+          dto.ownerUserId,
+        );
         const attackerSheet = await this.sheetService.computeSheet(
           ownerIdForExh,
           attacker.characterId,
         );
-        attackerExhaustionLevel = (attackerSheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+        attackerExhaustionLevel =
+          (attackerSheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
         if (attackerExhaustionLevel > 0) {
-          const mods = this.exhaustion.getModifiers(attackerExhaustionLevel, '2024_ten_levels');
+          const mods = this.exhaustion.getModifiers(
+            attackerExhaustionLevel,
+            "2024_ten_levels",
+          );
           exhaustionAttackPenalty = mods.d20Penalty ?? 0;
         }
       } catch {
@@ -2005,12 +2265,15 @@ export class CombatService {
       }
     }
 
-    const totalAttack = attackRoll + attackBonus + effectBonusSum + biBonus + exhaustionAttackPenalty;
+    const totalAttack =
+      attackRoll +
+      attackBonus +
+      effectBonusSum +
+      biBonus +
+      exhaustionAttackPenalty;
     const rawHit =
       !isCriticalMiss &&
-      (isCritical ||
-        defenderMods.autoCritIfMelee ||
-        totalAttack >= targetAc);
+      (isCritical || defenderMods.autoCritIfMelee || totalAttack >= targetAc);
 
     // Spec 012 Lote D — Rogue L20 Stroke of Luck: se attack iria miss, consome
     // stroke_of_luck_armed_attack effect e converte em hit.
@@ -2018,13 +2281,17 @@ export class CombatService {
     let strokeOfLuckConsumed = false;
     if (!rawHit && !isCriticalMiss) {
       const armed = (attacker.effectInstances ?? []).find(
-        (e) => (e as unknown as { kind?: string }).kind === 'stroke_of_luck_armed_attack',
+        (e) =>
+          (e as unknown as { kind?: string }).kind ===
+          "stroke_of_luck_armed_attack",
       );
       if (armed) {
         hit = true;
         strokeOfLuckConsumed = true;
         attacker.effectInstances = (attacker.effectInstances ?? []).filter(
-          (e) => (e as unknown as { kind?: string }).kind !== 'stroke_of_luck_armed_attack',
+          (e) =>
+            (e as unknown as { kind?: string }).kind !==
+            "stroke_of_luck_armed_attack",
         );
         await this.participantRepo.save(attacker);
       }
@@ -2033,26 +2300,30 @@ export class CombatService {
     const events: GameEventData[] = [...biEvents, ...naturesSanctuaryEvents];
     if (strokeOfLuckConsumed) {
       events.push({
-        event_type: 'stroke_of_luck_consumed',
+        event_type: "stroke_of_luck_consumed",
         actor_participant_id: attacker.id,
         target_participant_id: target.id,
-        data: { featureSlug: 'stroke-of-luck', kind: 'attack', originalMiss: true },
+        data: {
+          featureSlug: "stroke-of-luck",
+          kind: "attack",
+          originalMiss: true,
+        },
       });
     }
     if (elusiveCancelledAdvantage) {
       events.push({
-        event_type: 'elusive_cancelled_advantage',
+        event_type: "elusive_cancelled_advantage",
         actor_participant_id: attacker.id,
         target_participant_id: target.id,
-        data: { featureSlug: 'elusive' },
+        data: { featureSlug: "elusive" },
       });
     }
     if (exhaustionAttackPenalty !== 0) {
       events.push({
-        event_type: 'exhaustion_penalty_applied',
+        event_type: "exhaustion_penalty_applied",
         actor_participant_id: attacker.id,
         data: {
-          kind: 'attack_roll',
+          kind: "attack_roll",
           level: attackerExhaustionLevel,
           d20Penalty: exhaustionAttackPenalty,
           rawRoll: attackRoll,
@@ -2077,7 +2348,7 @@ export class CombatService {
     };
 
     events.push({
-      event_type: 'attack_roll',
+      event_type: "attack_roll",
       actor_participant_id: attacker.id,
       target_participant_id: target.id,
       data: {
@@ -2104,10 +2375,13 @@ export class CombatService {
       // Spec 012 Fase 0 — Great Weapon Fighting: rerola 1s e 2s uma vez
       // (aceita o segundo resultado). Aplica em damageDice base E no crit extra.
       if (rerollLowDamage) {
-        const rollsArr = (dmgResult.rolls ?? []) as number[];
-        const dieSize = parseInt(damageDice.split('d')[1] ?? '0', 10);
+        const rollsArr = dmgResult.rolls ?? [];
+        const dieSize = parseInt(damageDice.split("d")[1] ?? "0", 10);
         if (rollsArr.length > 0 && dieSize > 0) {
-          const rerollRes = this.fightingStyle.applyRerollLowDamage(rollsArr, dieSize);
+          const rerollRes = this.fightingStyle.applyRerollLowDamage(
+            rollsArr,
+            dieSize,
+          );
           if (rerollRes.rerolled) {
             totalDamage = rerollRes.total + damageBonus;
           }
@@ -2119,10 +2393,13 @@ export class CombatService {
         const critExtra = this.diceService.rollExpression(damageDice);
         let critTotal = critExtra.total;
         if (rerollLowDamage) {
-          const rollsArr = (critExtra.rolls ?? []) as number[];
-          const dieSize = parseInt(damageDice.split('d')[1] ?? '0', 10);
+          const rollsArr = critExtra.rolls ?? [];
+          const dieSize = parseInt(damageDice.split("d")[1] ?? "0", 10);
           if (rollsArr.length > 0 && dieSize > 0) {
-            const rerollRes = this.fightingStyle.applyRerollLowDamage(rollsArr, dieSize);
+            const rerollRes = this.fightingStyle.applyRerollLowDamage(
+              rollsArr,
+              dieSize,
+            );
             if (rerollRes.rerolled) critTotal = rerollRes.total;
           }
         }
@@ -2137,7 +2414,7 @@ export class CombatService {
       let sneakAttackDice: string | null = null;
       try {
         if (
-          attacker.type === 'pc' &&
+          attacker.type === "pc" &&
           attacker.characterId &&
           !attacker.sneakAttackUsedThisTurn
         ) {
@@ -2149,16 +2426,28 @@ export class CombatService {
             ownerIdForSa,
             attacker.characterId,
           );
-          const classesList = (saSheet as unknown as { classes?: Array<{ slug?: string; level?: number }> }).classes ?? [];
+          const classesList =
+            (
+              saSheet as unknown as {
+                classes?: Array<{ slug?: string; level?: number }>;
+              }
+            ).classes ?? [];
           const rogueClass = classesList.find(
-            (c) => typeof c.slug === 'string' && c.slug.replace(/-phb$/, '') === 'rogue',
+            (c) =>
+              typeof c.slug === "string" &&
+              c.slug.replace(/-phb$/, "") === "rogue",
           );
-          if (rogueClass && typeof rogueClass.level === 'number') {
-            const weaponSlug = dto.actionSlug ?? '';
-            const isWeaponAttack = weaponSlug.startsWith('weapon-') || weaponSlug.endsWith('-attack');
+          if (rogueClass && typeof rogueClass.level === "number") {
+            const weaponSlug = dto.actionSlug ?? "";
+            const isWeaponAttack =
+              weaponSlug.startsWith("weapon-") ||
+              weaponSlug.endsWith("-attack");
             const advantageForSa = hasAdvantage && !hasDisadvantage;
             if (isWeaponAttack && advantageForSa) {
-              const nDice = Math.min(10, Math.max(1, Math.floor((rogueClass.level + 1) / 2)));
+              const nDice = Math.min(
+                10,
+                Math.max(1, Math.floor((rogueClass.level + 1) / 2)),
+              );
               sneakAttackDice = `${nDice}d6`;
               const saRoll = this.diceService.rollExpression(sneakAttackDice);
               sneakAttackDamage = saRoll.total;
@@ -2179,13 +2468,9 @@ export class CombatService {
       let foeSlayerConsumed = false;
       try {
         const alreadyUsed = (attacker.effectInstances ?? []).some(
-          (e) => e.kind === 'foe_slayer_used_this_turn',
+          (e) => e.kind === "foe_slayer_used_this_turn",
         );
-        if (
-          !alreadyUsed &&
-          attacker.type === 'pc' &&
-          attacker.characterId
-        ) {
+        if (!alreadyUsed && attacker.type === "pc" && attacker.characterId) {
           const ownerIdForFs = await this.resolveParticipantOwner(
             attacker,
             dto.ownerUserId,
@@ -2194,9 +2479,12 @@ export class CombatService {
             ownerIdForFs,
             attacker.characterId,
           );
-          const hasFoeSlayer = (fsSheet as { hasFoeSlayer?: boolean }).hasFoeSlayer === true;
+          const hasFoeSlayer =
+            (fsSheet as { hasFoeSlayer?: boolean }).hasFoeSlayer === true;
           if (hasFoeSlayer) {
-            const wisAbility = fsSheet.abilityScores.find((a) => a.slug === 'wis');
+            const wisAbility = fsSheet.abilityScores.find(
+              (a) => a.slug === "wis",
+            );
             const wisMod = wisAbility?.modifier ?? 0;
             // RAW 2024: Foe Slayer sempre consome 1/turn ao hit, mesmo com WIS mod ≤ 0.
             // Isso mantém determinismo e emite evento p/ observabilidade no harness.
@@ -2208,11 +2496,12 @@ export class CombatService {
                 ...(attacker.effectInstances ?? []),
                 {
                   id: randomUUID(),
-                  kind: 'foe_slayer_used_this_turn',
-                  sourceFeatureSlug: 'foe-slayer',
+                  kind: "foe_slayer_used_this_turn",
+                  sourceFeatureSlug: "foe-slayer",
                   sourceCasterParticipantId: attacker.id,
-                  payload: {} as unknown as import('../interfaces/combat.interfaces').EffectInstancePayload,
-                  expiresAt: { kind: 'turns', value: 1 },
+                  payload:
+                    {} as unknown as import("../interfaces/combat.interfaces").EffectInstancePayload,
+                  expiresAt: { kind: "turns", value: 1 },
                   requiresConcentration: false,
                   appliedAt: new Date().toISOString(),
                 },
@@ -2231,7 +2520,7 @@ export class CombatService {
       // rolado pra cada attack. Empilhável com damageBonus (ability mod +
       // weapon bonus) que já está no totalDamage.
       const damageBonusEffects = (attacker.effectInstances ?? []).filter(
-        (e) => e.kind === 'damage_bonus',
+        (e) => e.kind === "damage_bonus",
       );
       const extraDamageBonuses: Array<{
         source: string;
@@ -2241,12 +2530,12 @@ export class CombatService {
       if (foeSlayerConsumed) {
         if (foeSlayerBonus > 0) {
           extraDamageBonuses.push({
-            source: 'foe-slayer',
+            source: "foe-slayer",
             amount: foeSlayerBonus,
           });
         }
         events.push({
-          event_type: 'foe_slayer_applied',
+          event_type: "foe_slayer_applied",
           actor_participant_id: attacker.id,
           target_participant_id: target.id,
           data: { wisBonus: foeSlayerBonus, oneshot: true },
@@ -2254,7 +2543,7 @@ export class CombatService {
       }
       if (sneakAttackDice) {
         extraDamageBonuses.push({
-          source: 'sneak-attack',
+          source: "sneak-attack",
           amount: sneakAttackDamage,
           dice: sneakAttackDice,
         });
@@ -2263,13 +2552,13 @@ export class CombatService {
         const payload = (eff.payload ?? {}) as {
           amount?: number;
           dice?: string;
-          scope?: 'melee' | 'ranged' | 'any';
+          scope?: "melee" | "ranged" | "any";
         };
-        const scope = payload.scope ?? 'any';
+        const scope = payload.scope ?? "any";
         const applies =
-          scope === 'any' ||
-          (scope === 'melee' && isMeleeAttack) ||
-          (scope === 'ranged' && !isMeleeAttack);
+          scope === "any" ||
+          (scope === "melee" && isMeleeAttack) ||
+          (scope === "ranged" && !isMeleeAttack);
         if (!applies) continue;
         if (payload.dice) {
           const r = this.diceService.rollExpression(payload.dice);
@@ -2279,7 +2568,7 @@ export class CombatService {
             amount: r.total,
             dice: payload.dice,
           });
-        } else if (typeof payload.amount === 'number') {
+        } else if (typeof payload.amount === "number") {
           totalDamage += payload.amount;
           extraDamageBonuses.push({
             source: eff.sourceFeatureSlug ?? eff.sourceSpellSlug ?? eff.kind,
@@ -2293,12 +2582,15 @@ export class CombatService {
       // hit, +1d6 (necrotic pra Hex, damage type do weapon pra HM).
       const targetMarks = (target.effectInstances ?? []).filter(
         (e) =>
-          (e.kind === 'hex_mark' || e.kind === 'hunter_mark') &&
+          (e.kind === "hex_mark" || e.kind === "hunter_mark") &&
           e.sourceCasterParticipantId === attacker.id,
       );
       for (const mark of targetMarks) {
-        const p = (mark.payload ?? {}) as { riderDice?: string; riderType?: string };
-        const dice = p.riderDice ?? '1d6';
+        const p = (mark.payload ?? {}) as {
+          riderDice?: string;
+          riderType?: string;
+        };
+        const dice = p.riderDice ?? "1d6";
         const r = this.diceService.rollExpression(dice);
         totalDamage += r.total;
         extraDamageBonuses.push({
@@ -2314,21 +2606,19 @@ export class CombatService {
       let vulnerable = false;
       let finalDamage = totalDamage;
 
-      if (target.type === 'monster' && target.monster) {
+      if (target.type === "monster" && target.monster) {
         const immunities =
-          ((target.monster.damage_immunities as unknown) as string[]) ?? [];
+          (target.monster.damage_immunities as unknown as string[]) ?? [];
         const resistances =
-          ((target.monster.damage_resistances as unknown) as string[]) ?? [];
+          (target.monster.damage_resistances as unknown as string[]) ?? [];
         const vulnerabilities =
-          ((target.monster.damage_vulnerabilities as unknown) as string[]) ?? [];
+          (target.monster.damage_vulnerabilities as unknown as string[]) ?? [];
 
         const dtLower = damageType.toLowerCase();
         if (immunities.some((i) => i.toLowerCase().includes(dtLower))) {
           immune = true;
           finalDamage = 0;
-        } else if (
-          resistances.some((r) => r.toLowerCase().includes(dtLower))
-        ) {
+        } else if (resistances.some((r) => r.toLowerCase().includes(dtLower))) {
           resisted = true;
           finalDamage = Math.floor(totalDamage / 2);
         } else if (
@@ -2352,7 +2642,7 @@ export class CombatService {
       };
 
       events.push({
-        event_type: 'damage_applied',
+        event_type: "damage_applied",
         actor_participant_id: attacker.id,
         target_participant_id: target.id,
         data: {
@@ -2362,9 +2652,12 @@ export class CombatService {
       });
 
       // Apply damage
-      if (target.type === 'pc' && target.characterId) {
-        const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
-        const wasDying = target.dyingState === 'dying';
+      if (target.type === "pc" && target.characterId) {
+        const targetOwnerId = await this.resolveParticipantOwner(
+          target,
+          dto.ownerUserId,
+        );
+        const wasDying = target.dyingState === "dying";
         if (wasDying) {
           // RAW: damage to a dying PC is a death-save failure (2 on crit).
           const failuresDelta = isCritical ? 2 : 1;
@@ -2375,15 +2668,19 @@ export class CombatService {
           );
           targetHpAfter = 0;
           if (ds.dead) {
-            target.dyingState = 'dead';
+            target.dyingState = "dead";
             target.isDefeated = true;
             targetDefeated = true;
             await this.participantRepo.save(target);
           }
           events.push({
-            event_type: 'death_save_failed_from_damage',
+            event_type: "death_save_failed_from_damage",
             target_participant_id: target.id,
-            data: { failuresAdded: failuresDelta, failures: ds.failures, dyingState: target.dyingState },
+            data: {
+              failuresAdded: failuresDelta,
+              failures: ds.failures,
+              dyingState: target.dyingState,
+            },
           });
         } else {
           // Spec 012 \u2014 Wild Shape/Polymorph: dano vai pro form HP primeiro, reverte em 0
@@ -2395,22 +2692,22 @@ export class CombatService {
           targetHpAfter = hpResult.currentHp;
           targetDefeated = hpResult.isDown;
           if (hpResult.instantDeath) {
-            target.dyingState = 'dead';
+            target.dyingState = "dead";
             target.isDefeated = true;
             await this.participantRepo.save(target);
             events.push({
-              event_type: 'instant_death',
+              event_type: "instant_death",
               target_participant_id: target.id,
-              data: { dyingState: 'dead' },
+              data: { dyingState: "dead" },
             });
           } else if (targetDefeated) {
-            target.dyingState = 'dying';
+            target.dyingState = "dying";
             target.isDefeated = false;
             await this.participantRepo.save(target);
             events.push({
-              event_type: 'fell_unconscious',
+              event_type: "fell_unconscious",
               target_participant_id: target.id,
-              data: { dyingState: 'dying' },
+              data: { dyingState: "dying" },
             });
           }
         }
@@ -2424,18 +2721,15 @@ export class CombatService {
 
       // Concentration check
       if (target.isConcentrating && finalDamage > 0 && !targetDefeated) {
-        const concResult = await this.concentrationCheck(
-          target,
-          finalDamage,
-        );
+        const concResult = await this.concentrationCheck(target, finalDamage);
         concentrationBroken = !concResult.maintained;
         events.push({
-          event_type: 'concentration_check',
+          event_type: "concentration_check",
           target_participant_id: target.id,
           data: concResult,
         });
         if (!concResult.maintained) {
-          const breakRes = await this.concentration.break(target, 'damage');
+          const breakRes = await this.concentration.break(target, "damage");
           events.push(...breakRes.events);
         }
       }
@@ -2453,18 +2747,22 @@ export class CombatService {
         // o alvo marcado caiu a 0 HP antes da spell expirar. Emite evento de
         // sinal — UI pode prompt player. (Endpoint de transfer é deferido.)
         const hunterMarks = (target.effectInstances ?? []).filter(
-          (e) => e.kind === 'hunter_mark' && e.sourceCasterParticipantId === attacker.id,
+          (e) =>
+            e.kind === "hunter_mark" &&
+            e.sourceCasterParticipantId === attacker.id,
         );
         const hexMarks = (target.effectInstances ?? []).filter(
-          (e) => e.kind === 'hex_mark' && e.sourceCasterParticipantId === attacker.id,
+          (e) =>
+            e.kind === "hex_mark" &&
+            e.sourceCasterParticipantId === attacker.id,
         );
         for (const mk of hunterMarks) {
           events.push({
-            event_type: 'mark_ready_to_transfer',
+            event_type: "mark_ready_to_transfer",
             actor_participant_id: attacker.id,
             target_participant_id: target.id,
             data: {
-              sourceSpell: mk.sourceSpellSlug ?? 'hunters-mark',
+              sourceSpell: mk.sourceSpellSlug ?? "hunters-mark",
               previousTargetId: target.id,
               effectId: mk.id,
               bonusActionRecast: true,
@@ -2473,11 +2771,11 @@ export class CombatService {
         }
         for (const mk of hexMarks) {
           events.push({
-            event_type: 'mark_ready_to_transfer',
+            event_type: "mark_ready_to_transfer",
             actor_participant_id: attacker.id,
             target_participant_id: target.id,
             data: {
-              sourceSpell: mk.sourceSpellSlug ?? 'hex',
+              sourceSpell: mk.sourceSpellSlug ?? "hex",
               previousTargetId: target.id,
               effectId: mk.id,
               bonusActionRecast: true,
@@ -2511,7 +2809,7 @@ export class CombatService {
           });
           if (secondTarget) {
             const cleaveDmg = mRes.cleaveSecondTarget.damageAmount;
-            if (secondTarget.type === 'pc' && secondTarget.characterId) {
+            if (secondTarget.type === "pc" && secondTarget.characterId) {
               const targetOwnerId = await this.resolveParticipantOwner(
                 secondTarget,
                 dto.ownerUserId,
@@ -2522,11 +2820,11 @@ export class CombatService {
                 { damage: cleaveDmg },
               );
               if (hpRes.instantDeath) {
-                secondTarget.dyingState = 'dead';
+                secondTarget.dyingState = "dead";
                 secondTarget.isDefeated = true;
                 await this.participantRepo.save(secondTarget);
               } else if (hpRes.isDown) {
-                secondTarget.dyingState = 'dying';
+                secondTarget.dyingState = "dying";
                 await this.participantRepo.save(secondTarget);
               }
             } else {
@@ -2534,7 +2832,7 @@ export class CombatService {
               await this.participantRepo.save(secondTarget);
             }
             events.push({
-              event_type: 'damage_applied',
+              event_type: "damage_applied",
               actor_participant_id: attacker.id,
               target_participant_id: secondTarget.id,
               data: {
@@ -2546,7 +2844,7 @@ export class CombatService {
                 immune: false,
                 vulnerable: false,
                 finalDamage: cleaveDmg,
-                source: 'weapon-mastery:cleave',
+                source: "weapon-mastery:cleave",
               },
             });
           }
@@ -2554,8 +2852,11 @@ export class CombatService {
       }
     } else {
       // Spec 012 Fase 0 — Weapon Mastery on-miss (Graze). Damage = abilityMod.
-      if (masterySlug === 'graze') {
-        const profBonus = await this.getAttackerProfBonus(attacker, dto.ownerUserId);
+      if (masterySlug === "graze") {
+        const profBonus = await this.getAttackerProfBonus(
+          attacker,
+          dto.ownerUserId,
+        );
         const mRes = this.weaponMastery.resolveOnMiss({
           masterySlug,
           attacker,
@@ -2570,8 +2871,11 @@ export class CombatService {
           // da arma, já coberto pela immunity logic ao reprocessar seria overkill
           // pra miss. Fase 1 simplifica: aplica literal).
           const dmg = mRes.grazeDamage.amount;
-          if (target.type === 'pc' && target.characterId) {
-            const targetOwnerId = await this.resolveParticipantOwner(target, dto.ownerUserId);
+          if (target.type === "pc" && target.characterId) {
+            const targetOwnerId = await this.resolveParticipantOwner(
+              target,
+              dto.ownerUserId,
+            );
             const hpResult = await this.stateService.updateHp(
               targetOwnerId,
               target.characterId,
@@ -2580,11 +2884,11 @@ export class CombatService {
             targetHpAfter = hpResult.currentHp;
             targetDefeated = hpResult.isDown;
             if (hpResult.instantDeath) {
-              target.dyingState = 'dead';
+              target.dyingState = "dead";
               target.isDefeated = true;
               await this.participantRepo.save(target);
             } else if (targetDefeated) {
-              target.dyingState = 'dying';
+              target.dyingState = "dying";
               target.isDefeated = false;
               await this.participantRepo.save(target);
             }
@@ -2595,7 +2899,7 @@ export class CombatService {
             await this.participantRepo.save(target);
           }
           events.push({
-            event_type: 'damage_applied',
+            event_type: "damage_applied",
             actor_participant_id: attacker.id,
             target_participant_id: target.id,
             data: {
@@ -2607,7 +2911,7 @@ export class CombatService {
               immune: false,
               vulnerable: false,
               finalDamage: dmg,
-              source: 'weapon-mastery:graze',
+              source: "weapon-mastery:graze",
             },
           });
           // damageRollResult para o return payload
@@ -2631,28 +2935,26 @@ export class CombatService {
       // (mesmo effect kind do Vex mastery — trigger oposto). Só PC weapon/unarmed.
       if (
         isWeaponOrUnarmedAttack &&
-        attacker.type === 'pc' &&
+        attacker.type === "pc" &&
         (await this.hasStudiedAttacks(attacker, dto.ownerUserId))
       ) {
-        const { effect, events: effEvents } = await this.effectInstances.addEffect(
-          attacker,
-          {
-            kind: 'self_advantage_next_attack',
-            sourceFeatureSlug: 'fighter:studied-attacks',
+        const { effect, events: effEvents } =
+          await this.effectInstances.addEffect(attacker, {
+            kind: "self_advantage_next_attack",
+            sourceFeatureSlug: "fighter:studied-attacks",
             sourceCasterParticipantId: attacker.id,
             payload: { requiredTargetId: target.id },
-            expiresAt: { kind: 'until_consumed' },
+            expiresAt: { kind: "until_consumed" },
             requiresConcentration: false,
-          },
-        );
+          });
         events.push(...effEvents);
         events.push({
-          event_type: 'class_feature_triggered',
+          event_type: "class_feature_triggered",
           actor_participant_id: attacker.id,
           target_participant_id: target.id,
           data: {
-            featureSlug: 'studied-attacks',
-            trigger: 'miss',
+            featureSlug: "studied-attacks",
+            trigger: "miss",
             effectId: effect.id,
             requiredTargetId: target.id,
           },
@@ -2677,14 +2979,12 @@ export class CombatService {
       }
 
       // Spec 003 T032 — ataque remove Hidden do atacante (RAW PHB cap. 9).
-      if (attacker.conditions?.includes('hidden')) {
-        attacker.conditions = attacker.conditions.filter(
-          (c) => c !== 'hidden',
-        );
+      if (attacker.conditions?.includes("hidden")) {
+        attacker.conditions = attacker.conditions.filter((c) => c !== "hidden");
         events.push({
-          event_type: 'condition_removed',
+          event_type: "condition_removed",
           actor_participant_id: attacker.id,
-          data: { condition: 'hidden', reason: 'attacked' },
+          data: { condition: "hidden", reason: "attacked" },
         });
       }
 
@@ -2696,7 +2996,7 @@ export class CombatService {
         activeHelper.helpingUntilTurnOfParticipantId = null;
         await this.participantRepo.save(activeHelper);
         events.push({
-          event_type: 'help_consumed',
+          event_type: "help_consumed",
           actor_participant_id: activeHelper.id,
           data: {
             allyParticipantId: attacker.id,
@@ -2710,7 +3010,7 @@ export class CombatService {
       if (consumeInspiration) {
         const inspResult = await this.inspirationService.consumeIfArmed(
           attacker.id,
-          'attack_roll',
+          "attack_roll",
         );
         if (inspResult.consumed && inspResult.eventData) {
           // InspirationService já persistiu; apenas refletimos no local
@@ -2731,7 +3031,7 @@ export class CombatService {
       // Spec 015 Eixo 7 — Shield opportunity. Se o hit foi marginal E target é
       // PC com Shield preparado + slot L1+ livre, emite `shield_opportunity`
       // referenciando o attack_roll salvo (pra recompute retroactive).
-      if (hit && target.type === 'pc') {
+      if (hit && target.type === "pc") {
         const shieldOpp = await this.reactionOpportunity.shouldOfferShield(
           target,
           attackRollResult.total,
@@ -2739,14 +3039,16 @@ export class CombatService {
           dto.ownerUserId,
         );
         if (shieldOpp) {
-          const attackRollSaved = savedEvents.find((e) => e.eventType === 'attack_roll');
+          const attackRollSaved = savedEvents.find(
+            (e) => e.eventType === "attack_roll",
+          );
           if (attackRollSaved) {
             const oppEvents = await this.eventService.emit(
               encounter.sessionId,
               encounterId,
               [
                 {
-                  event_type: 'shield_opportunity',
+                  event_type: "shield_opportunity",
                   actor_participant_id: attacker.id,
                   target_participant_id: target.id,
                   data: {
@@ -2763,7 +3065,7 @@ export class CombatService {
             );
             // Adiciona no retorno pra o frontend processar sem precisar re-fetch.
             events.push({
-              event_type: 'shield_opportunity',
+              event_type: "shield_opportunity",
               actor_participant_id: attacker.id,
               target_participant_id: target.id,
               data: {
@@ -2801,56 +3103,75 @@ export class CombatService {
     encounterId: string,
     dto: AttackDto,
   ): Promise<GameResult<MultiattackResult>> {
-    const encounter = await this.encounterRepo.findOne({ where: { id: encounterId } });
-    if (!encounter || encounter.status !== 'active')
-      return failure('Encontro nao esta ativo.', 'ENCOUNTER_NOT_ACTIVE');
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active")
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
-    const attacker = await this.encounterService.getParticipant(dto.attackerParticipantId);
+    const attacker = await this.encounterService.getParticipant(
+      dto.attackerParticipantId,
+    );
 
     if (attacker.isDefeated)
-      return failure('Atacante esta derrotado.', 'CONDITION_PREVENTS_ACTION');
+      return failure("Atacante esta derrotado.", "CONDITION_PREVENTS_ACTION");
 
     const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
     if (currentPid !== dto.attackerParticipantId)
-      return failure('Nao e o turno deste participante.', 'NOT_YOUR_TURN');
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
     if (attacker.actionUsed)
-      return failure('Acao ja utilizada neste turno.', 'NO_ACTION_AVAILABLE');
+      return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
 
     if (!this.conditionEffects.canTakeAction(attacker.conditions))
-      return failure('Atacante nao pode agir devido a condicoes.', 'CONDITION_PREVENTS_ACTION');
+      return failure(
+        "Atacante nao pode agir devido a condicoes.",
+        "CONDITION_PREVENTS_ACTION",
+      );
 
-    if (attacker.type !== 'monster' || !attacker.monster) {
-      return failure('Multiataque só se aplica a monstros.', 'INVALID_MULTIATTACK');
+    if (attacker.type !== "monster" || !attacker.monster) {
+      return failure(
+        "Multiataque só se aplica a monstros.",
+        "INVALID_MULTIATTACK",
+      );
     }
     const multiattack = (attacker.monster as any).multiattack;
-    if (!multiattack || !Array.isArray(multiattack.sequence) || multiattack.sequence.length === 0) {
-      return failure('Este monstro não possui multiataque configurado.', 'INVALID_MULTIATTACK');
+    if (
+      !multiattack ||
+      !Array.isArray(multiattack.sequence) ||
+      multiattack.sequence.length === 0
+    ) {
+      return failure(
+        "Este monstro não possui multiataque configurado.",
+        "INVALID_MULTIATTACK",
+      );
     }
 
     const expectedTargets = multiattack.sequence.reduce(
       (acc: number, s: { count: number }) => acc + (s.count ?? 1),
       0,
     );
-    const targetIds = Array.isArray(dto.targetParticipantIds) ? dto.targetParticipantIds : [];
+    const targetIds = Array.isArray(dto.targetParticipantIds)
+      ? dto.targetParticipantIds
+      : [];
     if (targetIds.length !== expectedTargets) {
       return failure(
         `Multiataque exige targetParticipantIds com ${expectedTargets} alvos.`,
-        'INVALID_PAYLOAD',
+        "INVALID_PAYLOAD",
       );
     }
 
     const subAttacks: SubAttackResult[] = [];
     const allEvents: GameEventData[] = [
       {
-        event_type: 'multiattack_start',
+        event_type: "multiattack_start",
         actor_participant_id: attacker.id,
         data: { sequence: multiattack.sequence },
       },
     ];
 
     let targetIdx = 0;
-    let interruptedAt: MultiattackResult['interruptedAt'] = null;
+    let interruptedAt: MultiattackResult["interruptedAt"] = null;
 
     outer: for (const sub of multiattack.sequence) {
       for (let i = 0; i < (sub.count ?? 1); i++) {
@@ -2858,7 +3179,7 @@ export class CombatService {
         targetIdx++;
         const target = await this.encounterService.getParticipant(tid);
         if (target.isDefeated) {
-          interruptedAt = { index: targetIdx - 1, reason: 'target_defeated' };
+          interruptedAt = { index: targetIdx - 1, reason: "target_defeated" };
           break outer;
         }
         const subDto: AttackDto = {
@@ -2869,7 +3190,7 @@ export class CombatService {
         };
         const res = await this.resolveAttack(encounterId, subDto);
         if (!res.ok) {
-          interruptedAt = { index: targetIdx - 1, reason: 'action_cancelled' };
+          interruptedAt = { index: targetIdx - 1, reason: "action_cancelled" };
           break outer;
         }
         const updatedTarget = await this.encounterService.getParticipant(tid);
@@ -2886,7 +3207,7 @@ export class CombatService {
         allEvents.push(...res.events);
 
         if (res.value.targetDefeated && targetIdx < expectedTargets) {
-          interruptedAt = { index: targetIdx - 1, reason: 'target_defeated' };
+          interruptedAt = { index: targetIdx - 1, reason: "target_defeated" };
           break outer;
         }
       }
@@ -2896,7 +3217,7 @@ export class CombatService {
     await this.participantRepo.save(attacker);
 
     allEvents.push({
-      event_type: 'multiattack_end',
+      event_type: "multiattack_end",
       actor_participant_id: attacker.id,
       data: { subAttackCount: subAttacks.length, interruptedAt },
     });
@@ -2904,7 +3225,7 @@ export class CombatService {
     await this.eventService.emit(encounter.sessionId, encounterId, allEvents);
 
     return success(
-      { kind: 'multiattack', actionConsumed: true, subAttacks, interruptedAt },
+      { kind: "multiattack", actionConsumed: true, subAttacks, interruptedAt },
       allEvents,
     );
   }
@@ -2918,14 +3239,15 @@ export class CombatService {
     GameResult<{
       hpAfter: number;
       defeated: boolean;
-      dyingState?: 'none' | 'dying' | 'stable' | 'dead';
+      dyingState?: "none" | "dying" | "stable" | "dead";
       instantDeath?: boolean;
     }>
   > {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
+    if (!encounter)
+      return failure("Encontro nao encontrado.", "ENCOUNTER_NOT_FOUND");
 
     const target = await this.encounterService.getParticipant(
       dto.targetParticipantId,
@@ -2933,12 +3255,12 @@ export class CombatService {
 
     let hpAfter: number;
     let defeated: boolean;
-    let dyingState: 'none' | 'dying' | 'stable' | 'dead' | undefined;
+    let dyingState: "none" | "dying" | "stable" | "dead" | undefined;
     let instantDeath = false;
     const events: GameEventData[] = [];
 
-    if (target.type === 'pc' && target.characterId) {
-      const wasDying = target.dyingState === 'dying';
+    if (target.type === "pc" && target.characterId) {
+      const wasDying = target.dyingState === "dying";
 
       // Rule: PC already at 0 HP and dying takes damage → death-save failure
       // (+2 on crit, +1 otherwise) instead of further HP loss.
@@ -2951,22 +3273,30 @@ export class CombatService {
         );
         hpAfter = 0;
         if (ds.dead) {
-          target.dyingState = 'dead';
+          target.dyingState = "dead";
           target.isDefeated = true;
-          dyingState = 'dead';
+          dyingState = "dead";
           defeated = true;
           events.push({
-            event_type: 'death_save_failed_from_damage',
+            event_type: "death_save_failed_from_damage",
             target_participant_id: target.id,
-            data: { failuresAdded: failuresDelta, failures: ds.failures, dyingState: 'dead' },
+            data: {
+              failuresAdded: failuresDelta,
+              failures: ds.failures,
+              dyingState: "dead",
+            },
           });
         } else {
-          dyingState = 'dying';
+          dyingState = "dying";
           defeated = false;
           events.push({
-            event_type: 'death_save_failed_from_damage',
+            event_type: "death_save_failed_from_damage",
             target_participant_id: target.id,
-            data: { failuresAdded: failuresDelta, failures: ds.failures, dyingState: 'dying' },
+            data: {
+              failuresAdded: failuresDelta,
+              failures: ds.failures,
+              dyingState: "dying",
+            },
           });
         }
         await this.participantRepo.save(target);
@@ -2979,17 +3309,23 @@ export class CombatService {
         let isDown = false;
         hpAfter = 0;
         if (target.transformationState) {
-          const formRes = await this.transformation.applyDamageToForm(target.id, dto.amount);
+          const formRes = await this.transformation.applyDamageToForm(
+            target.id,
+            dto.amount,
+          );
           formAbsorbed = formRes.absorbedByForm;
           formReverted = formRes.reverted;
           overflowAmount = formRes.overflowToOriginal;
           if (!formReverted) {
             // Form absorveu tudo — HP original não muda.
-            const formHpAfter = Math.max(0, target.transformationState.form.currentHp - formAbsorbed);
+            const formHpAfter = Math.max(
+              0,
+              target.transformationState.form.currentHp - formAbsorbed,
+            );
             hpAfter = formHpAfter;
             instantDeath = false;
             events.push({
-              event_type: 'form_damage_absorbed',
+              event_type: "form_damage_absorbed",
               target_participant_id: target.id,
               data: {
                 absorbedByForm: formAbsorbed,
@@ -3013,10 +3349,10 @@ export class CombatService {
           isDown = result.isDown;
           if (formReverted) {
             events.push({
-              event_type: 'transformation_reverted',
+              event_type: "transformation_reverted",
               target_participant_id: target.id,
               data: {
-                reason: 'form-hp-zero',
+                reason: "form-hp-zero",
                 absorbedByForm: formAbsorbed,
                 overflowDamageToCaster: overflowAmount,
                 hpAfter,
@@ -3026,25 +3362,25 @@ export class CombatService {
         }
 
         if (instantDeath) {
-          target.dyingState = 'dead';
+          target.dyingState = "dead";
           target.isDefeated = true;
-          dyingState = 'dead';
+          dyingState = "dead";
           defeated = true;
           events.push({
-            event_type: 'instant_death',
+            event_type: "instant_death",
             target_participant_id: target.id,
-            data: { damage: dto.amount, dyingState: 'dead' },
+            data: { damage: dto.amount, dyingState: "dead" },
           });
           await this.participantRepo.save(target);
         } else if (isDown) {
-          target.dyingState = 'dying';
+          target.dyingState = "dying";
           target.isDefeated = false;
-          dyingState = 'dying';
+          dyingState = "dying";
           defeated = false;
           events.push({
-            event_type: 'fell_unconscious',
+            event_type: "fell_unconscious",
             target_participant_id: target.id,
-            data: { dyingState: 'dying' },
+            data: { dyingState: "dying" },
           });
           await this.participantRepo.save(target);
         } else {
@@ -3060,9 +3396,15 @@ export class CombatService {
     }
 
     events.unshift({
-      event_type: 'hp_change',
+      event_type: "hp_change",
       target_participant_id: target.id,
-      data: { damage: dto.amount, type: dto.damageType, hpAfter, defeated, dyingState },
+      data: {
+        damage: dto.amount,
+        type: dto.damageType,
+        hpAfter,
+        defeated,
+        dyingState,
+      },
     });
 
     // Spec 004 — trigger auto CON save quando target estava concentrando.
@@ -3072,18 +3414,20 @@ export class CombatService {
       const dc = Math.max(10, Math.floor(dto.amount / 2));
       // Roll d20 + CON modifier (save proficiency raramente; por ora, simples CON mod).
       let conMod = 0;
-      if (target.type === 'pc' && target.characterId) {
+      if (target.type === "pc" && target.characterId) {
         try {
           const sheet = await this.sheetService.computeSheet(
             dto.ownerUserId,
             target.characterId,
           );
           const conBlock = (sheet.abilityScores ?? []).find(
-            (a: any) => a.slug === 'con' || a.slug === 'constitution',
+            (a: any) => a.slug === "con" || a.slug === "constitution",
           );
           conMod = conBlock?.modifier ?? 0;
-        } catch { /* fallback 0 */ }
-      } else if (target.type === 'monster') {
+        } catch {
+          /* fallback 0 */
+        }
+      } else if (target.type === "monster") {
         const conScore = (target.monster as any)?.stats?.con ?? 10;
         conMod = Math.floor((conScore - 10) / 2);
       }
@@ -3091,7 +3435,7 @@ export class CombatService {
       const total = roll + conMod;
       const success = total >= dc;
       events.push({
-        event_type: 'concentration_check',
+        event_type: "concentration_check",
         target_participant_id: target.id,
         data: {
           dc,
@@ -3103,7 +3447,7 @@ export class CombatService {
         },
       });
       if (!success) {
-        const breakRes = await this.concentration.break(target, 'damage');
+        const breakRes = await this.concentration.break(target, "damage");
         events.push(...breakRes.events);
       }
     } else if (target.isConcentrating && defeated) {
@@ -3112,11 +3456,7 @@ export class CombatService {
       events.push(...breakRes.events);
     }
 
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounterId,
-      events,
-    );
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
 
     return success({ hpAfter, defeated, dyingState, instantDeath }, events);
   }
@@ -3128,14 +3468,15 @@ export class CombatService {
     GameResult<{
       hpAfter: number;
       defeated: boolean;
-      dyingState?: 'none' | 'dying' | 'stable' | 'dead';
+      dyingState?: "none" | "dying" | "stable" | "dead";
       deathSavesReset?: boolean;
     }>
   > {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
+    if (!encounter)
+      return failure("Encontro nao encontrado.", "ENCOUNTER_NOT_FOUND");
 
     const target = await this.encounterService.getParticipant(
       dto.targetParticipantId,
@@ -3143,26 +3484,26 @@ export class CombatService {
 
     let hpAfter: number;
     let deathSavesReset = false;
-    let dyingState: 'none' | 'dying' | 'stable' | 'dead' | undefined;
+    let dyingState: "none" | "dying" | "stable" | "dead" | undefined;
     let defeated = false;
 
     // Spec 015 Eixo 3 — capture prevHp para revalidateAfterHpChange.
     // Tolera stateService sem `getCurrentHp` (mocks antigos) — cai pra
     // `target.currentHp` que sempre reflete o último snapshot persistido.
     const prevHp =
-      target.type === 'pc' &&
+      target.type === "pc" &&
       target.characterId &&
-      typeof this.stateService.getCurrentHp === 'function'
-        ? (await this.stateService.getCurrentHp(target.characterId)) ?? 0
-        : target.currentHp ?? 0;
+      typeof this.stateService.getCurrentHp === "function"
+        ? ((await this.stateService.getCurrentHp(target.characterId)) ?? 0)
+        : (target.currentHp ?? 0);
 
-    if (target.type === 'pc' && target.characterId) {
+    if (target.type === "pc" && target.characterId) {
       const wasDyingOrStable =
-        target.dyingState === 'dying' || target.dyingState === 'stable';
-      const isDead = target.dyingState === 'dead';
+        target.dyingState === "dying" || target.dyingState === "stable";
+      const isDead = target.dyingState === "dead";
 
       if (isDead) {
-        return failure('Este participante ja esta morto.', 'ALREADY_DEAD');
+        return failure("Este participante ja esta morto.", "ALREADY_DEAD");
       }
 
       const result = await this.stateService.updateHp(
@@ -3173,9 +3514,9 @@ export class CombatService {
       hpAfter = result.currentHp;
 
       if (wasDyingOrStable && result.currentHp > 0) {
-        target.dyingState = 'none';
+        target.dyingState = "none";
         target.isDefeated = false;
-        dyingState = 'none';
+        dyingState = "none";
         deathSavesReset = true;
         await this.participantRepo.save(target);
       } else {
@@ -3196,7 +3537,7 @@ export class CombatService {
 
     const events: GameEventData[] = [
       {
-        event_type: 'hp_change',
+        event_type: "hp_change",
         target_participant_id: target.id,
         data: { healing: dto.amount, hpAfter, dyingState, deathSavesReset },
       },
@@ -3205,9 +3546,7 @@ export class CombatService {
     // Spec 015 Eixo 3 — remove Unconscious derivada de hp_zero quando heal
     // transiciona HP≤0 → HP>0. Condições de outras fontes permanecem (RAW).
     // Tolera mocks de teste sem o método (checagem defensiva).
-    if (
-      typeof this.conditionLifecycle.revalidateAfterHpChange === 'function'
-    ) {
+    if (typeof this.conditionLifecycle.revalidateAfterHpChange === "function") {
       const revalidation =
         await this.conditionLifecycle.revalidateAfterHpChange(
           target,
@@ -3217,11 +3556,7 @@ export class CombatService {
       events.push(...revalidation.events);
     }
 
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounterId,
-      events,
-    );
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
 
     return success({ hpAfter, defeated, dyingState, deathSavesReset }, events);
   }
@@ -3241,7 +3576,8 @@ export class CombatService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
+    if (!encounter)
+      return failure("Encontro nao encontrado.", "ENCOUNTER_NOT_FOUND");
 
     const participant = await this.encounterService.getParticipant(
       dto.participantId,
@@ -3272,18 +3608,20 @@ export class CombatService {
         const res = await this.conditionLifecycle.removeConditionInstance(
           participant,
           match.id,
-          'manual_remove',
+          "manual_remove",
         );
         events.push(...res.events);
       }
     }
 
     // Re-fetch para ter o conditions[] derivado atualizado
-    const refreshed = await this.encounterService.getParticipant(dto.participantId);
+    const refreshed = await this.encounterService.getParticipant(
+      dto.participantId,
+    );
     const conditions = refreshed.conditions;
 
     // Sync to CharacterState for PCs
-    if (refreshed.type === 'pc' && refreshed.characterId) {
+    if (refreshed.type === "pc" && refreshed.characterId) {
       await this.stateService.updateConditions(
         dto.ownerUserId,
         refreshed.characterId,
@@ -3306,21 +3644,18 @@ export class CombatService {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) return failure('Encontro nao encontrado.', 'ENCOUNTER_NOT_FOUND');
+    if (!encounter)
+      return failure("Encontro nao encontrado.", "ENCOUNTER_NOT_FOUND");
 
-    const participant = await this.encounterService.getParticipant(
-      participantId,
-    );
+    const participant =
+      await this.encounterService.getParticipant(participantId);
 
-    if (participant.type !== 'pc' || !participant.characterId) {
-      return failure(
-        'Death saves so se aplicam a PCs.',
-        'INVALID_PARTICIPANT',
-      );
+    if (participant.type !== "pc" || !participant.characterId) {
+      return failure("Death saves so se aplicam a PCs.", "INVALID_PARTICIPANT");
     }
 
-    if (participant.dyingState !== 'dying') {
-      return failure('NOT_DYING');
+    if (participant.dyingState !== "dying") {
+      return failure("NOT_DYING");
     }
 
     const roll = this.diceService.roll(20);
@@ -3333,20 +3668,20 @@ export class CombatService {
       { rollValue: roll },
     );
 
-    let dyingState: 'none' | 'dying' | 'stable' | 'dead' = 'dying';
+    let dyingState: "none" | "dying" | "stable" | "dead" = "dying";
     let revivedHp: number | null = null;
 
     if (dsResult.revivedHp) {
-      dyingState = 'none';
+      dyingState = "none";
       revivedHp = dsResult.revivedHp;
     } else if (dsResult.dead) {
-      dyingState = 'dead';
+      dyingState = "dead";
     } else if (dsResult.stabilized) {
-      dyingState = 'stable';
+      dyingState = "stable";
     }
 
     participant.dyingState = dyingState;
-    participant.isDefeated = dyingState === 'dead';
+    participant.isDefeated = dyingState === "dead";
     await this.participantRepo.save(participant);
 
     const result: DeathSaveResult = {
@@ -3356,24 +3691,20 @@ export class CombatService {
       successes: dsResult.successes,
       failures: dsResult.failures,
       dyingState,
-      stabilized: dyingState === 'stable',
-      dead: dyingState === 'dead',
+      stabilized: dyingState === "stable",
+      dead: dyingState === "dead",
       revivedHp,
     };
 
     const events: GameEventData[] = [
       {
-        event_type: 'death_save',
+        event_type: "death_save",
         actor_participant_id: participantId,
         data: result,
       },
     ];
 
-    await this.eventService.emit(
-      encounter.sessionId,
-      encounterId,
-      events,
-    );
+    await this.eventService.emit(encounter.sessionId, encounterId, events);
 
     return success(result, events);
   }
@@ -3417,16 +3748,21 @@ export class CombatService {
     const dc = Math.max(10, Math.floor(damageTaken / 2));
     let conMod = 0;
 
-    if (participant.type === 'monster' && participant.monster) {
+    if (participant.type === "monster" && participant.monster) {
       conMod = getAbilityModifier(participant.monster.constitution);
-    } else if (participant.type === 'pc' && participant.characterId) {
+    } else if (participant.type === "pc" && participant.characterId) {
       // Read real CON save bonus from the computed sheet (includes proficiency
       // when the class grants it — e.g., Barbarian, Cleric, Fighter, etc.).
       try {
-        const ownerId = await this.resolveParticipantOwner(participant, '');
+        const ownerId = await this.resolveParticipantOwner(participant, "");
         if (ownerId) {
-          const sheet = await this.sheetService.computeSheet(ownerId, participant.characterId);
-          const conSave = sheet.savingThrows?.find((s: any) => s.slug === 'con');
+          const sheet = await this.sheetService.computeSheet(
+            ownerId,
+            participant.characterId,
+          );
+          const conSave = sheet.savingThrows?.find(
+            (s: any) => s.slug === "con",
+          );
           if (conSave) conMod = conSave.bonus;
         }
       } catch {

@@ -1,19 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   CharacterStateEntity,
   RestSessionEntity,
   RestEventTemplateEntity,
-} from 'src/entities';
-import {
-  RestKind,
-  RestEventTriggered,
-} from 'src/entities/rest-session.entity';
-import {
-  GameResult,
-  failure,
-} from '../interfaces/result.type';
+} from "src/entities";
+import { RestKind, RestEventTriggered } from "src/entities/rest-session.entity";
+import { GameResult, failure } from "../interfaces/result.type";
 
 /**
  * Spec 016 M0 — Rest service stub.
@@ -51,7 +45,7 @@ export interface RestStateDelta {
 export interface RestSessionResponse {
   session: RestSessionEntity;
   narrationSequence: Array<{
-    label: 'setup' | 'event' | 'wake';
+    label: "setup" | "event" | "wake";
     content: string;
   }>;
   stateDelta: RestStateDelta;
@@ -74,7 +68,10 @@ export class RestService {
     _request: ShortRestRequest,
   ): Promise<GameResult<RestSessionResponse>> {
     // TODO M4: validate HP>=1 RAW 2024; spend HD; restore SR features.
-    return failure('Short rest service not yet implemented (spec 016 M4).', 'INVALID_ACTION');
+    return failure(
+      "Short rest service not yet implemented (spec 016 M4).",
+      "INVALID_ACTION",
+    );
   }
 
   async longRest(
@@ -82,7 +79,10 @@ export class RestService {
   ): Promise<GameResult<RestSessionResponse>> {
     // TODO M4: validate 24h gate; full HP+HD 2024; exhaustion -1;
     //         pick event from pool; trigger Morning Briefing.
-    return failure('Long rest service not yet implemented (spec 016 M4).', 'INVALID_ACTION');
+    return failure(
+      "Long rest service not yet implemented (spec 016 M4).",
+      "INVALID_ACTION",
+    );
   }
 
   /**

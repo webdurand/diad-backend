@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 012 Paladin — Data gap: subclasses alternativas `paladin-ancients`,
@@ -13,7 +13,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - Vengeance: channel-divinity-vow-of-enmity
  */
 export class SeedPaladinSubclassLevels1777120000000 implements MigrationInterface {
-  name = 'SeedPaladinSubclassLevels1777120000000';
+  name = "SeedPaladinSubclassLevels1777120000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     const [xphb] = (await queryRunner.query(

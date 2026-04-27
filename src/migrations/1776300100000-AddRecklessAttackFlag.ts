@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 003 B-lite — flag para Reckless Attack (Barbarian L2+).
@@ -7,10 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * attacks ganham advantage E todos os attacks contra o barbarian ganham advantage
  * (a resolução aplica na Spec 4). Expira no start-turn do próprio barbarian.
  */
-export class AddRecklessAttackFlag1776300100000
-  implements MigrationInterface
-{
-  name = 'AddRecklessAttackFlag1776300100000';
+export class AddRecklessAttackFlag1776300100000 implements MigrationInterface {
+  name = "AddRecklessAttackFlag1776300100000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

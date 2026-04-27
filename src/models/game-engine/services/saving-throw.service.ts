@@ -1,21 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CharacterSheetService } from 'src/models/characters/services/character-sheet.service';
-import { DiceService } from './dice.service';
-import { ConditionEffectsService } from './condition-effects.service';
-import { EventService } from './event.service';
-import { InspirationService } from './inspiration.service';
-import { ExhaustionService } from './exhaustion.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import { DiceService } from "./dice.service";
+import { ConditionEffectsService } from "./condition-effects.service";
+import { EventService } from "./event.service";
+import { InspirationService } from "./inspiration.service";
+import { ExhaustionService } from "./exhaustion.service";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
-} from '../interfaces/result.type';
-import { SavingThrowResult } from '../interfaces/combat.interfaces';
-import { AdvantageResult } from '../interfaces/dice.interfaces';
+} from "../interfaces/result.type";
+import { SavingThrowResult } from "../interfaces/combat.interfaces";
+import { AdvantageResult } from "../interfaces/dice.interfaces";
 
 // --- DTOs ---
 
@@ -49,25 +49,38 @@ export class SavingThrowService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
   ) {}
 
-  async rollSavingThrow(dto: SavingThrowDto): Promise<GameResult<SavingThrowResult>> {
-    const sheet = await this.sheetService.computeSheet(dto.userId, dto.characterId);
+  async rollSavingThrow(
+    dto: SavingThrowDto,
+  ): Promise<GameResult<SavingThrowResult>> {
+    const sheet = await this.sheetService.computeSheet(
+      dto.userId,
+      dto.characterId,
+    );
     if (!sheet) {
-      return failure('Personagem nao encontrado.', 'INVALID_PARTICIPANT');
+      return failure("Personagem nao encontrado.", "INVALID_PARTICIPANT");
     }
 
     // Find saving throw bonus from computed sheet
     const saveBlock = sheet.savingThrows.find(
-      (s) => s.slug === dto.ability || s.name.toLowerCase() === dto.ability.toLowerCase(),
+      (s) =>
+        s.slug === dto.ability ||
+        s.name.toLowerCase() === dto.ability.toLowerCase(),
     );
     if (!saveBlock) {
-      return failure(`Ability '${dto.ability}' nao encontrada.`, 'INVALID_ACTION');
+      return failure(
+        `Ability '${dto.ability}' nao encontrada.`,
+        "INVALID_ACTION",
+      );
     }
 
     const modifier = saveBlock.bonus;
 
     // Check condition effects on saving throws
     const conditions = sheet.conditions ?? [];
-    const condMods = this.conditionEffects.getSavingThrowModifiers(conditions, dto.ability);
+    const condMods = this.conditionEffects.getSavingThrowModifiers(
+      conditions,
+      dto.ability,
+    );
 
     if (condMods.autoFail) {
       const result: SavingThrowResult = {
@@ -93,7 +106,7 @@ export class SavingThrowService {
     if (dto.participantId) {
       const inspResult = await this.inspirationService.consumeIfArmed(
         dto.participantId,
-        'saving_throw',
+        "saving_throw",
       );
       if (inspResult.consumed && inspResult.eventData) {
         hasAdvantage = true;
@@ -108,11 +121,21 @@ export class SavingThrowService {
     if (hasAdvantage && !hasDisadvantage) {
       const r = this.diceService.rollWithAdvantage();
       roll = r.chosen;
-      advantageResult = { roll1: r.roll1, roll2: r.roll2, chosen: r.chosen, discarded: r.roll1 === r.chosen ? r.roll2 : r.roll1 };
+      advantageResult = {
+        roll1: r.roll1,
+        roll2: r.roll2,
+        chosen: r.chosen,
+        discarded: r.roll1 === r.chosen ? r.roll2 : r.roll1,
+      };
     } else if (hasDisadvantage && !hasAdvantage) {
       const r = this.diceService.rollWithDisadvantage();
       roll = r.chosen;
-      advantageResult = { roll1: r.roll1, roll2: r.roll2, chosen: r.chosen, discarded: r.roll1 === r.chosen ? r.roll2 : r.roll1 };
+      advantageResult = {
+        roll1: r.roll1,
+        roll2: r.roll2,
+        chosen: r.chosen,
+        discarded: r.roll1 === r.chosen ? r.roll2 : r.roll1,
+      };
     } else {
       roll = this.diceService.roll(20);
     }
@@ -134,36 +157,55 @@ export class SavingThrowService {
     // Spec 004/012 — somar save_bonus/save_penalty dos EffectInstance do participant
     // (Bless +1d4, Bane -1d4). Só quando conhecemos o participant.
     let effectBonusSum = 0;
-    const rolledEffectBonuses: Array<{ source: string; dice?: string; rolled: number }> = [];
+    const rolledEffectBonuses: Array<{
+      source: string;
+      dice?: string;
+      rolled: number;
+    }> = [];
     if (dto.participantId) {
-      const subject = await this.participantRepo.findOne({ where: { id: dto.participantId } });
+      const subject = await this.participantRepo.findOne({
+        where: { id: dto.participantId },
+      });
       for (const e of subject?.effectInstances ?? []) {
-        if (e.kind === 'save_bonus' && e.payload?.diceExpression) {
+        if (e.kind === "save_bonus" && e.payload?.diceExpression) {
           const r = this.diceService.rollExpression(e.payload.diceExpression);
-          rolledEffectBonuses.push({ source: e.sourceSpellSlug ?? 'effect', dice: e.payload.diceExpression, rolled: r.total });
+          rolledEffectBonuses.push({
+            source: e.sourceSpellSlug ?? "effect",
+            dice: e.payload.diceExpression,
+            rolled: r.total,
+          });
           effectBonusSum += r.total;
-        } else if (e.kind === 'save_penalty' && e.payload?.diceExpression) {
+        } else if (e.kind === "save_penalty" && e.payload?.diceExpression) {
           const r = this.diceService.rollExpression(e.payload.diceExpression);
-          rolledEffectBonuses.push({ source: e.sourceSpellSlug ?? 'effect', dice: `-${e.payload.diceExpression}`, rolled: -r.total });
+          rolledEffectBonuses.push({
+            source: e.sourceSpellSlug ?? "effect",
+            dice: `-${e.payload.diceExpression}`,
+            rolled: -r.total,
+          });
           effectBonusSum += -r.total;
         }
       }
     }
 
     // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em saving throws (flat).
-    const exhLevel = (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
-    const exhMods = exhLevel > 0
-      ? this.exhaustionService.getModifiers(exhLevel, '2024_ten_levels')
-      : null;
+    const exhLevel =
+      (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
+    const exhMods =
+      exhLevel > 0
+        ? this.exhaustionService.getModifiers(exhLevel, "2024_ten_levels")
+        : null;
     const exhaustionD20Penalty = exhMods?.d20Penalty ?? 0;
 
-    let total = roll + modifier + auraBonus + effectBonusSum + exhaustionD20Penalty;
+    let total =
+      roll + modifier + auraBonus + effectBonusSum + exhaustionD20Penalty;
     let passed = total >= dto.dc;
 
     // Fighter L9 Indomitable (RAW 2024) — se save falhou e o participant armou
     // Indomitable, rerola d20 + bonus fighter level. Novo resultado substitui.
     let indomitableEvent: GameEventData | null = null;
-    let indomitableReroll: { originalRoll: number; newRoll: number; fighterLevel: number } | undefined;
+    let indomitableReroll:
+      | { originalRoll: number; newRoll: number; fighterLevel: number }
+      | undefined;
     if (!passed && dto.participantId) {
       const indomitable = await this.consumeIndomitableIfArmed(
         dto.participantId,
@@ -182,11 +224,11 @@ export class SavingThrowService {
         total = newTotal;
         passed = newPassed;
         indomitableEvent = {
-          event_type: 'class_feature_triggered',
+          event_type: "class_feature_triggered",
           actor_participant_id: dto.participantId,
           data: {
-            featureSlug: 'indomitable',
-            trigger: 'saving_throw_failed',
+            featureSlug: "indomitable",
+            trigger: "saving_throw_failed",
             originalRoll: indomitableReroll.originalRoll,
             newRoll: indomitableReroll.newRoll,
             fighterLevelBonus: indomitable.fighterLevel,
@@ -213,10 +255,10 @@ export class SavingThrowService {
     if (indomitableEvent) events.push(indomitableEvent);
     if (exhaustionD20Penalty !== 0) {
       events.push({
-        event_type: 'exhaustion_penalty_applied',
+        event_type: "exhaustion_penalty_applied",
         target_participant_id: dto.participantId,
         data: {
-          kind: 'saving_throw',
+          kind: "saving_throw",
           level: exhLevel,
           d20Penalty: exhaustionD20Penalty,
           rawRoll: roll,
@@ -227,7 +269,7 @@ export class SavingThrowService {
     }
     if (auraBonus > 0 && auraSourceName) {
       events.push({
-        event_type: 'aura_of_protection_applied',
+        event_type: "aura_of_protection_applied",
         target_participant_id: dto.participantId,
         data: {
           bonus: auraBonus,
@@ -256,7 +298,7 @@ export class SavingThrowService {
     });
     if (
       !subject ||
-      subject.type !== 'pc' ||
+      subject.type !== "pc" ||
       subject.positionX == null ||
       subject.positionY == null ||
       subject.isDefeated
@@ -265,7 +307,7 @@ export class SavingThrowService {
     }
 
     const allies = await this.participantRepo.find({
-      where: { encounterId: subject.encounterId, type: 'pc' },
+      where: { encounterId: subject.encounterId, type: "pc" },
     });
 
     let bestBonus = 0;
@@ -279,9 +321,13 @@ export class SavingThrowService {
       ) {
         continue;
       }
-      const sheet = await this.sheetService.computeSheet(userId, ally.characterId).catch(() => null);
+      const sheet = await this.sheetService
+        .computeSheet(userId, ally.characterId)
+        .catch(() => null);
       if (!sheet || !(sheet as any).hasAuraOfProtection) continue;
-      const paladinClass = (sheet as any).classes?.find((c: any) => c.slug === 'paladin');
+      const paladinClass = (sheet as any).classes?.find(
+        (c: any) => c.slug === "paladin",
+      );
       if (!paladinClass || paladinClass.level < 6) continue;
       const auraExpansion = Boolean((sheet as any).hasAuraExpansion);
       const reachCells = auraExpansion ? 6 : 2; // 30ft ou 10ft
@@ -292,7 +338,7 @@ export class SavingThrowService {
       if (chebyshevCells > reachCells) continue;
 
       const chaBlock = (sheet.abilityScores ?? []).find(
-        (a) => a.slug === 'cha' || a.slug === 'charisma',
+        (a) => a.slug === "cha" || a.slug === "charisma",
       );
       const chaMod = chaBlock?.modifier ?? 0;
       const bonus = Math.max(chaMod, 1); // RAW: mínimo +1
@@ -318,7 +364,9 @@ export class SavingThrowService {
     });
     if (!participant || !participant.indomitableArmed) return null;
 
-    const fighterClass = (sheet.classes ?? []).find((c) => c.slug === 'fighter');
+    const fighterClass = (sheet.classes ?? []).find(
+      (c) => c.slug === "fighter",
+    );
     const fighterLevel = fighterClass?.level ?? 0;
     if (fighterLevel < 9) {
       // Feature requer L9+; se não tem, não-op (não reroll, mantém flag — mas
@@ -340,7 +388,7 @@ export class SavingThrowService {
   ): GameEventData[] {
     return [
       {
-        event_type: 'saving_throw',
+        event_type: "saving_throw",
         data: {
           character_id: dto.characterId,
           ability: dto.ability,

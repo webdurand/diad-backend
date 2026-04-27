@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Adds typed structured fields for monster multiattack and spellcasting,
@@ -12,7 +12,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * PopulateMonsterMultiattackData and PopulateMonsterSpellcastingData.
  */
 export class AddMonsterTypedStructures1774910000000 implements MigrationInterface {
-  name = 'AddMonsterTypedStructures1774910000000';
+  name = "AddMonsterTypedStructures1774910000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

@@ -3,20 +3,20 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { MonsterEntity } from 'src/entities/monster.entity';
-import { CharacterStateEntity } from 'src/entities/character-state.entity';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { MonsterEntity } from "src/entities/monster.entity";
+import { CharacterStateEntity } from "src/entities/character-state.entity";
 import {
   TransformationForm,
   TransformationOriginalSnapshot,
   TransformationRevertReason,
   TransformationSource,
   TransformationState,
-} from '../interfaces/transformation.interfaces';
-import type { GameEventData } from '../interfaces/result.type';
+} from "../interfaces/transformation.interfaces";
+import type { GameEventData } from "../interfaces/result.type";
 
 /**
  * Spec 012 — TransformationService.
@@ -69,9 +69,9 @@ export class TransformationService {
       monsterSlug: string;
       formDisplayName?: string;
       durationRoundsTotal?: number | null;
-      retainedAbilities?: TransformationState['retainedAbilities'];
-      equipmentHandling?: TransformationState['equipmentHandling'];
-      revertTriggers?: Partial<TransformationState['revertTriggers']>;
+      retainedAbilities?: TransformationState["retainedAbilities"];
+      equipmentHandling?: TransformationState["equipmentHandling"];
+      revertTriggers?: Partial<TransformationState["revertTriggers"]>;
       currentEncounterRound?: number;
       /** Spec 012 Lote B — Caster que mantém concentração (Polymorph etc). */
       sourceCasterParticipantId?: string | null;
@@ -85,20 +85,19 @@ export class TransformationService {
     }
     if (participant.transformationState) {
       throw new BadRequestException(
-        'ALREADY_TRANSFORMED: participant j\u00e1 est\u00e1 em outra forma',
+        "ALREADY_TRANSFORMED: participant j\u00e1 est\u00e1 em outra forma",
       );
     }
     const monster = await this.monsterRepo.findOne({
       where: { slug: dto.monsterSlug },
     });
     if (!monster) {
-      throw new NotFoundException(
-        `MONSTER_NOT_FOUND: slug=${dto.monsterSlug}`,
-      );
+      throw new NotFoundException(`MONSTER_NOT_FOUND: slug=${dto.monsterSlug}`);
     }
 
     // Snapshot HP original. Pro PC, busca HP atual do character_state.
-    const original: TransformationOriginalSnapshot = await this.snapshotOriginal(participant);
+    const original: TransformationOriginalSnapshot =
+      await this.snapshotOriginal(participant);
 
     // Popula form do monster
     const form: TransformationForm = this.buildFormFromMonster(
@@ -114,8 +113,8 @@ export class TransformationService {
       durationRoundsRemaining: dto.durationRoundsTotal ?? null,
       original,
       form,
-      retainedAbilities: dto.retainedAbilities ?? ['mental-stats', 'speech'],
-      equipmentHandling: dto.equipmentHandling ?? 'merge',
+      retainedAbilities: dto.retainedAbilities ?? ["mental-stats", "speech"],
+      equipmentHandling: dto.equipmentHandling ?? "merge",
       revertTriggers: {
         hpZero: dto.revertTriggers?.hpZero ?? true,
         concentrationBroken: dto.revertTriggers?.concentrationBroken ?? false,
@@ -134,7 +133,7 @@ export class TransformationService {
     form.displayName = newDisplay;
 
     // Wild Shape \u00e9 bonus action em 2024 XPHB \u2014 consome agora se for a fonte
-    if (dto.source === 'wild-shape') {
+    if (dto.source === "wild-shape") {
       participant.bonusActionUsed = true;
     }
 
@@ -244,7 +243,9 @@ export class TransformationService {
     participantId: string,
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
-    const participant = await this.participantRepo.findOne({ where: { id: participantId } });
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId },
+    });
     if (!participant?.transformationState) return { events };
     const state = participant.transformationState;
     if (state.durationRoundsRemaining == null) return { events };
@@ -256,7 +257,7 @@ export class TransformationService {
     }
 
     // Chegou a 0. Comportamento depende da source.
-    if (state.source === 'true-polymorph-spell') {
+    if (state.source === "true-polymorph-spell") {
       // RAW XPHB 2024: "If the creature maintains the spell for 1 hour, the
       // form becomes permanent". Remove concentration bind; mant\u00e9m a forma.
       state.sourceCasterParticipantId = null;
@@ -269,14 +270,16 @@ export class TransformationService {
       state.durationRoundsRemaining = null;
       await this.participantRepo.save(participant);
       events.push({
-        event_type: 'true_polymorph_became_permanent',
+        event_type: "true_polymorph_became_permanent",
         target_participant_id: participant.id,
         data: {
           formName: state.form.formName,
           narrativeDescriptor: `A transforma\u00e7\u00e3o em ${state.form.formName} torna-se permanente.`,
         },
       });
-      this.logger.log(`[transformation] ${participantId} true-polymorph \u2192 permanent`);
+      this.logger.log(
+        `[transformation] ${participantId} true-polymorph \u2192 permanent`,
+      );
       return { events };
     }
 
@@ -287,16 +290,18 @@ export class TransformationService {
     participant.transformationState = null;
     await this.participantRepo.save(participant);
     events.push({
-      event_type: 'transformation_reverted',
+      event_type: "transformation_reverted",
       target_participant_id: participant.id,
       data: {
-        reason: 'duration-expired',
+        reason: "duration-expired",
         formName,
         source: state.source,
         narrativeDescriptor: `${formName} se desfaz e ${originalDisplay} retorna \u00e0 forma original.`,
       },
     });
-    this.logger.log(`[transformation] ${participantId} reverted (duration-expired, source=${state.source})`);
+    this.logger.log(
+      `[transformation] ${participantId} reverted (duration-expired, source=${state.source})`,
+    );
     return { events };
   }
 
@@ -305,7 +310,7 @@ export class TransformationService {
    */
   getEffectiveSpeed(
     participant: EncounterParticipantEntity,
-  ): TransformationForm['speed'] | null {
+  ): TransformationForm["speed"] | null {
     return participant.transformationState?.form.speed ?? null;
   }
 
@@ -315,7 +320,7 @@ export class TransformationService {
 
   getEffectiveActions(
     participant: EncounterParticipantEntity,
-  ): TransformationForm['actions'] | null {
+  ): TransformationForm["actions"] | null {
     return participant.transformationState?.form.actions ?? null;
   }
 
@@ -349,10 +354,10 @@ export class TransformationService {
     monster: MonsterEntity,
     displayName?: string,
   ): TransformationForm {
-    const speed = monster.speed as Record<string, unknown>;
+    const speed = monster.speed;
     const parseSpeedValue = (v: unknown): number | undefined => {
-      if (typeof v === 'number') return v;
-      if (typeof v === 'string') {
+      if (typeof v === "number") return v;
+      if (typeof v === "string") {
         const match = v.match(/(\d+)/);
         return match ? parseInt(match[1], 10) : undefined;
       }
@@ -383,24 +388,32 @@ export class TransformationService {
         wis: monster.wisdom,
         cha: monster.charisma,
       },
-      actions: Array.isArray((monster as unknown as { actions?: unknown[] }).actions)
-        ? ((monster as unknown as { actions: unknown[] }).actions as Record<string, unknown>[])
+      actions: Array.isArray(
+        (monster as unknown as { actions?: unknown[] }).actions,
+      )
+        ? ((monster as unknown as { actions: unknown[] }).actions as Record<
+            string,
+            unknown
+          >[])
         : [],
-      challengeRating: typeof (monster as unknown as { challenge_rating?: unknown }).challenge_rating === 'number'
-        ? (monster as unknown as { challenge_rating: number }).challenge_rating
-        : undefined,
+      challengeRating:
+        typeof (monster as unknown as { challenge_rating?: unknown })
+          .challenge_rating === "number"
+          ? (monster as unknown as { challenge_rating: number })
+              .challenge_rating
+          : undefined,
     };
   }
 
   private extractAc(ac: unknown): number {
-    if (typeof ac === 'number') return ac;
+    if (typeof ac === "number") return ac;
     if (Array.isArray(ac) && ac.length > 0) {
       const first = ac[0] as { value?: number };
-      if (typeof first?.value === 'number') return first.value;
+      if (typeof first?.value === "number") return first.value;
     }
-    if (typeof ac === 'object' && ac !== null) {
+    if (typeof ac === "object" && ac !== null) {
       const v = (ac as { value?: number }).value;
-      if (typeof v === 'number') return v;
+      if (typeof v === "number") return v;
     }
     return 10;
   }

@@ -5,12 +5,12 @@ import {
   Logger,
   NotFoundException,
   forwardRef,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { CombatService } from './combat.service';
-import type { GameEventData } from '../interfaces/result.type';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CombatService } from "./combat.service";
+import type { GameEventData } from "../interfaces/result.type";
 
 export interface OpportunityAttackDto {
   encounterId: string;
@@ -60,26 +60,28 @@ export class OpportunityAttackService {
       where: { id: dto.attackerParticipantId },
     });
     if (!attacker) {
-      throw new NotFoundException(`attacker ${dto.attackerParticipantId} not found`);
+      throw new NotFoundException(
+        `attacker ${dto.attackerParticipantId} not found`,
+      );
     }
     if (attacker.encounterId !== dto.encounterId) {
-      throw new BadRequestException('ATTACKER_NOT_IN_ENCOUNTER');
+      throw new BadRequestException("ATTACKER_NOT_IN_ENCOUNTER");
     }
 
     // RAW 2024: apenas 1 reaction por rodada.
     if ((attacker.reactionsUsed ?? 0) > 0) {
       return {
         ok: false,
-        code: 'REACTION_UNAVAILABLE',
-        message: 'Attacker já usou sua reaction nesta rodada.',
+        code: "REACTION_UNAVAILABLE",
+        message: "Attacker já usou sua reaction nesta rodada.",
       };
     }
 
-    if (attacker.isDefeated || attacker.dyingState === 'dead') {
+    if (attacker.isDefeated || attacker.dyingState === "dead") {
       return {
         ok: false,
-        code: 'ATTACKER_DEFEATED',
-        message: 'Attacker derrotado não pode atacar.',
+        code: "ATTACKER_DEFEATED",
+        message: "Attacker derrotado não pode atacar.",
       };
     }
 
@@ -87,13 +89,15 @@ export class OpportunityAttackService {
       where: { id: dto.targetParticipantId },
     });
     if (!target) {
-      throw new NotFoundException(`target ${dto.targetParticipantId} not found`);
+      throw new NotFoundException(
+        `target ${dto.targetParticipantId} not found`,
+      );
     }
     if (target.faction === attacker.faction) {
       return {
         ok: false,
-        code: 'SAME_FACTION',
-        message: 'Não pode fazer opportunity attack em aliado.',
+        code: "SAME_FACTION",
+        message: "Não pode fazer opportunity attack em aliado.",
       };
     }
 
@@ -104,7 +108,7 @@ export class OpportunityAttackService {
       attackerParticipantId: attacker.id,
       targetParticipantId: target.id,
       actionSlug: dto.actionSlug,
-      actionName: dto.actionName ?? dto.actionSlug ?? 'Opportunity Attack',
+      actionName: dto.actionName ?? dto.actionSlug ?? "Opportunity Attack",
       ownerUserId: dto.ownerUserId,
       _isSubAttack: true,
       _bypassRangeCheck: true,
@@ -116,7 +120,7 @@ export class OpportunityAttackService {
 
     const events: GameEventData[] = [
       {
-        event_type: 'opportunity_attack_resolved',
+        event_type: "opportunity_attack_resolved",
         actor_participant_id: attacker.id,
         target_participant_id: target.id,
         data: {
@@ -132,13 +136,13 @@ export class OpportunityAttackService {
       `[OA] attacker=${attacker.id} → target=${target.id} (${dto.actionName ?? dto.actionSlug})`,
     );
 
-    const attackEvents: GameEventData[] = (attackRes as unknown as { events?: GameEventData[] })
-      .events ?? [];
+    const attackEvents: GameEventData[] =
+      (attackRes as unknown as { events?: GameEventData[] }).events ?? [];
     const attackOk = attackRes.ok;
     const attackErrorCode = !attackOk
-      ? ((attackRes as unknown as { code?: string; error?: string }).code
-         ?? (attackRes as unknown as { code?: string; error?: string }).error
-         ?? 'ATTACK_FAILED')
+      ? ((attackRes as unknown as { code?: string; error?: string }).code ??
+        (attackRes as unknown as { code?: string; error?: string }).error ??
+        "ATTACK_FAILED")
       : undefined;
 
     if (!attackOk) {
@@ -153,7 +157,9 @@ export class OpportunityAttackService {
       ok: attackOk,
       code: attackErrorCode,
       events: [...events, ...attackEvents],
-      attackValue: attackOk ? (attackRes as unknown as { value?: unknown }).value : undefined,
+      attackValue: attackOk
+        ? (attackRes as unknown as { value?: unknown }).value
+        : undefined,
     };
   }
 }

@@ -1,5 +1,5 @@
-import { EncounterEntity } from 'src/entities/encounter.entity';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 
 /**
  * Spec 006 — Response DTO para GET /encounters/:id.
@@ -9,7 +9,7 @@ import { EncounterParticipantEntity } from 'src/entities/encounter-participant.e
 export interface EnrichedParticipantResponse {
   id: string;
   encounterId: string;
-  type: 'pc' | 'monster' | 'npc';
+  type: "pc" | "monster" | "npc";
   characterId: string | null;
   monsterId: string | null;
   displayName: string;
@@ -71,7 +71,7 @@ export interface EnrichedParticipantResponse {
   isDefeated: boolean;
   dyingState: string;
   isVisible: boolean;
-  controlledBy: 'pc' | 'ai' | 'dm';
+  controlledBy: "pc" | "ai" | "dm";
 
   positionX: number | null;
   positionY: number | null;
@@ -136,17 +136,19 @@ export interface EnrichedEncounterResponse {
 /**
  * Mapeia um participant entity (já enriquecido pelo enrichPcParticipants) para DTO.
  */
-function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantResponse {
+function mapParticipant(
+  p: EncounterParticipantEntity,
+): EnrichedParticipantResponse {
   const pAny = p as any;
 
   // Normalize controlledBy (safety: pre-migration rows might still have 'human')
-  let controlledBy: 'pc' | 'ai' | 'dm' = p.controlledBy;
-  if ((controlledBy as string) === 'human') controlledBy = 'pc';
+  let controlledBy: "pc" | "ai" | "dm" = p.controlledBy;
+  if ((controlledBy as string) === "human") controlledBy = "pc";
 
   return {
     id: p.id,
     encounterId: p.encounterId,
-    type: p.type as 'pc' | 'monster' | 'npc',
+    type: p.type,
     characterId: p.characterId ?? null,
     monsterId: p.monsterId ?? null,
     displayName: p.displayName,
@@ -184,13 +186,14 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
     helpingAgainst: p.helpingTargetParticipantId ?? null,
 
     // Concentration object
-    concentration: p.isConcentrating && p.concentratingOn
-      ? {
-          spellSlug: p.concentratingOn,
-          saveDc: p.concentrationSaveDc ?? 10,
-          roundsRemaining: p.concentrationRoundsRemaining ?? null,
-        }
-      : null,
+    concentration:
+      p.isConcentrating && p.concentratingOn
+        ? {
+            spellSlug: p.concentratingOn,
+            saveDc: p.concentrationSaveDc ?? 10,
+            roundsRemaining: p.concentrationRoundsRemaining ?? null,
+          }
+        : null,
 
     grappledBy: p.grappledByParticipantId ?? null,
 
@@ -203,7 +206,7 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
     conditions: p.conditions ?? [],
 
     isDefeated: p.isDefeated ?? false,
-    dyingState: p.dyingState ?? 'none',
+    dyingState: p.dyingState ?? "none",
     isVisible: p.isVisible ?? true,
     controlledBy,
 
@@ -219,10 +222,12 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
     transformationState: p.transformationState
       ? {
           source: p.transformationState.source,
-          sourceCasterParticipantId: p.transformationState.sourceCasterParticipantId ?? null,
+          sourceCasterParticipantId:
+            p.transformationState.sourceCasterParticipantId ?? null,
           enteredAtRound: p.transformationState.enteredAtRound,
           durationRoundsTotal: p.transformationState.durationRoundsTotal,
-          durationRoundsRemaining: p.transformationState.durationRoundsRemaining,
+          durationRoundsRemaining:
+            p.transformationState.durationRoundsRemaining,
           form: {
             monsterSlug: p.transformationState.form.monsterSlug,
             formName: p.transformationState.form.formName,
@@ -245,7 +250,7 @@ function mapParticipant(p: EncounterParticipantEntity): EnrichedParticipantRespo
 export function toEnrichedEncounterResponse(
   encounter: EncounterEntity,
 ): EnrichedEncounterResponse {
-  const isActive = encounter.status !== 'preparing';
+  const isActive = encounter.status !== "preparing";
   const turnOrder = encounter.turnOrder ?? [];
   const currentTurnIndex = encounter.currentTurnIndex ?? 0;
 
@@ -268,11 +273,13 @@ export function toEnrichedEncounterResponse(
 
     participants: (encounter.participants ?? []).map(mapParticipant),
 
-    createdAt: encounter.createdAt instanceof Date
-      ? encounter.createdAt.toISOString()
-      : String(encounter.createdAt ?? ''),
-    updatedAt: encounter.updatedAt instanceof Date
-      ? encounter.updatedAt.toISOString()
-      : String(encounter.updatedAt ?? ''),
+    createdAt:
+      encounter.createdAt instanceof Date
+        ? encounter.createdAt.toISOString()
+        : String(encounter.createdAt ?? ""),
+    updatedAt:
+      encounter.updatedAt instanceof Date
+        ? encounter.updatedAt.toISOString()
+        : String(encounter.updatedAt ?? ""),
   };
 }

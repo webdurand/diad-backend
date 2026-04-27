@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CampaignChronicleEntity } from 'src/entities/campaign-chronicle.entity';
-import { PartyKnowledgeEntity } from 'src/entities/party-knowledge.entity';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { CampaignChronicleEntity } from "src/entities/campaign-chronicle.entity";
+import { PartyKnowledgeEntity } from "src/entities/party-knowledge.entity";
 
 export interface CreateChronicleDto {
   campaignId: string;
@@ -55,11 +55,11 @@ export class ChronicleService {
     minSignificance = 1,
   ): Promise<CampaignChronicleEntity[]> {
     return this.chronicleRepo
-      .createQueryBuilder('c')
-      .where('c.campaign_id = :campaignId', { campaignId })
-      .andWhere('c.significance >= :min', { min: minSignificance })
-      .orderBy('c.significance', 'DESC')
-      .addOrderBy('c.created_at', 'DESC')
+      .createQueryBuilder("c")
+      .where("c.campaign_id = :campaignId", { campaignId })
+      .andWhere("c.significance >= :min", { min: minSignificance })
+      .orderBy("c.significance", "DESC")
+      .addOrderBy("c.created_at", "DESC")
       .take(limit)
       .getMany();
   }
@@ -107,7 +107,7 @@ export class ChronicleService {
   async getKnowledge(campaignId: string): Promise<PartyKnowledgeEntity[]> {
     return this.knowledgeRepo.find({
       where: { campaignId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
   }
 
@@ -126,15 +126,15 @@ export class ChronicleService {
     filters: { locationId?: string; npcIds?: string[] },
   ): Promise<PartyKnowledgeEntity[]> {
     const qb = this.knowledgeRepo
-      .createQueryBuilder('pk')
-      .where('pk.campaign_id = :campaignId', { campaignId });
+      .createQueryBuilder("pk")
+      .where("pk.campaign_id = :campaignId", { campaignId });
 
     const entityIds: string[] = [];
     if (filters.locationId) entityIds.push(filters.locationId);
     if (filters.npcIds?.length) entityIds.push(...filters.npcIds);
 
     if (entityIds.length > 0) {
-      qb.andWhere('pk.entity_id IN (:...entityIds)', { entityIds });
+      qb.andWhere("pk.entity_id IN (:...entityIds)", { entityIds });
     }
 
     return qb.getMany();

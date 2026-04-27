@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { RoomAuthorizer, parseRoomKey } from '../room-authorizer.interface';
+import { Injectable } from "@nestjs/common";
+import { RoomAuthorizer, parseRoomKey } from "../room-authorizer.interface";
 
 /**
  * Built-in authorizer for `user:<userId>` rooms. A user can only join
@@ -7,7 +7,7 @@ import { RoomAuthorizer, parseRoomKey } from '../room-authorizer.interface';
  */
 @Injectable()
 export class UserRoomAuthorizer implements RoomAuthorizer {
-  readonly prefix = 'user';
+  readonly prefix = "user";
 
   canJoin(userId: string, roomKey: string): Promise<boolean> {
     const parsed = parseRoomKey(roomKey);

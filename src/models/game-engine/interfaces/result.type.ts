@@ -23,104 +23,104 @@ export interface GameFailure {
  */
 export enum GameErrorCode {
   // Generic validation and permissions
-  INVALID_PAYLOAD = 'INVALID_PAYLOAD',
-  FORBIDDEN = 'FORBIDDEN',
-  UNAUTHORIZED = 'UNAUTHORIZED',
+  INVALID_PAYLOAD = "INVALID_PAYLOAD",
+  FORBIDDEN = "FORBIDDEN",
+  UNAUTHORIZED = "UNAUTHORIZED",
 
   // Spec 002: Encounter DM-led setup
-  FORBIDDEN_CAMPAIGN_MEMBER = 'FORBIDDEN_CAMPAIGN_MEMBER',
-  ENCOUNTER_ALREADY_ACTIVE = 'ENCOUNTER_ALREADY_ACTIVE',
-  ENCOUNTER_COMPLETED = 'ENCOUNTER_COMPLETED',
-  CHARACTER_NOT_FOUND = 'CHARACTER_NOT_FOUND',
-  CHARACTER_ALREADY_IN_ENCOUNTER = 'CHARACTER_ALREADY_IN_ENCOUNTER',
+  FORBIDDEN_CAMPAIGN_MEMBER = "FORBIDDEN_CAMPAIGN_MEMBER",
+  ENCOUNTER_ALREADY_ACTIVE = "ENCOUNTER_ALREADY_ACTIVE",
+  ENCOUNTER_COMPLETED = "ENCOUNTER_COMPLETED",
+  CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND",
+  CHARACTER_ALREADY_IN_ENCOUNTER = "CHARACTER_ALREADY_IN_ENCOUNTER",
 
   // Encounter lifecycle
-  ENCOUNTER_NOT_FOUND = 'ENCOUNTER_NOT_FOUND',
-  ENCOUNTER_NOT_ACTIVE = 'ENCOUNTER_NOT_ACTIVE',
-  ENCOUNTER_NOT_PREPARING = 'ENCOUNTER_NOT_PREPARING',
-  SESSION_NOT_FOUND = 'SESSION_NOT_FOUND',
+  ENCOUNTER_NOT_FOUND = "ENCOUNTER_NOT_FOUND",
+  ENCOUNTER_NOT_ACTIVE = "ENCOUNTER_NOT_ACTIVE",
+  ENCOUNTER_NOT_PREPARING = "ENCOUNTER_NOT_PREPARING",
+  SESSION_NOT_FOUND = "SESSION_NOT_FOUND",
 
   // Participants
-  PARTICIPANT_NOT_FOUND = 'PARTICIPANT_NOT_FOUND',
-  INVALID_PARTICIPANT = 'INVALID_PARTICIPANT',
-  INVALID_TARGET = 'INVALID_TARGET',
-  TARGET_DEFEATED = 'TARGET_DEFEATED',
-  OUT_OF_RANGE = 'OUT_OF_RANGE',
+  PARTICIPANT_NOT_FOUND = "PARTICIPANT_NOT_FOUND",
+  INVALID_PARTICIPANT = "INVALID_PARTICIPANT",
+  INVALID_TARGET = "INVALID_TARGET",
+  TARGET_DEFEATED = "TARGET_DEFEATED",
+  OUT_OF_RANGE = "OUT_OF_RANGE",
 
   // Turn and action economy
-  NOT_YOUR_TURN = 'NOT_YOUR_TURN',
-  NO_ACTION_AVAILABLE = 'NO_ACTION_AVAILABLE',
-  NO_BONUS_ACTION_AVAILABLE = 'NO_BONUS_ACTION_AVAILABLE',
-  NO_REACTION_AVAILABLE = 'NO_REACTION_AVAILABLE',
-  CONDITION_PREVENTS_ACTION = 'CONDITION_PREVENTS_ACTION',
-  INVALID_ACTION = 'INVALID_ACTION',
+  NOT_YOUR_TURN = "NOT_YOUR_TURN",
+  NO_ACTION_AVAILABLE = "NO_ACTION_AVAILABLE",
+  NO_BONUS_ACTION_AVAILABLE = "NO_BONUS_ACTION_AVAILABLE",
+  NO_REACTION_AVAILABLE = "NO_REACTION_AVAILABLE",
+  CONDITION_PREVENTS_ACTION = "CONDITION_PREVENTS_ACTION",
+  INVALID_ACTION = "INVALID_ACTION",
 
   // Death saves (novos na spec 002)
-  NOT_DYING = 'NOT_DYING',
-  ALREADY_DEAD = 'ALREADY_DEAD',
+  NOT_DYING = "NOT_DYING",
+  ALREADY_DEAD = "ALREADY_DEAD",
 
   // Multiataque (novos na spec 002)
-  INVALID_MULTIATTACK = 'INVALID_MULTIATTACK',
-  MULTIATTACK_NOT_RECHARGED = 'MULTIATTACK_NOT_RECHARGED',
+  INVALID_MULTIATTACK = "INVALID_MULTIATTACK",
+  MULTIATTACK_NOT_RECHARGED = "MULTIATTACK_NOT_RECHARGED",
 
   // Magia
-  INVALID_SPELL = 'INVALID_SPELL',
-  INSUFFICIENT_SPELL_SLOTS = 'INSUFFICIENT_SPELL_SLOTS',
-  ALREADY_CONCENTRATING = 'ALREADY_CONCENTRATING',
-  NO_CONCENTRATION = 'NO_CONCENTRATION',
+  INVALID_SPELL = "INVALID_SPELL",
+  INSUFFICIENT_SPELL_SLOTS = "INSUFFICIENT_SPELL_SLOTS",
+  ALREADY_CONCENTRATING = "ALREADY_CONCENTRATING",
+  NO_CONCENTRATION = "NO_CONCENTRATION",
 
   // Movement
-  POSITION_OUT_OF_BOUNDS = 'POSITION_OUT_OF_BOUNDS',
-  POSITION_OCCUPIED = 'POSITION_OCCUPIED',
-  OUT_OF_MOVEMENT = 'OUT_OF_MOVEMENT',
+  POSITION_OUT_OF_BOUNDS = "POSITION_OUT_OF_BOUNDS",
+  POSITION_OCCUPIED = "POSITION_OCCUPIED",
+  OUT_OF_MOVEMENT = "OUT_OF_MOVEMENT",
 
   // Spec 003: IA e ações genéricas
-  NOT_AI_CONTROLLED = 'NOT_AI_CONTROLLED',
-  AI_UNAVAILABLE = 'AI_UNAVAILABLE',
-  AI_TIMEOUT = 'AI_TIMEOUT',
-  NOT_DODGING = 'NOT_DODGING',
-  NOT_HIDDEN = 'NOT_HIDDEN',
-  INVALID_READY_TRIGGER = 'INVALID_READY_TRIGGER',
-  ITEM_NOT_USABLE = 'ITEM_NOT_USABLE',
-  CONTROL_CHANGE_FORBIDDEN = 'CONTROL_CHANGE_FORBIDDEN',
+  NOT_AI_CONTROLLED = "NOT_AI_CONTROLLED",
+  AI_UNAVAILABLE = "AI_UNAVAILABLE",
+  AI_TIMEOUT = "AI_TIMEOUT",
+  NOT_DODGING = "NOT_DODGING",
+  NOT_HIDDEN = "NOT_HIDDEN",
+  INVALID_READY_TRIGGER = "INVALID_READY_TRIGGER",
+  ITEM_NOT_USABLE = "ITEM_NOT_USABLE",
+  CONTROL_CHANGE_FORBIDDEN = "CONTROL_CHANGE_FORBIDDEN",
 
   // Spec 004: completude RAW
-  INSUFFICIENT_LEGENDARY_POINTS = 'INSUFFICIENT_LEGENDARY_POINTS',
-  CONDITION_PREVENTS_LEGENDARY = 'CONDITION_PREVENTS_LEGENDARY',
-  LAIR_ACTION_NOT_AVAILABLE = 'LAIR_ACTION_NOT_AVAILABLE',
-  NOT_GRAPPLED = 'NOT_GRAPPLED',
-  RESISTANCE_NOT_APPLICABLE = 'RESISTANCE_NOT_APPLICABLE',
-  CONCENTRATION_ALREADY_BROKEN = 'CONCENTRATION_ALREADY_BROKEN',
-  INVALID_CONDITION_INSTANCE = 'INVALID_CONDITION_INSTANCE',
-  PERSISTENT_AREA_NOT_FOUND = 'PERSISTENT_AREA_NOT_FOUND',
+  INSUFFICIENT_LEGENDARY_POINTS = "INSUFFICIENT_LEGENDARY_POINTS",
+  CONDITION_PREVENTS_LEGENDARY = "CONDITION_PREVENTS_LEGENDARY",
+  LAIR_ACTION_NOT_AVAILABLE = "LAIR_ACTION_NOT_AVAILABLE",
+  NOT_GRAPPLED = "NOT_GRAPPLED",
+  RESISTANCE_NOT_APPLICABLE = "RESISTANCE_NOT_APPLICABLE",
+  CONCENTRATION_ALREADY_BROKEN = "CONCENTRATION_ALREADY_BROKEN",
+  INVALID_CONDITION_INSTANCE = "INVALID_CONDITION_INSTANCE",
+  PERSISTENT_AREA_NOT_FOUND = "PERSISTENT_AREA_NOT_FOUND",
 
   // Spec 005: polish + bug fixes (US14 + US9)
-  SPELL_NOT_AOE = 'SPELL_NOT_AOE',
-  SPELL_OUT_OF_RANGE = 'SPELL_OUT_OF_RANGE',
-  LIBRARY_MONSTER_NOT_FOUND = 'LIBRARY_MONSTER_NOT_FOUND',
+  SPELL_NOT_AOE = "SPELL_NOT_AOE",
+  SPELL_OUT_OF_RANGE = "SPELL_OUT_OF_RANGE",
+  LIBRARY_MONSTER_NOT_FOUND = "LIBRARY_MONSTER_NOT_FOUND",
 
   // Spec 015 Eixo 2: spell range semantics (Self-origin-attack rejeita caster)
-  INVALID_TARGET_SELF = 'INVALID_TARGET_SELF',
+  INVALID_TARGET_SELF = "INVALID_TARGET_SELF",
 
   // Spec 003 (combat action registry) — novos codes
-  MISSING_ACTION_SLUG = 'MISSING_ACTION_SLUG',
-  INVALID_ACTION_SLUG = 'INVALID_ACTION_SLUG',
-  USE_UNARMED_STRIKE = 'USE_UNARMED_STRIKE',
-  ACTION_SUBOPTION_REQUIRED = 'ACTION_SUBOPTION_REQUIRED',
-  NO_USES_REMAINING = 'NO_USES_REMAINING',
-  FEATURE_NOT_AVAILABLE = 'FEATURE_NOT_AVAILABLE',
-  WRONG_CLASS = 'WRONG_CLASS',
-  BELOW_REQUIRED_LEVEL = 'BELOW_REQUIRED_LEVEL',
-  PREREQUISITE_NOT_MET = 'PREREQUISITE_NOT_MET',
-  ACTION_ALREADY_USED = 'ACTION_ALREADY_USED',
-  BONUS_ACTION_ALREADY_USED = 'BONUS_ACTION_ALREADY_USED',
-  REACTION_ALREADY_USED = 'REACTION_ALREADY_USED',
-  NOT_EQUIPPED = 'NOT_EQUIPPED',
-  SPELL_NOT_REACTION = 'SPELL_NOT_REACTION',
-  MISSING_TRIGGER_EVENT = 'MISSING_TRIGGER_EVENT',
-  INVALID_TRIGGER_EVENT = 'INVALID_TRIGGER_EVENT',
-  STEADY_AIM_MOVEMENT_USED = 'STEADY_AIM_MOVEMENT_USED',
-  LAY_ON_HANDS_INSUFFICIENT_POOL = 'LAY_ON_HANDS_INSUFFICIENT_POOL',
+  MISSING_ACTION_SLUG = "MISSING_ACTION_SLUG",
+  INVALID_ACTION_SLUG = "INVALID_ACTION_SLUG",
+  USE_UNARMED_STRIKE = "USE_UNARMED_STRIKE",
+  ACTION_SUBOPTION_REQUIRED = "ACTION_SUBOPTION_REQUIRED",
+  NO_USES_REMAINING = "NO_USES_REMAINING",
+  FEATURE_NOT_AVAILABLE = "FEATURE_NOT_AVAILABLE",
+  WRONG_CLASS = "WRONG_CLASS",
+  BELOW_REQUIRED_LEVEL = "BELOW_REQUIRED_LEVEL",
+  PREREQUISITE_NOT_MET = "PREREQUISITE_NOT_MET",
+  ACTION_ALREADY_USED = "ACTION_ALREADY_USED",
+  BONUS_ACTION_ALREADY_USED = "BONUS_ACTION_ALREADY_USED",
+  REACTION_ALREADY_USED = "REACTION_ALREADY_USED",
+  NOT_EQUIPPED = "NOT_EQUIPPED",
+  SPELL_NOT_REACTION = "SPELL_NOT_REACTION",
+  MISSING_TRIGGER_EVENT = "MISSING_TRIGGER_EVENT",
+  INVALID_TRIGGER_EVENT = "INVALID_TRIGGER_EVENT",
+  STEADY_AIM_MOVEMENT_USED = "STEADY_AIM_MOVEMENT_USED",
+  LAY_ON_HANDS_INSUFFICIENT_POOL = "LAY_ON_HANDS_INSUFFICIENT_POOL",
 }
 
 /**
@@ -128,130 +128,132 @@ export enum GameErrorCode {
  * Source of truth for error text. Tests should assert on `code`, not message.
  */
 export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
-  [GameErrorCode.INVALID_PAYLOAD]: 'Payload invalido.',
-  [GameErrorCode.FORBIDDEN]: 'Voce nao tem permissao para esta operacao.',
-  [GameErrorCode.UNAUTHORIZED]: 'Sessao ausente.',
+  [GameErrorCode.INVALID_PAYLOAD]: "Payload invalido.",
+  [GameErrorCode.FORBIDDEN]: "Voce nao tem permissao para esta operacao.",
+  [GameErrorCode.UNAUTHORIZED]: "Sessao ausente.",
 
   [GameErrorCode.FORBIDDEN_CAMPAIGN_MEMBER]:
-    'Voce nao e um membro autorizado desta campanha.',
-  [GameErrorCode.ENCOUNTER_ALREADY_ACTIVE]:
-    'O combate ja esta em andamento.',
-  [GameErrorCode.ENCOUNTER_COMPLETED]:
-    'Este combate ja foi encerrado.',
-  [GameErrorCode.CHARACTER_NOT_FOUND]: 'Personagem nao encontrado.',
+    "Voce nao e um membro autorizado desta campanha.",
+  [GameErrorCode.ENCOUNTER_ALREADY_ACTIVE]: "O combate ja esta em andamento.",
+  [GameErrorCode.ENCOUNTER_COMPLETED]: "Este combate ja foi encerrado.",
+  [GameErrorCode.CHARACTER_NOT_FOUND]: "Personagem nao encontrado.",
   [GameErrorCode.CHARACTER_ALREADY_IN_ENCOUNTER]:
-    'Este personagem ja participa deste encontro.',
+    "Este personagem ja participa deste encontro.",
 
-  [GameErrorCode.ENCOUNTER_NOT_FOUND]: 'Encontro nao encontrado.',
-  [GameErrorCode.ENCOUNTER_NOT_ACTIVE]: 'Encontro nao esta ativo.',
-  [GameErrorCode.ENCOUNTER_NOT_PREPARING]: 'Encontro nao esta em preparacao.',
-  [GameErrorCode.SESSION_NOT_FOUND]: 'Sessao nao encontrada.',
+  [GameErrorCode.ENCOUNTER_NOT_FOUND]: "Encontro nao encontrado.",
+  [GameErrorCode.ENCOUNTER_NOT_ACTIVE]: "Encontro nao esta ativo.",
+  [GameErrorCode.ENCOUNTER_NOT_PREPARING]: "Encontro nao esta em preparacao.",
+  [GameErrorCode.SESSION_NOT_FOUND]: "Sessao nao encontrada.",
 
-  [GameErrorCode.PARTICIPANT_NOT_FOUND]: 'Participante nao encontrado.',
-  [GameErrorCode.INVALID_PARTICIPANT]: 'Participante invalido para esta operacao.',
-  [GameErrorCode.INVALID_TARGET]: 'Alvo invalido.',
-  [GameErrorCode.TARGET_DEFEATED]: 'Alvo ja esta derrotado.',
-  [GameErrorCode.OUT_OF_RANGE]: 'Alvo fora de alcance.',
+  [GameErrorCode.PARTICIPANT_NOT_FOUND]: "Participante nao encontrado.",
+  [GameErrorCode.INVALID_PARTICIPANT]:
+    "Participante invalido para esta operacao.",
+  [GameErrorCode.INVALID_TARGET]: "Alvo invalido.",
+  [GameErrorCode.TARGET_DEFEATED]: "Alvo ja esta derrotado.",
+  [GameErrorCode.OUT_OF_RANGE]: "Alvo fora de alcance.",
 
-  [GameErrorCode.NOT_YOUR_TURN]: 'Nao e o turno deste participante.',
-  [GameErrorCode.NO_ACTION_AVAILABLE]: 'Acao ja utilizada neste turno.',
-  [GameErrorCode.NO_BONUS_ACTION_AVAILABLE]: 'Acao bonus ja utilizada neste turno.',
-  [GameErrorCode.NO_REACTION_AVAILABLE]: 'Reacao ja utilizada neste round.',
-  [GameErrorCode.CONDITION_PREVENTS_ACTION]: 'Uma condicao impede esta acao.',
-  [GameErrorCode.INVALID_ACTION]: 'Acao invalida ou nao disponivel.',
+  [GameErrorCode.NOT_YOUR_TURN]: "Nao e o turno deste participante.",
+  [GameErrorCode.NO_ACTION_AVAILABLE]: "Acao ja utilizada neste turno.",
+  [GameErrorCode.NO_BONUS_ACTION_AVAILABLE]:
+    "Acao bonus ja utilizada neste turno.",
+  [GameErrorCode.NO_REACTION_AVAILABLE]: "Reacao ja utilizada neste round.",
+  [GameErrorCode.CONDITION_PREVENTS_ACTION]: "Uma condicao impede esta acao.",
+  [GameErrorCode.INVALID_ACTION]: "Acao invalida ou nao disponivel.",
 
-  [GameErrorCode.NOT_DYING]: 'Este participante nao esta fazendo testes de morte.',
-  [GameErrorCode.ALREADY_DEAD]: 'Este participante ja esta morto.',
+  [GameErrorCode.NOT_DYING]:
+    "Este participante nao esta fazendo testes de morte.",
+  [GameErrorCode.ALREADY_DEAD]: "Este participante ja esta morto.",
 
-  [GameErrorCode.INVALID_MULTIATTACK]: 'Multiataque invalido ou nao disponivel.',
-  [GameErrorCode.MULTIATTACK_NOT_RECHARGED]: 'Multiataque ainda nao recarregou.',
+  [GameErrorCode.INVALID_MULTIATTACK]:
+    "Multiataque invalido ou nao disponivel.",
+  [GameErrorCode.MULTIATTACK_NOT_RECHARGED]:
+    "Multiataque ainda nao recarregou.",
 
-  [GameErrorCode.INVALID_SPELL]: 'Magia nao encontrada ou nao disponivel para este caster.',
-  [GameErrorCode.INSUFFICIENT_SPELL_SLOTS]: 'Sem slot de magia disponivel deste nivel.',
-  [GameErrorCode.ALREADY_CONCENTRATING]: 'Ja ha uma magia de concentracao ativa.',
-  [GameErrorCode.NO_CONCENTRATION]: 'Nenhuma concentracao ativa.',
+  [GameErrorCode.INVALID_SPELL]:
+    "Magia nao encontrada ou nao disponivel para este caster.",
+  [GameErrorCode.INSUFFICIENT_SPELL_SLOTS]:
+    "Sem slot de magia disponivel deste nivel.",
+  [GameErrorCode.ALREADY_CONCENTRATING]:
+    "Ja ha uma magia de concentracao ativa.",
+  [GameErrorCode.NO_CONCENTRATION]: "Nenhuma concentracao ativa.",
 
-  [GameErrorCode.POSITION_OUT_OF_BOUNDS]: 'Posicao fora dos limites do mapa.',
-  [GameErrorCode.POSITION_OCCUPIED]: 'Posicao ja esta ocupada.',
-  [GameErrorCode.OUT_OF_MOVEMENT]: 'Movimento insuficiente.',
+  [GameErrorCode.POSITION_OUT_OF_BOUNDS]: "Posicao fora dos limites do mapa.",
+  [GameErrorCode.POSITION_OCCUPIED]: "Posicao ja esta ocupada.",
+  [GameErrorCode.OUT_OF_MOVEMENT]: "Movimento insuficiente.",
 
   [GameErrorCode.NOT_AI_CONTROLLED]:
-    'Este participante nao esta sob controle de IA.',
+    "Este participante nao esta sob controle de IA.",
   [GameErrorCode.AI_UNAVAILABLE]:
-    'O servico de IA esta indisponivel no momento.',
+    "O servico de IA esta indisponivel no momento.",
   [GameErrorCode.AI_TIMEOUT]:
-    'A IA excedeu o tempo limite para decidir o turno.',
-  [GameErrorCode.NOT_DODGING]: 'Este participante nao esta esquivando.',
-  [GameErrorCode.NOT_HIDDEN]: 'Este participante nao esta escondido.',
+    "A IA excedeu o tempo limite para decidir o turno.",
+  [GameErrorCode.NOT_DODGING]: "Este participante nao esta esquivando.",
+  [GameErrorCode.NOT_HIDDEN]: "Este participante nao esta escondido.",
   [GameErrorCode.INVALID_READY_TRIGGER]:
-    'O gatilho da acao preparada e invalido.',
-  [GameErrorCode.ITEM_NOT_USABLE]: 'Este item nao pode ser usado em combate.',
+    "O gatilho da acao preparada e invalido.",
+  [GameErrorCode.ITEM_NOT_USABLE]: "Este item nao pode ser usado em combate.",
   [GameErrorCode.CONTROL_CHANGE_FORBIDDEN]:
-    'Apenas o DM da sessao pode alterar o controle de um participante.',
+    "Apenas o DM da sessao pode alterar o controle de um participante.",
 
   [GameErrorCode.INSUFFICIENT_LEGENDARY_POINTS]:
-    'Pontos lendarios insuficientes para usar essa acao.',
+    "Pontos lendarios insuficientes para usar essa acao.",
   [GameErrorCode.CONDITION_PREVENTS_LEGENDARY]:
-    'A criatura esta incapacitada e nao pode usar acoes lendarias.',
+    "A criatura esta incapacitada e nao pode usar acoes lendarias.",
   [GameErrorCode.LAIR_ACTION_NOT_AVAILABLE]:
-    'Lair actions nao estao disponiveis para este encontro.',
-  [GameErrorCode.NOT_GRAPPLED]: 'O participante nao esta agarrado.',
+    "Lair actions nao estao disponiveis para este encontro.",
+  [GameErrorCode.NOT_GRAPPLED]: "O participante nao esta agarrado.",
   [GameErrorCode.RESISTANCE_NOT_APPLICABLE]:
-    'Resistencia nao se aplica a este tipo de dano.',
+    "Resistencia nao se aplica a este tipo de dano.",
   [GameErrorCode.CONCENTRATION_ALREADY_BROKEN]:
-    'A concentracao ja foi quebrada.',
-  [GameErrorCode.INVALID_CONDITION_INSTANCE]:
-    'Instancia de condicao invalida.',
+    "A concentracao ja foi quebrada.",
+  [GameErrorCode.INVALID_CONDITION_INSTANCE]: "Instancia de condicao invalida.",
   [GameErrorCode.PERSISTENT_AREA_NOT_FOUND]:
-    'Efeito de area persistente nao encontrado.',
+    "Efeito de area persistente nao encontrado.",
 
   [GameErrorCode.SPELL_NOT_AOE]:
-    'Essa magia nao e de area; selecione apenas um alvo.',
-  [GameErrorCode.SPELL_OUT_OF_RANGE]:
-    'Alvo esta fora do alcance da magia.',
+    "Essa magia nao e de area; selecione apenas um alvo.",
+  [GameErrorCode.SPELL_OUT_OF_RANGE]: "Alvo esta fora do alcance da magia.",
   [GameErrorCode.LIBRARY_MONSTER_NOT_FOUND]:
-    'Monstro nao encontrado na biblioteca.',
+    "Monstro nao encontrado na biblioteca.",
 
   [GameErrorCode.INVALID_TARGET_SELF]:
-    'Esta magia precisa ser lancada contra outra criatura.',
+    "Esta magia precisa ser lancada contra outra criatura.",
 
   // Spec 003 (combat action registry)
   [GameErrorCode.MISSING_ACTION_SLUG]:
     "Campo 'actionSlug' e obrigatorio. O shape antigo ('actionName') foi removido.",
   [GameErrorCode.INVALID_ACTION_SLUG]:
-    'Slug de acao invalido para este participante.',
+    "Slug de acao invalido para este participante.",
   [GameErrorCode.USE_UNARMED_STRIKE]:
     "Shove e Grapple sao sub-opcoes de Unarmed Strike. Use actionSlug='unarmed-strike' com options.mode='grapple' ou 'shove'.",
   [GameErrorCode.ACTION_SUBOPTION_REQUIRED]:
-    'Esta acao exige uma sub-opcao em options.',
+    "Esta acao exige uma sub-opcao em options.",
   [GameErrorCode.NO_USES_REMAINING]:
-    'Sem usos restantes desta feature ate o proximo descanso adequado.',
+    "Sem usos restantes desta feature ate o proximo descanso adequado.",
   [GameErrorCode.FEATURE_NOT_AVAILABLE]:
-    'Este participante nao possui a feature solicitada.',
+    "Este participante nao possui a feature solicitada.",
   [GameErrorCode.WRONG_CLASS]:
-    'Esta feature exige uma classe especifica que este participante nao possui.',
+    "Esta feature exige uma classe especifica que este participante nao possui.",
   [GameErrorCode.BELOW_REQUIRED_LEVEL]:
-    'Nivel atual abaixo do requisito desta feature.',
+    "Nivel atual abaixo do requisito desta feature.",
   [GameErrorCode.PREREQUISITE_NOT_MET]:
-    'Pre-requisito da acao nao foi atendido.',
-  [GameErrorCode.ACTION_ALREADY_USED]:
-    'Acao ja utilizada neste turno.',
+    "Pre-requisito da acao nao foi atendido.",
+  [GameErrorCode.ACTION_ALREADY_USED]: "Acao ja utilizada neste turno.",
   [GameErrorCode.BONUS_ACTION_ALREADY_USED]:
-    'Acao bonus ja utilizada neste turno.',
-  [GameErrorCode.REACTION_ALREADY_USED]:
-    'Reacao ja utilizada neste round.',
+    "Acao bonus ja utilizada neste turno.",
+  [GameErrorCode.REACTION_ALREADY_USED]: "Reacao ja utilizada neste round.",
   [GameErrorCode.NOT_EQUIPPED]:
-    'A arma referenciada pela acao nao esta equipada.',
+    "A arma referenciada pela acao nao esta equipada.",
   [GameErrorCode.SPELL_NOT_REACTION]:
-    'Esta magia nao possui casting time de reaction.',
+    "Esta magia nao possui casting time de reaction.",
   [GameErrorCode.MISSING_TRIGGER_EVENT]:
     "asReaction=true exige 'triggerEventId'.",
   [GameErrorCode.INVALID_TRIGGER_EVENT]:
-    'Evento trigger referenciado nao existe ou nao e aceitavel para esta reaction.',
+    "Evento trigger referenciado nao existe ou nao e aceitavel para esta reaction.",
   [GameErrorCode.STEADY_AIM_MOVEMENT_USED]:
-    'Steady Aim exige que o movimento ainda nao tenha sido usado neste turno.',
+    "Steady Aim exige que o movimento ainda nao tenha sido usado neste turno.",
   [GameErrorCode.LAY_ON_HANDS_INSUFFICIENT_POOL]:
-    'Pool de Lay on Hands insuficiente para a cura solicitada.',
+    "Pool de Lay on Hands insuficiente para a cura solicitada.",
 };
 
 export interface GameEventData {
@@ -264,7 +266,10 @@ export interface GameEventData {
 /**
  * Helper para resposta de sucesso.
  */
-export function success<T>(value: T, events: GameEventData[] = []): GameSuccess<T> {
+export function success<T>(
+  value: T,
+  events: GameEventData[] = [],
+): GameSuccess<T> {
   return { ok: true, value, events };
 }
 
@@ -285,5 +290,9 @@ export function failure(
     const c = codeOrMessage as GameErrorCode;
     return { ok: false, error: ERROR_MESSAGES_PT_BR[c] ?? String(c), code: c };
   }
-  return { ok: false, error: String(codeOrMessage), code: code as GameErrorCode };
+  return {
+    ok: false,
+    error: String(codeOrMessage),
+    code: code as GameErrorCode,
+  };
 }

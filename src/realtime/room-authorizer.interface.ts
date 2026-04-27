@@ -8,7 +8,7 @@ export interface RoomAuthorizer {
   canJoin(userId: string, roomKey: string): Promise<boolean>;
 }
 
-export const ROOM_AUTHORIZER = Symbol('ROOM_AUTHORIZER');
+export const ROOM_AUTHORIZER = Symbol("ROOM_AUTHORIZER");
 
 export const ROOM_KEY_PATTERN = /^([a-z_]+):([a-zA-Z0-9_-]+)$/;
 

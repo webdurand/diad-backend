@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 013 — Ground Effects.
@@ -11,10 +11,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Princípio X (Constitution): `tactical_metadata` (camada 2) +
  * `narrative_descriptor` (camada 3) tornam a feature consumível por AI DM.
  */
-export class AddTileEffectColumnsToPersistentArea1780000000000
-  implements MigrationInterface
-{
-  name = 'AddTileEffectColumnsToPersistentArea1780000000000';
+export class AddTileEffectColumnsToPersistentArea1780000000000 implements MigrationInterface {
+  name = "AddTileEffectColumnsToPersistentArea1780000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

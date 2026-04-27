@@ -1,7 +1,7 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DiceService } from './dice.service';
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { DiceService } from "./dice.service";
 import {
   DiceModifierBreakdown,
   DiceRollAdvantage,
@@ -9,7 +9,7 @@ import {
   DiceRollRequest,
   DiceRollResolved,
   DiceVerdict,
-} from '../interfaces/dice.interfaces';
+} from "../interfaces/dice.interfaces";
 
 /**
  * Spec 016 M2 — Dice request lifecycle service.
@@ -30,7 +30,7 @@ interface RequestState {
   rollId: string;
   characterId?: string;
   kind: DiceRollKind;
-  ability: DiceRollRequest['ability'];
+  ability: DiceRollRequest["ability"];
   skill: string | null;
   dc: number;
   advantage: DiceRollAdvantage;
@@ -46,7 +46,7 @@ const TTL_MS = 60 * 60 * 1000; // 1h — declared in spec as MVP retention
 export interface RequestRollInput {
   characterId?: string;
   kind: DiceRollKind;
-  ability: DiceRollRequest['ability'];
+  ability: DiceRollRequest["ability"];
   skill?: string | null;
   dc: number;
   advantage?: DiceRollAdvantage;
@@ -144,11 +144,11 @@ export class DiceRollService {
     let chosen: number;
     let discarded: number | null = null;
 
-    if (state.advantage === 'advantage') {
+    if (state.advantage === "advantage") {
       const second = raw2 ?? raw1;
       chosen = Math.max(raw1, second);
       discarded = Math.min(raw1, second);
-    } else if (state.advantage === 'disadvantage') {
+    } else if (state.advantage === "disadvantage") {
       const second = raw2 ?? raw1;
       chosen = Math.min(raw1, second);
       discarded = Math.max(raw1, second);
@@ -200,7 +200,7 @@ export class DiceRollService {
     });
     return {
       success:
-        resolved.verdict === 'success' || resolved.verdict === 'crit_success',
+        resolved.verdict === "success" || resolved.verdict === "crit_success",
       verdict: resolved.verdict,
       total: resolved.total,
       rollId,

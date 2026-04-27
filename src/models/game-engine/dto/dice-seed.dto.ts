@@ -1,4 +1,4 @@
-import { IsInt, Max, Min } from 'class-validator';
+import { IsInt, Max, Min } from "class-validator";
 
 /**
  * Payload do endpoint `POST /game/dice/seed`.

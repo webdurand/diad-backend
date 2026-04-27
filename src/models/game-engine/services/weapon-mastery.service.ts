@@ -1,12 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EncounterParticipantEntity } from 'src/entities/encounter-participant.entity';
-import { DiceService } from './dice.service';
-import { EffectInstanceService } from './effect-instance.service';
-import { ConditionLifecycleService } from './condition-lifecycle.service';
-import { GameEventData } from '../interfaces/result.type';
-import { getAbilityModifier } from 'src/shared/srd-utils';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { DiceService } from "./dice.service";
+import { EffectInstanceService } from "./effect-instance.service";
+import { ConditionLifecycleService } from "./condition-lifecycle.service";
+import { GameEventData } from "../interfaces/result.type";
+import { getAbilityModifier } from "src/shared/srd-utils";
 
 // Spec 012 Fase 0 — Weapon Mastery (XPHB 2024)
 //
@@ -15,14 +15,14 @@ import { getAbilityModifier } from 'src/shared/srd-utils';
 // Fase 2 (deferred): Cleave (second attack in chain), Nick (TWF action flow).
 
 export type MasterySlug =
-  | 'cleave'
-  | 'graze'
-  | 'nick'
-  | 'push'
-  | 'sap'
-  | 'slow'
-  | 'topple'
-  | 'vex';
+  | "cleave"
+  | "graze"
+  | "nick"
+  | "push"
+  | "sap"
+  | "slow"
+  | "topple"
+  | "vex";
 
 export interface MasteryContext {
   masterySlug: string;
@@ -88,42 +88,46 @@ export class WeaponMasteryService {
    * fiquem na mesma transação lógica.
    */
   async resolveOnHit(ctx: MasteryContext): Promise<MasteryOnHitResult> {
-    const result: MasteryOnHitResult = { applied: [], extraDamage: 0, events: [] };
+    const result: MasteryOnHitResult = {
+      applied: [],
+      extraDamage: 0,
+      events: [],
+    };
     switch (ctx.masterySlug as MasterySlug) {
-      case 'sap':
+      case "sap":
         await this.applySap(ctx, result);
         break;
-      case 'slow':
+      case "slow":
         await this.applySlow(ctx, result);
         break;
-      case 'vex':
+      case "vex":
         await this.applyVex(ctx, result);
         break;
-      case 'topple':
+      case "topple":
         await this.applyTopple(ctx, result);
         break;
-      case 'push':
+      case "push":
         await this.applyPush(ctx, result);
         break;
-      case 'cleave':
+      case "cleave":
         await this.applyCleave(ctx, result);
         break;
-      case 'nick':
+      case "nick":
         // Nick é "action economy rider" — expõe via actions.service + flag
         // nickUsedThisTurn (gerenciado em combat.service quando extra attack
         // light é feito). Aqui só emite marker.
         result.events.push({
-          event_type: 'weapon_mastery_triggered',
+          event_type: "weapon_mastery_triggered",
           actor_participant_id: ctx.attacker.id,
           target_participant_id: ctx.target.id,
           data: {
-            masterySlug: 'nick',
-            note: 'Extra attack light disponível dentro da Attack action',
+            masterySlug: "nick",
+            note: "Extra attack light disponível dentro da Attack action",
           },
         });
         break;
       // Graze só em miss — ignora em hit
-      case 'graze':
+      case "graze":
         break;
       default:
         break;
@@ -136,16 +140,16 @@ export class WeaponMasteryService {
    */
   resolveOnMiss(ctx: MasteryContext): MasteryOnMissResult {
     const result: MasteryOnMissResult = { events: [] };
-    if ((ctx.masterySlug as MasterySlug) !== 'graze') return result;
+    if ((ctx.masterySlug as MasterySlug) !== "graze") return result;
     const amount = Math.max(0, ctx.abilityMod);
     if (amount <= 0) return result;
     result.grazeDamage = { amount, damageType: ctx.damageType };
     result.events.push({
-      event_type: 'weapon_mastery_triggered',
+      event_type: "weapon_mastery_triggered",
       actor_participant_id: ctx.attacker.id,
       target_participant_id: ctx.target.id,
       data: {
-        masterySlug: 'graze',
+        masterySlug: "graze",
         grazeDamage: amount,
         damageType: ctx.damageType,
       },
@@ -166,10 +170,10 @@ export class WeaponMasteryService {
     // Limite 1×/turno
     if (ctx.attacker.cleaveUsedThisTurn) {
       result.events.push({
-        event_type: 'weapon_mastery_deferred',
+        event_type: "weapon_mastery_deferred",
         actor_participant_id: ctx.attacker.id,
         target_participant_id: ctx.target.id,
-        data: { masterySlug: 'cleave', reason: 'already_used_this_turn' },
+        data: { masterySlug: "cleave", reason: "already_used_this_turn" },
       });
       return;
     }
@@ -193,10 +197,10 @@ export class WeaponMasteryService {
 
     if (!adjacent) {
       result.events.push({
-        event_type: 'weapon_mastery_deferred',
+        event_type: "weapon_mastery_deferred",
         actor_participant_id: ctx.attacker.id,
         target_participant_id: ctx.target.id,
-        data: { masterySlug: 'cleave', reason: 'no_adjacent_hostile' },
+        data: { masterySlug: "cleave", reason: "no_adjacent_hostile" },
       });
       return;
     }
@@ -210,13 +214,13 @@ export class WeaponMasteryService {
       damageAmount: ctx.damageRolledAmount,
       damageType: ctx.damageType,
     };
-    result.applied.push('cleave');
+    result.applied.push("cleave");
     result.events.push({
-      event_type: 'weapon_mastery_triggered',
+      event_type: "weapon_mastery_triggered",
       actor_participant_id: ctx.attacker.id,
       target_participant_id: adjacent.id,
       data: {
-        masterySlug: 'cleave',
+        masterySlug: "cleave",
         primaryTargetId: ctx.target.id,
         secondTargetId: adjacent.id,
         damageAmount: ctx.damageRolledAmount,
@@ -234,21 +238,24 @@ export class WeaponMasteryService {
     ctx: MasteryContext,
     result: MasteryOnHitResult,
   ): Promise<void> {
-    const { effect, events } = await this.effectInstances.addEffect(ctx.target, {
-      kind: 'self_disadvantage_next_attack',
-      sourceFeatureSlug: 'weapon-mastery:sap',
-      sourceCasterParticipantId: ctx.attacker.id,
-      payload: { masterySlug: 'sap' },
-      expiresAt: { kind: 'until_consumed' },
-      requiresConcentration: false,
-    });
-    result.applied.push('sap');
+    const { effect, events } = await this.effectInstances.addEffect(
+      ctx.target,
+      {
+        kind: "self_disadvantage_next_attack",
+        sourceFeatureSlug: "weapon-mastery:sap",
+        sourceCasterParticipantId: ctx.attacker.id,
+        payload: { masterySlug: "sap" },
+        expiresAt: { kind: "until_consumed" },
+        requiresConcentration: false,
+      },
+    );
+    result.applied.push("sap");
     result.events.push(...events);
     result.events.push({
-      event_type: 'weapon_mastery_triggered',
+      event_type: "weapon_mastery_triggered",
       actor_participant_id: ctx.attacker.id,
       target_participant_id: ctx.target.id,
-      data: { masterySlug: 'sap', effectId: effect.id },
+      data: { masterySlug: "sap", effectId: effect.id },
     });
   }
 
@@ -264,29 +271,32 @@ export class WeaponMasteryService {
     // Remove existing slow mastery stacking
     const existing = (ctx.target.effectInstances ?? []).filter(
       (e) =>
-        e.kind === 'speed_reduction' &&
-        e.sourceFeatureSlug === 'weapon-mastery:slow',
+        e.kind === "speed_reduction" &&
+        e.sourceFeatureSlug === "weapon-mastery:slow",
     );
     for (const e of existing) {
-      await this.effectInstances.removeEffect(ctx.target, e.id, 'manual');
+      await this.effectInstances.removeEffect(ctx.target, e.id, "manual");
     }
 
-    const { effect, events } = await this.effectInstances.addEffect(ctx.target, {
-      kind: 'speed_reduction',
-      sourceFeatureSlug: 'weapon-mastery:slow',
-      sourceCasterParticipantId: ctx.attacker.id,
-      payload: { amount: 10, masterySlug: 'slow' },
-      // Dura até o início do próximo turno do attacker (approx: 1 round, decresce no tick)
-      expiresAt: { kind: 'rounds', value: 1 },
-      requiresConcentration: false,
-    });
-    result.applied.push('slow');
+    const { effect, events } = await this.effectInstances.addEffect(
+      ctx.target,
+      {
+        kind: "speed_reduction",
+        sourceFeatureSlug: "weapon-mastery:slow",
+        sourceCasterParticipantId: ctx.attacker.id,
+        payload: { amount: 10, masterySlug: "slow" },
+        // Dura até o início do próximo turno do attacker (approx: 1 round, decresce no tick)
+        expiresAt: { kind: "rounds", value: 1 },
+        requiresConcentration: false,
+      },
+    );
+    result.applied.push("slow");
     result.events.push(...events);
     result.events.push({
-      event_type: 'weapon_mastery_triggered',
+      event_type: "weapon_mastery_triggered",
       actor_participant_id: ctx.attacker.id,
       target_participant_id: ctx.target.id,
-      data: { masterySlug: 'slow', effectId: effect.id, speedReductionFt: 10 },
+      data: { masterySlug: "slow", effectId: effect.id, speedReductionFt: 10 },
     });
   }
 
@@ -299,21 +309,28 @@ export class WeaponMasteryService {
     ctx: MasteryContext,
     result: MasteryOnHitResult,
   ): Promise<void> {
-    const { effect, events } = await this.effectInstances.addEffect(ctx.attacker, {
-      kind: 'self_advantage_next_attack',
-      sourceFeatureSlug: 'weapon-mastery:vex',
-      sourceCasterParticipantId: ctx.attacker.id,
-      payload: { masterySlug: 'vex', requiredTargetId: ctx.target.id },
-      expiresAt: { kind: 'until_consumed' },
-      requiresConcentration: false,
-    });
-    result.applied.push('vex');
+    const { effect, events } = await this.effectInstances.addEffect(
+      ctx.attacker,
+      {
+        kind: "self_advantage_next_attack",
+        sourceFeatureSlug: "weapon-mastery:vex",
+        sourceCasterParticipantId: ctx.attacker.id,
+        payload: { masterySlug: "vex", requiredTargetId: ctx.target.id },
+        expiresAt: { kind: "until_consumed" },
+        requiresConcentration: false,
+      },
+    );
+    result.applied.push("vex");
     result.events.push(...events);
     result.events.push({
-      event_type: 'weapon_mastery_triggered',
+      event_type: "weapon_mastery_triggered",
       actor_participant_id: ctx.attacker.id,
       target_participant_id: ctx.target.id,
-      data: { masterySlug: 'vex', effectId: effect.id, requiredTargetId: ctx.target.id },
+      data: {
+        masterySlug: "vex",
+        effectId: effect.id,
+        requiredTargetId: ctx.target.id,
+      },
     });
   }
 
@@ -329,22 +346,25 @@ export class WeaponMasteryService {
     const success = total >= dc;
     result.toppleSave = { roll, total, dc, success };
     result.events.push({
-      event_type: 'weapon_mastery_triggered',
+      event_type: "weapon_mastery_triggered",
       actor_participant_id: ctx.attacker.id,
       target_participant_id: ctx.target.id,
       data: {
-        masterySlug: 'topple',
-        save: { ability: 'con', dc, roll, modifier: mod, total, success },
+        masterySlug: "topple",
+        save: { ability: "con", dc, roll, modifier: mod, total, success },
       },
     });
     if (!success) {
-      const { events } = await this.conditionLifecycle.applyCondition(ctx.target, {
-        slug: 'prone',
-        appliedBy: ctx.attacker.id,
-        sourceSpell: null,
-        durationRoundsRemaining: null,
-      });
-      result.applied.push('topple');
+      const { events } = await this.conditionLifecycle.applyCondition(
+        ctx.target,
+        {
+          slug: "prone",
+          appliedBy: ctx.attacker.id,
+          sourceSpell: null,
+          durationRoundsRemaining: null,
+        },
+      );
+      result.applied.push("topple");
       result.events.push(...events);
     }
   }
@@ -365,8 +385,8 @@ export class WeaponMasteryService {
     const ay = ctx.attacker.positionY ?? 0;
     const tx = ctx.target.positionX ?? 0;
     const ty = ctx.target.positionY ?? 0;
-    let dx = tx - ax;
-    let dy = ty - ay;
+    const dx = tx - ax;
+    const dy = ty - ay;
     // Normalize to -1/0/1 (grid-friendly); default (0,0) → no push possible
     if (dx === 0 && dy === 0) return;
     const mag = Math.max(Math.abs(dx), Math.abs(dy));
@@ -377,14 +397,14 @@ export class WeaponMasteryService {
     ctx.target.positionX = newX;
     ctx.target.positionY = newY;
     await this.participantRepo.save(ctx.target);
-    result.applied.push('push');
+    result.applied.push("push");
     result.pushedTo = { x: newX, y: newY };
     result.events.push({
-      event_type: 'weapon_mastery_triggered',
+      event_type: "weapon_mastery_triggered",
       actor_participant_id: ctx.attacker.id,
       target_participant_id: ctx.target.id,
       data: {
-        masterySlug: 'push',
+        masterySlug: "push",
         from: { x: tx, y: ty },
         to: { x: newX, y: newY },
         distanceFt: cellsToMove * cellSize,
@@ -405,7 +425,7 @@ export class WeaponMasteryService {
     mod: number;
   } {
     let mod = 0;
-    if (target.type === 'monster' && target.monster) {
+    if (target.type === "monster" && target.monster) {
       const m = target.monster as unknown as {
         constitution?: number;
         proficiency_bonus?: number;
@@ -415,7 +435,9 @@ export class WeaponMasteryService {
       mod = getAbilityModifier(con);
       const profs = Array.isArray(m.proficiencies) ? m.proficiencies : [];
       const hasProf = profs.some(
-        (p) => p?.type === 'saving-throw' && (p?.name ?? '').toLowerCase().includes('con'),
+        (p) =>
+          p?.type === "saving-throw" &&
+          (p?.name ?? "").toLowerCase().includes("con"),
       );
       if (hasProf) mod += m.proficiency_bonus ?? 0;
     }

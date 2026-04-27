@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * Spec 014 M2.A — rastreio de visitação por location.
@@ -8,7 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Persistência é idempotente (primeiro visit grava; subsequentes no-op).
  */
 export class AddLocationVisitedAt1778090000000 implements MigrationInterface {
-  name = 'AddLocationVisitedAt1778090000000';
+  name = "AddLocationVisitedAt1778090000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
