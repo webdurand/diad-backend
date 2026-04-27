@@ -4,6 +4,7 @@ import {
   SceneEntity,
   SceneNpcEntity,
   SessionEventEntity,
+  SessionMessageEntity,
   CampaignChronicleEntity,
   PartyKnowledgeEntity,
   GameSessionEntity,
@@ -22,6 +23,7 @@ import { SceneService } from "./services/scene.service";
 import { EventLogService } from "./services/event-log.service";
 import { ChronicleService } from "./services/chronicle.service";
 import { SceneContextService } from "./services/scene-context.service";
+import { SessionMessageService } from "./services/session-message.service";
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { SceneContextService } from "./services/scene-context.service";
       SceneEntity,
       SceneNpcEntity,
       SessionEventEntity,
+      SessionMessageEntity,
       CampaignChronicleEntity,
       PartyKnowledgeEntity,
       GameSessionEntity,
@@ -49,12 +52,14 @@ import { SceneContextService } from "./services/scene-context.service";
     EventLogService,
     ChronicleService,
     SceneContextService,
+    SessionMessageService,
   ],
   exports: [
     SceneService,
     EventLogService,
     ChronicleService,
     SceneContextService,
+    SessionMessageService,
   ],
 })
 export class SessionModule {}

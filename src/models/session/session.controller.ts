@@ -16,8 +16,11 @@ import { SceneService } from "./services/scene.service";
 import { EventLogService } from "./services/event-log.service";
 import { ChronicleService } from "./services/chronicle.service";
 import { SceneContextService } from "./services/scene-context.service";
+import { SessionMessageService } from "./services/session-message.service";
 import type { CreateSceneDto } from "./services/scene.service";
 import type { LogEventDto } from "./services/event-log.service";
+import type { AppendMessageDto } from "./services/session-message.service";
+import type { SessionMessageKind } from "src/entities/session-message.entity";
 import type {
   CreateChronicleDto,
   RecordKnowledgeDto,
@@ -41,7 +44,70 @@ export class SessionController {
     private readonly eventLogService: EventLogService,
     private readonly chronicleService: ChronicleService,
     private readonly sceneContextService: SceneContextService,
+    private readonly sessionMessageService: SessionMessageService,
   ) {}
+
+  // ==================== CHAT MESSAGES (Spec 017) ====================
+
+  /**
+   * Histórico de mensagens narrativas da sessão. Hidratação cross-device:
+   * frontend chama esse GET ao montar a tela de chat e re-popula entries
+   * antes de qualquer fallback localStorage.
+   */
+  @Get(":sessionId/messages")
+  async listMessages(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Query("limit") limit?: string,
+    @Query("after") after?: string,
+  ) {
+    const userId = getUserId(req);
+    const messages = await this.sessionMessageService.listBySession(
+      sessionId,
+      userId,
+      limit ? parseInt(limit, 10) : 200,
+      after ? parseInt(after, 10) : undefined,
+    );
+    return {
+      sessionId,
+      messages: messages.map((m) => ({
+        id: m.id,
+        kind: m.kind,
+        content: m.content,
+        characterId: m.characterId ?? null,
+        sequenceNumber: m.sequenceNumber,
+        clientId: m.clientId ?? null,
+        createdAt: m.createdAt,
+      })),
+    };
+  }
+
+  @Post(":sessionId/messages")
+  async appendMessage(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Body()
+    body: Omit<AppendMessageDto, "sessionId" | "userId"> & {
+      kind: SessionMessageKind;
+    },
+  ) {
+    const userId = getUserId(req);
+    const saved = await this.sessionMessageService.append({
+      sessionId,
+      userId,
+      characterId: body.characterId,
+      kind: body.kind,
+      content: body.content,
+      clientId: body.clientId,
+    });
+    return {
+      id: saved.id,
+      sequenceNumber: saved.sequenceNumber,
+      kind: saved.kind,
+      clientId: saved.clientId ?? null,
+      createdAt: saved.createdAt,
+    };
+  }
 
   // ==================== SESSION FINALIZE (Spec 014 M2.C) ====================
 

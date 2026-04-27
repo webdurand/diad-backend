@@ -77,6 +77,7 @@ import { EncounterJoinRequestEntity } from "./encounter-join-request.entity";
 import { SceneEntity } from "./scene.entity";
 import { SceneNpcEntity } from "./scene-npc.entity";
 import { SessionEventEntity } from "./session-event.entity";
+import { SessionMessageEntity } from "./session-message.entity";
 import { CampaignChronicleEntity } from "./campaign-chronicle.entity";
 import { PartyKnowledgeEntity } from "./party-knowledge.entity";
 import { ClockEntity } from "./clock.entity";
@@ -172,6 +173,7 @@ export {
   SceneEntity,
   SceneNpcEntity,
   SessionEventEntity,
+  SessionMessageEntity,
   CampaignChronicleEntity,
   PartyKnowledgeEntity,
   ClockEntity,
@@ -267,6 +269,7 @@ export const ENTITIES = [
   SceneEntity,
   SceneNpcEntity,
   SessionEventEntity,
+  SessionMessageEntity,
   CampaignChronicleEntity,
   PartyKnowledgeEntity,
   ClockEntity,
