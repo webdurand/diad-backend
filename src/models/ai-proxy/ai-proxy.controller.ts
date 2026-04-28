@@ -17,6 +17,8 @@ import type { Response } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import { AdminGuard } from "../auth/admin.guard";
 import { AiProxyService } from "./ai-proxy.service";
+import { SessionResumeService } from "../session/services/session-resume.service";
+import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import type { AuthRequest } from "../auth/auth.types";
 
 @Controller("ai")
@@ -24,7 +26,10 @@ import type { AuthRequest } from "../auth/auth.types";
 export class AiProxyController {
   private readonly logger = new Logger(AiProxyController.name);
 
-  constructor(private readonly aiProxyService: AiProxyService) {}
+  constructor(
+    private readonly aiProxyService: AiProxyService,
+    private readonly resumeService: SessionResumeService,
+  ) {}
 
   // ────── Assistente D&D ──────
 
@@ -117,7 +122,7 @@ export class AiProxyController {
   @Post("solo/:sessionId/message")
   async soloMessage(
     @Param("sessionId") sessionId: string,
-    @Body() body: { message: string },
+    @Body() body: { message: string; lastMessageId?: number | null },
     @Req() req: AuthRequest,
     @Res() res: Response,
   ) {
@@ -127,9 +132,56 @@ export class AiProxyController {
     res.setHeader("X-Accel-Buffering", "no");
 
     try {
+      // Spec 024 — monta payload enriquecido server-side: sceneContext,
+      // recentMessages, isResumed, previousSessionSummary, hot-recap
+      // (fire-and-forget) e session_resumed event quando aplicável.
+      const ctx = await this.resumeService.assemble(sessionId, {
+        lastMessageIdFromClient: body.lastMessageId ?? null,
+      });
+
+      if (ctx.lastMessageMismatch) {
+        res.statusCode = 409;
+        res.write(
+          `data: ${JSON.stringify({
+            type: "error",
+            code: ErrorCode.SESSION_LAST_MESSAGE_MISMATCH,
+            content:
+              "Histórico desincronizado — recarregue para continuar a sessão.",
+          })}\n\n`,
+        );
+        res.end();
+        return;
+      }
+
+      res.setHeader(
+        "X-Session-Resume-Hot-Recap",
+        ctx.hotRecapTriggered
+          ? "pending"
+          : ctx.previousSessionSummary
+          ? "cached"
+          : "none",
+      );
+      res.setHeader(
+        "X-Session-Is-Resumed",
+        ctx.isResumed ? "true" : "false",
+      );
+
       await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/message`,
-        { message: body.message, user_id: req.user!.id },
+        {
+          message: body.message,
+          user_id: req.user!.id,
+          // Spec 024 — payload enriquecido (camelCase per contract).
+          sessionId,
+          campaignId: ctx.campaignId,
+          isResumed: ctx.isResumed,
+          previousSessionId: ctx.previousSessionId,
+          sceneContext: ctx.sceneContext,
+          recentMessages: ctx.recentMessages,
+          previousSessionSummary: ctx.previousSessionSummary,
+          lastMessageId: body.lastMessageId ?? ctx.serverLastMessageId,
+          gapMinutes: ctx.gapMinutes,
+        },
         res,
       );
     } catch (err: any) {

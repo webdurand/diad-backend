@@ -422,6 +422,42 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "RAW: stable mantém 0HP. Apply healing antes de transicionar para none.",
     domain: "encounter",
   },
+
+  // session-recap (spec 024)
+  [ErrorCode.SUMMARIZE_LLM_TIMEOUT]: {
+    httpStatus: 504,
+    defaultTitle: "Hot-recap LLM call timed out",
+    defaultHint:
+      "Recap pendente — agendado retry. Próximo turn ainda continua via recent messages + scene context.",
+    domain: "session-recap",
+  },
+  [ErrorCode.SUMMARIZE_LLM_FAILURE]: {
+    httpStatus: 502,
+    defaultTitle: "Hot-recap LLM call failed",
+    defaultHint:
+      "Recap não pôde ser gerado neste momento — agendado retry. Continuidade da cena imediata mantida via recent messages.",
+    domain: "session-recap",
+  },
+  [ErrorCode.SUMMARIZE_INVALID_INPUT]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid input for hot-recap",
+    defaultHint: "Payload do summarize inválido. Verifique sessionId + messages[].",
+    domain: "session-recap",
+  },
+  [ErrorCode.SUMMARIZE_AUTH_FAILED]: {
+    httpStatus: 401,
+    defaultTitle: "Internal token missing or invalid",
+    defaultHint:
+      "Endpoint /internal/summarize exige X-Internal-Token compartilhado entre backend e agents.",
+    domain: "session-recap",
+  },
+  [ErrorCode.SESSION_LAST_MESSAGE_MISMATCH]: {
+    httpStatus: 409,
+    defaultTitle: "Frontend lastMessageId does not match server state",
+    defaultHint:
+      "Re-hidrate o histórico — algum turno foi processado fora desta aba.",
+    domain: "session-recap",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {

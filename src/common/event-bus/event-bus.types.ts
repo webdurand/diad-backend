@@ -65,6 +65,7 @@ export const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "npc_created",
     "revivify_eligibility_checked",
     "event_bus_listener_registered",
+    "session_resumed",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",

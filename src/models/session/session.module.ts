@@ -25,6 +25,8 @@ import { EventLogService } from "./services/event-log.service";
 import { ChronicleService } from "./services/chronicle.service";
 import { SceneContextService } from "./services/scene-context.service";
 import { SessionMessageService } from "./services/session-message.service";
+import { SessionRecapService } from "./services/session-recap.service";
+import { SessionResumeService } from "./services/session-resume.service";
 
 @Module({
   imports: [
@@ -55,6 +57,8 @@ import { SessionMessageService } from "./services/session-message.service";
     ChronicleService,
     SceneContextService,
     SessionMessageService,
+    SessionRecapService,
+    SessionResumeService,
   ],
   exports: [
     SceneService,
@@ -62,6 +66,8 @@ import { SessionMessageService } from "./services/session-message.service";
     ChronicleService,
     SceneContextService,
     SessionMessageService,
+    SessionRecapService,
+    SessionResumeService,
   ],
 })
 export class SessionModule {}
