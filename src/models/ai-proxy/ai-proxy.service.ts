@@ -42,11 +42,25 @@ export class AiProxyService {
    * agents service is forwarded to the client verbatim, with NO parsing,
    * filtering, or whitelisting by event type. New SSE event types added on
    * the agents side flow through automatically without backend changes.
+   *
+   * `onChunk`: callback opcional invocado com cada chunk recebido do upstream
+   * ANTES do passthrough — usado pelos endpoints solo pra acumular a
+   * narração via `SseNarrationCollector` e persistir server-side em
+   * `session_messages`. Não-bloqueante; exceções são engolidas pra não
+   * sabotar o stream.
+   *
+   * `onEnd`: callback opcional invocado APÓS o upstream finalizar e ANTES
+   * do `res.end()`. Aceita Promise — o response só fecha após o awaited
+   * resolver. Garante que persistência server-side termine antes do client
+   * receber EOF (sem isso, GET /sessions/:id/messages logo após o stream
+   * pode não ver a narração mais nova).
    */
   pipeStream(
     path: string,
     body: Record<string, unknown>,
     res: Response,
+    onChunk?: (chunk: Buffer) => void,
+    onEnd?: () => Promise<void> | void,
   ): Promise<void> {
     return new Promise((resolve) => {
       const url = new URL(`${this.agentBaseUrl}${path}`);
@@ -92,6 +106,13 @@ export class AiProxyService {
 
           // Pipe chunks directly — no buffering
           proxyRes.on("data", (chunk: Buffer) => {
+            if (onChunk) {
+              try {
+                onChunk(chunk);
+              } catch {
+                // Side-channel collectors nunca podem derrubar o passthrough.
+              }
+            }
             res.write(chunk);
             if (typeof (res as any).flush === "function") {
               (res as any).flush();
@@ -102,8 +123,21 @@ export class AiProxyService {
             this.logger.debug("http.client.stream.end", {
               "upstream.service": "diad-agents",
             });
-            res.end();
-            resolve();
+            const finish = async () => {
+              if (onEnd) {
+                try {
+                  await onEnd();
+                } catch (err: any) {
+                  this.logger.warn("http.client.stream.on_end_failed", {
+                    "upstream.service": "diad-agents",
+                    "error.message": err?.message,
+                  });
+                }
+              }
+              res.end();
+              resolve();
+            };
+            void finish();
           });
 
           proxyRes.on("error", (err) => {

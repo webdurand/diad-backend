@@ -14,12 +14,15 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
+import { randomUUID } from "crypto";
 import { AuthGuard } from "../auth/auth.guard";
 import { AdminGuard } from "../auth/admin.guard";
 import { AiProxyService } from "./ai-proxy.service";
 import { SessionResumeService } from "../session/services/session-resume.service";
 import { SessionRecapService } from "../session/services/session-recap.service";
 import { SceneService } from "../session/services/scene.service";
+import { SessionMessageService } from "../session/services/session-message.service";
+import { SseNarrationCollector } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import type { AuthRequest } from "../auth/auth.types";
 
@@ -33,7 +36,63 @@ export class AiProxyController {
     private readonly resumeService: SessionResumeService,
     private readonly recapService: SessionRecapService,
     private readonly sceneService: SceneService,
+    private readonly sessionMessageService: SessionMessageService,
   ) {}
+
+  /**
+   * Persiste input do user (`player_action`) ANTES do pipeStream pra garantir
+   * que o turno fica registrado mesmo se o agents falhar mid-stream. Idempotente
+   * via `clientId` — frontend usa `entry-N`, backend usa `srv-act-*`.
+   */
+  private async persistPlayerAction(
+    sessionId: string,
+    userId: string,
+    content: string,
+    clientId: string | undefined,
+  ): Promise<void> {
+    if (!content || !content.trim()) return;
+    try {
+      await this.sessionMessageService.append({
+        sessionId,
+        userId,
+        kind: "player_action",
+        content,
+        clientId: clientId ?? `srv-act-${randomUUID()}`,
+      });
+    } catch (err: any) {
+      this.logger.warn(
+        `player_action persist failed (session=${sessionId}): ${err?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Persiste narração final (`narration`) DEPOIS do pipeStream finalizar.
+   * Bloqueante (await) — o stream já foi entregue ao client via `res.end()`
+   * interno do pipeStream; aguardar aqui só atrasa a Promise do controller,
+   * garantindo que `GET /sessions/:id/messages` logo em seguida veja a
+   * narração nova. Tolera erro pra não derrubar o request.
+   */
+  private async persistNarration(
+    sessionId: string,
+    userId: string,
+    narration: string,
+  ): Promise<void> {
+    if (!narration || !narration.trim()) return;
+    try {
+      await this.sessionMessageService.append({
+        sessionId,
+        userId,
+        kind: "narration",
+        content: narration,
+        clientId: `srv-narr-${randomUUID()}`,
+      });
+    } catch (err: any) {
+      this.logger.warn(
+        `narration persist failed (session=${sessionId}): ${err?.message}`,
+      );
+    }
+  }
 
   // ────── Assistente D&D ──────
 
@@ -112,6 +171,7 @@ export class AiProxyController {
       // continuidade. Em fresh session ctx vem vazio (degrade-graceful);
       // em re-render pós-retomada, ctx tem scene/recap → DM mantém estado.
       const ctx = await this.resumeService.assemble(sessionId);
+      const collector = new SseNarrationCollector();
       await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/narrate-start`,
         {
@@ -127,6 +187,8 @@ export class AiProxyController {
           gapMinutes: ctx.gapMinutes,
         },
         res,
+        (chunk) => collector.feed(chunk),
+        () => this.persistNarration(sessionId, req.user!.id, collector.finalize()),
       );
     } catch (err: any) {
       this.logger.error(`Solo narrate-start error: ${err.message}`);
@@ -138,7 +200,12 @@ export class AiProxyController {
   @Post("solo/:sessionId/message")
   async soloMessage(
     @Param("sessionId") sessionId: string,
-    @Body() body: { message: string; lastMessageId?: number | null },
+    @Body()
+    body: {
+      message: string;
+      lastMessageId?: number | null;
+      clientId?: string;
+    },
     @Req() req: AuthRequest,
     @Res() res: Response,
   ) {
@@ -182,6 +249,16 @@ export class AiProxyController {
         ctx.isResumed ? "true" : "false",
       );
 
+      // Spec 024 follow-up — fonte de verdade do histórico não pode depender
+      // do client persistir. Backend grava player_action ANTES do stream
+      // (sobrevive a falha no agents) e narration DEPOIS (fire-and-forget).
+      await this.persistPlayerAction(
+        sessionId,
+        req.user!.id,
+        body.message,
+        body.clientId,
+      );
+      const collector = new SseNarrationCollector();
       await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/message`,
         {
@@ -199,6 +276,8 @@ export class AiProxyController {
           gapMinutes: ctx.gapMinutes,
         },
         res,
+        (chunk) => collector.feed(chunk),
+        () => this.persistNarration(sessionId, req.user!.id, collector.finalize()),
       );
     } catch (err: any) {
       this.logger.error(`Solo message error: ${err.message}`);
@@ -218,6 +297,7 @@ export class AiProxyController {
       spellId?: string;
       text?: string;
       lastMessageId?: number | null;
+      clientId?: string;
     },
     @Req() req: AuthRequest,
     @Res() res: Response,
@@ -248,6 +328,22 @@ export class AiProxyController {
         return;
       }
 
+      // Spec 024 follow-up — persiste a intenção do jogador como player_action.
+      // Body livre (`text`) tem prioridade; senão monta string sintética da
+      // ação estruturada pra ficar legível na timeline + retomada.
+      const actionContent =
+        body.text && body.text.trim().length > 0
+          ? body.text
+          : `${body.type}${body.actionId ? `:${body.actionId}` : ""}${
+              body.targetId ? ` → ${body.targetId}` : ""
+            }${body.spellId ? ` (${body.spellId})` : ""}`;
+      await this.persistPlayerAction(
+        sessionId,
+        req.user!.id,
+        actionContent,
+        body.clientId,
+      );
+      const collector = new SseNarrationCollector();
       await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/action`,
         {
@@ -264,6 +360,8 @@ export class AiProxyController {
           gapMinutes: ctx.gapMinutes,
         },
         res,
+        (chunk) => collector.feed(chunk),
+        () => this.persistNarration(sessionId, req.user!.id, collector.finalize()),
       );
     } catch (err: any) {
       this.logger.error(`Solo action error: ${err.message}`);
