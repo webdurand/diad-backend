@@ -100,6 +100,8 @@ import { DyingStateService } from "./services/dying-state.service";
 import type { DyingState, DyingReason } from "./services/dying-state.service";
 import { LootRollService } from "./services/loot-roll.service";
 import type { CRBand, LootMode } from "./services/loot-roll.service";
+import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
+import { StartEncounterFromNarrativeDto } from "./dto/start-encounter-from-narrative.dto";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
@@ -186,6 +188,7 @@ export class GameEngineController {
     private readonly revivifyCheckService: RevivifyCheckService,
     private readonly dyingStateService: DyingStateService,
     private readonly lootRollService: LootRollService,
+    private readonly startEncounterFromNarrativeService: StartEncounterFromNarrativeService,
   ) {}
 
   // ==================== SPEC 020 — TOOL SURFACE COMPLETION ====================
@@ -269,6 +272,35 @@ export class GameEngineController {
   ) {
     void req;
     const result = await this.lootRollService.roll(body);
+    return { ok: true as const, value: result };
+  }
+
+  /**
+   * Spec 020 — start_encounter_from_narrative.
+   * POST /game/sessions/:sessionId/encounters/from-narrative
+   *
+   * Orquestra narrativa→combate: cria encounter, materializa NPCs hostis,
+   * posiciona tokens, inicia combate, opcionalmente aplica Surprised round.
+   * Emite EncounterEvent.encounter_started.
+   */
+  @Post("sessions/:sessionId/encounters/from-narrative")
+  async startEncounterFromNarrative(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Body() dto: StartEncounterFromNarrativeDto,
+  ) {
+    const ownerUserId = getUserId(req);
+    const result = await this.startEncounterFromNarrativeService.run({
+      sessionId,
+      sceneId: dto.sceneId,
+      attackerParticipantId: dto.attackerParticipantId ?? null,
+      targetNpcIds: dto.targetNpcIds,
+      surpriseRound: dto.surpriseRound ?? false,
+      autoPlaceTokens: dto.autoPlaceTokens ?? true,
+      narrativeTrigger: dto.narrativeTrigger,
+      campaignId: dto.campaignId,
+      ownerUserId,
+    });
     return { ok: true as const, value: result };
   }
 

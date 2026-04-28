@@ -119,6 +119,9 @@ import { RevivifyCheckService } from "./services/revivify-check.service";
 import { DyingStateService } from "./services/dying-state.service";
 import { LootRollService } from "./services/loot-roll.service";
 import { ToolEventEmitService } from "./services/tool-event-emit.service";
+import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
+import { SceneEntity } from "src/entities/scene.entity";
+import { NpcEntity } from "src/entities/npc.entity";
 
 @Module({
   imports: [
@@ -145,6 +148,9 @@ import { ToolEventEmitService } from "./services/tool-event-emit.service";
       RestEventTemplateEntity,
       ReactionDefaultEntity,
       XpAwardEventEntity,
+      // Spec 020 — start_encounter_from_narrative
+      SceneEntity,
+      NpcEntity,
     ]),
     AuthModule,
     CharactersModule,
@@ -241,6 +247,7 @@ import { ToolEventEmitService } from "./services/tool-event-emit.service";
     DyingStateService,
     LootRollService,
     ToolEventEmitService,
+    StartEncounterFromNarrativeService,
   ],
   exports: [
     DiceService,
