@@ -94,6 +94,32 @@ export class AiProxyController {
     }
   }
 
+  /**
+   * Spec 024 follow-up — emite chunk SSE `session_sync` com o `lastSequenceNumber`
+   * server-authoritative ao final do stream. Frontend usa pra ressincronizar
+   * `lastMessageIdRef` e evitar 409 (`SESSION_LAST_MESSAGE_MISMATCH`) no
+   * próximo turn. Best-effort: falha aqui não derruba o stream.
+   */
+  private async emitSessionSync(
+    sessionId: string,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const lastSequenceNumber =
+        await this.sessionMessageService.getMaxSequenceNumber(sessionId);
+      res.write(
+        `data: ${JSON.stringify({
+          type: "session_sync",
+          lastSequenceNumber,
+        })}\n\n`,
+      );
+    } catch (err: any) {
+      this.logger.warn(
+        `session_sync emit failed (session=${sessionId}): ${err?.message}`,
+      );
+    }
+  }
+
   // ────── Assistente D&D ──────
 
   @Post("assistant/message")
@@ -188,7 +214,14 @@ export class AiProxyController {
         },
         res,
         (chunk) => collector.feed(chunk),
-        () => this.persistNarration(sessionId, req.user!.id, collector.finalize()),
+        async () => {
+          await this.persistNarration(
+            sessionId,
+            req.user!.id,
+            collector.finalize(),
+          );
+          await this.emitSessionSync(sessionId, res);
+        },
       );
     } catch (err: any) {
       this.logger.error(`Solo narrate-start error: ${err.message}`);
@@ -277,7 +310,14 @@ export class AiProxyController {
         },
         res,
         (chunk) => collector.feed(chunk),
-        () => this.persistNarration(sessionId, req.user!.id, collector.finalize()),
+        async () => {
+          await this.persistNarration(
+            sessionId,
+            req.user!.id,
+            collector.finalize(),
+          );
+          await this.emitSessionSync(sessionId, res);
+        },
       );
     } catch (err: any) {
       this.logger.error(`Solo message error: ${err.message}`);
@@ -361,7 +401,14 @@ export class AiProxyController {
         },
         res,
         (chunk) => collector.feed(chunk),
-        () => this.persistNarration(sessionId, req.user!.id, collector.finalize()),
+        async () => {
+          await this.persistNarration(
+            sessionId,
+            req.user!.id,
+            collector.finalize(),
+          );
+          await this.emitSessionSync(sessionId, res);
+        },
       );
     } catch (err: any) {
       this.logger.error(`Solo action error: ${err.message}`);

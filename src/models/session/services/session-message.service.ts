@@ -119,12 +119,21 @@ export class SessionMessageService {
     }
   }
 
-  private async getNextSequence(sessionId: string): Promise<number> {
+  /**
+   * Spec 024 follow-up — exposto público pra ai-proxy emitir `session_sync`
+   * chunk no fim de cada turn (frontend ressincroniza `lastMessageIdRef`).
+   * Também consumido por session-resume.service no `serverLastMessageId`.
+   */
+  async getMaxSequenceNumber(sessionId: string): Promise<number> {
     const result = await this.messageRepo
       .createQueryBuilder("m")
       .select("COALESCE(MAX(m.sequence_number), 0)", "max")
       .where("m.session_id = :sessionId", { sessionId })
       .getRawOne();
-    return (parseInt(result?.max ?? "0", 10) || 0) + 1;
+    return parseInt(result?.max ?? "0", 10) || 0;
+  }
+
+  private async getNextSequence(sessionId: string): Promise<number> {
+    return (await this.getMaxSequenceNumber(sessionId)) + 1;
   }
 }

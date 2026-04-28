@@ -317,6 +317,97 @@ describe("PcPersonaService", () => {
     expect(persona.conditionsActive).toEqual([]);
   });
 
+  // Spec 024 follow-up — fix do 500 em /characters/<name>/persona quando
+  // tools agno (Spec 020 `get_pc_persona`) passam o nome ao invés do UUID.
+  describe("UUID-or-name resolution (Spec 024 follow-up)", () => {
+    it("resolve por UUID (caminho original preservado)", async () => {
+      const service = buildService({
+        character: makeCharacter(),
+        origin: makeOrigin(),
+        classes: [makeClass()],
+        abilities: makeAbilities(14),
+        state: makeState(),
+        levelUps: makeLevelUps(),
+      });
+      const persona = await service.assemblePersona(CHARACTER_ID, USER_ID);
+      expect(persona.characterId).toBe(CHARACTER_ID);
+    });
+
+    it("resolve por nome quando entrada não é UUID (LLM hallucination)", async () => {
+      const characterRepoMock = repoOf(makeCharacter());
+      const service = new PcPersonaService(
+        characterRepoMock as unknown as Repository<CharacterEntity>,
+        repoOf([makeClass()]) as unknown as Repository<CharacterClassEntity>,
+        repoOf(makeAbilities(14)) as unknown as Repository<CharacterAbilityScoreEntity>,
+        repoOf(makeState()) as unknown as Repository<CharacterStateEntity>,
+        repoOf(makeLevelUps()) as unknown as Repository<CharacterLevelUpEntity>,
+        repoOf([]) as unknown as Repository<CharacterEquipmentEntity>,
+        repoOf([]) as unknown as Repository<CharacterMagicItemEntity>,
+        repoOf(makeOrigin()) as unknown as Repository<CharacterOriginEntity>,
+      );
+
+      const persona = await service.assemblePersona("Aelara", USER_ID);
+
+      expect(persona.characterId).toBe(CHARACTER_ID);
+      // Lookup do character usou `name` (não `id`) porque entrada não bateu UUID_RE.
+      const findOneCall = characterRepoMock.findOne.mock.calls[0]?.[0] as {
+        where: Record<string, unknown>;
+      };
+      expect(findOneCall.where).toEqual({ name: "Aelara", userId: USER_ID });
+    });
+
+    it("levanta NotFoundException se nome não existe (não 500 com uuid parse)", async () => {
+      const service = buildService({ character: null });
+      await expect(
+        service.assemblePersona("inexistente", USER_ID),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("FK queries usam o UUID resolvido (não o nome) quando entrada é nome", async () => {
+      const originRepoMock = repoOf(makeOrigin());
+      const service = new PcPersonaService(
+        repoOf(makeCharacter()) as unknown as Repository<CharacterEntity>,
+        repoOf([makeClass()]) as unknown as Repository<CharacterClassEntity>,
+        repoOf(makeAbilities(14)) as unknown as Repository<CharacterAbilityScoreEntity>,
+        repoOf(makeState()) as unknown as Repository<CharacterStateEntity>,
+        repoOf(makeLevelUps()) as unknown as Repository<CharacterLevelUpEntity>,
+        repoOf([]) as unknown as Repository<CharacterEquipmentEntity>,
+        repoOf([]) as unknown as Repository<CharacterMagicItemEntity>,
+        originRepoMock as unknown as Repository<CharacterOriginEntity>,
+      );
+
+      await service.assemblePersona("Aelara", USER_ID);
+
+      // FK lookup do origin DEVE usar character_id = UUID real, não "Aelara"
+      // (caso contrário Postgres rejeita com `invalid input syntax for type uuid`).
+      const originCall = originRepoMock.findOne.mock.calls[0]?.[0] as {
+        where: Record<string, unknown>;
+      };
+      expect(originCall.where).toEqual({ character_id: CHARACTER_ID });
+    });
+
+    it("acesso interno (userId=null) também aceita nome", async () => {
+      const characterRepoMock = repoOf(makeCharacter());
+      const service = new PcPersonaService(
+        characterRepoMock as unknown as Repository<CharacterEntity>,
+        repoOf([makeClass()]) as unknown as Repository<CharacterClassEntity>,
+        repoOf(makeAbilities(14)) as unknown as Repository<CharacterAbilityScoreEntity>,
+        repoOf(makeState()) as unknown as Repository<CharacterStateEntity>,
+        repoOf(makeLevelUps()) as unknown as Repository<CharacterLevelUpEntity>,
+        repoOf([]) as unknown as Repository<CharacterEquipmentEntity>,
+        repoOf([]) as unknown as Repository<CharacterMagicItemEntity>,
+        repoOf(makeOrigin()) as unknown as Repository<CharacterOriginEntity>,
+      );
+
+      const persona = await service.assemblePersona("Aelara", null);
+      expect(persona.characterId).toBe(CHARACTER_ID);
+      const findOneCall = characterRepoMock.findOne.mock.calls[0]?.[0] as {
+        where: Record<string, unknown>;
+      };
+      expect(findOneCall.where).toEqual({ name: "Aelara" });
+    });
+  });
+
   it("keyEquipmentSummary cap em 5 itens", async () => {
     const equipment = Array.from({ length: 8 }, (_, i) => ({
       equipped: true,

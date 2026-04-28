@@ -23,6 +23,11 @@ import {
 
 const PERSONA_FIELDS = ["trait", "ideal", "bond", "flaw", "backstory"] as const;
 
+// RFC 4122 v1-v5 — usado pra distinguir UUID real de nome de PC quando tools
+// agno chamam `get_pc_persona(character_id="goma")` (alucinação de LLM).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const VALID_ALIGNMENTS = new Set<PCPersonaAlignment>([
   "lawful-good",
   "neutral-good",
@@ -78,14 +83,29 @@ export class PcPersonaService {
    * em fluxo já autenticado pelo SessionController guard).
    */
   async assemblePersona(
-    characterId: string,
+    characterIdOrName: string,
     userId: string | null,
   ): Promise<PCPersona> {
-    const where = userId ? { id: characterId, userId } : { id: characterId };
+    // Defensive: tools agno (Spec 020) ocasionalmente passam o NOME do PC
+    // ao invés do UUID — LLM enxerga `playerCharacter.name` no prompt e
+    // alucina como identificador. Antes desta resolução, Postgres rejeitava
+    // com `invalid input syntax for type uuid` (500). Aceita UUID OU nome
+    // (case-sensitive — character names já são únicos por user).
+    const isUuid = UUID_RE.test(characterIdOrName);
+    const where = userId
+      ? isUuid
+        ? { id: characterIdOrName, userId }
+        : { name: characterIdOrName, userId }
+      : isUuid
+      ? { id: characterIdOrName }
+      : { name: characterIdOrName };
     const character = await this.characterRepo.findOne({ where });
     if (!character) {
       throw new NotFoundException("Personagem nao encontrado.");
     }
+    // FK queries abaixo precisam do UUID real — se entrada foi nome, usa
+    // o resolvido (caso contrário PG falha com mesma uuid parse error).
+    const characterId = character.id;
 
     const [
       charOrigin,
