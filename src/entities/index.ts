@@ -97,6 +97,9 @@ import { AudienceRoutingEntity } from "./audience-routing.entity";
 import { CampaignAudienceOverrideEntity } from "./campaign-audience-override.entity";
 import { EventSubscriberEntity } from "./event-subscriber.entity";
 import { EventListenerProcessedEntity } from "./event-listener-processed.entity";
+// Spec 019 — Living World & Ambiance
+import { WeatherEntity } from "./weather.entity";
+import { GameClockEntity } from "./game-clock.entity";
 
 export {
   AbilityScoreEntity,
@@ -196,6 +199,8 @@ export {
   CampaignAudienceOverrideEntity,
   EventSubscriberEntity,
   EventListenerProcessedEntity,
+  WeatherEntity,
+  GameClockEntity,
 };
 
 export const ENTITIES = [
@@ -296,6 +301,8 @@ export const ENTITIES = [
   CampaignAudienceOverrideEntity,
   EventSubscriberEntity,
   EventListenerProcessedEntity,
+  WeatherEntity,
+  GameClockEntity,
 ];
 
 export * from "./enums";

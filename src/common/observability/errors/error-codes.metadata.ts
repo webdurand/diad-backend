@@ -208,6 +208,34 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "O header traceparent precisa seguir o formato W3C 00-{32hex}-{16hex}-{2hex}.",
     domain: "event-bus",
   },
+
+  // world / ambiance (spec 019)
+  [ErrorCode.WEATHER_INVALID_BIOME]: {
+    httpStatus: 422,
+    defaultTitle: "Invalid biome",
+    defaultHint:
+      "Biomes válidos: forest, plains, mountain, swamp, desert.",
+    domain: "world",
+  },
+  [ErrorCode.CLOCK_NEGATIVE_HOURS]: {
+    httpStatus: 422,
+    defaultTitle: "Invalid clock advance",
+    defaultHint: "hours deve ser positivo (>0) e ≤ 168 (1 semana).",
+    domain: "world",
+  },
+  [ErrorCode.CHAOS_OUT_OF_RANGE]: {
+    httpStatus: 422,
+    defaultTitle: "Chaos factor out of range",
+    defaultHint: "chaosFactor deve ser inteiro entre 1 e 9 (Mythic GME).",
+    domain: "world",
+  },
+  [ErrorCode.SPELL_BLOCKED_DEAD_MAGIC]: {
+    httpStatus: 409,
+    defaultTitle: "Spell blocked by dead magic",
+    defaultHint:
+      "Dead magic zone bloqueia spells de nível 1+; cantrips exigem ability check DC 11.",
+    domain: "spell",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {

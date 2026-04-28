@@ -53,6 +53,12 @@ export const ErrorCode = {
   // event bus (spec 017)
   EVENT_TYPE_NOT_REGISTERED: "EVENT_TYPE_NOT_REGISTERED",
   TRACE_ID_INVALID: "TRACE_ID_INVALID",
+
+  // world / ambiance (spec 019)
+  WEATHER_INVALID_BIOME: "WEATHER_INVALID_BIOME",
+  CLOCK_NEGATIVE_HOURS: "CLOCK_NEGATIVE_HOURS",
+  CHAOS_OUT_OF_RANGE: "CHAOS_OUT_OF_RANGE",
+  SPELL_BLOCKED_DEAD_MAGIC: "SPELL_BLOCKED_DEAD_MAGIC",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

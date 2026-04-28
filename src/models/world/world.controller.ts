@@ -17,6 +17,15 @@ import { LocationService } from "./services/location.service";
 import { NpcService } from "./services/npc.service";
 import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
+// Spec 019 — Living World & Ambiance
+import { AmbianceService } from "./services/ambiance.service";
+import { WeatherService, type Biome } from "./services/weather.service";
+import { GameClockService } from "./services/game-clock.service";
+import {
+  ChaosFactorService,
+  type ChaosSource,
+} from "./services/chaos-factor.service";
+import { Headers } from "@nestjs/common";
 import type {
   CreateCampaignDto,
   UpdateCampaignDto,
@@ -45,6 +54,31 @@ function getUserId(req: AuthRequest): string {
   return id;
 }
 
+/** W3C traceparent: `00-<32hex traceId>-<16hex spanId>-<flags>`. */
+function extractTraceId(traceparent: string | undefined): string | undefined {
+  if (!traceparent) return undefined;
+  const parts = traceparent.split("-");
+  if (parts.length < 4) return undefined;
+  const traceId = parts[1];
+  if (!/^[0-9a-f]{32}$/.test(traceId)) return undefined;
+  return traceId;
+}
+
+interface RollWeatherBody {
+  biome: Biome;
+  sceneId?: string | null;
+}
+
+interface AdvanceClockBody {
+  hours: number;
+  trigger?: "scene_transition" | "long_rest" | "combat_ended" | "manual_tool";
+}
+
+interface SetChaosBody {
+  value: number;
+  source: ChaosSource;
+}
+
 @Controller("campaigns")
 @UseGuards(AuthGuard)
 export class WorldController {
@@ -54,7 +88,82 @@ export class WorldController {
     private readonly npcService: NpcService,
     private readonly factionService: FactionService,
     private readonly questService: QuestService,
+    // Spec 019 — Living World & Ambiance
+    private readonly ambianceService: AmbianceService,
+    private readonly weatherService: WeatherService,
+    private readonly gameClockService: GameClockService,
+    private readonly chaosFactorService: ChaosFactorService,
   ) {}
+
+  // ==================== AMBIANCE (Spec 019) ====================
+
+  /**
+   * Spec 019 — payload agregado consumido pelo agent (`get_ambiance`) e
+   * frontend (`useAmbiancePill`). Inclui weather, timeOfDay (derivado),
+   * chaosFactor, clocks visíveis e summary narrativo PT-BR.
+   */
+  @Get(":id/ambiance")
+  async getAmbiance(
+    @Param("id") campaignId: string,
+    @Query("sceneId") sceneId?: string,
+  ) {
+    return this.ambianceService.assemble(campaignId, sceneId ?? null);
+  }
+
+  @Post(":id/weather/roll")
+  async rollWeather(
+    @Param("id") campaignId: string,
+    @Body() body: RollWeatherBody,
+    @Headers("traceparent") traceparent?: string,
+  ) {
+    const traceId = extractTraceId(traceparent);
+    const row = await this.weatherService.rollWeather(
+      campaignId,
+      body.biome,
+      { sceneId: body.sceneId ?? null, traceId },
+    );
+    return this.weatherService.toDto(row);
+  }
+
+  @Post(":id/clock/advance")
+  async advanceClock(
+    @Param("id") campaignId: string,
+    @Body() body: AdvanceClockBody,
+    @Headers("traceparent") traceparent?: string,
+  ) {
+    const traceId = extractTraceId(traceparent);
+    const result = await this.gameClockService.advanceTime(campaignId, {
+      hours: body.hours,
+      trigger: body.trigger,
+      traceId,
+    });
+    return {
+      campaignId,
+      currentInGameDateTime: result.clock.currentInGameDateTime.toISOString(),
+      daysPassed: result.clock.daysPassed,
+      timeOfDay: result.timeOfDay,
+      previousTimeOfDay: result.previousTimeOfDay,
+    };
+  }
+
+  /**
+   * Spec 019 — DM-only. `source` deve ser `director` ou `event` (decisão
+   * 2026-04-27: chaos não tem slider pra player).
+   */
+  @Patch(":id/chaos")
+  async setChaos(
+    @Param("id") campaignId: string,
+    @Body() body: SetChaosBody,
+    @Headers("traceparent") traceparent?: string,
+  ) {
+    const traceId = extractTraceId(traceparent);
+    return this.chaosFactorService.setChaosFactor(
+      campaignId,
+      body.value,
+      body.source,
+      { traceId },
+    );
+  }
 
   // ==================== CAMPAIGNS ====================
 

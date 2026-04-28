@@ -21,6 +21,11 @@ import {
   MonsterEntity,
   EquipmentEntity,
   MagicItemEntity,
+  // Spec 019
+  WeatherEntity,
+  GameClockEntity,
+  ClockEntity,
+  SceneEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { WorldController } from "./world.controller";
@@ -29,6 +34,11 @@ import { LocationService } from "./services/location.service";
 import { NpcService } from "./services/npc.service";
 import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
+// Spec 019 — Living World & Ambiance
+import { AmbianceService } from "./services/ambiance.service";
+import { WeatherService } from "./services/weather.service";
+import { GameClockService } from "./services/game-clock.service";
+import { ChaosFactorService } from "./services/chaos-factor.service";
 
 @Module({
   imports: [
@@ -53,6 +63,11 @@ import { QuestService } from "./services/quest.service";
       MonsterEntity,
       EquipmentEntity,
       MagicItemEntity,
+      // Spec 019
+      WeatherEntity,
+      GameClockEntity,
+      ClockEntity,
+      SceneEntity,
     ]),
     AuthModule,
   ],
@@ -63,6 +78,11 @@ import { QuestService } from "./services/quest.service";
     NpcService,
     FactionService,
     QuestService,
+    // Spec 019 — Living World & Ambiance
+    AmbianceService,
+    WeatherService,
+    GameClockService,
+    ChaosFactorService,
   ],
   exports: [
     CampaignService,
@@ -70,6 +90,11 @@ import { QuestService } from "./services/quest.service";
     NpcService,
     FactionService,
     QuestService,
+    // Spec 019
+    AmbianceService,
+    WeatherService,
+    GameClockService,
+    ChaosFactorService,
   ],
 })
 export class WorldModule {}

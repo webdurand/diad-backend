@@ -10,9 +10,11 @@ import {
 } from "../errors/error-codes.metadata";
 
 describe("Error Codes Catalog", () => {
-  it("contém os 29 codes do catálogo canônico", () => {
+  it("contém os 33 codes do catálogo canônico", () => {
     // Spec 017 adicionou EVENT_TYPE_NOT_REGISTERED + TRACE_ID_INVALID.
-    expect(ALL_ERROR_CODES.length).toBe(29);
+    // Spec 019 adicionou WEATHER_INVALID_BIOME, CLOCK_NEGATIVE_HOURS,
+    // CHAOS_OUT_OF_RANGE, SPELL_BLOCKED_DEAD_MAGIC.
+    expect(ALL_ERROR_CODES.length).toBe(33);
   });
 
   it("todos os codes seguem o regex SCREAMING_SNAKE", () => {
