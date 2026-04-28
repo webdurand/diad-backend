@@ -4,6 +4,12 @@ import { Repository } from "typeorm";
 import { NpcEntity } from "src/entities/npc.entity";
 import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
 import { randomBytes } from "crypto";
+import {
+  NpcProjectionOptions,
+  ProjectedNpc,
+  projectNpc,
+  projectNpcs,
+} from "./npc-projection";
 
 export interface CreateNpcDto {
   name: string;
@@ -63,6 +69,11 @@ export class NpcService {
     return this.npcRepo.save(npc);
   }
 
+  /**
+   * Retorna NPC RAW (sem redaction). Uso interno do backend (services
+   * que dependem de descriptionHidden/personality/etc — ex: scene-builders,
+   * combat AI, dm-omniscient bypass). Controllers devem preferir getProjectedById.
+   */
   async getById(npcId: string): Promise<NpcEntity> {
     const npc = await this.npcRepo.findOne({
       where: { id: npcId },
@@ -72,12 +83,34 @@ export class NpcService {
     return npc;
   }
 
+  /** Spec 020 — variante com redaction filter aplicado. */
+  async getProjectedById(
+    npcId: string,
+    options: NpcProjectionOptions = {},
+  ): Promise<ProjectedNpc> {
+    const npc = await this.getById(npcId);
+    return projectNpc(npc, options);
+  }
+
+  /**
+   * Retorna lista RAW (sem redaction). Uso interno apenas. Controllers do
+   * agent-facing devem usar listByCampaignProjected.
+   */
   async listByCampaign(campaignId: string): Promise<NpcEntity[]> {
     return this.npcRepo.find({
       where: { campaignId },
       relations: ["currentLocation"],
       order: { name: "ASC" },
     });
+  }
+
+  /** Spec 020 — variante com redaction filter aplicado. */
+  async listByCampaignProjected(
+    campaignId: string,
+    options: NpcProjectionOptions = {},
+  ): Promise<ProjectedNpc[]> {
+    const npcs = await this.listByCampaign(campaignId);
+    return projectNpcs(npcs, options);
   }
 
   async update(npcId: string, dto: Partial<CreateNpcDto>): Promise<NpcEntity> {

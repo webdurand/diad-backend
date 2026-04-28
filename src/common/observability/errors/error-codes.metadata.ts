@@ -236,6 +236,192 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Dead magic zone bloqueia spells de nível 1+; cantrips exigem ability check DC 11.",
     domain: "spell",
   },
+
+  // tool surface completion (spec 020)
+  [ErrorCode.ENCOUNTER_CREATE_FAILED]: {
+    httpStatus: 422,
+    defaultTitle: "Failed to create encounter from narrative",
+    defaultHint:
+      "Verificar se a cena ainda existe e se os NPCs alvos estão na mesma localização.",
+    domain: "encounter",
+  },
+  [ErrorCode.REVIVIFY_INELIGIBLE]: {
+    httpStatus: 422,
+    defaultTitle: "Revivify not applicable",
+    defaultHint:
+      "Janela RAW é 1 minuto desde a morte. Diamante de 300gp consumido como componente. Corpo precisa estar intacto.",
+    domain: "spell",
+  },
+  [ErrorCode.REVIVIFY_TARGET_NOT_DEAD]: {
+    httpStatus: 409,
+    defaultTitle: "Revivify target is not dead",
+    defaultHint:
+      "Use Spare the Dying ou Healing Word se ainda está estabilizando.",
+    domain: "spell",
+  },
+  [ErrorCode.REVIVIFY_BODY_DESTROYED]: {
+    httpStatus: 422,
+    defaultTitle: "Body destroyed prevents Revivify",
+    defaultHint:
+      "Necessário Resurrection ou True Resurrection para corpo destruído.",
+    domain: "spell",
+  },
+  [ErrorCode.CONDITION_INVALID_SLUG]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid condition slug",
+    defaultHint:
+      "Condições válidas: blinded, charmed, deafened, frightened, grappled, incapacitated, invisible, paralyzed, petrified, poisoned, prone, restrained, stunned, unconscious, exhaustion.",
+    domain: "combat",
+  },
+  [ErrorCode.CONDITION_TARGET_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Condition target not found",
+    defaultHint: "Verifique target_type (pc | npc) e que o id existe.",
+    domain: "combat",
+  },
+  [ErrorCode.CONDITION_DURATION_INVALID]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid condition duration hint",
+    defaultHint:
+      "Use: instant, 1_minute, 10_minutes, 1_hour, 24_hours, until_long_rest, until_cured.",
+    domain: "combat",
+  },
+  [ErrorCode.EXHAUSTION_LEVELS_REQUIRED]: {
+    httpStatus: 400,
+    defaultTitle: "Exhaustion levels required",
+    defaultHint: "Exhaustion exige campo exhaustion_levels (1-6, RAW 2024).",
+    domain: "combat",
+  },
+  [ErrorCode.CONDITION_BLOCKED_BY_IMMUNITY]: {
+    httpStatus: 200,
+    defaultTitle: "Condition blocked by immunity",
+    defaultHint:
+      "Alvo é imune via feature/feat/spell — narrar resistência em vez de aplicar.",
+    domain: "combat",
+  },
+  [ErrorCode.INVENTORY_ITEM_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Item not found in inventory",
+    defaultHint: "Verificar se o item já foi consumido/removido em turn anterior.",
+    domain: "inventory",
+  },
+  [ErrorCode.ITEM_OWNERSHIP_MISMATCH]: {
+    httpStatus: 403,
+    defaultTitle: "Item belongs to a different character",
+    defaultHint: "Use o character_id correto do dono do item.",
+    domain: "inventory",
+  },
+  [ErrorCode.CURRENCY_NEGATIVE_FORBIDDEN]: {
+    httpStatus: 422,
+    defaultTitle: "Currency balance cannot be negative",
+    defaultHint:
+      "DM pode forçar via narrativa diferente (ex: PC tomou empréstimo) — modelar como evento próprio.",
+    domain: "inventory",
+  },
+  [ErrorCode.CURRENCY_DELTA_EMPTY]: {
+    httpStatus: 400,
+    defaultTitle: "At least one currency delta is required",
+    defaultHint: "Pelo menos um de delta_cp/sp/gp/pp deve ser não-zero.",
+    domain: "inventory",
+  },
+  [ErrorCode.NPC_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "NPC not found",
+    defaultHint: "Verificar se o NPC ainda existe nessa campanha.",
+    domain: "npc",
+  },
+  [ErrorCode.NPC_LOCATION_MISMATCH]: {
+    httpStatus: 422,
+    defaultTitle: "NPC cannot move to target location",
+    defaultHint: "Verificar getConnections para validar movimento.",
+    domain: "npc",
+  },
+  [ErrorCode.NPC_DUPLICATE_NAME]: {
+    httpStatus: 409,
+    defaultTitle: "Duplicate NPC name in campaign",
+    defaultHint:
+      "Reusar NPC existente em vez de criar duplicado (Princípio bounded world).",
+    domain: "npc",
+  },
+  [ErrorCode.ROLE_HINT_INVALID]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid role hint",
+    defaultHint:
+      "Use: commoner, guard, merchant, scholar, criminal, innkeeper, noble, child, elder, soldier.",
+    domain: "npc",
+  },
+  [ErrorCode.LOCATION_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Location not found",
+    defaultHint: "Verificar se a localização ainda existe na campanha.",
+    domain: "world",
+  },
+  [ErrorCode.SCENE_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Scene not found",
+    defaultHint: "Cena pode ter sido encerrada — chamar get_active_scene.",
+    domain: "session",
+  },
+  [ErrorCode.NPC_NOT_HOSTILE_CAPABLE]: {
+    httpStatus: 422,
+    defaultTitle: "NPC cannot enter combat",
+    defaultHint:
+      "NPC sem monsterId não tem stats. Use create_npc_from_narrative para aplicar default por role_hint.",
+    domain: "encounter",
+  },
+  [ErrorCode.PARTICIPANT_PLACEMENT_FAILED]: {
+    httpStatus: 500,
+    defaultTitle: "Auto token placement failed",
+    defaultHint:
+      "Tentar com auto_place_tokens=false e chamar place_tokens manualmente.",
+    domain: "encounter",
+  },
+  [ErrorCode.LOOT_TABLE_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Loot table not found",
+    defaultHint: "Verificar slug ou usar cr_band para gerar tabela ad-hoc.",
+    domain: "loot",
+  },
+  [ErrorCode.LOOT_ALREADY_ROLLED]: {
+    httpStatus: 409,
+    defaultTitle: "Loot table already rolled",
+    defaultHint:
+      "Tabelas DIAD são single-shot. Para loot recorrente, criar nova LootTableEntity ou usar cr_band ad-hoc.",
+    domain: "loot",
+  },
+  [ErrorCode.LOOT_PARAMS_INVALID]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid loot roll parameters",
+    defaultHint:
+      "Esperado exatamente um de: table_slug, cr_band+hoard_or_individual, monster_slug.",
+    domain: "loot",
+  },
+  [ErrorCode.MONSTER_HAS_NO_LOOT]: {
+    httpStatus: 404,
+    defaultTitle: "Monster has no canonical loot",
+    defaultHint: "Use cr_band para gerar loot ad-hoc.",
+    domain: "loot",
+  },
+  [ErrorCode.PARTICIPANT_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Participant not found",
+    defaultHint: "Verificar se o participant ainda existe no encounter.",
+    domain: "encounter",
+  },
+  [ErrorCode.DYING_STATE_TRANSITION_INVALID]: {
+    httpStatus: 422,
+    defaultTitle: "Dying state transition not allowed",
+    defaultHint:
+      "Transições válidas: none↔dying, dying→stable, dying→dead, stable→none (com HP+), stable→dying (novo dano), * → captured (extensão DIAD).",
+    domain: "encounter",
+  },
+  [ErrorCode.DYING_STATE_REQUIRES_HP_RESTORE]: {
+    httpStatus: 422,
+    defaultTitle: "Stable to none requires HP restore",
+    defaultHint:
+      "RAW: stable mantém 0HP. Apply healing antes de transicionar para none.",
+    domain: "encounter",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {

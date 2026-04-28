@@ -94,6 +94,12 @@ import type {
 import { XpAwardService } from "./services/xp-award.service";
 import { DiceRollService } from "./services/dice-roll.service";
 import type { XpAwardSource } from "src/entities/xp-award-event.entity";
+// Spec 020 — Tool Surface Completion
+import { RevivifyCheckService } from "./services/revivify-check.service";
+import { DyingStateService } from "./services/dying-state.service";
+import type { DyingState, DyingReason } from "./services/dying-state.service";
+import { LootRollService } from "./services/loot-roll.service";
+import type { CRBand, LootMode } from "./services/loot-roll.service";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
@@ -176,7 +182,91 @@ export class GameEngineController {
     private readonly xpAwardService: XpAwardService,
     // Spec 016 M2 — Dice request lifecycle (active checks via SSE)
     private readonly diceRollService: DiceRollService,
+    // Spec 020 — Tool Surface Completion
+    private readonly revivifyCheckService: RevivifyCheckService,
+    private readonly dyingStateService: DyingStateService,
+    private readonly lootRollService: LootRollService,
   ) {}
+
+  // ==================== SPEC 020 — TOOL SURFACE COMPLETION ====================
+
+  /**
+   * Spec 020 — Revivify check (RAW pure, stateless).
+   * Body: { characterId, timeSinceDeathMin, hasDiamond300gp, casterCharacterId?, campaignId? }
+   */
+  @Post("spells/revivify-check")
+  async revivifyCheck(
+    @Req() req: AuthRequest,
+    @Body()
+    body: {
+      characterId: string;
+      timeSinceDeathMin: number;
+      hasDiamond300gp?: boolean;
+      casterCharacterId?: string | null;
+      campaignId?: string;
+    },
+  ) {
+    void req;
+    const result = await this.revivifyCheckService.check({
+      characterId: body.characterId,
+      timeSinceDeathMin: body.timeSinceDeathMin,
+      hasDiamond300gp: body.hasDiamond300gp,
+      casterCharacterId: body.casterCharacterId,
+      campaignId: body.campaignId,
+    });
+    return { ok: true as const, value: result };
+  }
+
+  /**
+   * Spec 020 — set_dying_state.
+   * PATCH /game/encounters/:id/participants/:pid/dying-state
+   */
+  @Patch("encounters/:id/participants/:pid/dying-state")
+  async setDyingState(
+    @Req() req: AuthRequest,
+    @Param("id") encounterId: string,
+    @Param("pid") participantId: string,
+    @Body()
+    body: {
+      state: DyingState;
+      reason: DyingReason;
+      narrativeDescriptor?: string;
+      campaignId?: string;
+    },
+  ) {
+    void req;
+    const result = await this.dyingStateService.setState({
+      participantId,
+      state: body.state,
+      reason: body.reason,
+      narrativeDescriptor: body.narrativeDescriptor,
+      encounterId,
+      campaignId: body.campaignId,
+    });
+    return { ok: true as const, value: result };
+  }
+
+  /**
+   * Spec 020 — roll_loot_table.
+   * POST /game/loot/roll
+   */
+  @Post("loot/roll")
+  async rollLootTable(
+    @Req() req: AuthRequest,
+    @Body()
+    body: {
+      campaignId: string;
+      tableSlug?: string;
+      crBand?: CRBand;
+      monsterSlug?: string;
+      hoardOrIndividual?: LootMode;
+      awardToCharacterId?: string | null;
+    },
+  ) {
+    void req;
+    const result = await this.lootRollService.roll(body);
+    return { ok: true as const, value: result };
+  }
 
   // ==================== SESSIONS ====================
 

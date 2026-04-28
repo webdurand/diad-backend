@@ -38,6 +38,7 @@ import type {
   AddConnectionDto,
 } from "./services/location.service";
 import type { CreateNpcDto, AddRelationshipDto } from "./services/npc.service";
+import { isDmOmniscient } from "./services/npc-projection";
 import type {
   CreateFactionDto,
   SetFactionRelationDto,
@@ -343,19 +344,30 @@ export class WorldController {
   }
 
   @Get(":id/npcs")
-  async listNpcs(@Req() req: AuthRequest, @Param("id") id: string) {
+  async listNpcs(
+    @Req() req: AuthRequest,
+    @Headers() headers: Record<string, string>,
+    @Param("id") id: string,
+  ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
-    return this.npcService.listByCampaign(id);
+    // Spec 020 — redaction filter default-on. dm-omniscient bypass via header.
+    return this.npcService.listByCampaignProjected(id, {
+      dmOmniscient: isDmOmniscient(headers),
+    });
   }
 
   @Get(":id/npcs/:npcId")
   async getNpc(
     @Req() req: AuthRequest,
+    @Headers() headers: Record<string, string>,
     @Param("id") id: string,
     @Param("npcId") npcId: string,
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
-    return this.npcService.getById(npcId);
+    // Spec 020 — redaction filter default-on. dm-omniscient bypass via header.
+    return this.npcService.getProjectedById(npcId, {
+      dmOmniscient: isDmOmniscient(headers),
+    });
   }
 
   @Patch(":id/npcs/:npcId")

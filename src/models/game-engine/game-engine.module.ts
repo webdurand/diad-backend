@@ -114,6 +114,11 @@ import { FateLadderService } from "./services/fate-ladder.service";
 import { RestEventPickerService } from "./services/rest-event-picker.service";
 // Spec 016 M2 — Dice request lifecycle (active checks via SSE)
 import { DiceRollService } from "./services/dice-roll.service";
+// Spec 020 — Tool Surface Completion
+import { RevivifyCheckService } from "./services/revivify-check.service";
+import { DyingStateService } from "./services/dying-state.service";
+import { LootRollService } from "./services/loot-roll.service";
+import { ToolEventEmitService } from "./services/tool-event-emit.service";
 
 @Module({
   imports: [
@@ -231,6 +236,11 @@ import { DiceRollService } from "./services/dice-roll.service";
     RestEventPickerService,
     // Spec 016 M2 — Dice request lifecycle
     DiceRollService,
+    // Spec 020 — Tool Surface Completion
+    RevivifyCheckService,
+    DyingStateService,
+    LootRollService,
+    ToolEventEmitService,
   ],
   exports: [
     DiceService,

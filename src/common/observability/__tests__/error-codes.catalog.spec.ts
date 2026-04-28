@@ -10,11 +10,10 @@ import {
 } from "../errors/error-codes.metadata";
 
 describe("Error Codes Catalog", () => {
-  it("contém os 33 codes do catálogo canônico", () => {
-    // Spec 017 adicionou EVENT_TYPE_NOT_REGISTERED + TRACE_ID_INVALID.
-    // Spec 019 adicionou WEATHER_INVALID_BIOME, CLOCK_NEGATIVE_HOURS,
-    // CHAOS_OUT_OF_RANGE, SPELL_BLOCKED_DEAD_MAGIC.
-    expect(ALL_ERROR_CODES.length).toBe(33);
+  it("contém os 61 codes do catálogo canônico", () => {
+    // Spec 017 +2 (event-bus). Spec 019 +4 (world+spell).
+    // Spec 020 +28 (encounter, spell, combat, inventory, npc, world, session, loot).
+    expect(ALL_ERROR_CODES.length).toBe(61);
   });
 
   it("todos os codes seguem o regex SCREAMING_SNAKE", () => {
@@ -24,11 +23,13 @@ describe("Error Codes Catalog", () => {
     }
   });
 
-  it("todos os codes têm metadata com httpStatus em [400, 599]", () => {
+  it("todos os codes têm metadata com httpStatus válido (200 warning ou 4xx/5xx)", () => {
+    // CONDITION_BLOCKED_BY_IMMUNITY (spec 020) é warning-style 200.
     for (const code of ALL_ERROR_CODES) {
       const md = getMetadata(code);
-      expect(md.httpStatus).toBeGreaterThanOrEqual(400);
-      expect(md.httpStatus).toBeLessThanOrEqual(599);
+      const isWarning = md.httpStatus === 200;
+      const isError = md.httpStatus >= 400 && md.httpStatus <= 599;
+      expect(isWarning || isError).toBe(true);
       expect(md.defaultTitle.length).toBeGreaterThan(0);
       expect(md.domain.length).toBeGreaterThan(0);
     }
