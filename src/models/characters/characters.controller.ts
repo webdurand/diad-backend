@@ -43,6 +43,7 @@ import {
 } from "./services/inventory.service";
 import { ActionsService } from "./services/actions.service";
 import { ReactionPrefsService } from "./services/reaction-prefs.service";
+import { PcPersonaService } from "./services/pc-persona.service";
 import { CombatActionRegistry } from "../game-engine/services/combat-action-registry.service";
 import type { ReactionState } from "src/entities/reaction-default.entity";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -85,6 +86,8 @@ export class CharactersController {
     private readonly combatActionRegistry: CombatActionRegistry,
     // Spec 016 — Play Shell Foundation
     private readonly reactionPrefsService: ReactionPrefsService,
+    // Spec 018 — PC Persona Injection
+    private readonly pcPersonaService: PcPersonaService,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     @InjectRepository(EncounterEntity)
@@ -108,6 +111,16 @@ export class CharactersController {
   async getSheet(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.sheetService.computeSheet(userId, id);
+  }
+
+  /**
+   * Spec 018 — bloco enxuto de persona consumido pelo DM Agent
+   * (Director/Narrator) e injetado em SceneContext.playerCharacter.
+   */
+  @Get(":id/persona")
+  async getPersona(@Req() req: AuthRequest, @Param("id") id: string) {
+    const userId = getUserId(req);
+    return this.pcPersonaService.assemblePersona(id, userId);
   }
 
   @Post()

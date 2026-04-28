@@ -12,6 +12,8 @@ import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
 import { QuestEntity } from "src/entities/quest.entity";
 import { EventLogService } from "./event-log.service";
 import { ChronicleService } from "./chronicle.service";
+import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
+import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 
 /**
  * Assembles the 5-tier context for AI integration.
@@ -72,6 +74,9 @@ export interface SceneContext {
     currentPhase: string;
     phaseNotes: Record<string, string>;
   };
+
+  // Spec 018 — PC Persona block. Null em sessions multi-PC ou sem PC resolvido.
+  playerCharacter?: PCPersona | null;
 }
 
 @Injectable()
@@ -97,6 +102,7 @@ export class SceneContextService {
     private readonly questRepo: Repository<QuestEntity>,
     private readonly eventLogService: EventLogService,
     private readonly chronicleService: ChronicleService,
+    private readonly pcPersonaService: PcPersonaService,
   ) {}
 
   async assembleContext(sceneId: string): Promise<SceneContext> {
@@ -201,6 +207,23 @@ export class SceneContextService {
       }
     }
 
+    // Spec 018 — bloco PC. Solo flow: 1 PC por session em characterIds[0].
+    // Multi-PC ou sem PC → playerCharacter: null (DM prompt cobre o caso).
+    let playerCharacter: PCPersona | null = null;
+    const characterIds = session?.characterIds ?? [];
+    if (characterIds.length === 1) {
+      try {
+        playerCharacter = await this.pcPersonaService.assemblePersona(
+          characterIds[0],
+          null, // contexto interno — auth já passou no SessionController guard.
+        );
+      } catch {
+        // Persona indisponível → seguir sem ela. Spec 018 §Riscos: backwards
+        // compat — clients V1 ignoram playerCharacter (additive).
+        playerCharacter = null;
+      }
+    }
+
     return {
       scene: {
         title: scene.title,
@@ -222,6 +245,7 @@ export class SceneContextService {
       worldLore,
       recentChronicles,
       storyArc,
+      playerCharacter,
     };
   }
 
@@ -258,6 +282,7 @@ export class SceneContextService {
       partyKnowledge: [],
       locationChain: [],
       recentChronicles: [],
+      playerCharacter: null,
     };
   }
 }

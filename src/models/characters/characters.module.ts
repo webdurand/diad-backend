@@ -49,6 +49,7 @@ import { SpellService } from "./services/spell.service";
 import { InventoryService } from "./services/inventory.service";
 import { ActionsService } from "./services/actions.service";
 import { ReactionPrefsService } from "./services/reaction-prefs.service";
+import { PcPersonaService } from "./services/pc-persona.service";
 
 @Module({
   imports: [
@@ -104,6 +105,8 @@ import { ReactionPrefsService } from "./services/reaction-prefs.service";
     ActionsService,
     // Spec 016 — Play Shell Foundation
     ReactionPrefsService,
+    // Spec 018 — PC Persona Injection
+    PcPersonaService,
   ],
   exports: [
     CharactersService,
@@ -114,6 +117,8 @@ import { ReactionPrefsService } from "./services/reaction-prefs.service";
     InventoryService,
     // Spec 016 — Play Shell Foundation
     ReactionPrefsService,
+    // Spec 018 — PC Persona Injection
+    PcPersonaService,
   ],
 })
 export class CharactersModule {}

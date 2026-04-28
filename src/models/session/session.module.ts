@@ -18,6 +18,7 @@ import {
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { WorldModule } from "../world/world.module";
+import { CharactersModule } from "../characters/characters.module";
 import { SessionController } from "./session.controller";
 import { SceneService } from "./services/scene.service";
 import { EventLogService } from "./services/event-log.service";
@@ -45,6 +46,7 @@ import { SessionMessageService } from "./services/session-message.service";
     ]),
     AuthModule,
     WorldModule,
+    CharactersModule,
   ],
   controllers: [SessionController],
   providers: [
