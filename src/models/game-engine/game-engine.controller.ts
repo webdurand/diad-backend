@@ -204,6 +204,8 @@ export class GameEngineController {
       hasDiamond300gp?: boolean;
       casterCharacterId?: string | null;
       campaignId?: string;
+      targetDyingState?: "none" | "dying" | "stable" | "dead" | "captured";
+      bodyDestroyed?: boolean;
     },
   ) {
     void req;
@@ -213,6 +215,8 @@ export class GameEngineController {
       hasDiamond300gp: body.hasDiamond300gp,
       casterCharacterId: body.casterCharacterId,
       campaignId: body.campaignId,
+      targetDyingState: body.targetDyingState,
+      bodyDestroyed: body.bodyDestroyed,
     });
     return { ok: true as const, value: result };
   }
