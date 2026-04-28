@@ -12,6 +12,7 @@ import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
 import { QuestEntity } from "src/entities/quest.entity";
 import { EventLogService } from "./event-log.service";
 import { ChronicleService } from "./chronicle.service";
+import { SceneContextCacheService } from "./scene-context-cache.service";
 import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
 import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 
@@ -103,9 +104,18 @@ export class SceneContextService {
     private readonly eventLogService: EventLogService,
     private readonly chronicleService: ChronicleService,
     private readonly pcPersonaService: PcPersonaService,
+    private readonly cache: SceneContextCacheService,
   ) {}
 
   async assembleContext(sceneId: string): Promise<SceneContext> {
+    const cached = this.cache.get(sceneId);
+    if (cached) return cached;
+    const ctx = await this.assembleContextUncached(sceneId);
+    this.cache.set(sceneId, ctx);
+    return ctx;
+  }
+
+  private async assembleContextUncached(sceneId: string): Promise<SceneContext> {
     const scene = await this.sceneRepo.findOne({
       where: { id: sceneId },
       relations: ["location", "session"],
@@ -254,24 +264,31 @@ export class SceneContextService {
   ): Promise<Array<{ name: string; type: string; description?: string }>> {
     if (!locationId) return [];
 
-    const chain: Array<{ name: string; type: string; description?: string }> =
-      [];
-    let currentId: string | undefined = locationId;
+    // Recursive CTE — uma query única ao invés de N findOne sequenciais.
+    // Ordem: raiz primeiro (depth DESC), bate o unshift do loop antigo.
+    const rows: Array<{
+      name: string;
+      type: string;
+      description: string | null;
+      depth: number;
+    }> = await this.locationRepo.query(
+      `WITH RECURSIVE chain AS (
+         SELECT id, parent_id, name, type, description, 0 AS depth
+         FROM locations WHERE id = $1
+         UNION ALL
+         SELECT l.id, l.parent_id, l.name, l.type, l.description, c.depth + 1
+         FROM locations l
+         JOIN chain c ON l.id = c.parent_id
+       )
+       SELECT name, type, description, depth FROM chain ORDER BY depth DESC`,
+      [locationId],
+    );
 
-    while (currentId) {
-      const loc = await this.locationRepo.findOne({
-        where: { id: currentId },
-      });
-      if (!loc) break;
-      chain.unshift({
-        name: loc.name,
-        type: loc.type,
-        description: loc.description,
-      });
-      currentId = loc.parentId;
-    }
-
-    return chain;
+    return rows.map((r) => ({
+      name: r.name,
+      type: r.type,
+      description: r.description ?? undefined,
+    }));
   }
 
   private emptyContext(): SceneContext {

@@ -18,6 +18,8 @@ import { AuthGuard } from "../auth/auth.guard";
 import { AdminGuard } from "../auth/admin.guard";
 import { AiProxyService } from "./ai-proxy.service";
 import { SessionResumeService } from "../session/services/session-resume.service";
+import { SessionRecapService } from "../session/services/session-recap.service";
+import { SceneService } from "../session/services/scene.service";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import type { AuthRequest } from "../auth/auth.types";
 
@@ -29,6 +31,8 @@ export class AiProxyController {
   constructor(
     private readonly aiProxyService: AiProxyService,
     private readonly resumeService: SessionResumeService,
+    private readonly recapService: SessionRecapService,
+    private readonly sceneService: SceneService,
   ) {}
 
   // ────── Assistente D&D ──────
@@ -104,11 +108,23 @@ export class AiProxyController {
     res.setHeader("X-Accel-Buffering", "no");
 
     try {
+      // Backend-authoritative — DM agent depende de payload enriquecido pra
+      // continuidade. Em fresh session ctx vem vazio (degrade-graceful);
+      // em re-render pós-retomada, ctx tem scene/recap → DM mantém estado.
+      const ctx = await this.resumeService.assemble(sessionId);
       await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/narrate-start`,
         {
           character_id: body.characterId,
           user_id: req.user!.id,
+          sessionId,
+          campaignId: ctx.campaignId,
+          isResumed: ctx.isResumed,
+          previousSessionId: ctx.previousSessionId,
+          sceneContext: ctx.sceneContext,
+          recentMessages: ctx.recentMessages,
+          previousSessionSummary: ctx.previousSessionSummary,
+          gapMinutes: ctx.gapMinutes,
         },
         res,
       );
@@ -201,6 +217,7 @@ export class AiProxyController {
       targetId?: string;
       spellId?: string;
       text?: string;
+      lastMessageId?: number | null;
     },
     @Req() req: AuthRequest,
     @Res() res: Response,
@@ -211,9 +228,41 @@ export class AiProxyController {
     res.setHeader("X-Accel-Buffering", "no");
 
     try {
+      // Backend-authoritative — combat actions precisam de scene_context +
+      // recent_messages pro DM narrar coerente. Mesmo padrão de soloMessage.
+      const ctx = await this.resumeService.assemble(sessionId, {
+        lastMessageIdFromClient: body.lastMessageId ?? null,
+      });
+
+      if (ctx.lastMessageMismatch) {
+        res.statusCode = 409;
+        res.write(
+          `data: ${JSON.stringify({
+            type: "error",
+            code: ErrorCode.SESSION_LAST_MESSAGE_MISMATCH,
+            content:
+              "Histórico desincronizado — recarregue para continuar a sessão.",
+          })}\n\n`,
+        );
+        res.end();
+        return;
+      }
+
       await this.aiProxyService.pipeStream(
         `/solo/${sessionId}/action`,
-        { ...body, user_id: req.user!.id },
+        {
+          ...body,
+          user_id: req.user!.id,
+          sessionId,
+          campaignId: ctx.campaignId,
+          isResumed: ctx.isResumed,
+          previousSessionId: ctx.previousSessionId,
+          sceneContext: ctx.sceneContext,
+          recentMessages: ctx.recentMessages,
+          previousSessionSummary: ctx.previousSessionSummary,
+          lastMessageId: body.lastMessageId ?? ctx.serverLastMessageId,
+          gapMinutes: ctx.gapMinutes,
+        },
         res,
       );
     } catch (err: any) {
@@ -231,11 +280,30 @@ export class AiProxyController {
   @Post("solo/:sessionId/end")
   async soloEnd(
     @Param("sessionId") sessionId: string,
-    @Req() req: AuthRequest,
+    @Req() _req: AuthRequest,
   ) {
-    return this.aiProxyService.requestAgent("POST", `/solo/${sessionId}/end`, {
-      user_id: req.user!.id,
+    // Backend-authoritative — orquestra recap + finalize localmente.
+    // ensureRecap chama /internal/summarize no agents (com lock advisory pra
+    // evitar duplo-trabalho concorrente). finalizeSession persiste summary +
+    // marca status=completed + endedAt. Idempotente.
+    const recap = await this.recapService.ensureRecap(sessionId);
+    let summaryText = "";
+    if (recap.status === "cached" || recap.status === "generated") {
+      summaryText = recap.summaryText;
+    }
+
+    const session = await this.sceneService.finalizeSession(sessionId, {
+      summaryText: summaryText || undefined,
     });
+
+    return {
+      sessionId,
+      summary: session.summaryText ?? "",
+      summaryKeyFacts: session.summaryKeyFacts ?? null,
+      status: session.status,
+      endedAt: session.endedAt,
+      recapStatus: recap.status,
+    };
   }
 
   // ────── Admin: Knowledge Management ──────

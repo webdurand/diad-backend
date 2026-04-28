@@ -7,6 +7,7 @@ import { ArcBeat, CampaignEntity } from "src/entities/campaign.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { VowEntity } from "src/entities/vow.entity";
 import { CampaignService } from "src/models/world/services/campaign.service";
+import { SceneContextCacheService } from "./scene-context-cache.service";
 
 export interface CreateSceneDto {
   locationId?: string;
@@ -40,10 +41,16 @@ export class SceneService {
     @InjectRepository(VowEntity)
     private readonly vowRepo: Repository<VowEntity>,
     private readonly campaignService: CampaignService,
+    private readonly contextCache: SceneContextCacheService,
   ) {}
 
   async create(sessionId: string, dto: CreateSceneDto): Promise<SceneEntity> {
-    // Deactivate current active scene
+    // Deactivate current active scene + invalidate cache pra cena saindo.
+    const previousActive = await this.sceneRepo.findOne({
+      where: { sessionId, isActive: true },
+      select: ["id"],
+    });
+    if (previousActive) this.contextCache.invalidate(previousActive.id);
     await this.sceneRepo.update(
       { sessionId, isActive: true },
       { isActive: false, endedAt: new Date() },
@@ -254,7 +261,9 @@ export class SceneService {
     const scene = await this.sceneRepo.findOne({ where: { id: sceneId } });
     if (!scene) throw new NotFoundException("Cena nao encontrada.");
     Object.assign(scene, dto);
-    return this.sceneRepo.save(scene);
+    const saved = await this.sceneRepo.save(scene);
+    this.contextCache.invalidate(sceneId);
+    return saved;
   }
 
   async endScene(sceneId: string): Promise<void> {
@@ -262,6 +271,7 @@ export class SceneService {
       isActive: false,
       endedAt: new Date(),
     });
+    this.contextCache.invalidate(sceneId);
   }
 
   async addNpcToScene(sceneId: string, npcId: string): Promise<SceneNpcEntity> {
@@ -271,11 +281,14 @@ export class SceneService {
     if (existing) return existing;
 
     const sceneNpc = this.sceneNpcRepo.create({ sceneId, npcId });
-    return this.sceneNpcRepo.save(sceneNpc);
+    const saved = await this.sceneNpcRepo.save(sceneNpc);
+    this.contextCache.invalidate(sceneId);
+    return saved;
   }
 
   async removeNpcFromScene(sceneId: string, npcId: string): Promise<void> {
     await this.sceneNpcRepo.delete({ sceneId, npcId });
+    this.contextCache.invalidate(sceneId);
   }
 
   async getSceneNpcs(sceneId: string): Promise<SceneNpcEntity[]> {

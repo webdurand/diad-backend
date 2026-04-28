@@ -11,6 +11,7 @@ import {
   QuestEntity,
 } from "src/entities";
 import { SceneContextService } from "../scene-context.service";
+import { SceneContextCacheService } from "../scene-context-cache.service";
 import { EventLogService } from "../event-log.service";
 import { ChronicleService } from "../chronicle.service";
 import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
@@ -73,6 +74,7 @@ function buildService(opts: {
     assemblePersona: personaMock,
   } as unknown as PcPersonaService;
 
+  const cache = new SceneContextCacheService();
   const service = new SceneContextService(
     sceneRepo as unknown as Repository<SceneEntity>,
     sceneNpcRepo as unknown as Repository<SceneNpcEntity>,
@@ -86,6 +88,7 @@ function buildService(opts: {
     eventLog,
     chronicle,
     persona,
+    cache,
   );
 
   return { service, personaMock };

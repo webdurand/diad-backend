@@ -24,6 +24,7 @@ import { SceneService } from "./services/scene.service";
 import { EventLogService } from "./services/event-log.service";
 import { ChronicleService } from "./services/chronicle.service";
 import { SceneContextService } from "./services/scene-context.service";
+import { SceneContextCacheService } from "./services/scene-context-cache.service";
 import { SessionMessageService } from "./services/session-message.service";
 import { SessionRecapService } from "./services/session-recap.service";
 import { SessionResumeService } from "./services/session-resume.service";
@@ -56,6 +57,7 @@ import { SessionResumeService } from "./services/session-resume.service";
     EventLogService,
     ChronicleService,
     SceneContextService,
+    SceneContextCacheService,
     SessionMessageService,
     SessionRecapService,
     SessionResumeService,
@@ -65,6 +67,7 @@ import { SessionResumeService } from "./services/session-resume.service";
     EventLogService,
     ChronicleService,
     SceneContextService,
+    SceneContextCacheService,
     SessionMessageService,
     SessionRecapService,
     SessionResumeService,
