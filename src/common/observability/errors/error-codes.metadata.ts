@@ -458,6 +458,15 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Re-hidrate o histórico — algum turno foi processado fora desta aba.",
     domain: "session-recap",
   },
+
+  // deterministic DM refactor (spec 027)
+  [ErrorCode.IDEMPOTENCY_CACHE_MISS_AFTER_RACE]: {
+    httpStatus: 409,
+    defaultTitle: "Idempotency cache missed after concurrent race",
+    defaultHint:
+      "Outro turn com a mesma chave foi processado em paralelo — re-hidrate o histórico antes de tentar de novo.",
+    domain: "session",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {

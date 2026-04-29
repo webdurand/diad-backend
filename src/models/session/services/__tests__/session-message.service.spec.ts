@@ -1,4 +1,4 @@
-import { Repository } from "typeorm";
+import { DataSource, EntityManager, Repository } from "typeorm";
 import { SessionMessageService } from "../session-message.service";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
@@ -22,7 +22,8 @@ describe("SessionMessageService.getMaxSequenceNumber", () => {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
     } as unknown as Repository<SessionMessageEntity>;
     const sessionRepo = {} as unknown as Repository<GameSessionEntity>;
-    return new SessionMessageService(messageRepo, sessionRepo);
+    const dataSource = {} as unknown as DataSource;
+    return new SessionMessageService(messageRepo, sessionRepo, dataSource);
   }
 
   it("retorna 0 para sessão sem mensagens (COALESCE)", async () => {
@@ -59,5 +60,235 @@ describe("SessionMessageService.getMaxSequenceNumber", () => {
     const service = buildService(qb);
     const result = await service.getMaxSequenceNumber("session-uuid");
     expect(result).toBe(0);
+  });
+});
+
+/**
+ * Spec 027 (M1, AC1.11) — `append` precisa rodar inteiro dentro de uma
+ * transação que adquire pg_advisory_xact_lock por sessionId. Sem o lock,
+ * dois turns concorrentes liam o mesmo MAX(seq), persistiam o mesmo
+ * `sequenceNumber` e o cliente via 409 SESSION_LAST_MESSAGE_MISMATCH.
+ *
+ * Estes testes são unitários (mocks); o caminho integrado via Postgres real
+ * fica documentado no smoke da spec 027 — montar testcontainer aqui passa
+ * de 30min de infra e o lock em si é testado pelo PG.
+ */
+describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
+  const SESSION_ID = "00000000-0000-4000-8000-000000000001";
+  const USER_ID = "00000000-0000-4000-8000-000000000002";
+
+  function buildService(opts: {
+    existingByClientId?: SessionMessageEntity | null;
+    existingSequence?: number;
+    sessionOwnerId?: string;
+  }) {
+    const queries: string[] = [];
+    const findOneCalls: any[] = [];
+    const saveCalls: any[] = [];
+    const createCalls: any[] = [];
+
+    const txManager = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        queries.push(sql);
+        return [];
+      }),
+      findOne: jest.fn(async (_entity: any, where: any) => {
+        findOneCalls.push(where);
+        return opts.existingByClientId ?? null;
+      }),
+      createQueryBuilder: jest.fn(() => {
+        const qb: any = {
+          select: jest.fn(() => qb),
+          where: jest.fn(() => qb),
+          getRawOne: jest
+            .fn()
+            .mockResolvedValue({ max: String(opts.existingSequence ?? 0) }),
+        };
+        return qb;
+      }),
+      create: jest.fn((_entity: any, payload: any) => {
+        createCalls.push(payload);
+        return { ...payload };
+      }),
+      save: jest.fn(async (_entity: any, payload: any) => {
+        saveCalls.push(payload);
+        return { id: "msg-uuid", ...payload };
+      }),
+    } as unknown as EntityManager;
+
+    const transactionFn = jest.fn(async (cb: (m: EntityManager) => any) => {
+      // Roda o callback exatamente como TypeORM faria — em sequência.
+      return cb(txManager);
+    });
+
+    const dataSource = {
+      transaction: transactionFn,
+    } as unknown as DataSource;
+
+    const messageRepo = {
+      createQueryBuilder: jest.fn(),
+    } as unknown as Repository<SessionMessageEntity>;
+    const sessionRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: SESSION_ID,
+        ownerId: opts.sessionOwnerId ?? USER_ID,
+      }),
+    } as unknown as Repository<GameSessionEntity>;
+
+    const service = new SessionMessageService(
+      messageRepo,
+      sessionRepo,
+      dataSource,
+    );
+
+    return {
+      service,
+      queries,
+      findOneCalls,
+      saveCalls,
+      createCalls,
+      transactionFn,
+      txManager: txManager as any,
+    };
+  }
+
+  it("adquire pg_advisory_xact_lock(hashtext('session_msg:<id>')) ANTES do MAX(seq)", async () => {
+    const ctx = buildService({ existingSequence: 4 });
+    const result = await ctx.service.append({
+      sessionId: SESSION_ID,
+      userId: USER_ID,
+      kind: "narration",
+      content: "ok",
+    });
+
+    // Lock SQL é a primeira query dentro da transação.
+    expect(ctx.queries[0]).toContain("pg_advisory_xact_lock");
+    expect(ctx.queries[0]).toContain("hashtext");
+    // Lock invocado com o sessionId scopado.
+    expect(ctx.txManager.query).toHaveBeenCalledWith(
+      expect.stringContaining("pg_advisory_xact_lock"),
+      [`session_msg:${SESSION_ID}`],
+    );
+    // sequenceNumber = MAX(4) + 1 = 5.
+    expect(result.sequenceNumber).toBe(5);
+    expect(ctx.transactionFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("dedup por clientId acontece DENTRO da transação (após lock)", async () => {
+    const existing = {
+      id: "existing-uuid",
+      sessionId: SESSION_ID,
+      sequenceNumber: 7,
+      clientId: "entry-3",
+    } as unknown as SessionMessageEntity;
+    const ctx = buildService({ existingByClientId: existing });
+
+    const result = await ctx.service.append({
+      sessionId: SESSION_ID,
+      userId: USER_ID,
+      kind: "player_action",
+      content: "atacar goblin",
+      clientId: "entry-3",
+    });
+
+    // Lock primeiro, depois findOne, NÃO chega no save.
+    expect(ctx.queries[0]).toContain("pg_advisory_xact_lock");
+    expect(ctx.findOneCalls[0]).toEqual({
+      where: { sessionId: SESSION_ID, clientId: "entry-3" },
+    });
+    expect(ctx.saveCalls.length).toBe(0);
+    expect(result).toBe(existing);
+  });
+
+  it("não chama lock nem transação se kind for inválido", async () => {
+    const ctx = buildService({});
+    await expect(
+      ctx.service.append({
+        sessionId: SESSION_ID,
+        userId: USER_ID,
+        kind: "invalid_kind" as any,
+        content: "x",
+      }),
+    ).rejects.toThrow();
+    expect(ctx.transactionFn).not.toHaveBeenCalled();
+  });
+
+  it("rejeita ANTES da transação quando user não é dono (lock fica fora do hot path)", async () => {
+    const ctx = buildService({ sessionOwnerId: "outro-user-uuid" });
+    await expect(
+      ctx.service.append({
+        sessionId: SESSION_ID,
+        userId: USER_ID,
+        kind: "narration",
+        content: "x",
+      }),
+    ).rejects.toThrow();
+    expect(ctx.transactionFn).not.toHaveBeenCalled();
+  });
+
+  it("10 chamadas concorrentes geram sequences contíguas 1..10 (mock simulando lock real)", async () => {
+    /**
+     * Como `dataSource.transaction(cb)` aqui é um mock, simulamos a
+     * serialização que o lock advisory faria no Postgres real: cada call
+     * a `transaction` aguarda a anterior antes de executar o callback. O
+     * MAX(seq) lê o estado atual do "DB" simulado (variável local).
+     */
+    let currentMax = 0;
+    let chain: Promise<unknown> = Promise.resolve();
+
+    const txManager = {
+      query: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      createQueryBuilder: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest
+          .fn()
+          .mockImplementation(async () => ({ max: String(currentMax) })),
+      })),
+      create: jest.fn((_e: any, payload: any) => payload),
+      save: jest.fn(async (_e: any, payload: any) => {
+        currentMax = payload.sequenceNumber;
+        return { id: `m-${payload.sequenceNumber}`, ...payload };
+      }),
+    } as unknown as EntityManager;
+
+    const dataSource = {
+      transaction: jest.fn((cb: (m: EntityManager) => any) => {
+        // Serializa: encadeia os callbacks pra simular o advisory lock.
+        const next = chain.then(() => cb(txManager));
+        chain = next.catch(() => undefined);
+        return next;
+      }),
+    } as unknown as DataSource;
+
+    const sessionRepo = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: SESSION_ID, ownerId: USER_ID }),
+    } as unknown as Repository<GameSessionEntity>;
+    const messageRepo = {} as unknown as Repository<SessionMessageEntity>;
+
+    const service = new SessionMessageService(
+      messageRepo,
+      sessionRepo,
+      dataSource,
+    );
+
+    const dispatched = Array.from({ length: 10 }).map((_, i) =>
+      service.append({
+        sessionId: SESSION_ID,
+        userId: USER_ID,
+        kind: "narration",
+        content: `chunk ${i}`,
+      }),
+    );
+    const results = await Promise.all(dispatched);
+    const sequences = results
+      .map((r) => r.sequenceNumber)
+      .sort((a, b) => a - b);
+
+    expect(sequences).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect((dataSource.transaction as jest.Mock).mock.calls.length).toBe(10);
   });
 });

@@ -10,10 +10,12 @@ import {
 } from "../errors/error-codes.metadata";
 
 describe("Error Codes Catalog", () => {
-  it("contém os 61 codes do catálogo canônico", () => {
+  it("contém os 67 codes do catálogo canônico", () => {
     // Spec 017 +2 (event-bus). Spec 019 +4 (world+spell).
     // Spec 020 +28 (encounter, spell, combat, inventory, npc, world, session, loot).
-    expect(ALL_ERROR_CODES.length).toBe(61);
+    // Spec 024 +5 (session-recap incl SESSION_LAST_MESSAGE_MISMATCH).
+    // Spec 027 +1 (IDEMPOTENCY_CACHE_MISS_AFTER_RACE).
+    expect(ALL_ERROR_CODES.length).toBe(67);
   });
 
   it("todos os codes seguem o regex SCREAMING_SNAKE", () => {

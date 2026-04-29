@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { AuthGuard } from "../auth/auth.guard";
 import { AdminGuard } from "../auth/admin.guard";
 import { AiProxyService } from "./ai-proxy.service";
@@ -25,6 +25,57 @@ import { SessionMessageService } from "../session/services/session-message.servi
 import { SseNarrationCollector } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import type { AuthRequest } from "../auth/auth.types";
+
+/**
+ * Spec 027 (M1, AC1.12) — guard in-flight pra evitar dois POST idênticos
+ * em paralelo (jogador clica 2× rápido demais antes do `persistPlayerAction`
+ * gravar a primeira). Não é cache de resposta — é apenas um Set de chaves
+ * sob TTL curto (60s) que rejeita o duplicado com 409
+ * IDEMPOTENCY_CACHE_MISS_AFTER_RACE.
+ *
+ * In-memory simples — DIAD não tem Redis. Em multi-replica, a colisão real
+ * que importa (mesma sessão batendo no mesmo replica em ms) ainda é
+ * mitigada pelo advisory lock no `getNextSequence`; este guard cobre o
+ * caso single-replica + click duplo do user.
+ */
+const IDEMPOTENCY_TTL_MS = 60_000;
+const inFlightRequests = new Map<string, number>();
+
+function buildIdempotencyKey(
+  sessionId: string,
+  lastMessageId: number | null | undefined,
+  payload: string,
+): string {
+  const payloadHash = createHash("sha256")
+    .update(payload ?? "")
+    .digest("hex");
+  return `${sessionId}|${lastMessageId ?? "null"}|${payloadHash}`;
+}
+
+function tryAcquireIdempotency(key: string): boolean {
+  const now = Date.now();
+  const expiresAt = inFlightRequests.get(key);
+  if (expiresAt && expiresAt > now) {
+    return false;
+  }
+  inFlightRequests.set(key, now + IDEMPOTENCY_TTL_MS);
+  // Sweep oportunista — se o Map crescer, limpa entradas expiradas.
+  if (inFlightRequests.size > 256) {
+    for (const [k, exp] of inFlightRequests) {
+      if (exp <= now) inFlightRequests.delete(k);
+    }
+  }
+  return true;
+}
+
+function releaseIdempotency(key: string): void {
+  inFlightRequests.delete(key);
+}
+
+/** Exposto APENAS pra testes — limpa todo o cache in-flight entre runs. */
+export function __resetIdempotencyForTests(): void {
+  inFlightRequests.clear();
+}
 
 @Controller("ai")
 @UseGuards(AuthGuard)
@@ -363,6 +414,28 @@ export class AiProxyController {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
+    // Spec 027 (M1, AC1.12) — guard in-flight contra duplo-POST do mesmo
+    // turn (jogador clicando rápido). Chave inclui lastMessageId pra que
+    // turns sequenciais legítimos não colidam.
+    const idempotencyKey = buildIdempotencyKey(
+      sessionId,
+      body.lastMessageId,
+      body.playerInput ?? "",
+    );
+    if (!tryAcquireIdempotency(idempotencyKey)) {
+      res.statusCode = 409;
+      res.write(
+        `data: ${JSON.stringify({
+          type: "error",
+          code: ErrorCode.IDEMPOTENCY_CACHE_MISS_AFTER_RACE,
+          content:
+            "Outro turn idêntico já está em processamento — aguarde a resposta antes de tentar de novo.",
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+
     try {
       const ctx = await this.resumeService.assemble(sessionId, {
         lastMessageIdFromClient: body.lastMessageId ?? null,
@@ -448,6 +521,8 @@ export class AiProxyController {
       this.logger.error(`Narrative turn error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       res.end();
+    } finally {
+      releaseIdempotency(idempotencyKey);
     }
   }
 
@@ -471,6 +546,28 @@ export class AiProxyController {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
+
+    // Spec 027 (M1, AC1.12) — guard in-flight idêntico ao narrativeTurn.
+    // Sem playerInput o payload é sempre vazio; chave usa só sessionId +
+    // marker fixo "narrative-start" pra rejeitar duplo-POST de abertura.
+    const idempotencyKey = buildIdempotencyKey(
+      sessionId,
+      null,
+      "narrative-start",
+    );
+    if (!tryAcquireIdempotency(idempotencyKey)) {
+      res.statusCode = 409;
+      res.write(
+        `data: ${JSON.stringify({
+          type: "error",
+          code: ErrorCode.IDEMPOTENCY_CACHE_MISS_AFTER_RACE,
+          content:
+            "A abertura desta sessão já está em processamento — aguarde a primeira resposta.",
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
 
     try {
       const ctx = await this.resumeService.assemble(sessionId);
@@ -516,6 +613,8 @@ export class AiProxyController {
       this.logger.error(`Narrative start error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       res.end();
+    } finally {
+      releaseIdempotency(idempotencyKey);
     }
   }
 

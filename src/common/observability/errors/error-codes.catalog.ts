@@ -96,6 +96,9 @@ export const ErrorCode = {
   SUMMARIZE_INVALID_INPUT: "SUMMARIZE_INVALID_INPUT",
   SUMMARIZE_AUTH_FAILED: "SUMMARIZE_AUTH_FAILED",
   SESSION_LAST_MESSAGE_MISMATCH: "SESSION_LAST_MESSAGE_MISMATCH",
+
+  // deterministic DM refactor (spec 027)
+  IDEMPOTENCY_CACHE_MISS_AFTER_RACE: "IDEMPOTENCY_CACHE_MISS_AFTER_RACE",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
