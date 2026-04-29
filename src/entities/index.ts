@@ -63,6 +63,7 @@ import { CampaignPlayerEntity } from "./campaign-player.entity";
 import { LocationEntity } from "./location.entity";
 import { LocationConnectionEntity } from "./location-connection.entity";
 import { NpcEntity } from "./npc.entity";
+import { NpcArchetypeTemplateEntity } from "./npc-archetype-template.entity";
 import { NpcRelationshipEntity } from "./npc-relationship.entity";
 import { FactionEntity } from "./faction.entity";
 import { FactionRelationEntity } from "./faction-relation.entity";
@@ -167,6 +168,7 @@ export {
   LocationEntity,
   LocationConnectionEntity,
   NpcEntity,
+  NpcArchetypeTemplateEntity,
   NpcRelationshipEntity,
   FactionEntity,
   FactionRelationEntity,
@@ -269,6 +271,7 @@ export const ENTITIES = [
   LocationEntity,
   LocationConnectionEntity,
   NpcEntity,
+  NpcArchetypeTemplateEntity,
   NpcRelationshipEntity,
   FactionEntity,
   FactionRelationEntity,

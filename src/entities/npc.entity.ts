@@ -91,6 +91,13 @@ export class NpcEntity {
   @Column({ type: "jsonb", default: [] })
   tags: string[];
 
+  /**
+   * Spec 026 Pillar 6 — origem do NPC. Usado pra GC futuro de auto-materializados
+   * que nunca foram interagidos depois.
+   */
+  @Column({ type: "varchar", length: 24, default: "manual" })
+  provenance: "manual" | "auto-materialized" | "director-planned";
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 

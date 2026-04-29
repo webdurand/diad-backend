@@ -19,6 +19,10 @@ const NARRATION_TYPES = new Set([
   "narration",
   "narration_token",
   "token",
+  // Spec 026 Pillar 4 — pipeline multi-agent emite chunks tipo `narrator`
+  // (vide diad-agents/src/routers/narrative.py). Tratamos igual a `text`
+  // pra que persistência server-authoritative cubra ambos os pipelines.
+  "narrator",
 ]);
 
 export class SseNarrationCollector {

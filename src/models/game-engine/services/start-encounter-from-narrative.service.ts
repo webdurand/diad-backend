@@ -35,6 +35,14 @@ import { DomainException } from "src/common/observability/errors/diad-exception"
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { getAbilityModifier } from "src/shared/srd-utils";
 
+export interface TokenLayoutEntry {
+  /** characterId (PC) ou npcId — backend resolve pra participantId. */
+  ref: string;
+  x: number;
+  y: number;
+  reason?: string;
+}
+
 export interface StartEncounterFromNarrativeInput {
   sessionId: string;
   sceneId: string;
@@ -46,6 +54,8 @@ export interface StartEncounterFromNarrativeInput {
   campaignId?: string;
   ownerUserId: string;
   traceId?: string;
+  /** Spec 026 Pillar 4 — layout sugerido pelo agente (oracle). */
+  tokensLayout?: TokenLayoutEntry[];
 }
 
 export interface StartEncounterFromNarrativeResult {
@@ -136,7 +146,13 @@ export class StartEncounterFromNarrativeService {
     const shouldPlace = input.autoPlaceTokens !== false;
     if (shouldPlace) {
       try {
-        await this.autoPlaceTokens(encounter.id, allParticipants, encounter);
+        await this.placeTokens(
+          encounter.id,
+          allParticipants,
+          encounter,
+          input.tokensLayout,
+          npcs,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new DomainException(
@@ -314,13 +330,20 @@ export class StartEncounterFromNarrativeService {
   }
 
   /**
-   * Distribui 1 célula por participant em ordem (top-left → right, depois quebra
-   * linha). Garante zero conflitos com células já ocupadas.
+   * Spec 026 Pillar 4 — aplica layout proposto pelo agente narrativo quando
+   * existe e auto-completa o resto via grid top-left.
+   *
+   * Resolução de `ref`: tenta como `npcId` (com base nos NPCs hostis criados
+   * neste encounter) → cai pra `characterId` do participant (PCs já anexados
+   * pelo `EncounterService.create`). Refs sem match e coords fora do grid
+   * são descartadas sem erro — auto-grid cobre a lacuna.
    */
-  private async autoPlaceTokens(
+  private async placeTokens(
     encounterId: string,
     participants: EncounterParticipantEntity[],
     encounter: { mapData?: { gridColumns?: number; gridRows?: number; gridSize?: number } },
+    layout: TokenLayoutEntry[] | undefined,
+    npcs: NpcEntity[],
   ): Promise<void> {
     const gridColumns =
       encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 10;
@@ -335,6 +358,48 @@ export class StartEncounterFromNarrativeService {
     }
 
     const positions: Array<{ participantId: string; x: number; y: number }> = [];
+
+    // Resolver ref (npcId | characterId) → participantId.
+    const npcIdToParticipantId = new Map<string, string>();
+    for (const np of npcs) {
+      const part = participants.find(
+        (p) => p.type === "npc" && p.monsterId === np.monsterId,
+      );
+      if (part) npcIdToParticipantId.set(np.id, part.id);
+    }
+    const charIdToParticipantId = new Map<string, string>();
+    for (const p of participants) {
+      if (p.type === "pc" && p.characterId) {
+        charIdToParticipantId.set(p.characterId, p.id);
+      }
+    }
+    const resolveRef = (ref: string): string | null =>
+      npcIdToParticipantId.get(ref) ?? charIdToParticipantId.get(ref) ?? null;
+
+    const placedParticipantIds = new Set<string>();
+    if (layout && layout.length > 0) {
+      for (const entry of layout) {
+        if (
+          !Number.isInteger(entry.x) ||
+          !Number.isInteger(entry.y) ||
+          entry.x < 0 ||
+          entry.y < 0 ||
+          entry.x >= gridColumns ||
+          entry.y >= gridRows
+        ) {
+          continue;
+        }
+        const cellKey = `${entry.x},${entry.y}`;
+        if (occupied.has(cellKey)) continue;
+        const participantId = resolveRef(entry.ref);
+        if (!participantId) continue;
+        if (placedParticipantIds.has(participantId)) continue;
+        positions.push({ participantId, x: entry.x, y: entry.y });
+        occupied.add(cellKey);
+        placedParticipantIds.add(participantId);
+      }
+    }
+
     let cursorX = 0;
     let cursorY = 0;
 
@@ -349,6 +414,7 @@ export class StartEncounterFromNarrativeService {
 
     for (const p of participants) {
       if (p.positionX != null && p.positionY != null) continue; // já posicionado
+      if (placedParticipantIds.has(p.id)) continue; // posicionado pelo layout
 
       while (occupied.has(`${cursorX},${cursorY}`)) {
         if (!advance()) {

@@ -326,6 +326,199 @@ export class AiProxyController {
     }
   }
 
+  // ────── Multi-agent narrative pipeline (Spec 014/026 Pillar 4) ──────
+
+  /**
+   * Spec 026 Pillar 4 — proxy para `/narrative/turn` do diad-agents.
+   *
+   * Substitui `solo/:sessionId/message` para usuários migrados ao pipeline
+   * multi-agent (Director / Narrator / Archivist / PreFlightOracle / Chaos).
+   * Faz mesmo enrichment server-authoritative do soloMessage (sceneContext,
+   * recentMessages, isResumed, previousSessionSummary, gap minutes) e
+   * persiste player_action + narration via SseNarrationCollector.
+   *
+   * Diferenças vs `solo/:sessionId/message`:
+   *  - body usa `playerInput` (alinhado ao contract /narrative/turn).
+   *  - injeta headers `X-Service-Key` + `X-User-Id` no upstream pra que o
+   *    BackendClient interno do agents impersone o owner da campanha.
+   *  - emite SSE chunks com tipos do pipeline novo (`narrator`, `director`,
+   *    `combat_starting`, `preflight_rolls`, `chaos_evaluated`, ...).
+   *    Frontend (`useAiStream`) trata `narrator` como prose chunk.
+   */
+  @Post("narrative/:sessionId/turn")
+  async narrativeTurn(
+    @Param("sessionId") sessionId: string,
+    @Body()
+    body: {
+      playerInput: string;
+      lastMessageId?: number | null;
+      clientId?: string;
+      voiceProfile?: string;
+    },
+    @Req() req: AuthRequest,
+    @Res() res: Response,
+  ) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    try {
+      const ctx = await this.resumeService.assemble(sessionId, {
+        lastMessageIdFromClient: body.lastMessageId ?? null,
+      });
+
+      if (ctx.lastMessageMismatch) {
+        res.statusCode = 409;
+        res.write(
+          `data: ${JSON.stringify({
+            type: "error",
+            code: ErrorCode.SESSION_LAST_MESSAGE_MISMATCH,
+            content:
+              "Histórico desincronizado — recarregue para continuar a sessão.",
+          })}\n\n`,
+        );
+        res.end();
+        return;
+      }
+
+      res.setHeader(
+        "X-Session-Resume-Hot-Recap",
+        ctx.hotRecapTriggered
+          ? "pending"
+          : ctx.previousSessionSummary
+          ? "cached"
+          : "none",
+      );
+      res.setHeader(
+        "X-Session-Is-Resumed",
+        ctx.isResumed ? "true" : "false",
+      );
+
+      await this.persistPlayerAction(
+        sessionId,
+        req.user!.id,
+        body.playerInput,
+        body.clientId,
+      );
+
+      // Spec 026 Pillar 4 — `SceneContext` (Spec 018) não carrega `sceneId`
+      // no top-level (só `scene.{title,description,mood,location}`). O
+      // Coordinator agents precisa do sceneId pra dispatch
+      // start_encounter_from_narrative — sem ele, encounter dispatch retorna
+      // None silenciosamente. Injetamos via `sceneService.getActive()`.
+      const activeScene = await this.sceneService
+        .getActive(sessionId)
+        .catch(() => null);
+      const sceneContextForAgent = activeScene
+        ? { ...(ctx.sceneContext ?? {}), sceneId: activeScene.id }
+        : ctx.sceneContext;
+
+      const collector = new SseNarrationCollector();
+      await this.aiProxyService.pipeStream(
+        "/narrative/turn",
+        {
+          campaignId: ctx.campaignId,
+          sessionId,
+          playerInput: body.playerInput,
+          voiceProfile: body.voiceProfile,
+          isResumed: ctx.isResumed,
+          previousSessionId: ctx.previousSessionId,
+          sceneContext: sceneContextForAgent,
+          recentMessages: ctx.recentMessages,
+          previousSessionSummary: ctx.previousSessionSummary,
+          gapMinutes: ctx.gapMinutes,
+        },
+        res,
+        (chunk) => collector.feed(chunk),
+        async () => {
+          await this.persistNarration(
+            sessionId,
+            req.user!.id,
+            collector.finalize(),
+          );
+          await this.emitSessionSync(sessionId, res);
+        },
+        {
+          "X-Service-Key": this.aiProxyService.getServiceKey(),
+          "X-User-Id": req.user!.id,
+        },
+      );
+    } catch (err: any) {
+      this.logger.error(`Narrative turn error: ${err.message}`);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+
+  /**
+   * Spec 026 Pillar 4 — abertura de sessão via pipeline multi-agent.
+   *
+   * Substitui `/ai/solo/:sessionId/narrate-start` (legacy DM agent que vazava
+   * system prompt em sessões novas, ex: "Preciso do character_id..."). Mesmo
+   * pipeline do `/ai/narrative/:sessionId/turn` mas com `playerInput=null`
+   * — Director resolve via forcing rule "scene 1 → YOU beat" (Spec 014).
+   * Filtros de leak (Pillar 2 camadas A+B+C) já cobrem o stream.
+   */
+  @Post("narrative/:sessionId/start")
+  async narrativeStart(
+    @Param("sessionId") sessionId: string,
+    @Body() body: { voiceProfile?: string },
+    @Req() req: AuthRequest,
+    @Res() res: Response,
+  ) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    try {
+      const ctx = await this.resumeService.assemble(sessionId);
+
+      const activeScene = await this.sceneService
+        .getActive(sessionId)
+        .catch(() => null);
+      const sceneContextForAgent = activeScene
+        ? { ...(ctx.sceneContext ?? {}), sceneId: activeScene.id }
+        : ctx.sceneContext;
+
+      const collector = new SseNarrationCollector();
+      await this.aiProxyService.pipeStream(
+        "/narrative/turn",
+        {
+          campaignId: ctx.campaignId,
+          sessionId,
+          playerInput: null,
+          voiceProfile: body.voiceProfile,
+          isResumed: ctx.isResumed,
+          previousSessionId: ctx.previousSessionId,
+          sceneContext: sceneContextForAgent,
+          recentMessages: ctx.recentMessages,
+          previousSessionSummary: ctx.previousSessionSummary,
+          gapMinutes: ctx.gapMinutes,
+        },
+        res,
+        (chunk) => collector.feed(chunk),
+        async () => {
+          await this.persistNarration(
+            sessionId,
+            req.user!.id,
+            collector.finalize(),
+          );
+          await this.emitSessionSync(sessionId, res);
+        },
+        {
+          "X-Service-Key": this.aiProxyService.getServiceKey(),
+          "X-User-Id": req.user!.id,
+        },
+      );
+    } catch (err: any) {
+      this.logger.error(`Narrative start error: ${err.message}`);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+
   @Post("solo/:sessionId/action")
   async soloAction(
     @Param("sessionId") sessionId: string,

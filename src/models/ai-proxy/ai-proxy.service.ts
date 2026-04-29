@@ -33,6 +33,17 @@ export class AiProxyService {
   }
 
   /**
+   * Spec 026 Pillar 4 — service key compartilhada com diad-agents (header
+   * `X-Service-Key`). Controllers usam pra montar headers do pipeStream
+   * quando o agents endpoint exige auth service-to-service.
+   */
+  getServiceKey(): string {
+    return (
+      this.configService.get<string>("DIAD_SERVICE_KEY") ?? "diad-internal-dev"
+    );
+  }
+
+  /**
    * Pipes an SSE stream from the Python agent to the Express response.
    * Uses raw http.request for reliable streaming (no fetch/undici issues).
    *
@@ -61,6 +72,7 @@ export class AiProxyService {
     res: Response,
     onChunk?: (chunk: Buffer) => void,
     onEnd?: () => Promise<void> | void,
+    extraHeaders?: Record<string, string>,
   ): Promise<void> {
     return new Promise((resolve) => {
       const url = new URL(`${this.agentBaseUrl}${path}`);
@@ -83,6 +95,7 @@ export class AiProxyService {
             "Content-Type": "application/json",
             "Content-Length": Buffer.byteLength(payload),
             [TRACEPARENT_HEADER]: traceparent,
+            ...(extraHeaders ?? {}),
           },
         },
         (proxyRes) => {

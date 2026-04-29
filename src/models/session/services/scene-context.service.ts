@@ -34,6 +34,13 @@ export interface SceneContext {
     };
   };
   npcsPresent: Array<{
+    /**
+     * Spec 026 Pillar 1+4 — UUID do NpcEntity. Sem `id`, PreFlightOracle
+     * Camada 0 não conseguia resolver targets de ataque e caía pra Haiku
+     * silenciosamente; ataques a NPCs neutros viravam diálogo dramático
+     * em vez de combate (RAW: declaração hostil = encounter sempre).
+     */
+    id: string;
     name: string;
     title?: string;
     race?: string;
@@ -141,6 +148,10 @@ export class SceneContextService {
     const npcsPresent = sceneNpcs
       .filter((sn) => sn.npc)
       .map((sn) => ({
+        // Spec 026 Pillar 1+4 — `id` é necessário pro PreFlightOracle
+        // Camada 0 resolver target sem cair pro Haiku LLM. Sem ele, ataques
+        // a NPCs presentes na cena viravam fall-through silencioso.
+        id: sn.npc.id,
         name: sn.npc.name,
         title: sn.npc.title,
         race: sn.npc.race,

@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { NpcEntity } from "src/entities/npc.entity";
+import { NpcArchetypeTemplateEntity } from "src/entities/npc-archetype-template.entity";
 import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
 import { randomBytes } from "crypto";
 import {
@@ -20,6 +21,17 @@ export interface CreateNpcDto {
   disposition?: "friendly" | "neutral" | "hostile" | "indifferent";
   currentLocationId?: string;
   monsterId?: string;
+  /**
+   * Spec 026 Pillar 6 — slug de archetype RAW (`thug`, `bandit_captain`, ...).
+   * Quando fornecido (e `monsterId` ausente), service resolve via
+   * `npc_archetype_templates` e popula `monsterId` automaticamente.
+   */
+  archetypeSlug?: string;
+  /**
+   * Origem do NPC. Default `manual` (criado pelo DM via UI). Agents devem
+   * passar `auto-materialized` quando criam via PreFlightOracle.
+   */
+  provenance?: "manual" | "auto-materialized" | "director-planned";
   personalityBig5?: Record<string, number>;
   motivation?: string;
   knowledgeScope?: string[];
@@ -39,14 +51,46 @@ export interface AddRelationshipDto {
 
 @Injectable()
 export class NpcService {
+  /** Cache em memória do registry — cresce até 14 entries; sem invalidation
+   * porque seed roda em migration, não muda em runtime. */
+  private archetypeCache = new Map<string, NpcArchetypeTemplateEntity>();
+
   constructor(
     @InjectRepository(NpcEntity)
     private readonly npcRepo: Repository<NpcEntity>,
     @InjectRepository(NpcRelationshipEntity)
     private readonly relationRepo: Repository<NpcRelationshipEntity>,
+    @InjectRepository(NpcArchetypeTemplateEntity)
+    private readonly archetypeRepo: Repository<NpcArchetypeTemplateEntity>,
   ) {}
 
+  /**
+   * Spec 026 Pillar 6 — resolve slug de archetype para template completo.
+   * Throws BadRequestException se slug inválido (handlers convertem em 400).
+   */
+  async resolveArchetype(slug: string): Promise<NpcArchetypeTemplateEntity> {
+    const cached = this.archetypeCache.get(slug);
+    if (cached) return cached;
+
+    const template = await this.archetypeRepo.findOne({ where: { slug } });
+    if (!template) {
+      throw new BadRequestException(
+        `Archetype slug desconhecido: '${slug}'. ` +
+          `Slugs válidos vivem em npc_archetype_templates.`,
+      );
+    }
+    this.archetypeCache.set(slug, template);
+    return template;
+  }
+
   async create(campaignId: string, dto: CreateNpcDto): Promise<NpcEntity> {
+    // Spec 026 Pillar 6: archetypeSlug resolve pra monsterId quando ausente.
+    let monsterId = dto.monsterId;
+    if (!monsterId && dto.archetypeSlug) {
+      const template = await this.resolveArchetype(dto.archetypeSlug);
+      monsterId = template.monsterId;
+    }
+
     const slug = this.generateSlug(dto.name);
     const npc = this.npcRepo.create({
       campaignId,
@@ -58,7 +102,8 @@ export class NpcService {
       descriptionHidden: dto.descriptionHidden,
       disposition: dto.disposition ?? "neutral",
       currentLocationId: dto.currentLocationId,
-      monsterId: dto.monsterId,
+      monsterId,
+      provenance: dto.provenance ?? "manual",
       personalityBig5: dto.personalityBig5 ?? {},
       motivation: dto.motivation,
       knowledgeScope: dto.knowledgeScope ?? [],

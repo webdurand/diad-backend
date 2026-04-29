@@ -299,6 +299,7 @@ export class GameEngineController {
       autoPlaceTokens: dto.autoPlaceTokens ?? true,
       narrativeTrigger: dto.narrativeTrigger,
       campaignId: dto.campaignId,
+      tokensLayout: dto.tokensLayout,
       ownerUserId,
     });
     return { ok: true as const, value: result };
