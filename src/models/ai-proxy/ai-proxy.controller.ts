@@ -405,6 +405,10 @@ export class AiProxyController {
       lastMessageId?: number | null;
       clientId?: string;
       voiceProfile?: string;
+      // Spec 027 (M1, AC1.10) — hint do quick-action button. Quando válido,
+      // IntentClassifier (Camada 1 / Brain) bypassa o Haiku (latência 0ms).
+      // Campo opcional, validado no agents (`VALID_INTENTS` enum).
+      intent?: string;
     },
     @Req() req: AuthRequest,
     @Res() res: Response,
@@ -501,6 +505,9 @@ export class AiProxyController {
           recentMessages: ctx.recentMessages,
           previousSessionSummary: ctx.previousSessionSummary,
           gapMinutes: ctx.gapMinutes,
+          // Spec 027 (M1, AC1.10) — forward do intent hint pro IntentClassifier
+          // bypassar o Haiku quando o input vem de quick-action button.
+          ...(body.intent ? { intent: body.intent } : {}),
         },
         res,
         (chunk) => collector.feed(chunk),
