@@ -103,10 +103,54 @@ export class CampaignService {
     return players.map((p) => p.campaign).filter(Boolean);
   }
 
-  async getById(campaignId: string): Promise<CampaignEntity> {
-    const campaign = await this.campaignRepo.findOne({
-      where: { id: campaignId },
+  /**
+   * UUID v4-ish detection — campaigns usam `gen_random_uuid()` (Postgres)
+   * que produz strings 8-4-4-4-12 hex. Slug é varchar non-UUID (ex:
+   * `misterio-aldeia-campaign`). Regex simples diferencia.
+   */
+  private static readonly UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  /**
+   * Spec 027 (M2, AC2.10 / bug D3) — resolve `slugOrId` para o UUID canônico
+   * da campanha. Aceita ambos como input pra fechar 500s em endpoints que
+   * recebiam slug (ex: `/campaigns/misterio-aldeia-campaign/ambiance`).
+   *
+   * Retorna o UUID. NotFoundException se não achar nem por id nem por slug.
+   */
+  async resolveId(slugOrId: string): Promise<string> {
+    const candidate = (slugOrId || "").trim();
+    if (!candidate) {
+      throw new NotFoundException("Campanha nao encontrada.");
+    }
+    if (CampaignService.UUID_REGEX.test(candidate)) {
+      // Já é UUID — confirma existência mas não precisa resolver.
+      const exists = await this.campaignRepo.findOne({
+        where: { id: candidate },
+        select: { id: true },
+      });
+      if (!exists) throw new NotFoundException("Campanha nao encontrada.");
+      return exists.id;
+    }
+    const bySlug = await this.campaignRepo.findOne({
+      where: { slug: candidate },
+      select: { id: true },
     });
+    if (!bySlug) throw new NotFoundException("Campanha nao encontrada.");
+    return bySlug.id;
+  }
+
+  /**
+   * Tolerante a slug-ou-UUID (Spec 027 D3). Quando recebe UUID, faz lookup
+   * direto; quando recebe slug, resolve via `slug` column. Mantém o contrato
+   * histórico de retornar a entidade completa.
+   */
+  async getById(campaignId: string): Promise<CampaignEntity> {
+    const candidate = (campaignId || "").trim();
+    const where = CampaignService.UUID_REGEX.test(candidate)
+      ? { id: candidate }
+      : { slug: candidate };
+    const campaign = await this.campaignRepo.findOne({ where });
     if (!campaign) throw new NotFoundException("Campanha nao encontrada.");
     return campaign;
   }

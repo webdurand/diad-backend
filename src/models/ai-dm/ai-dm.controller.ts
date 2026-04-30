@@ -12,6 +12,8 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CampaignService } from "../world/services/campaign.service";
+// Spec 027 (M2, AC2.10 / bug D3) — slug→UUID resolution em `/campaigns/:id/*`.
+import { CampaignIdPipe } from "../world/pipes/campaign-id.pipe";
 import { SceneService } from "../session/services/scene.service";
 import type { ArcBeat } from "src/entities/campaign.entity";
 import { ClockService } from "./services/clock.service";
@@ -55,7 +57,7 @@ export class AiDmController {
   @Post("campaigns/:id/arc/transition")
   async forceArcTransition(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() body: { newBeat: ArcBeat; reason?: string; atScene?: number },
   ) {
     await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
@@ -72,7 +74,7 @@ export class AiDmController {
   @Post("campaigns/:id/clocks")
   async createClock(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() dto: CreateClockDto,
   ) {
     await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
@@ -80,7 +82,7 @@ export class AiDmController {
   }
 
   @Get("campaigns/:id/clocks")
-  async listClocks(@Req() req: AuthRequest, @Param("id") campaignId: string) {
+  async listClocks(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) campaignId: string) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));
     const clocks = await this.clockService.listByCampaign(campaignId);
     // Hidden clocks ficam visíveis ao DM sempre, e ao player só se visibleToPlayer=true.
@@ -108,7 +110,7 @@ export class AiDmController {
   @Post("campaigns/:id/vows")
   async createVow(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() dto: CreateVowDto,
   ) {
     await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
@@ -116,7 +118,7 @@ export class AiDmController {
   }
 
   @Get("campaigns/:id/vows")
-  async listVows(@Req() req: AuthRequest, @Param("id") campaignId: string) {
+  async listVows(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) campaignId: string) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));
     return this.vowService.listByCampaign(campaignId);
   }
@@ -150,7 +152,7 @@ export class AiDmController {
   @Post("campaigns/:id/narrative-decisions")
   async createDecision(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() dto: CreateNarrativeDecisionDto,
   ) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));
@@ -160,7 +162,7 @@ export class AiDmController {
   @Get("campaigns/:id/narrative-decisions")
   async listDecisions(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
   ) {
@@ -174,7 +176,7 @@ export class AiDmController {
   @Get("campaigns/:id/narrative-decisions/top")
   async topDecisions(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Query("limit") limit?: string,
   ) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));
@@ -189,7 +191,7 @@ export class AiDmController {
   @Post("campaigns/:id/lore-entries")
   async createLore(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() dto: CreateLoreEntryDto,
   ) {
     await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
@@ -197,7 +199,7 @@ export class AiDmController {
   }
 
   @Get("campaigns/:id/lore-entries")
-  async listLore(@Req() req: AuthRequest, @Param("id") campaignId: string) {
+  async listLore(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) campaignId: string) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));
     return this.loreService.listByCampaign(campaignId);
   }
@@ -223,7 +225,7 @@ export class AiDmController {
   @Post("campaigns/:id/ai-usage")
   async ingestAiUsage(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() dto: Omit<LogAiUsageDto, "campaignId">,
   ) {
     await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
@@ -233,7 +235,7 @@ export class AiDmController {
   @Get("campaigns/:id/cost-summary")
   async costSummary(
     @Req() req: AuthRequest,
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Query("targetPerSessionUsd") target?: string,
   ) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));

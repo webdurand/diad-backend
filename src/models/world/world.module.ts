@@ -40,6 +40,7 @@ import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService } from "./services/weather.service";
 import { GameClockService } from "./services/game-clock.service";
 import { ChaosFactorService } from "./services/chaos-factor.service";
+import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 
 @Module({
   imports: [
@@ -85,6 +86,8 @@ import { ChaosFactorService } from "./services/chaos-factor.service";
     WeatherService,
     GameClockService,
     ChaosFactorService,
+    // Spec 027 D3 — slug→UUID pipe pra `/campaigns/:id/*`
+    CampaignIdPipe,
   ],
   exports: [
     CampaignService,

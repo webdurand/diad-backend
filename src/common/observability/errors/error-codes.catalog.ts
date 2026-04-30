@@ -99,6 +99,14 @@ export const ErrorCode = {
 
   // deterministic DM refactor (spec 027)
   IDEMPOTENCY_CACHE_MISS_AFTER_RACE: "IDEMPOTENCY_CACHE_MISS_AFTER_RACE",
+  // Spec 027 M2 — bug D2: Archivist passa name (ex: "eda") em campo UUID
+  // de affected_entity_id; Postgres rejeita; service deve resolver primeiro.
+  NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND:
+    "NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND",
+  // Spec 027 M2 — bug D3: campaign id em rota é slug (ex: "misterio-aldeia")
+  // mas downstream espera UUID. CampaignIdPipe resolve; este código é pra
+  // telemetria quando resolução falha.
+  CAMPAIGN_SLUG_NOT_RESOLVED: "CAMPAIGN_SLUG_NOT_RESOLVED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

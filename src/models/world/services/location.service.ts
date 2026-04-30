@@ -166,6 +166,26 @@ export class LocationService {
     });
   }
 
+  /**
+   * Spec 027 (M2, AC2.9 / bug D2) — resolve `name → UUID` dentro do escopo
+   * da campanha. Match case-insensitive exato; multiple match retorna `null`
+   * (ambiguous, caller decide).
+   */
+  async findByNameInCampaign(
+    campaignId: string,
+    name: string,
+  ): Promise<LocationEntity | null> {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const matches = await this.locationRepo
+      .createQueryBuilder("loc")
+      .where("loc.campaign_id = :campaignId", { campaignId })
+      .andWhere("LOWER(loc.name) = LOWER(:name)", { name: trimmed })
+      .limit(2)
+      .getMany();
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()

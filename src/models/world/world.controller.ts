@@ -44,6 +44,8 @@ import type {
   SetFactionRelationDto,
 } from "./services/faction.service";
 import type { CreateQuestDto, UpdateQuestDto } from "./services/quest.service";
+// Spec 027 (M2, AC2.10 / bug D3) — resolve slug-ou-UUID em `:id`.
+import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -105,7 +107,7 @@ export class WorldController {
    */
   @Get(":id/ambiance")
   async getAmbiance(
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Query("sceneId") sceneId?: string,
   ) {
     return this.ambianceService.assemble(campaignId, sceneId ?? null);
@@ -113,7 +115,7 @@ export class WorldController {
 
   @Post(":id/weather/roll")
   async rollWeather(
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() body: RollWeatherBody,
     @Headers("traceparent") traceparent?: string,
   ) {
@@ -128,7 +130,7 @@ export class WorldController {
 
   @Post(":id/clock/advance")
   async advanceClock(
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() body: AdvanceClockBody,
     @Headers("traceparent") traceparent?: string,
   ) {
@@ -153,7 +155,7 @@ export class WorldController {
    */
   @Patch(":id/chaos")
   async setChaos(
-    @Param("id") campaignId: string,
+    @Param("id", CampaignIdPipe) campaignId: string,
     @Body() body: SetChaosBody,
     @Headers("traceparent") traceparent?: string,
   ) {
@@ -187,7 +189,7 @@ export class WorldController {
   }
 
   @Get(":id")
-  async getCampaign(@Req() req: AuthRequest, @Param("id") id: string) {
+  async getCampaign(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.campaignService.getById(id);
   }
@@ -195,7 +197,7 @@ export class WorldController {
   @Patch(":id")
   async updateCampaign(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() dto: UpdateCampaignDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -207,7 +209,7 @@ export class WorldController {
   @Post(":id/initialize-with-budget")
   async initializeWithBudget(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() dto: InitializeBudgetDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -215,7 +217,7 @@ export class WorldController {
   }
 
   @Get(":id/budget")
-  async getBudget(@Req() req: AuthRequest, @Param("id") id: string) {
+  async getBudget(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.campaignService.getBudget(id);
   }
@@ -223,7 +225,7 @@ export class WorldController {
   @Patch(":id/budget")
   async updateBudget(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() dto: UpdateBudgetDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -231,7 +233,7 @@ export class WorldController {
   }
 
   @Get(":id/players")
-  async getPlayers(@Req() req: AuthRequest, @Param("id") id: string) {
+  async getPlayers(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.campaignService.getPlayers(id);
   }
@@ -239,7 +241,7 @@ export class WorldController {
   @Post(":id/players")
   async addPlayer(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() body: { userId?: string; characterId?: string },
   ) {
     const userId = body.userId ?? getUserId(req);
@@ -249,7 +251,7 @@ export class WorldController {
   @Patch(":id/players/:userId")
   async setPlayerCharacter(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("userId") userId: string,
     @Body("characterId") characterId: string,
   ) {
@@ -259,7 +261,7 @@ export class WorldController {
   @Delete(":id/players/:userId")
   async removePlayer(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("userId") userId: string,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -271,7 +273,7 @@ export class WorldController {
   @Post(":id/locations")
   async createLocation(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() dto: CreateLocationDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -279,7 +281,7 @@ export class WorldController {
   }
 
   @Get(":id/locations")
-  async getLocationTree(@Req() req: AuthRequest, @Param("id") id: string) {
+  async getLocationTree(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.locationService.getTree(id);
   }
@@ -287,7 +289,7 @@ export class WorldController {
   @Patch(":id/locations/:locId")
   async updateLocation(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("locId") locId: string,
     @Body() dto: UpdateLocationDto,
   ) {
@@ -298,7 +300,7 @@ export class WorldController {
   @Delete(":id/locations/:locId")
   async removeLocation(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("locId") locId: string,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -308,7 +310,7 @@ export class WorldController {
   @Post(":id/locations/:locId/visit")
   async markLocationVisited(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("locId") locId: string,
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
@@ -323,7 +325,7 @@ export class WorldController {
   @Post(":id/locations/:locId/connections")
   async addConnection(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("locId") locId: string,
     @Body() dto: AddConnectionDto,
   ) {
@@ -336,7 +338,7 @@ export class WorldController {
   @Post(":id/npcs")
   async createNpc(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() dto: CreateNpcDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -347,7 +349,7 @@ export class WorldController {
   async listNpcs(
     @Req() req: AuthRequest,
     @Headers() headers: Record<string, string>,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     // Spec 020 — redaction filter default-on. dm-omniscient bypass via header.
@@ -360,7 +362,7 @@ export class WorldController {
   async getNpc(
     @Req() req: AuthRequest,
     @Headers() headers: Record<string, string>,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("npcId") npcId: string,
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
@@ -373,7 +375,7 @@ export class WorldController {
   @Patch(":id/npcs/:npcId")
   async updateNpc(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("npcId") npcId: string,
     @Body() dto: Partial<CreateNpcDto>,
   ) {
@@ -384,7 +386,7 @@ export class WorldController {
   @Delete(":id/npcs/:npcId")
   async removeNpc(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("npcId") npcId: string,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -394,7 +396,7 @@ export class WorldController {
   @Post(":id/npcs/:npcId/relationships")
   async addRelationship(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("npcId") npcId: string,
     @Body() dto: AddRelationshipDto,
   ) {
@@ -405,7 +407,7 @@ export class WorldController {
   @Patch(":id/npcs/:npcId/move")
   async moveNpc(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("npcId") npcId: string,
     @Body("locationId") locationId: string | null,
   ) {
@@ -418,7 +420,7 @@ export class WorldController {
   @Post(":id/factions")
   async createFaction(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() dto: CreateFactionDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -426,7 +428,7 @@ export class WorldController {
   }
 
   @Get(":id/factions")
-  async listFactions(@Req() req: AuthRequest, @Param("id") id: string) {
+  async listFactions(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.factionService.listByCampaign(id);
   }
@@ -434,7 +436,7 @@ export class WorldController {
   @Patch(":id/factions/:facId")
   async updateFaction(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("facId") facId: string,
     @Body() dto: Partial<CreateFactionDto>,
   ) {
@@ -445,7 +447,7 @@ export class WorldController {
   @Post(":id/factions/relations")
   async setFactionRelation(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() body: { factionAId: string } & SetFactionRelationDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -453,7 +455,7 @@ export class WorldController {
   }
 
   @Get(":id/factions/relations")
-  async getFactionRelations(@Req() req: AuthRequest, @Param("id") id: string) {
+  async getFactionRelations(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.factionService.getRelations(id);
   }
@@ -463,7 +465,7 @@ export class WorldController {
   @Post(":id/quests")
   async createQuest(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Body() dto: CreateQuestDto,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
@@ -473,7 +475,7 @@ export class WorldController {
   @Get(":id/quests")
   async listQuests(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Query("status") status?: string,
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
@@ -481,7 +483,7 @@ export class WorldController {
   }
 
   @Get(":id/quests/available")
-  async getAvailableQuests(@Req() req: AuthRequest, @Param("id") id: string) {
+  async getAvailableQuests(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.questService.getAvailableQuests(id);
   }
@@ -489,7 +491,7 @@ export class WorldController {
   @Patch(":id/quests/:qId")
   async updateQuest(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("qId") qId: string,
     @Body() dto: UpdateQuestDto,
   ) {
@@ -500,7 +502,7 @@ export class WorldController {
   @Patch(":id/quests/:qId/objectives/:oId")
   async updateObjectiveStatus(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("oId") oId: string,
     @Body("status") status: string,
   ) {
@@ -511,7 +513,7 @@ export class WorldController {
   @Post(":id/quests/:qId/prerequisites")
   async addPrerequisite(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("qId") qId: string,
     @Body() body: { requiredQuestId: string; requiredStatus?: string },
   ) {
@@ -526,7 +528,7 @@ export class WorldController {
   @Delete(":id/quests/:qId")
   async removeQuest(
     @Req() req: AuthRequest,
-    @Param("id") id: string,
+    @Param("id", CampaignIdPipe) id: string,
     @Param("qId") qId: string,
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));

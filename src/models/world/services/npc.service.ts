@@ -149,6 +149,32 @@ export class NpcService {
     });
   }
 
+  /**
+   * Spec 027 (M2, AC2.9 / bug D2) — resolve `name → UUID` dentro do escopo
+   * da campanha. Match case-insensitive exato; sem fuzzy. Multiple match com
+   * mesmo nome retorna `null` (caller decide entre erro 422 ou disambiguation).
+   *
+   * Usado por NarrativeDecisionService quando Archivist envia "eda" em vez
+   * de UUID em `affectedEntityId`.
+   */
+  async findByNameInCampaign(
+    campaignId: string,
+    name: string,
+  ): Promise<NpcEntity | null> {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    // Case-insensitive exact match. ILIKE sem wildcard = igualdade
+    // case-insensitive em Postgres; em outros DBs o queryBuilder normaliza.
+    const matches = await this.npcRepo
+      .createQueryBuilder("npc")
+      .where("npc.campaign_id = :campaignId", { campaignId })
+      .andWhere("LOWER(npc.name) = LOWER(:name)", { name: trimmed })
+      .limit(2)
+      .getMany();
+    // Disambiguation: 0 → null; 1 → match; 2+ → null (ambiguous, caller decide).
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   /** Spec 020 — variante com redaction filter aplicado. */
   async listByCampaignProjected(
     campaignId: string,

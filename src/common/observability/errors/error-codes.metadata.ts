@@ -467,6 +467,20 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Outro turn com a mesma chave foi processado em paralelo — re-hidrate o histórico antes de tentar de novo.",
     domain: "session",
   },
+  [ErrorCode.NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND]: {
+    httpStatus: 422,
+    defaultTitle: "NarrativeDecision.affectedEntity could not be resolved",
+    defaultHint:
+      "O Archivist enviou um nome em vez de UUID, e nenhuma entidade casa com esse nome no contexto da campanha.",
+    domain: "narrative",
+  },
+  [ErrorCode.CAMPAIGN_SLUG_NOT_RESOLVED]: {
+    httpStatus: 404,
+    defaultTitle: "Campaign slug or id could not be resolved",
+    defaultHint:
+      "Verifique se a campanha existe e se o slug/UUID na URL está correto.",
+    domain: "campaign",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {
