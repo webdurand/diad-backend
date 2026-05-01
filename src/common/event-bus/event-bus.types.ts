@@ -66,6 +66,9 @@ export const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "revivify_eligibility_checked",
     "event_bus_listener_registered",
     "session_resumed",
+    // Spec 027 (M2, AC2.5)
+    "npc_witnessed_event",
+    "guard_dispatched",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",
@@ -84,6 +87,9 @@ export const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "item_lost",
     "currency_changed",
     "loot_rolled",
+    // Spec 027 (M2, AC2.5)
+    "reputation_tag_added",
+    "crime_committed",
   ]),
 };
 

@@ -321,7 +321,13 @@ export class StartEncounterFromNarrativeService {
         conditions: [],
         isDefeated: false,
         faction: "enemy",
-        controlledBy: "dm",
+        // Spec 027 (M2 follow-up) — NPCs hostis criados via narrative em
+        // DIAD solo são controlados pela IA. Antes vinha 'dm' (assumia DM
+        // humano), causando turno NPC parado esperando input do player.
+        // Frontend ([sessao/page.tsx:510-522]) auto-dispatcha POST /ai-turn
+        // quando current participant tem controlledBy='ai' → AiTurnService
+        // → /monsters/decide no agno (rule-based / utility / LLM por INT).
+        controlledBy: "ai",
       });
       const saved = await this.participantRepo.save(participant);
       participants.push(saved);

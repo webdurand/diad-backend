@@ -762,13 +762,39 @@ export class GameEngineController {
     };
   }
 
+  /**
+   * Spec 027 (M2 follow-up) — fim de combate é decisão IA-only. Em DIAD solo
+   * o player nunca dispara este endpoint diretamente: ou todos NPCs hostis
+   * são derrotados (auto-end no backend), ou todos PCs caem (auto-end). Este
+   * handler ainda existe pra DM-led campaigns futuras (multiplayer V2).
+   *
+   * Gate: só roda se o caller é dono de algum PC do encounter (placeholder
+   * mínimo até multiplayer DM real). Em solo, player é dono do PC, então
+   * conserta exatamente o gap: player NÃO podia chamar isso por NPC.
+   *
+   * MonsterTurnAutoService chama este endpoint internamente como
+   * `service-side` skipando o guard (passa `internal: true`).
+   */
   @Post("encounters/:id/resolve")
   async resolveEncounter(
     @Req() req: AuthRequest,
     @Param("id") id: string,
     @Body() body: ResolveEncounterDto,
   ) {
-    return this.encounterService.resolveEncounter(id, body, getUserId(req));
+    const userId = getUserId(req);
+    // Resolve via current turn participant — se for PC do user, autoriza;
+    // senão recusa. Em solo single-PC isso = "só o player pode resolver
+    // manual via UI"; quando IA encerra, ela usa a invocação interna do
+    // service (sem passar por este controller).
+    const current = await this.combatService.getCurrentTurn(id);
+    if (current.ok && current.value?.participantId) {
+      await this.permissionResolver.resolveMutationOwner(
+        current.value.participantId,
+        userId,
+        id,
+      );
+    }
+    return this.encounterService.resolveEncounter(id, body, userId);
   }
 
   @Post("encounters/:id/difficulty")
@@ -797,9 +823,16 @@ export class GameEngineController {
       affectedParticipantIds: string[];
     },
   ) {
+    // Spec 027 (M2 follow-up) — gate por dono do caster. Sem isso o player
+    // podia disparar AoE como se fosse NPC, controlando combate inteiro.
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.casterParticipantId,
+      getUserId(req),
+      id,
+    );
     return this.combatService.resolveAoeAction(id, {
       ...body,
-      ownerUserId: getUserId(req),
+      ownerUserId,
     });
   }
 
@@ -842,7 +875,14 @@ export class GameEngineController {
       };
     }
 
-    const ownerUserId = getUserId(req);
+    // Spec 027 (M2 follow-up) — gate de dono do attacker. PermissionResolver
+    // recusa quando o player tenta atacar usando NPC/monster (NPCs só DM
+    // controla; em DIAD solo, IA é DM, player não passa o gate).
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.attackerParticipantId,
+      getUserId(req),
+      id,
+    );
     // Traduz slug → actionName interno para manter o fluxo de resolveAttack intacto.
     const translated = await this.combatService.translateSlugToActionName(
       id,
@@ -886,7 +926,17 @@ export class GameEngineController {
     });
   }
 
-  @Post("encounters/:id/damage")
+  /**
+   * Spec 027 (M2, AC2.6) — endpoint canônico para Hostile Action Arbiter
+   * + tool agno `apply_damage`. Path `apply-damage` é o nome contractual da
+   * spec; `damage` mantido como alias backward-compat (usado por code legacy
+   * do combat surface).
+   *
+   * Princípio XI: erros propagam via DiadException (CombatService já throws
+   * com codes estruturados). Body é o input runtime do tool — `targetParticipantId`
+   * resolve permissão antes do combat path mutar HP.
+   */
+  @Post(["encounters/:id/apply-damage", "encounters/:id/damage"])
   async applyDamage(
     @Req() req: AuthRequest,
     @Param("id") id: string,
@@ -962,7 +1012,24 @@ export class GameEngineController {
   }
 
   @Post("encounters/:id/end-turn")
-  async endTurn(@Param("id") id: string) {
+  async endTurn(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+  ) {
+    // Spec 027 (M2 follow-up) — gate de dono do current turn participant.
+    // Antes qualquer user autenticado podia bater em /end-turn e avançar o
+    // turno do NPC pra fazer o NPC ficar idle (efetivamente "skip" do
+    // ataque). Resolver garante: só dono do PC ativo pode end-turn; turno
+    // de NPC é encerrado pelo MonsterTurnAutoService no backend, sem player.
+    const current = await this.combatService.getCurrentTurn(id);
+    if (current.ok && current.value?.participantId) {
+      await this.permissionResolver.resolveMutationOwner(
+        current.value.participantId,
+        getUserId(req),
+        id,
+      );
+    }
+
     return this.combatService.endTurn(id);
   }
 

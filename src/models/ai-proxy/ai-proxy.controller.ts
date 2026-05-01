@@ -24,6 +24,7 @@ import { SceneService } from "../session/services/scene.service";
 import { SessionMessageService } from "../session/services/session-message.service";
 import { SseNarrationCollector } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
+import { DomainException } from "src/common/observability/errors/diad-exception";
 import type { AuthRequest } from "../auth/auth.types";
 
 /**
@@ -123,24 +124,60 @@ export class AiProxyController {
    * interno do pipeStream; aguardar aqui só atrasa a Promise do controller,
    * garantindo que `GET /sessions/:id/messages` logo em seguida veja a
    * narração nova. Tolera erro pra não derrubar o request.
+   *
+   * Spec 027 (M2/AC2.11) — retorna o serverId persistido pra que o caller
+   * emita `narration_persisted` SSE event antes de fechar o stream. Frontend
+   * usa esse event pra substituir o `entry-N` otimista por `srv-narr-<uuid>`
+   * inline (sem esperar `session_sync` do fim do stream).
    */
   private async persistNarration(
     sessionId: string,
     userId: string,
     narration: string,
-  ): Promise<void> {
-    if (!narration || !narration.trim()) return;
+  ): Promise<{ serverId: string } | null> {
+    if (!narration || !narration.trim()) return null;
+    const serverId = `srv-narr-${randomUUID()}`;
     try {
       await this.sessionMessageService.append({
         sessionId,
         userId,
         kind: "narration",
         content: narration,
-        clientId: `srv-narr-${randomUUID()}`,
+        clientId: serverId,
       });
+      return { serverId };
     } catch (err: any) {
       this.logger.warn(
         `narration persist failed (session=${sessionId}): ${err?.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Spec 027 (M2/AC2.11) — emite SSE event `narration_persisted` carregando
+   * o serverId real da narração (`srv-narr-<uuid>`). Frontend substitui o
+   * `entry-N` otimista por esse id, eliminando o duplicado D4.
+   *
+   * Best-effort — falha não derruba stream. Caller passa `clientTempId` se
+   * tiver (vem do request body); nulo é aceito.
+   */
+  private emitNarrationPersisted(
+    res: Response,
+    serverId: string,
+    clientTempId: string | null | undefined,
+  ): void {
+    try {
+      res.write(
+        `data: ${JSON.stringify({
+          type: "narration_persisted",
+          serverId,
+          clientTempId: clientTempId ?? null,
+        })}\n\n`,
+      );
+    } catch (err: any) {
+      this.logger.warn(
+        `narration_persisted emit failed: ${err?.message}`,
       );
     }
   }
@@ -231,150 +268,40 @@ export class AiProxyController {
     });
   }
 
+  /**
+   * Spec 027 (M1, AC1.7+1.8) — endpoint legado removido. Pipeline DM agent
+   * monolítico (40 tools, prompt leak, ataques ignorados) substituído pelo
+   * Coordinator multi-agent. Frontend migrou pra `/ai/narrative/:sessionId/turn`
+   * (commit cd957d9). Mantemos a rota só pra responder 410 estruturado a
+   * clients antigos cacheados.
+   */
   @Post("solo/:sessionId/narrate-start")
-  async soloNarrateStart(
+  async soloNarrateStartDeprecated(
     @Param("sessionId") sessionId: string,
-    @Body() body: { characterId: string },
-    @Req() req: AuthRequest,
-    @Res() res: Response,
-  ) {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    try {
-      // Backend-authoritative — DM agent depende de payload enriquecido pra
-      // continuidade. Em fresh session ctx vem vazio (degrade-graceful);
-      // em re-render pós-retomada, ctx tem scene/recap → DM mantém estado.
-      const ctx = await this.resumeService.assemble(sessionId);
-      const collector = new SseNarrationCollector();
-      await this.aiProxyService.pipeStream(
-        `/solo/${sessionId}/narrate-start`,
-        {
-          character_id: body.characterId,
-          user_id: req.user!.id,
-          sessionId,
-          campaignId: ctx.campaignId,
-          isResumed: ctx.isResumed,
-          previousSessionId: ctx.previousSessionId,
-          sceneContext: ctx.sceneContext,
-          recentMessages: ctx.recentMessages,
-          previousSessionSummary: ctx.previousSessionSummary,
-          gapMinutes: ctx.gapMinutes,
-        },
-        res,
-        (chunk) => collector.feed(chunk),
-        async () => {
-          await this.persistNarration(
-            sessionId,
-            req.user!.id,
-            collector.finalize(),
-          );
-          await this.emitSessionSync(sessionId, res);
-        },
-      );
-    } catch (err: any) {
-      this.logger.error(`Solo narrate-start error: ${err.message}`);
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-      res.end();
-    }
+  ): Promise<never> {
+    throw new DomainException(
+      ErrorCode.LEGACY_ENDPOINT_DEPRECATED,
+      "Endpoint legado removido na spec 027.",
+      {
+        context: { sessionId, replacement: "/ai/narrative/:sessionId/turn" },
+      },
+    );
   }
 
+  /**
+   * Spec 027 (M1, AC1.7+1.8) — ver `soloNarrateStartDeprecated`.
+   */
   @Post("solo/:sessionId/message")
-  async soloMessage(
+  async soloMessageDeprecated(
     @Param("sessionId") sessionId: string,
-    @Body()
-    body: {
-      message: string;
-      lastMessageId?: number | null;
-      clientId?: string;
-    },
-    @Req() req: AuthRequest,
-    @Res() res: Response,
-  ) {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    try {
-      // Spec 024 — monta payload enriquecido server-side: sceneContext,
-      // recentMessages, isResumed, previousSessionSummary, hot-recap
-      // (fire-and-forget) e session_resumed event quando aplicável.
-      const ctx = await this.resumeService.assemble(sessionId, {
-        lastMessageIdFromClient: body.lastMessageId ?? null,
-      });
-
-      if (ctx.lastMessageMismatch) {
-        res.statusCode = 409;
-        res.write(
-          `data: ${JSON.stringify({
-            type: "error",
-            code: ErrorCode.SESSION_LAST_MESSAGE_MISMATCH,
-            content:
-              "Histórico desincronizado — recarregue para continuar a sessão.",
-          })}\n\n`,
-        );
-        res.end();
-        return;
-      }
-
-      res.setHeader(
-        "X-Session-Resume-Hot-Recap",
-        ctx.hotRecapTriggered
-          ? "pending"
-          : ctx.previousSessionSummary
-          ? "cached"
-          : "none",
-      );
-      res.setHeader(
-        "X-Session-Is-Resumed",
-        ctx.isResumed ? "true" : "false",
-      );
-
-      // Spec 024 follow-up — fonte de verdade do histórico não pode depender
-      // do client persistir. Backend grava player_action ANTES do stream
-      // (sobrevive a falha no agents) e narration DEPOIS (fire-and-forget).
-      await this.persistPlayerAction(
-        sessionId,
-        req.user!.id,
-        body.message,
-        body.clientId,
-      );
-      const collector = new SseNarrationCollector();
-      await this.aiProxyService.pipeStream(
-        `/solo/${sessionId}/message`,
-        {
-          message: body.message,
-          user_id: req.user!.id,
-          // Spec 024 — payload enriquecido (camelCase per contract).
-          sessionId,
-          campaignId: ctx.campaignId,
-          isResumed: ctx.isResumed,
-          previousSessionId: ctx.previousSessionId,
-          sceneContext: ctx.sceneContext,
-          recentMessages: ctx.recentMessages,
-          previousSessionSummary: ctx.previousSessionSummary,
-          lastMessageId: body.lastMessageId ?? ctx.serverLastMessageId,
-          gapMinutes: ctx.gapMinutes,
-        },
-        res,
-        (chunk) => collector.feed(chunk),
-        async () => {
-          await this.persistNarration(
-            sessionId,
-            req.user!.id,
-            collector.finalize(),
-          );
-          await this.emitSessionSync(sessionId, res);
-        },
-      );
-    } catch (err: any) {
-      this.logger.error(`Solo message error: ${err.message}`);
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-      res.end();
-    }
+  ): Promise<never> {
+    throw new DomainException(
+      ErrorCode.LEGACY_ENDPOINT_DEPRECATED,
+      "Endpoint legado removido na spec 027.",
+      {
+        context: { sessionId, replacement: "/ai/narrative/:sessionId/turn" },
+      },
+    );
   }
 
   // ────── Multi-agent narrative pipeline (Spec 014/026 Pillar 4) ──────
@@ -409,6 +336,11 @@ export class AiProxyController {
       // IntentClassifier (Camada 1 / Brain) bypassa o Haiku (latência 0ms).
       // Campo opcional, validado no agents (`VALID_INTENTS` enum).
       intent?: string;
+      // Spec 027 (M2 follow-up) — hint sistêmico (não-player) pro Narrator.
+      // Hoje único valor: 'post_combat' — sinaliza que o turn anterior foi
+      // o fim de um encounter; Narrator deve fechar o arco diegeticamente
+      // usando session_events recentes (encounter_ended, xp_awarded, etc).
+      systemHint?: string;
     },
     @Req() req: AuthRequest,
     @Res() res: Response,
@@ -508,15 +440,21 @@ export class AiProxyController {
           // Spec 027 (M1, AC1.10) — forward do intent hint pro IntentClassifier
           // bypassar o Haiku quando o input vem de quick-action button.
           ...(body.intent ? { intent: body.intent } : {}),
+          // Spec 027 (M2 follow-up) — forward do systemHint pro Narrator
+          // (hoje só 'post_combat' = closure narrativa pós encounter).
+          ...(body.systemHint ? { systemHint: body.systemHint } : {}),
         },
         res,
         (chunk) => collector.feed(chunk),
         async () => {
-          await this.persistNarration(
+          const persisted = await this.persistNarration(
             sessionId,
             req.user!.id,
             collector.finalize(),
           );
+          if (persisted) {
+            this.emitNarrationPersisted(res, persisted.serverId, body.clientId);
+          }
           await this.emitSessionSync(sessionId, res);
         },
         {
@@ -604,11 +542,14 @@ export class AiProxyController {
         res,
         (chunk) => collector.feed(chunk),
         async () => {
-          await this.persistNarration(
+          const persisted = await this.persistNarration(
             sessionId,
             req.user!.id,
             collector.finalize(),
           );
+          if (persisted) {
+            this.emitNarrationPersisted(res, persisted.serverId, null);
+          }
           await this.emitSessionSync(sessionId, res);
         },
         {
@@ -701,11 +642,14 @@ export class AiProxyController {
         res,
         (chunk) => collector.feed(chunk),
         async () => {
-          await this.persistNarration(
+          const persisted = await this.persistNarration(
             sessionId,
             req.user!.id,
             collector.finalize(),
           );
+          if (persisted) {
+            this.emitNarrationPersisted(res, persisted.serverId, body.clientId);
+          }
           await this.emitSessionSync(sessionId, res);
         },
       );

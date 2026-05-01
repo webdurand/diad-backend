@@ -481,6 +481,13 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Verifique se a campanha existe e se o slug/UUID na URL está correto.",
     domain: "campaign",
   },
+  [ErrorCode.LEGACY_ENDPOINT_DEPRECATED]: {
+    httpStatus: 410,
+    defaultTitle: "Legacy endpoint removed",
+    defaultHint:
+      "Use /ai/narrative/:sessionId/turn — endpoints /solo/* foram removidos na spec 027.",
+    domain: "system",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {

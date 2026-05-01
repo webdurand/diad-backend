@@ -228,6 +228,8 @@ function createHarness() {
       }),
     } as any,
     { shouldOfferShield: async () => null } as any,
+    // Spec 027 (M2 follow-up) — EncounterEndDetectorService stub
+    { tryAutoEnd: async () => null, detectOutcome: async () => null } as any,
   );
 
   return { combat, participants, encounter };

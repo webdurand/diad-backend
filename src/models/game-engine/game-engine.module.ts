@@ -35,6 +35,7 @@ import { MovementService } from "./services/movement.service";
 import { LootService } from "./services/loot.service";
 import { MonsterActionResolver } from "./services/monster-action-resolver.service";
 import { PermissionResolver } from "./services/permission-resolver.service";
+import { EncounterEndDetectorService } from "./services/encounter-end-detector.service";
 import { MonsterSpellcastingService } from "./services/monster-spellcasting.service";
 import { GenericActionsService } from "./services/generic-actions.service";
 import { EncounterSnapshotService } from "./services/encounter-snapshot.service";
@@ -248,6 +249,8 @@ import { NpcEntity } from "src/entities/npc.entity";
     LootRollService,
     ToolEventEmitService,
     StartEncounterFromNarrativeService,
+    // Spec 027 (M2 follow-up) — auto-end de combate em DIAD solo
+    EncounterEndDetectorService,
   ],
   exports: [
     DiceService,

@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignEntity } from "src/entities/campaign.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import { CharacterEntity } from "src/entities/character.entity";
 
 export interface CreateSessionDto {
   name: string;
@@ -34,6 +35,8 @@ export class SessionService {
     private readonly campaignRepo: Repository<CampaignEntity>,
     @InjectRepository(CampaignPlayerEntity)
     private readonly campaignPlayerRepo: Repository<CampaignPlayerEntity>,
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo: Repository<CharacterEntity>,
   ) {}
 
   async create(
@@ -88,7 +91,47 @@ export class SessionService {
     if (!session.characterIds.includes(characterId)) {
       session.characterIds = [...session.characterIds, characterId];
     }
-    return this.sessionRepo.save(session);
+    const saved = await this.sessionRepo.save(session);
+
+    // Spec 027 (M2 follow-up) — espelhar (campaignId, userId, characterId)
+    // em campaign_players. Sem isso, em DIAD solo o frontend não conseguia
+    // resolver `currentOwnerUserId` via campaignPlayers.find(...) e o player
+    // perdia ActionBar do próprio PC. Idempotente: upsert por (campaignId, userId).
+    if (saved.campaignId) {
+      try {
+        const character = await this.characterRepo.findOne({
+          where: { id: characterId },
+          select: ["id", "userId"],
+        });
+        if (character?.userId) {
+          const existing = await this.campaignPlayerRepo.findOne({
+            where: { campaignId: saved.campaignId, userId: character.userId },
+          });
+          if (existing) {
+            existing.characterId = characterId;
+            existing.isActive = true;
+            await this.campaignPlayerRepo.save(existing);
+          } else {
+            await this.campaignPlayerRepo.save(
+              this.campaignPlayerRepo.create({
+                campaignId: saved.campaignId,
+                userId: character.userId,
+                characterId,
+                isActive: true,
+              }),
+            );
+          }
+        }
+      } catch (err) {
+        // Best-effort — falha aqui não derruba addCharacter (testes podem
+        // rodar com character.userId nulo). Log não-disruptivo.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `session.addCharacter: campaign_players link falhou (session=${sessionId}, character=${characterId}): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return saved;
   }
 
   async delete(sessionId: string): Promise<void> {

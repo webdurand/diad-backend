@@ -12,6 +12,7 @@ import { DiceService } from "./dice.service";
 import { ConditionEffectsService } from "./condition-effects.service";
 import { EventService } from "./event.service";
 import { EncounterService } from "./encounter.service";
+import { EncounterEndDetectorService } from "./encounter-end-detector.service";
 import { MovementService } from "./movement.service";
 import { SessionService } from "./session.service";
 import {
@@ -161,6 +162,9 @@ export class CombatService {
     private readonly exhaustion: ExhaustionService,
     private readonly capstones: CapstonesService,
     private readonly reactionOpportunity: ReactionOpportunityService,
+    // Spec 027 (M2 follow-up) — single auto-end hook em endTurn (lifecycle).
+    // Detector é gateado por solo (no-op em multiplayer DM-led).
+    private readonly encounterEndDetector: EncounterEndDetectorService,
   ) {}
 
   /**
@@ -1547,6 +1551,14 @@ export class CombatService {
     });
 
     await this.eventService.emit(encounter.sessionId, encounterId, events);
+
+    // Spec 027 (M2 follow-up) — single auto-end hook, no início de cada turno.
+    // Regra (DIAD solo): se a IA é o DM e nenhum token controlled='ai' está
+    // vivo → finaliza combate, calcula XP/loot/fame e devolve pro chat.
+    // Idempotente; multiplayer DM-led: no-op (gateado por isSoloCampaign no
+    // detector). NÃO afeta turn_start emitido — frontend lê encounter.status
+    // e navega quando ver 'completed'.
+    await this.encounterEndDetector.tryAutoEnd(encounterId);
 
     return success(
       {

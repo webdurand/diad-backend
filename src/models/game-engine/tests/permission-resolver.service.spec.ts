@@ -6,6 +6,11 @@ function mockServices(
   encounter: any,
   session: any,
   campaignDmUserId?: string,
+  // Spec 027 (M2 follow-up) — `multiplayerHumanCount` controla a heurística
+  // "AI-DM solo" do PermissionResolver. Default 2 = comporta-se como antes
+  // (DM bypass ativo). Passar 1 simula DIAD solo (player == dmUserId mas
+  // sem outros humanos) → DM bypass desligado.
+  multiplayerHumanCount: number = 2,
 ) {
   const encounterService: any = {
     getParticipant: jest.fn(async () => participant),
@@ -25,7 +30,23 @@ function mockServices(
         : { id: session.campaignId, dmUserId: "someone-else" },
     ),
   };
-  return { encounterService, sessionService, campaignService };
+  // Spec 027 (M2 follow-up) — mock do CampaignPlayerEntity repo. Apenas
+  // count() + createQueryBuilder().getRawOne() são consumidos pelo Resolver.
+  const campaignPlayerRepo: any = {
+    count: jest.fn(async () => multiplayerHumanCount),
+    createQueryBuilder: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn(async () => ({ n: String(multiplayerHumanCount) })),
+    })),
+  };
+  return {
+    encounterService,
+    sessionService,
+    campaignService,
+    campaignPlayerRepo,
+  };
 }
 
 describe("PermissionResolver", () => {
@@ -40,7 +61,12 @@ describe("PermissionResolver", () => {
       encounterId: "enc-1",
       __ownerUserId: "user-owner",
     };
-    const { encounterService, sessionService, campaignService } = mockServices(
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(
       participant,
       encounter,
       session,
@@ -49,6 +75,7 @@ describe("PermissionResolver", () => {
       encounterService,
       sessionService,
       campaignService,
+      campaignPlayerRepo,
     );
 
     const result = await resolver.resolveMutationOwner(
@@ -67,7 +94,12 @@ describe("PermissionResolver", () => {
       encounterId: "enc-1",
       __ownerUserId: "user-other",
     };
-    const { encounterService, sessionService, campaignService } = mockServices(
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(
       participant,
       encounter,
       session,
@@ -77,6 +109,7 @@ describe("PermissionResolver", () => {
       encounterService,
       sessionService,
       campaignService,
+      campaignPlayerRepo,
     );
 
     const result = await resolver.resolveMutationOwner(
@@ -95,7 +128,12 @@ describe("PermissionResolver", () => {
       encounterId: "enc-1",
       __ownerUserId: "user-other",
     };
-    const { encounterService, sessionService, campaignService } = mockServices(
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(
       participant,
       encounter,
       session,
@@ -105,6 +143,7 @@ describe("PermissionResolver", () => {
       encounterService,
       sessionService,
       campaignService,
+      campaignPlayerRepo,
     );
 
     await expect(
@@ -119,7 +158,12 @@ describe("PermissionResolver", () => {
       monsterId: "mon-1",
       encounterId: "enc-1",
     };
-    const { encounterService, sessionService, campaignService } = mockServices(
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(
       participant,
       encounter,
       session,
@@ -129,6 +173,7 @@ describe("PermissionResolver", () => {
       encounterService,
       sessionService,
       campaignService,
+      campaignPlayerRepo,
     );
 
     const result = await resolver.resolveMutationOwner(
@@ -146,7 +191,12 @@ describe("PermissionResolver", () => {
       monsterId: "mon-2",
       encounterId: "enc-1",
     };
-    const { encounterService, sessionService, campaignService } = mockServices(
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(
       participant,
       encounter,
       session,
@@ -156,6 +206,7 @@ describe("PermissionResolver", () => {
       encounterService,
       sessionService,
       campaignService,
+      campaignPlayerRepo,
     );
 
     await expect(
@@ -171,7 +222,12 @@ describe("PermissionResolver", () => {
       encounterId: "other-enc",
       __ownerUserId: "user-owner",
     };
-    const { encounterService, sessionService, campaignService } = mockServices(
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(
       participant,
       encounter,
       session,
@@ -180,6 +236,7 @@ describe("PermissionResolver", () => {
       encounterService,
       sessionService,
       campaignService,
+      campaignPlayerRepo,
     );
 
     await expect(
@@ -194,7 +251,12 @@ describe("PermissionResolver", () => {
       characterId: "char-5",
       encounterId: "enc-1",
     };
-    const { encounterService, sessionService, campaignService } = mockServices(
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(
       participant,
       encounter,
       session,
@@ -203,6 +265,7 @@ describe("PermissionResolver", () => {
       encounterService,
       sessionService,
       campaignService,
+      campaignPlayerRepo,
     );
 
     await expect(

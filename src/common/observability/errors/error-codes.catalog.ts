@@ -107,6 +107,10 @@ export const ErrorCode = {
   // mas downstream espera UUID. CampaignIdPipe resolve; este código é pra
   // telemetria quando resolução falha.
   CAMPAIGN_SLUG_NOT_RESOLVED: "CAMPAIGN_SLUG_NOT_RESOLVED",
+  // Spec 027 M1 (AC1.7+1.8) — endpoints /solo/{id}/narrate-start e
+  // /solo/{id}/message do pipeline legacy DM agent foram removidos. Frontend
+  // usa /ai/narrative/:sessionId/turn (Coordinator multi-agent).
+  LEGACY_ENDPOINT_DEPRECATED: "LEGACY_ENDPOINT_DEPRECATED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
