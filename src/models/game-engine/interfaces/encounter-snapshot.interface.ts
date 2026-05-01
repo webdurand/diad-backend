@@ -77,7 +77,15 @@ export interface SnapshotParticipant {
   /** Spec 013 — concentração ativa (probes/AI consomem). */
   isConcentrating: boolean;
   concentratingOn: string | null;
-  statblockRef?: { monsterSlug: string };
+  // Spec 027 (M2 follow-up) — agno `_pick_best_attack` consulta `actions`
+  // pra resolver nome real (vs literal "attack" que backend não acha).
+  // `intelligence`/`wisdom` gateiam motor de decisão (rule/utility/LLM).
+  statblockRef?: {
+    monsterSlug: string;
+    actions?: unknown[];
+    intelligence?: number;
+    wisdom?: number;
+  };
   availableActions: TurnActionBlock[];
   /** id → distância em pés (tiles × 5ft). */
   distances: Record<string, number>;

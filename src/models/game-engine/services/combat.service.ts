@@ -2018,11 +2018,44 @@ export class CombatService {
           if (fsRes.appliedStyle) appliedFightingStyle = fsRes.appliedStyle;
         }
       }
-    } else if (attacker.type === "monster" && attacker.monster) {
-      const resolved = this.monsterActionResolver.resolveByName(
+    } else if (
+      (attacker.type === "monster" || attacker.type === "npc") &&
+      attacker.monster
+    ) {
+      // Spec 027 (M2 follow-up) — fallback pra primeira ação atacável quando
+      // actionName não bate com nada no statblock. Cobre dois cenários:
+      //   1) AI mandou nome genérico ("attack") porque _pick_best_attack
+      //      não conseguiu resolver nome real (statblock vazio no snapshot).
+      //   2) Tradução slug→nome divergiu (renames RAW vs DB).
+      // Sem isso, NPC ficava parado o turno inteiro retornando INVALID_ACTION.
+      let resolved = this.monsterActionResolver.resolveByName(
         attacker.monster,
         dto.actionName,
       );
+      if (!resolved) {
+        const monsterActions = (attacker.monster as { actions?: unknown })
+          .actions;
+        if (Array.isArray(monsterActions)) {
+          for (const candidate of monsterActions) {
+            if (!candidate || typeof candidate !== "object") continue;
+            const candidateName = (candidate as { name?: unknown }).name;
+            if (typeof candidateName !== "string" || !candidateName.trim()) {
+              continue;
+            }
+            const r = this.monsterActionResolver.resolveByName(
+              attacker.monster,
+              candidateName,
+            );
+            if (
+              r &&
+              (typeof r.attackBonus === "number" || r.damageDice)
+            ) {
+              resolved = r;
+              break;
+            }
+          }
+        }
+      }
       if (!resolved) {
         return failure(
           `Acao "${dto.actionName}" nao encontrada no statblock do monstro.`,

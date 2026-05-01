@@ -101,6 +101,8 @@ import type { DyingState, DyingReason } from "./services/dying-state.service";
 import { LootRollService } from "./services/loot-roll.service";
 import type { CRBand, LootMode } from "./services/loot-roll.service";
 import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
+// Spec 027 (M2 follow-up) — WS realtime substitui polling no frontend.
+import { RealtimeService } from "src/realtime/realtime.service";
 import { StartEncounterFromNarrativeDto } from "./dto/start-encounter-from-narrative.dto";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -189,7 +191,28 @@ export class GameEngineController {
     private readonly dyingStateService: DyingStateService,
     private readonly lootRollService: LootRollService,
     private readonly startEncounterFromNarrativeService: StartEncounterFromNarrativeService,
+    // Spec 027 (M2 follow-up) — WS realtime para invalidar cache do frontend
+    // após mutações de turno/encontro. Sala: encounter:<id>.
+    private readonly realtime: RealtimeService,
   ) {}
+
+  /**
+   * Spec 027 (M2 follow-up) — emite invalidate WS pra que clientes refreshem.
+   * Não tenta diff incremental: mantém simples (refresh full do encounter no
+   * frontend). Frequência baixa (uma por mutação significativa). Erros
+   * silenciados — emit nunca quebra o response do endpoint.
+   */
+  private emitEncounterInvalidate(encounterId: string, reason: string): void {
+    try {
+      this.realtime.emitToRoom(
+        `encounter:${encounterId}`,
+        "encounter:invalidate",
+        { encounterId, reason, at: new Date().toISOString() },
+      );
+    } catch {
+      /* noop */
+    }
+  }
 
   // ==================== SPEC 020 — TOOL SURFACE COMPLETION ====================
 
@@ -544,12 +567,16 @@ export class GameEngineController {
           : getUserId(req);
       await this.movementService.initializeTurn(first, ownerId);
     }
-    return this.encounterService.getById(id);
+    const out = await this.encounterService.getById(id);
+    this.emitEncounterInvalidate(id, "start-combat");
+    return out;
   }
 
   @Post("encounters/:id/end")
   async endEncounter(@Param("id") id: string) {
-    return this.encounterService.endEncounter(id);
+    const result = await this.encounterService.endEncounter(id);
+    this.emitEncounterInvalidate(id, "end-encounter");
+    return result;
   }
 
   /**
@@ -1030,7 +1057,9 @@ export class GameEngineController {
       );
     }
 
-    return this.combatService.endTurn(id);
+    const result = await this.combatService.endTurn(id);
+    this.emitEncounterInvalidate(id, "end-turn");
+    return result;
   }
 
   // ==================== SPEC 004: RAW COMBAT ENDPOINTS ====================
@@ -1180,7 +1209,13 @@ export class GameEngineController {
     @Body() body: { participantId: string },
   ) {
     const authUserId = getUserId(req);
-    return this.aiTurnService.executeAiTurn(id, body.participantId, authUserId);
+    const result = await this.aiTurnService.executeAiTurn(
+      id,
+      body.participantId,
+      authUserId,
+    );
+    this.emitEncounterInvalidate(id, "ai-turn");
+    return result;
   }
 
   @Get("encounters/:id/snapshot")

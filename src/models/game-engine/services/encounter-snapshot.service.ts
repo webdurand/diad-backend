@@ -111,9 +111,21 @@ export class EncounterSnapshotService {
           hidden: (p.conditions ?? []).includes("hidden"),
           isConcentrating: p.isConcentrating ?? false,
           concentratingOn: p.concentratingOn ?? null,
+          // Spec 027 (M2 follow-up) — statblock para monster E npc (NPC do
+          // narrative tem type='npc' + monsterId). Carrega `actions` (era
+          // ausente) pra que agno `_pick_best_attack` resolva nome real;
+          // sem isso, AI mandava "attack" genérico que o backend não
+          // reconhece, deixando NPC parado no turno.
           statblockRef:
-            p.type === "monster" && p.monster
-              ? { monsterSlug: p.monster.slug ?? p.monster.name ?? "" }
+            (p.type === "monster" || p.type === "npc") && p.monster
+              ? {
+                  monsterSlug: p.monster.slug ?? p.monster.name ?? "",
+                  actions: Array.isArray(p.monster.actions)
+                    ? p.monster.actions
+                    : [],
+                  intelligence: p.monster.intelligence ?? 10,
+                  wisdom: p.monster.wisdom ?? 10,
+                }
               : undefined,
           availableActions,
           distances: computeDistances(p, participants),
