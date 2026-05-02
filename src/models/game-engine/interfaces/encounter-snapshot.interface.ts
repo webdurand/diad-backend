@@ -85,6 +85,9 @@ export interface SnapshotParticipant {
     actions?: unknown[];
     intelligence?: number;
     wisdom?: number;
+    /** Spec 027 (M2 follow-up) — walk speed em pés (default 30). agno usa
+     * pra movement planner saber até onde mover pra entrar em range. */
+    speed?: number;
   };
   availableActions: TurnActionBlock[];
   /** id → distância em pés (tiles × 5ft). */

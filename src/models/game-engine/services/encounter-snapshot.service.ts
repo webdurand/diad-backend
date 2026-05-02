@@ -116,6 +116,9 @@ export class EncounterSnapshotService {
           // ausente) pra que agno `_pick_best_attack` resolva nome real;
           // sem isso, AI mandava "attack" genérico que o backend não
           // reconhece, deixando NPC parado no turno.
+          // `speed` adicionado pra movement_planner do agno saber até onde
+          // pode mover quando alvo está fora de range (evita NPC parado por
+          // OUT_OF_RANGE silencioso).
           statblockRef:
             (p.type === "monster" || p.type === "npc") && p.monster
               ? {
@@ -125,6 +128,7 @@ export class EncounterSnapshotService {
                     : [],
                   intelligence: p.monster.intelligence ?? 10,
                   wisdom: p.monster.wisdom ?? 10,
+                  speed: parseMonsterSpeedFt(p.monster.speed),
                 }
               : undefined,
           availableActions,
@@ -232,4 +236,22 @@ function computeVisibility(
     out[other.id] = !otherHidden;
   }
   return out;
+}
+
+/**
+ * Spec 027 (M2 follow-up) — extrai walk speed em pés do JSONB do monster.
+ * Espelha `MovementService.parseMonsterSpeed` (privado lá). RAW SRD: humanoides
+ * 30ft, beasts variam, undead 25-30ft. Default 30 quando não parseável.
+ */
+function parseMonsterSpeedFt(
+  speed: Record<string, unknown> | null | undefined,
+): number {
+  if (!speed) return 30;
+  const walk = speed.walk;
+  if (typeof walk === "number") return walk;
+  if (typeof walk === "string") {
+    const match = walk.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 30;
+  }
+  return 30;
 }

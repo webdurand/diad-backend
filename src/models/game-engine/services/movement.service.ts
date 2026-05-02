@@ -603,6 +603,8 @@ export class MovementService {
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
   ): Promise<void> {
+    // eslint-disable-next-line no-console
+    console.log(`[INIT-TURN] participantId=${participant.id} type=${participant.type} controlledBy=${participant.controlledBy} prev{actionUsed=${participant.actionUsed}, bonusActionUsed=${participant.bonusActionUsed}, movementRemaining=${participant.movementRemaining}}`);
     const speed = await this.getSpeed(participant, ownerUserId);
     participant.movementRemaining = speed;
     participant.actionUsed = false;

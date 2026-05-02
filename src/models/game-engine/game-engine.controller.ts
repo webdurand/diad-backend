@@ -14,6 +14,7 @@ import {
   UploadedFile,
   HttpCode,
   HttpStatus,
+  Header,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
@@ -418,7 +419,10 @@ export class GameEngineController {
     return this.encounterService.listBySession(sessionId);
   }
 
+  // Spec 027 (M2 follow-up) — sem cache HTTP. Encounter muda a cada turno
+  // (action_used, hp, conditions) e ETag estável pode mascarar mudanças.
   @Get("encounters/:id")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
   async getEncounter(@Param("id") id: string) {
     const encounter = await this.encounterService.getById(id);
     return {
@@ -835,6 +839,7 @@ export class GameEngineController {
   // ==================== COMBAT ====================
 
   @Get("encounters/:id/turn")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
   async getCurrentTurn(@Param("id") id: string) {
     return this.combatService.getCurrentTurn(id);
   }
@@ -1011,7 +1016,13 @@ export class GameEngineController {
     return this.combatService.applyCondition(id, { ...body, ownerUserId });
   }
 
+  // Spec 027 (M2 follow-up) — desabilita cache HTTP/ETag.
+  // Express auto-gera ETag (W/...) que pode bater igual entre turns mesmo
+  // depois de initializeTurn ter resetado actionUsed/movementRemaining,
+  // causando 304 com body stale no client. `no-store` força sempre 200.
   @Get("encounters/:id/turn-actions/:participantId")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
+  @Header("Pragma", "no-cache")
   async getTurnActions(
     @Req() req: AuthRequest,
     @Param("id") id: string,

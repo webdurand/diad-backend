@@ -71,11 +71,35 @@ export class AiTurnService {
     if (!participant) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
 
     // Idempotência: mesmo round + resultado cacheado → retorna direto.
+    // Spec 027 (M2 follow-up) — invalida cache quando steps são triviais (só
+    // dodge/end-turn, sem attack/move/cast). Cobre regressão onde upgrade do
+    // engine de decisão (ex: smart→medium fallback) não dispararia em rounds
+    // antigos que cacheraram steps degenerados.
     if (
       participant.lastAiTurnRound === encounter.currentRound &&
       participant.lastAiTurnResult
     ) {
-      return success(participant.lastAiTurnResult);
+      const cachedSteps = (
+        (participant.lastAiTurnResult as { steps?: Array<{ kind?: string }> })
+          .steps ?? []
+      );
+      const hasUsefulStep = cachedSteps.some(
+        (s) =>
+          s.kind === "attack" ||
+          s.kind === "move" ||
+          s.kind === "cast-spell" ||
+          s.kind === "use-object" ||
+          s.kind === "help",
+      );
+      if (hasUsefulStep) {
+        this.logger.log(
+          `[AI-TURN-CACHE] hit participant=${participantId} round=${encounter.currentRound} steps=${JSON.stringify(cachedSteps)}`,
+        );
+        return success(participant.lastAiTurnResult);
+      }
+      this.logger.log(
+        `[AI-TURN-CACHE] discard stale participant=${participantId} round=${encounter.currentRound} steps=${JSON.stringify(cachedSteps)} (degenerado, recomputando)`,
+      );
     }
 
     if (participant.controlledBy !== "ai") {
@@ -107,6 +131,9 @@ export class AiTurnService {
     }
 
     // Aplica steps
+    this.logger.log(
+      `[AI-TURN] participant=${participantId} round=${encounter.currentRound} steps=${JSON.stringify(planRes.value.steps)}`,
+    );
     const executedSteps: ActionStep[] = [];
     for (const step of planRes.value.steps) {
       const executed = await this.applyStep(
@@ -116,11 +143,14 @@ export class AiTurnService {
         authUserId,
       );
       executedSteps.push(executed);
+      this.logger.log(
+        `[AI-TURN] step.kind=${step.kind} ok=${executed.result.ok} summary="${executed.result.summary}" error=${executed.result.error?.code ?? "-"}`,
+      );
       // Se step falhou criticamente (ex: TARGET_DEFEATED), para — o
       // frontend/executor pode re-chamar com continuationFrom.
       if (!executed.result.ok && step.kind !== "end-turn") {
         this.logger.warn(
-          `Step ${step.kind} falhou: ${executed.result.error?.code}`,
+          `Step ${step.kind} falhou: ${executed.result.error?.code} — ${executed.result.summary}`,
         );
         break;
       }
