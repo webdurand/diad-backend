@@ -24,6 +24,7 @@ import { EventService } from "./event.service";
 import { SessionService } from "./session.service";
 import { CampaignService } from "src/models/world/services/campaign.service";
 import { CapstonesService } from "./capstones.service";
+import { XpAwardService } from "./xp-award.service";
 import { getAbilityModifier } from "src/shared/srd-utils";
 import { XP_THRESHOLDS } from "src/shared/srd-constants";
 import { EquipmentSourceEnum } from "src/entities/enums";
@@ -103,6 +104,7 @@ export class EncounterService {
     private readonly campaignService: CampaignService,
     @Inject(forwardRef(() => CapstonesService))
     private readonly capstones: CapstonesService,
+    private readonly xpAwardService: XpAwardService,
   ) {}
 
   async create(
@@ -1204,7 +1206,15 @@ export class EncounterService {
     );
     const warnings: string[] = [];
 
-    // Apply XP
+    // Resolve campaign id once — usado pelo XpAwardService pra honrar
+    // `campaign.xp_mode` (rules|milestone|hybrid).
+    const session = await this.sessionService
+      .getById(encounter.sessionId)
+      .catch(() => null);
+    const campaignId = session?.campaignId ?? undefined;
+
+    // Apply XP via XpAwardService — escreve audit row em `xp_award_events`
+    // e respeita xp_mode (milestone retorna awardedXp=0 mas grava audit).
     const xpApplied: Array<{
       characterId: string;
       xp: number;
@@ -1214,16 +1224,28 @@ export class EncounterService {
     for (const reward of dto.xpRewards) {
       if (reward.xp <= 0) continue;
       try {
-        const result = await this.stateService.updateXp(
-          dto.ownerUserId,
+        const effectiveOwner = await this.resolveEffectiveOwner(
           reward.characterId,
-          { amount: reward.xp },
+          dto.ownerUserId,
         );
+        const result = await this.xpAwardService.awardXp({
+          characterId: reward.characterId,
+          amount: reward.xp,
+          source: "combat_kill",
+          reason: `Encounter ${encounterId} resolved (${dto.outcome})`,
+          encounterId,
+          ownerUserId: effectiveOwner,
+          campaignId,
+        });
+        if (!result.ok) {
+          warnings.push(`XP for ${reward.characterId}: ${result.error}`);
+          continue;
+        }
         xpApplied.push({
           characterId: reward.characterId,
-          xp: reward.xp,
-          newTotal: result.xp,
-          levelUpAvailable: result.levelUpAvailable,
+          xp: result.value.awardedXp,
+          newTotal: result.value.totalXp,
+          levelUpAvailable: result.value.levelUpReady,
         });
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : "unknown error";
@@ -1241,8 +1263,12 @@ export class EncounterService {
     }> = [];
     for (const reward of dto.goldRewards) {
       try {
-        await this.inventoryService.updateGold(
+        const effectiveOwner = await this.resolveEffectiveOwner(
+          reward.characterId,
           dto.ownerUserId,
+        );
+        await this.inventoryService.updateGold(
+          effectiveOwner,
           reward.characterId,
           { gp: reward.gp, cp: reward.cp, sp: reward.sp, pp: reward.pp },
         );
@@ -1261,9 +1287,13 @@ export class EncounterService {
     }> = [];
     for (const reward of dto.itemRewards) {
       try {
+        const effectiveOwner = await this.resolveEffectiveOwner(
+          reward.characterId,
+          dto.ownerUserId,
+        );
         if (reward.equipmentId) {
           const result = await this.inventoryService.addItem(
-            dto.ownerUserId,
+            effectiveOwner,
             reward.characterId,
             {
               equipmentId: reward.equipmentId,
@@ -1279,7 +1309,7 @@ export class EncounterService {
         }
         if (reward.magicItemId) {
           await this.inventoryService.addMagicItem(
-            dto.ownerUserId,
+            effectiveOwner,
             reward.characterId,
             { magicItemId: reward.magicItemId },
           );
@@ -1300,7 +1330,18 @@ export class EncounterService {
     await this.encounterRepo.save(encounter);
     await this.sessionService.setActiveEncounter(encounter.sessionId, null);
 
-    // Emit event
+    // Build outcome summary — payload estruturado pro post-combat narrative
+    // (Spec 027 follow-up). Lido pelo AiProxy quando systemHint='post_combat'
+    // e injetado em sceneContext.recent_events.
+    const outcomeSummary = await this.buildEncounterOutcomeSummary(
+      encounter,
+      dto.outcome,
+      xpApplied,
+      goldApplied,
+      itemsApplied,
+    );
+
+    // Emit events
     const events = [
       {
         event_type: "encounter_resolved",
@@ -1311,6 +1352,10 @@ export class EncounterService {
           goldApplied,
           itemsApplied,
         },
+      },
+      {
+        event_type: "encounter_outcome_summary",
+        data: outcomeSummary,
       },
     ];
     await this.eventService.emit(encounter.sessionId, encounterId, events);
@@ -1326,6 +1371,183 @@ export class EncounterService {
       },
       events,
     };
+  }
+
+  /**
+   * Retorna o userId real dono do PC quando o caller usa `'system'` (auto-end).
+   * Caller humano (DM/player) continua passando o próprio userId — o ownership
+   * check downstream (`ensureCharacterOwnership`) então valida normalmente.
+   *
+   * Sem isso, `'system'` falharia em `ensureCharacterOwnership` e XP/gold
+   * ficariam silenciosamente em `warnings[]`.
+   */
+  private async resolveEffectiveOwner(
+    characterId: string,
+    callerUserId: string,
+  ): Promise<string> {
+    if (callerUserId !== "system") return callerUserId;
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId },
+      select: ["id", "userId"],
+    });
+    if (!character?.userId) {
+      throw new NotFoundException(
+        `Personagem ${characterId} sem userId — não dá pra resolver owner.`,
+      );
+    }
+    return character.userId;
+  }
+
+  /**
+   * Spec 027 (M2 follow-up) — payload estruturado pra post-combat narrative.
+   *
+   * Resume o resultado do encounter em fatos curtos (PT-BR) que o Narrator
+   * lê via scene_context.recent_events. Inclui:
+   *  - outcome canônico (victory|defeat|retreat|negotiation)
+   *  - lista de NPCs derrotados (nome + tipo + slug pro DM citar pelo nome)
+   *  - HP final do PC (current/max/percent) pra calibrar tom narrativo
+   *  - totais consolidados de XP / gold / items
+   *  - summary em 1 frase como fato (não prosa)
+   */
+  private async buildEncounterOutcomeSummary(
+    encounter: EncounterEntity,
+    outcome: string,
+    xpApplied: Array<{ characterId: string; xp: number }>,
+    goldApplied: Array<{
+      characterId: string;
+      gp: number;
+      cp?: number;
+      sp?: number;
+      pp?: number;
+    }>,
+    itemsApplied: Array<{
+      characterId: string;
+      itemName: string;
+      quantity: number;
+    }>,
+  ): Promise<{
+    outcome: string;
+    defeatedNpcs: Array<{
+      name: string;
+      type: "monster" | "npc";
+      monsterSlug?: string;
+    }>;
+    xpAwarded: number;
+    gold: { cp: number; sp: number; gp: number; pp: number };
+    items: Array<{ name: string; quantity: number }>;
+    pcFinalHp:
+      | { characterId: string; current: number; max: number; percent: number }
+      | null;
+    summary: string;
+  }> {
+    const participants = await this.participantRepo.find({
+      where: { encounterId: encounter.id },
+      relations: ["monster"],
+    });
+
+    const defeatedNpcs = participants
+      .filter(
+        (p) =>
+          p.faction === "enemy" &&
+          (p.type === "monster" || p.type === "npc") &&
+          (p.isDefeated || (p.currentHp ?? 0) <= 0),
+      )
+      .map((p) => ({
+        name: p.displayName,
+        type: p.type as "monster" | "npc",
+        monsterSlug: p.monster?.slug,
+      }));
+
+    const xpAwarded = xpApplied.reduce((sum, x) => sum + (x.xp ?? 0), 0);
+    const gold = goldApplied.reduce(
+      (acc, g) => ({
+        cp: acc.cp + (g.cp ?? 0),
+        sp: acc.sp + (g.sp ?? 0),
+        gp: acc.gp + (g.gp ?? 0),
+        pp: acc.pp + (g.pp ?? 0),
+      }),
+      { cp: 0, sp: 0, gp: 0, pp: 0 },
+    );
+    const items = itemsApplied.map((it) => ({
+      name: it.itemName,
+      quantity: it.quantity,
+    }));
+
+    const pcParticipant = participants.find(
+      (p) => p.type === "pc" && p.characterId,
+    );
+    let pcFinalHp:
+      | { characterId: string; current: number; max: number; percent: number }
+      | null = null;
+    if (pcParticipant?.characterId) {
+      const current = pcParticipant.currentHp ?? 0;
+      const max = pcParticipant.maxHp ?? 0;
+      const percent = max > 0 ? Math.round((current / max) * 100) : 0;
+      pcFinalHp = {
+        characterId: pcParticipant.characterId,
+        current,
+        max,
+        percent,
+      };
+    }
+
+    const summary = this.formatOutcomeSummaryText(
+      outcome,
+      defeatedNpcs,
+      xpAwarded,
+      gold.gp,
+      pcFinalHp?.percent ?? null,
+      participants,
+    );
+
+    return {
+      outcome,
+      defeatedNpcs,
+      xpAwarded,
+      gold,
+      items,
+      pcFinalHp,
+      summary,
+    };
+  }
+
+  private formatOutcomeSummaryText(
+    outcome: string,
+    defeatedNpcs: Array<{ name: string }>,
+    xpAwarded: number,
+    gp: number,
+    pcHpPercent: number | null,
+    allParticipants: EncounterParticipantEntity[],
+  ): string {
+    const names = defeatedNpcs
+      .slice(0, 3)
+      .map((n) => n.name)
+      .join(", ");
+    if (outcome === "victory") {
+      const hpFragment = pcHpPercent !== null ? ` PC ${pcHpPercent}%HP.` : "";
+      const rewardParts: string[] = [];
+      if (xpAwarded > 0) rewardParts.push(`${xpAwarded}XP`);
+      if (gp > 0) rewardParts.push(`${gp}gp`);
+      const rewards =
+        rewardParts.length > 0 ? ` Recompensa: ${rewardParts.join(", ")}.` : "";
+      return `Inimigos derrotados: ${names || "—"}.${hpFragment}${rewards}`;
+    }
+    if (outcome === "defeat") {
+      const remaining = allParticipants
+        .filter(
+          (p) =>
+            p.faction === "enemy" &&
+            !(p.isDefeated || (p.currentHp ?? 0) <= 0),
+        )
+        .map((p) => p.displayName)
+        .slice(0, 3)
+        .join(", ");
+      return `PC caiu em combate. Inimigos restantes: ${remaining || "—"}.`;
+    }
+    if (outcome === "retreat") {
+      return "PC retirou-se. Combate inconcluso.";
+    }
+    return `Encontro encerrado: ${outcome}.`;
   }
 
   async updateMapData(

@@ -13,6 +13,8 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import type { Response } from "express";
 import { createHash, randomUUID } from "crypto";
 import { AuthGuard } from "../auth/auth.guard";
@@ -25,7 +27,25 @@ import { SessionMessageService } from "../session/services/session-message.servi
 import { SseNarrationCollector } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { DomainException } from "src/common/observability/errors/diad-exception";
+import { GameEventEntity } from "src/entities/game-event.entity";
 import type { AuthRequest } from "../auth/auth.types";
+
+/**
+ * Spec 027 (M2 follow-up) — mapping systemHint → eventType injetado
+ * em sceneContext.recent_events. Quando o frontend dispara um turn com
+ * `systemHint='post_combat'` ou `'post_fate_choice'`, o backend lê o
+ * último evento estruturado correspondente do `game_events` e adiciona
+ * em `sceneContext.recent_events` ANTES de fazer proxy pro agno. O
+ * Coordinator branch correspondente lê esse evento pra montar guidance
+ * estruturado por outcome (vitória/derrota/retreat ou A/B/C/D).
+ *
+ * Mapping é exhaustive — qualquer systemHint não listado é forwarded
+ * sem injeção (no-op).
+ */
+const SYSTEM_HINT_EVENT_MAP: Record<string, string> = {
+  post_combat: "encounter_outcome_summary",
+  post_fate_choice: "fate_ladder_resolved",
+};
 
 /**
  * Spec 027 (M1, AC1.12) — guard in-flight pra evitar dois POST idênticos
@@ -89,7 +109,53 @@ export class AiProxyController {
     private readonly recapService: SessionRecapService,
     private readonly sceneService: SceneService,
     private readonly sessionMessageService: SessionMessageService,
+    @InjectRepository(GameEventEntity)
+    private readonly gameEventRepo: Repository<GameEventEntity>,
   ) {}
+
+  /**
+   * Spec 027 (M2 follow-up) — busca último evento de um tipo na sessão e
+   * injeta em `sceneContext.recent_events`. Quando systemHint='post_combat',
+   * lê `encounter_outcome_summary`; quando 'post_fate_choice', lê
+   * `fate_ladder_resolved`. No-op pra hints não-mapeados.
+   *
+   * Best-effort: erro de query loga warn mas não derruba o turn (Narrator
+   * cai num fallback genérico).
+   */
+  private async injectSystemHintEvent(
+    sessionId: string,
+    systemHint: string | undefined,
+    sceneContext: Record<string, any> | null | undefined,
+  ): Promise<Record<string, any> | null | undefined> {
+    if (!systemHint) return sceneContext;
+    const eventType = SYSTEM_HINT_EVENT_MAP[systemHint];
+    if (!eventType) return sceneContext;
+
+    try {
+      const latest = await this.gameEventRepo.findOne({
+        where: { sessionId, eventType },
+        order: { sequence: "DESC" },
+      });
+      if (!latest) return sceneContext;
+
+      const enriched: Record<string, any> = { ...(sceneContext ?? {}) };
+      const recent = Array.isArray(enriched.recent_events)
+        ? [...enriched.recent_events]
+        : [];
+      recent.push({ type: eventType, payload: latest.data });
+      enriched.recent_events = recent;
+      this.logger.log(
+        `systemHint=${systemHint} injected ${eventType} (seq=${latest.sequence}) ` +
+          `into sceneContext.recent_events (count=${recent.length})`,
+      );
+      return enriched;
+    } catch (err: any) {
+      this.logger.warn(
+        `injectSystemHintEvent failed (session=${sessionId}, hint=${systemHint}): ${err?.message}`,
+      );
+      return sceneContext;
+    }
+  }
 
   /**
    * Persiste input do user (`player_action`) ANTES do pipeStream pra garantir
@@ -419,9 +485,19 @@ export class AiProxyController {
       const activeScene = await this.sceneService
         .getActive(sessionId)
         .catch(() => null);
-      const sceneContextForAgent = activeScene
+      let sceneContextForAgent = activeScene
         ? { ...(ctx.sceneContext ?? {}), sceneId: activeScene.id }
         : ctx.sceneContext;
+
+      // Spec 027 (M2 follow-up) — quando systemHint mapeia pra um evento
+      // estruturado em `game_events`, injetamos esse evento em
+      // `sceneContext.recent_events` pro Coordinator (post_combat /
+      // post_fate_choice) ler outcome + dados do PC.
+      sceneContextForAgent = (await this.injectSystemHintEvent(
+        sessionId,
+        body.systemHint,
+        sceneContextForAgent as Record<string, any> | null | undefined,
+      )) as typeof sceneContextForAgent;
 
       const collector = new SseNarrationCollector();
       await this.aiProxyService.pipeStream(
@@ -441,7 +517,7 @@ export class AiProxyController {
           // bypassar o Haiku quando o input vem de quick-action button.
           ...(body.intent ? { intent: body.intent } : {}),
           // Spec 027 (M2 follow-up) — forward do systemHint pro Narrator
-          // (hoje só 'post_combat' = closure narrativa pós encounter).
+          // ('post_combat' | 'post_fate_choice' = closure narrativa estruturada).
           ...(body.systemHint ? { systemHint: body.systemHint } : {}),
         },
         res,

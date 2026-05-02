@@ -47,6 +47,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
   function makeController(opts: {
     pipeStream: jest.Mock;
     activeScene?: { id: string } | null;
+    gameEventRepo?: { findOne: jest.Mock };
   }): AiProxyController {
     const aiProxyService: any = {
       pipeStream: opts.pipeStream,
@@ -74,12 +75,19 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       append: jest.fn().mockResolvedValue({ id: "m-1", sequenceNumber: 6 }),
       getMaxSequenceNumber: jest.fn().mockResolvedValue(6),
     };
+    // Spec 027 (M2 follow-up) — repo de game_events pra inject de
+    // encounter_outcome_summary / fate_ladder_resolved em sceneContext.
+    // Default: nenhum evento (controller passa adiante sem mescla).
+    const gameEventRepo: any = opts.gameEventRepo ?? {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     return new AiProxyController(
       aiProxyService,
       resumeService,
       recapService,
       sceneService,
       sessionMessageService,
+      gameEventRepo,
     );
   }
 
@@ -229,5 +237,211 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
 
     expect(r2.getStatusCode()).not.toBe(409);
     expect(pipeStream).toHaveBeenCalledTimes(2);
+  });
+
+  // ─── Spec 027 (M2 follow-up) — systemHint event injection ───
+
+  describe("narrativeTurn: systemHint event injection", () => {
+    it("post_combat: injeta encounter_outcome_summary em sceneContext.recent_events", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const eventPayload = {
+        outcome: "victory",
+        defeatedNpcs: [{ name: "Goblin Capanga", type: "monster" }],
+        xpAwarded: 50,
+        gold: { cp: 0, sp: 0, gp: 30, pp: 0 },
+        items: [],
+        pcFinalHp: { characterId: "c1", current: 6, max: 22, percent: 27 },
+        summary: "Inimigos derrotados: Goblin Capanga. PC 27%HP. Recompensa: 50XP, 30gp.",
+      };
+      const findOne = jest.fn().mockResolvedValue({
+        sequence: 42,
+        eventType: "encounter_outcome_summary",
+        sessionId: SESSION_ID,
+        data: eventPayload,
+      });
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+      });
+
+      const req: any = { user: { id: USER_ID } };
+      const r = makeRes();
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "post_combat",
+          lastMessageId: 5,
+        },
+        req,
+        r.res,
+      );
+
+      expect(findOne).toHaveBeenCalledWith({
+        where: {
+          sessionId: SESSION_ID,
+          eventType: "encounter_outcome_summary",
+        },
+        order: { sequence: "DESC" },
+      });
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      const proxiedBody = pipeStream.mock.calls[0][1];
+      expect(proxiedBody.systemHint).toBe("post_combat");
+      const recent = proxiedBody.sceneContext.recent_events;
+      expect(Array.isArray(recent)).toBe(true);
+      expect(recent[recent.length - 1]).toEqual({
+        type: "encounter_outcome_summary",
+        payload: eventPayload,
+      });
+    });
+
+    it("post_fate_choice: injeta fate_ladder_resolved", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const fatePayload = {
+        characterId: "c1",
+        ladderId: "ladder-1",
+        chosenOption: "C",
+        outcome: { description: "amnesia parcial" },
+        pcFinalState: {
+          current_hp: 1,
+          max_hp_bonus: 0,
+          conditions: ["unconscious"],
+          dyingState: "stable",
+        },
+      };
+      const findOne = jest.fn().mockResolvedValue({
+        sequence: 99,
+        eventType: "fate_ladder_resolved",
+        sessionId: SESSION_ID,
+        data: fatePayload,
+      });
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+      });
+
+      const r = makeRes();
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "post_fate_choice",
+          lastMessageId: 6,
+        },
+        { user: { id: USER_ID } } as any,
+        r.res,
+      );
+
+      expect(findOne).toHaveBeenCalledWith({
+        where: { sessionId: SESSION_ID, eventType: "fate_ladder_resolved" },
+        order: { sequence: "DESC" },
+      });
+      const recent =
+        pipeStream.mock.calls[0][1].sceneContext.recent_events;
+      expect(recent[recent.length - 1]).toEqual({
+        type: "fate_ladder_resolved",
+        payload: fatePayload,
+      });
+    });
+
+    it("systemHint sem evento correspondente: forwarded sem mescla, não erra", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const findOne = jest.fn().mockResolvedValue(null);
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "post_combat",
+          lastMessageId: 7,
+        },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      // findOne foi chamado mas não retornou nada — não adiciona em recent_events.
+      expect(findOne).toHaveBeenCalledTimes(1);
+      const proxied = pipeStream.mock.calls[0][1];
+      // sceneContext.recent_events não deve conter encounter_outcome_summary.
+      const recent = proxied.sceneContext?.recent_events ?? [];
+      expect(
+        recent.some((e: any) => e.type === "encounter_outcome_summary"),
+      ).toBe(false);
+    });
+
+    it("sem systemHint: query nem é executada", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const findOne = jest.fn();
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        { playerInput: "atacar", lastMessageId: 8 },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      expect(findOne).not.toHaveBeenCalled();
+    });
+
+    it("systemHint não-mapeado: forwarded sem touch no DB", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const findOne = jest.fn();
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "unknown_hint",
+          lastMessageId: 9,
+        },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      expect(findOne).not.toHaveBeenCalled();
+      expect(pipeStream.mock.calls[0][1].systemHint).toBe("unknown_hint");
+    });
+
+    it("query falha: stream segue, evento não é injetado", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const findOne = jest
+        .fn()
+        .mockRejectedValue(new Error("DB unreachable"));
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "post_combat",
+          lastMessageId: 10,
+        },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      // pipeStream ainda foi chamado — best-effort não derruba turn.
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      const recent =
+        pipeStream.mock.calls[0][1].sceneContext?.recent_events ?? [];
+      expect(
+        recent.some((e: any) => e.type === "encounter_outcome_summary"),
+      ).toBe(false);
+    });
   });
 });

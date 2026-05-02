@@ -2961,6 +2961,16 @@ export class GameEngineController {
    * Resolve opção do Fate Ladder. Retorna stateChanges descritivos pro
    * Coordinator narrar via DM agent. Body: { ladderId, chosenOption,
    * sacrificeDescription? }.
+   *
+   * Spec 027 (M2 follow-up): além de retornar stateChanges, também
+   *  (a) aplica os descritores que mapeiam pro DB (`pc_hp=1`,
+   *      `pc_status=*`) via `fateLadderService.applyResolution`, e
+   *  (b) emite evento `fate_ladder_resolved` em `game_events` com payload
+   *      estruturado pro AiProxy injetar em sceneContext na próxima
+   *      narrativa (`systemHint='post_fate_choice'`).
+   *
+   * Sem (a), narrativa do turno seguinte mente sobre o estado do PC.
+   * Sem (b), Coordinator não sabe qual opção foi escolhida.
    */
   @Post("fate-ladder/:characterId/resolve")
   async resolveFateLadder(
@@ -2970,14 +2980,83 @@ export class GameEngineController {
       ladderId: string;
       chosenOption: FateLadderOption;
       sacrificeDescription?: string;
+      sessionId?: string;
     },
   ) {
-    return this.fateLadderService.resolveLadder({
+    const result = await this.fateLadderService.resolveLadder({
       characterId,
       ladderId: body.ladderId,
       chosenOption: body.chosenOption,
       sacrificeDescription: body.sacrificeDescription,
     });
+
+    if (!result.ok) return result;
+
+    // (a) Aplica stateChanges no character_state.
+    let applied:
+      | Awaited<ReturnType<typeof this.fateLadderService.applyResolution>>
+      | null = null;
+    try {
+      applied = await this.fateLadderService.applyResolution(
+        characterId,
+        result.value.stateChanges,
+      );
+    } catch (err: unknown) {
+      // Log + continue: a narrativa ainda pode rodar (com warning), mas
+      // sinalizamos no response pra debug.
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: true as const,
+        value: {
+          ...result.value,
+          applyError: msg,
+        },
+      };
+    }
+
+    // (b) Emit `fate_ladder_resolved` em `game_events` pra AiProxy injetar
+    // em sceneContext quando systemHint='post_fate_choice'. SessionId é
+    // opcional — se ausente, evento não é emitido (warning loga).
+    if (body.sessionId) {
+      try {
+        await this.eventService.emit(body.sessionId, null, [
+          {
+            event_type: "fate_ladder_resolved",
+            data: {
+              characterId,
+              ladderId: body.ladderId,
+              chosenOption: body.chosenOption,
+              sacrificeDescription: body.sacrificeDescription,
+              outcome: result.value.outcome ?? null,
+              stateChangesApplied: applied.appliedChanges,
+              pcFinalState: applied.pcFinalState,
+            },
+          },
+        ]);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Falha ao emitir não bloqueia response — Coordinator caí no
+        // fallback genérico (post_fate_choice sem evento).
+        return {
+          ok: true as const,
+          value: {
+            ...result.value,
+            stateChangesApplied: applied.appliedChanges,
+            pcFinalState: applied.pcFinalState,
+            emitError: msg,
+          },
+        };
+      }
+    }
+
+    return {
+      ok: true as const,
+      value: {
+        ...result.value,
+        stateChangesApplied: applied.appliedChanges,
+        pcFinalState: applied.pcFinalState,
+      },
+    };
   }
 
   /**

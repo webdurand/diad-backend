@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
@@ -8,6 +8,7 @@ import {
   CharacterStateEntity,
   CampaignEntity,
 } from "src/entities";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { GameResult, failure, success } from "../interfaces/result.type";
 import {
   buildPayPriceOutcome,
@@ -66,6 +67,8 @@ export interface FateLadderResolution {
 
 @Injectable()
 export class FateLadderService {
+  private readonly logger = new Logger(FateLadderService.name);
+
   constructor(
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
@@ -73,6 +76,8 @@ export class FateLadderService {
     private readonly stateRepo: Repository<CharacterStateEntity>,
     @InjectRepository(CampaignEntity)
     private readonly campaignRepo: Repository<CampaignEntity>,
+    @InjectRepository(EncounterParticipantEntity)
+    private readonly participantRepo: Repository<EncounterParticipantEntity>,
   ) {}
 
   /**
@@ -239,5 +244,149 @@ export class FateLadderService {
 
   private defaultRitualMessage(name: string): string {
     return `E assim, ${name}, a luz dos céus se apaga lentamente. O destino aguarda sua escolha.`;
+  }
+
+  /**
+   * Spec 027 (M2 follow-up) — aplica `stateChanges` descritivos do `resolveLadder`
+   * no `character_state` real. Sem isso, a narrativa do turno seguinte mente
+   * sobre o estado do PC (ex: "você desperta com HP=1" mas current_hp=0).
+   *
+   * Mapping V1 (focado nas 4 opções A/B/C/D do Fate Ladder):
+   *  - `pc_hp=1` → state.current_hp = 1
+   *  - `pc_status=stable_unconscious` → state.conditions += 'unconscious'; participant.dyingState='stable' se houver
+   *  - `pc_status=alive` → remove 'unconscious'/'dying'/'dead' de state.conditions
+   *  - `pc_status=dead_permanent` → state.conditions = ['dead']; participant.dyingState='dead'
+   *  - `consume_diamond_component` → log + TODO (precisa lookup de inventory item slug)
+   *
+   * Demais descritores (`arc_beat=...`, `trigger_epilogue_modal*`, `wakes_next_round`,
+   * `legacy_bond_for_next_pc=...`, etc) não mapeiam pra DB direto — viram
+   * itens em `appliedChanges` com `applied=false` pra audit.
+   */
+  async applyResolution(
+    characterId: string,
+    stateChanges: string[],
+  ): Promise<{
+    appliedChanges: Array<{ change: string; applied: boolean; reason?: string }>;
+    pcFinalState: {
+      current_hp: number;
+      max_hp_bonus: number;
+      conditions: string[];
+      dyingState?: string | null;
+    };
+  }> {
+    const applied: Array<{
+      change: string;
+      applied: boolean;
+      reason?: string;
+    }> = [];
+
+    const state = await this.stateRepo.findOne({
+      where: { character_id: characterId },
+    });
+    if (!state) {
+      throw new Error(`character_state não encontrado para ${characterId}`);
+    }
+
+    let dirty = false;
+    for (const change of stateChanges) {
+      if (change === "pc_hp=1") {
+        state.current_hp = 1;
+        dirty = true;
+        applied.push({ change, applied: true });
+        continue;
+      }
+      if (change === "pc_status=stable_unconscious") {
+        const next = new Set(state.conditions ?? []);
+        next.add("unconscious");
+        next.delete("dying");
+        next.delete("dead");
+        state.conditions = Array.from(next);
+        dirty = true;
+        applied.push({ change, applied: true });
+        continue;
+      }
+      if (change === "pc_status=alive") {
+        const next = new Set(state.conditions ?? []);
+        next.delete("unconscious");
+        next.delete("dying");
+        next.delete("dead");
+        state.conditions = Array.from(next);
+        dirty = true;
+        applied.push({ change, applied: true });
+        continue;
+      }
+      if (change === "pc_status=dead_permanent") {
+        state.conditions = ["dead"];
+        dirty = true;
+        applied.push({ change, applied: true });
+        continue;
+      }
+      if (change === "consume_diamond_component") {
+        // V1: log + audit. Lookup do item específico no inventário e
+        // consume_one fica como TODO (depende de slug canônico de
+        // 'diamond_500gp' no equipment_catalog).
+        this.logger.warn(
+          `consume_diamond_component não aplicado em ${characterId} (V1 — TODO).`,
+        );
+        applied.push({
+          change,
+          applied: false,
+          reason: "diamond consume V1 não implementado",
+        });
+        continue;
+      }
+      // Descritores narrativos (arc_beat=..., trigger_epilogue_modal*,
+      // wakes_next_round, legacy_bond_for_next_pc, bonus_inspiration_next_pc,
+      // cost_applied=...) não modificam character_state — Coordinator
+      // consome via narrative event.
+      applied.push({
+        change,
+        applied: false,
+        reason: "descritor narrativo (consumo via Coordinator)",
+      });
+    }
+
+    if (dirty) {
+      await this.stateRepo.save(state);
+    }
+
+    // Sincroniza dyingState do participant ATIVO (se existir) — Fate Ladder
+    // pode acontecer fora de encounter, mas se houver participant ativo
+    // queremos manter coerência com state.conditions.
+    let dyingState: string | null = null;
+    try {
+      const activeParticipant = await this.participantRepo
+        .createQueryBuilder("p")
+        .innerJoin("p.encounter", "e")
+        .where("p.character_id = :cid", { cid: characterId })
+        .andWhere("e.status = :st", { st: "active" })
+        .orderBy("p.id", "DESC")
+        .getOne();
+      if (activeParticipant) {
+        if (state.conditions?.includes("dead")) {
+          activeParticipant.dyingState = "dead";
+        } else if (state.conditions?.includes("unconscious")) {
+          activeParticipant.dyingState = "stable";
+        } else if (state.current_hp > 0) {
+          activeParticipant.dyingState = "none";
+        }
+        dyingState = activeParticipant.dyingState;
+        await this.participantRepo.save(activeParticipant);
+      }
+    } catch (err) {
+      this.logger.warn(
+        `falha ao sincronizar participant.dyingState para ${characterId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    return {
+      appliedChanges: applied,
+      pcFinalState: {
+        current_hp: state.current_hp,
+        max_hp_bonus: state.max_hp_bonus,
+        conditions: state.conditions ?? [],
+        dyingState,
+      },
+    };
   }
 }
