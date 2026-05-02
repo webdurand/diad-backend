@@ -239,7 +239,14 @@ export class MovementService {
       }
     }
 
-    const distanceCells = Math.abs(targetX - fromX) + Math.abs(targetY - fromY);
+    // Spec 027 (M2 follow-up) — Chebyshev RAW: diagonal conta como 1 cell.
+    // Antes: Manhattan (|dx|+|dy|) — inconsistente com combat-range.ts e
+    // movement_planner.py (agents); causava NPC parado em alvo longe diagonal
+    // (cost computado dobrado → MOVEMENT_INSUFFICIENT silencioso).
+    const distanceCells = Math.max(
+      Math.abs(targetX - fromX),
+      Math.abs(targetY - fromY),
+    );
     const {
       costFt: distanceFt,
       difficultCellsCrossed,
@@ -425,11 +432,29 @@ export class MovementService {
     difficultCellsCrossed: number;
     traversedCells: Array<{ x: number; y: number }>;
   } {
+    // Spec 027 (M2 follow-up) — RAW D&D 5e (PHB 2024 + DMG): cada cell = 5ft
+    // incluindo diagonais (Chebyshev). Antes esta função andava axis-by-axis
+    // (X até zerar, depois Y), cobrando 5ft por cell — equivalente a Manhattan,
+    // que dobra custo de movimentos diagonais. Resultado: NPC com speed 30ft
+    // (6 cells RAW) era recusado em alvos diagonais a >3 cells (cost 40+ft >
+    // 30ft) → step.move falhava silencioso → NPC parado.
+    //
+    // Fix: 1) walk diagonal até zerar um dos eixos (1 cell por step, 5ft cada),
+    //      2) walk axis remanescente. Espelha combat-range.ts:chebyshevDistanceFt
+    //      e agents movement_planner.py:chebyshev_distance.
     let cost = 0;
     let crossed = 0;
     const traversed: Array<{ x: number; y: number }> = [];
     let cx = fromX;
     let cy = fromY;
+    while (cx !== toX && cy !== toY) {
+      cx += Math.sign(toX - cx);
+      cy += Math.sign(toY - cy);
+      traversed.push({ x: cx, y: cy });
+      const isDiff = difficultCells.has(`${cx},${cy}`);
+      if (isDiff) crossed++;
+      cost += isDiff && !hasLandsStride ? 10 : 5;
+    }
     while (cx !== toX) {
       cx += Math.sign(toX - cx);
       traversed.push({ x: cx, y: cy });
