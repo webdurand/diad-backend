@@ -58,17 +58,35 @@ export class AiTurnService {
   ): Promise<GameResult<TurnExecutionResult>> {
     const start = Date.now();
 
+    this.logger.log(
+      `[AI-TURN-START] encounter=${encounterId} participant=${participantId}`,
+    );
+
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
-    if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
-    if (encounter.status !== "active")
+    if (!encounter) {
+      this.logger.warn(
+        `[AI-TURN-FAIL] encounter_not_found encounter=${encounterId}`,
+      );
+      return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
+    }
+    if (encounter.status !== "active") {
+      this.logger.warn(
+        `[AI-TURN-FAIL] encounter_not_active encounter=${encounterId} status=${encounter.status}`,
+      );
       return failure(GameErrorCode.ENCOUNTER_NOT_ACTIVE);
+    }
 
     const participant = await this.participantRepo.findOne({
       where: { id: participantId },
     });
-    if (!participant) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
+    if (!participant) {
+      this.logger.warn(
+        `[AI-TURN-FAIL] participant_not_found participant=${participantId}`,
+      );
+      return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
+    }
 
     // Idempotência: mesmo round + resultado cacheado → retorna direto.
     // Spec 027 (M2 follow-up) — invalida cache quando steps são triviais (só
@@ -103,15 +121,68 @@ export class AiTurnService {
     }
 
     if (participant.controlledBy !== "ai") {
+      this.logger.warn(
+        `[AI-TURN-FAIL] not_ai_controlled participant=${participantId} ` +
+          `controlledBy=${participant.controlledBy}`,
+      );
       return failure(GameErrorCode.NOT_AI_CONTROLLED);
     }
     if (encounter.turnOrder[encounter.currentTurnIndex] !== participant.id) {
+      this.logger.warn(
+        `[AI-TURN-FAIL] not_your_turn participant=${participantId} ` +
+          `currentTurnIndex=${encounter.currentTurnIndex} ` +
+          `turnOrder[idx]=${encounter.turnOrder[encounter.currentTurnIndex]}`,
+      );
       return failure(GameErrorCode.NOT_YOUR_TURN);
     }
 
     // Build snapshot
     const snapRes = await this.snapshotService.build(encounterId, authUserId);
-    if (!snapRes.ok) return snapRes;
+    if (!snapRes.ok) {
+      this.logger.warn(
+        `[AI-TURN-FAIL] snapshot_build_failed encounter=${encounterId} code=${snapRes.code}`,
+      );
+      return snapRes;
+    }
+
+    // Spec 027 (M2 follow-up logs) — summary do que sai pro agents service.
+    // Foco: diagnose silent fail "NPC parado". Loga monster + position +
+    // actions count (se 0 → snapshot não propagou statblockRef.actions e
+    // _pick_best_attack vai cair pra Unarmed Strike).
+    const monsterPart = snapRes.value.participants.find(
+      (p) => p.id === participantId,
+    );
+    const enemiesAlive = snapRes.value.participants.filter(
+      (p) =>
+        p.faction !== monsterPart?.faction &&
+        p.dyingState !== "dead" &&
+        p.hp.current > 0,
+    );
+    this.logger.log(
+      `[AI-TURN-SNAPSHOT] encounter=${encounterId} ` +
+        `round=${encounter.currentRound} turnIdx=${encounter.currentTurnIndex} ` +
+        `participants=${snapRes.value.participants.length} ` +
+        `monster="${monsterPart?.displayName ?? "?"}" ` +
+        `pos=(${monsterPart?.position?.x},${monsterPart?.position?.y}) ` +
+        `hp=${monsterPart?.hp?.current}/${monsterPart?.hp?.max} ` +
+        `faction=${monsterPart?.faction} ` +
+        `actionsCount=${monsterPart?.statblockRef?.actions?.length ?? 0} ` +
+        `enemiesAlive=${enemiesAlive.length}`,
+    );
+    // Spec 027 (M2 follow-up logs) — breakdown completo dos participantes.
+    // Crítico quando enemiesAlive=0: revela se PC está dying, faction errada
+    // do witness propagation, ou encontro stuck que deveria ter resolvido.
+    const breakdown = snapRes.value.participants
+      .map(
+        (p) =>
+          `${p.id.slice(0, 8)}/"${p.displayName}"/` +
+          `${p.type}/${p.faction}/` +
+          `hp=${p.hp?.current}/${p.hp?.max}/` +
+          `dying=${p.dyingState}/` +
+          `pos=(${p.position?.x},${p.position?.y})`,
+      )
+      .join(" | ");
+    this.logger.log(`[AI-TURN-PARTICIPANTS] ${breakdown}`);
 
     // Chama executor
     const planRes = await this.executor.executeTurn(
@@ -119,6 +190,10 @@ export class AiTurnService {
       participantId,
     );
     if (!planRes.ok) {
+      this.logger.warn(
+        `[AI-TURN-FAIL] executor_failed encounter=${encounterId} ` +
+          `participant=${participantId} code=${planRes.code}`,
+      );
       if (planRes.code === GameErrorCode.AI_TIMEOUT) {
         return this.fallbackEndTurn(
           encounter,

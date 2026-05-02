@@ -1,6 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { CharacterEntity } from "src/entities/character.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
@@ -15,6 +16,7 @@ import type {
   SnapshotParticipant,
   TileEffectSnapshot,
 } from "../interfaces/encounter-snapshot.interface";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { CombatService } from "./combat.service";
 import { PersistentAreaService } from "./persistent-area.service";
 import type { TurnActionBlock } from "../interfaces/combat.interfaces";
@@ -28,6 +30,8 @@ import type { TurnActionBlock } from "../interfaces/combat.interfaces";
  */
 @Injectable()
 export class EncounterSnapshotService {
+  private readonly logger = new Logger(EncounterSnapshotService.name);
+
   constructor(
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
@@ -35,8 +39,11 @@ export class EncounterSnapshotService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     @InjectRepository(PersistentAreaEffectEntity)
     private readonly areaRepo: Repository<PersistentAreaEffectEntity>,
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo: Repository<CharacterEntity>,
     private readonly combatService: CombatService,
     private readonly persistentArea: PersistentAreaService,
+    private readonly sheetService: CharacterSheetService,
   ) {}
 
   async build(
@@ -52,6 +59,15 @@ export class EncounterSnapshotService {
       where: { encounterId: encounter.id },
       relations: ["monster"],
     });
+
+    // Spec 027 (M2 follow-up) — overlay HP do sheet pra PCs.
+    // EncounterParticipantEntity NÃO persiste currentHp/maxHp pra PCs (vivem
+    // em char_state via CharacterSheetService.computeSheet). Sem overlay, o
+    // snapshot mostra hp=0/0 pro PC e a IA filtra com `hp.current > 0` →
+    // bartender vê enemiesAlive=0 → dodge silencioso, PC parado.
+    // Espelha encounter.service.ts:enrichPcParticipants() — se mexer aqui,
+    // mexer lá também (até extrair pra um helper compartilhado).
+    const pcOverlay = await this.buildPcSheetOverlay(participants);
 
     const currentTurnParticipantId =
       encounter.turnOrder[encounter.currentTurnIndex] ?? "";
@@ -91,9 +107,9 @@ export class EncounterSnapshotService {
           positionX: p.positionX ?? 0,
           positionY: p.positionY ?? 0,
           hp: {
-            current: p.currentHp ?? 0,
-            max: p.maxHp ?? 0,
-            tempHp: p.tempHp,
+            current: pcOverlay.get(p.id)?.currentHp ?? p.currentHp ?? 0,
+            max: pcOverlay.get(p.id)?.maxHp ?? p.maxHp ?? 0,
+            tempHp: pcOverlay.get(p.id)?.tempHp ?? p.tempHp,
           },
           dyingState: p.dyingState,
           conditions: p.conditions ?? [],
@@ -205,6 +221,84 @@ export class EncounterSnapshotService {
       tileEffects,
       generatedAt: new Date().toISOString(),
     });
+  }
+
+  /**
+   * Spec 027 (M2 follow-up) — resolve HP/tempHp do sheet pra cada PC participant.
+   * Retorna `Map<participantId, {currentHp, maxHp, tempHp}>`. Participants sem
+   * overlay (sheet falhou, owner não resolvido, ou type !== pc) ficam fora —
+   * caller usa fallback no `?? p.currentHp ?? 0`.
+   *
+   * Espelha encounter.service.ts:enrichPcParticipants() — divergir aqui pode
+   * causar drift entre o que o snapshot vê e o que /encounters/:id retorna.
+   */
+  private async buildPcSheetOverlay(
+    participants: EncounterParticipantEntity[],
+  ): Promise<
+    Map<string, { currentHp: number; maxHp: number; tempHp: number }>
+  > {
+    const overlay = new Map<
+      string,
+      { currentHp: number; maxHp: number; tempHp: number }
+    >();
+    const pcs = participants.filter(
+      (p) => p.type === "pc" && p.characterId,
+    );
+    if (pcs.length === 0) return overlay;
+
+    const charIds = pcs.map((p) => p.characterId!);
+    const characters = await this.characterRepo
+      .createQueryBuilder("c")
+      .select(["c.id", "c.userId"])
+      .where("c.id IN (:...ids)", { ids: charIds })
+      .getMany();
+    const ownerMap = new Map<string, string>();
+    for (const c of characters) {
+      if (c.userId) ownerMap.set(c.id, c.userId);
+    }
+
+    await Promise.all(
+      pcs.map(async (p) => {
+        const ownerId = ownerMap.get(p.characterId!);
+        if (!ownerId) {
+          this.logger.warn(
+            `[SNAPSHOT-OVERLAY] missing_owner participant=${p.id} ` +
+              `character=${p.characterId} — PC ficará com hp=${p.currentHp}/${p.maxHp} ` +
+              `(persisted entity values, provavelmente 0/0).`,
+          );
+          return;
+        }
+        try {
+          const sheet = await this.sheetService.computeSheet(
+            ownerId,
+            p.characterId!,
+          );
+          // Transformação ativa (Wild Shape, Polymorph) — espelha
+          // encounter.service.ts:262-267.
+          if (p.transformationState) {
+            const form = p.transformationState.form;
+            overlay.set(p.id, {
+              currentHp: form.currentHp,
+              maxHp: form.maxHp,
+              tempHp: sheet.tempHp ?? 0,
+            });
+          } else {
+            overlay.set(p.id, {
+              currentHp: sheet.currentHp,
+              maxHp: sheet.maxHp,
+              tempHp: sheet.tempHp ?? 0,
+            });
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `[SNAPSHOT-OVERLAY] computeSheet_failed participant=${p.id} ` +
+              `character=${p.characterId}: ${msg}`,
+          );
+        }
+      }),
+    );
+    return overlay;
   }
 }
 
