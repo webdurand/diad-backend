@@ -324,6 +324,28 @@ export class AiTurnService {
             actionName: step.actionName,
             ownerUserId: authUserId,
           } as Parameters<typeof this.combatService.resolveAttack>[1]);
+          // Spec 027 (M2 follow-up) — propaga AttackResult no events array.
+          // Antes events ficava `[]` e o frontend não tinha como animar
+          // damage floater no ataque da IA — PC tomava dano sem feedback
+          // visual. Frontend (page.tsx) lê `attack_resolved` e chama
+          // showDamageFloater pra render o número flutuante no token.
+          const attackEvents: Array<{
+            type: string;
+            [k: string]: unknown;
+          }> = [];
+          if (res.ok && res.value) {
+            attackEvents.push({
+              type: "attack_resolved",
+              attackerParticipantId: participantId,
+              targetParticipantId: target,
+              hit: res.value.attackRoll.hit,
+              critical: res.value.attackRoll.critical,
+              damageDealt: res.value.damageRoll?.finalDamage ?? 0,
+              damageType: res.value.damageRoll?.type ?? null,
+              targetDefeated: res.value.targetDefeated,
+              targetHpAfter: res.value.targetHpAfter ?? null,
+            });
+          }
           return {
             kind: "attack",
             payload: {
@@ -335,7 +357,7 @@ export class AiTurnService {
               summary: res.ok
                 ? `Atacou com ${step.actionName}`
                 : ((res as { error?: string }).error ?? "Falhou"),
-              events: [],
+              events: attackEvents,
               error: res.ok
                 ? undefined
                 : {
