@@ -345,6 +345,13 @@ export class AiTurnService {
               targetDefeated: res.value.targetDefeated,
               targetHpAfter: res.value.targetHpAfter ?? null,
             });
+            this.logger.log(
+              `[AI-ATTACK] emit attack_resolved attacker=${participantId} target=${target} hit=${res.value.attackRoll.hit} crit=${res.value.attackRoll.critical} dmg=${res.value.damageRoll?.finalDamage ?? 0} hpAfter=${res.value.targetHpAfter ?? "n/a"} defeated=${res.value.targetDefeated}`,
+            );
+          } else {
+            this.logger.warn(
+              `[AI-ATTACK] resolveAttack falhou attacker=${participantId} target=${target} action=${step.actionName} code=${(res as { code?: string }).code ?? "?"} err=${(res as { error?: string }).error ?? "?"}`,
+            );
           }
           return {
             kind: "attack",
