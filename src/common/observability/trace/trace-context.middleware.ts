@@ -1,7 +1,6 @@
 import { Injectable, NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { ClsService } from "nestjs-cls";
-import { DiadLogger } from "../logger/diad-logger.service";
 import {
   TRACEPARENT_HEADER,
   generateSpanId,
@@ -14,15 +13,14 @@ import {
  * Popula CLS com traceId/spanId/parentSpanId. Ecoa header no response.
  *
  * Sempre tenta ser graceful — middleware NUNCA rejeita request por trace inválido.
+ *
+ * Não emite log próprio: pinoHttp auto-loga 1x por request no fim com customLogLevel
+ * controlando ruído (ver pino.config.ts), e RequestBodyLogInterceptor / GlobalExceptionFilter
+ * cobrem body/erro. Logar aqui dobraria linhas sem ganho.
  */
 @Injectable()
 export class TraceContextMiddleware implements NestMiddleware {
-  constructor(
-    private readonly cls: ClsService,
-    private readonly logger: DiadLogger,
-  ) {
-    this.logger.setContext(TraceContextMiddleware.name);
-  }
+  constructor(private readonly cls: ClsService) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
     try {
@@ -62,11 +60,5 @@ export class TraceContextMiddleware implements NestMiddleware {
     this.cls.set("trace.origin", origin);
 
     res.setHeader(TRACEPARENT_HEADER, responseTraceparent);
-
-    this.logger.info("http.server.request.start", {
-      "http.request.method": req.method,
-      "url.path": req.url,
-      "trace.origin": origin,
-    });
   }
 }

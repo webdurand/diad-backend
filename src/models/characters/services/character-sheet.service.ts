@@ -145,6 +145,10 @@ export interface EquipmentBlock {
   weight: number;
   quantity: number;
   equipped: boolean;
+  /** RAW 2024 weapons-in-hand — arma/escudo empunhado na mão principal. */
+  mainHand?: boolean;
+  /** RAW 2024 weapons-in-hand — arma light ou escudo na mão secundária. */
+  offHand?: boolean;
   source: string;
   proficient?: boolean | null;
   damage?: Record<string, unknown>;

@@ -46,7 +46,7 @@ function makeRes() {
 describe("TraceContextMiddleware", () => {
   it("sem header → gera traceparent novo, popula CLS e ecoa response", () => {
     const store: ClsStore = { active: true, values: {} };
-    const mw = new TraceContextMiddleware(makeCls(store), makeLogger());
+    const mw = new TraceContextMiddleware(makeCls(store));
     const res = makeRes();
     const next: NextFunction = jest.fn();
     mw.use(makeReq(), res, next);
@@ -62,7 +62,7 @@ describe("TraceContextMiddleware", () => {
 
   it("header válido → preserva traceId, marca origin=inherited", () => {
     const store: ClsStore = { active: true, values: {} };
-    const mw = new TraceContextMiddleware(makeCls(store), makeLogger());
+    const mw = new TraceContextMiddleware(makeCls(store));
     const incoming = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
     const res = makeRes();
     mw.use(makeReq({ traceparent: incoming }), res, jest.fn() as NextFunction);
@@ -79,7 +79,7 @@ describe("TraceContextMiddleware", () => {
 
   it("header inválido → gera novo (origin=generated)", () => {
     const store: ClsStore = { active: true, values: {} };
-    const mw = new TraceContextMiddleware(makeCls(store), makeLogger());
+    const mw = new TraceContextMiddleware(makeCls(store));
     const res = makeRes();
     mw.use(makeReq({ traceparent: "garbage" }), res, jest.fn() as NextFunction);
     expect(store.values["trace.origin"]).toBe("generated");
@@ -95,7 +95,7 @@ describe("TraceContextMiddleware", () => {
       },
       get: () => undefined,
     } as unknown as ClsService;
-    const mw = new TraceContextMiddleware(cls, makeLogger());
+    const mw = new TraceContextMiddleware(cls);
     const next: NextFunction = jest.fn();
     expect(() => mw.use(makeReq(), makeRes(), next)).not.toThrow();
     expect(next).toHaveBeenCalled();

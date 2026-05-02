@@ -294,6 +294,66 @@ describe("InventoryService", () => {
     });
   });
 
+  describe("setHand — shield AC sync", () => {
+    // AC calc em character-sheet.service lê `eq.equipped` pra detectar shield.
+    // setHand precisa sincronizar `equipped` com presença em mão pra escudo
+    // não sumir do AC quando empunhado via paper-doll.
+    const buildShield = () =>
+      makeCharacterEquipment("shield", {
+        equipmentOverrides: {
+          name: "Shield",
+          armor_class: { base: 2 },
+          weight: "6",
+        },
+      });
+
+    it("setHand('off') em escudo marca equipped=true", async () => {
+      setupOwnership();
+      const shield = buildShield();
+      shield.equipped = false;
+      repos.charEquip.findOne!.mockResolvedValue(shield);
+      repos.charEquip.find!.mockResolvedValue([shield]);
+      repos.charEquip.save!.mockImplementation(async (s: any) => s);
+
+      await service.setHand("user-1", "char-1", shield.id, { hand: "off" });
+
+      expect(shield.offHand).toBe(true);
+      expect(shield.equipped).toBe(true);
+    });
+
+    it("setHand(null) em escudo marca equipped=false", async () => {
+      setupOwnership();
+      const shield = buildShield();
+      shield.equipped = true;
+      shield.offHand = true;
+      repos.charEquip.findOne!.mockResolvedValue(shield);
+      repos.charEquip.save!.mockImplementation(async (s: any) => s);
+
+      await service.setHand("user-1", "char-1", shield.id, { hand: null });
+
+      expect(shield.offHand).toBe(false);
+      expect(shield.equipped).toBe(false);
+    });
+
+    it("setHand não toca equipped em armas (só escudo)", async () => {
+      setupOwnership();
+      const longsword = makeCharacterEquipment("longsword", {
+        equipmentOverrides: {
+          damage: { dice: "1d8", type: "slashing" },
+        },
+      });
+      longsword.equipped = false;
+      repos.charEquip.findOne!.mockResolvedValue(longsword);
+      repos.charEquip.find!.mockResolvedValue([longsword]);
+      repos.charEquip.save!.mockImplementation(async (s: any) => s);
+
+      await service.setHand("user-1", "char-1", longsword.id, { hand: "main" });
+
+      expect(longsword.mainHand).toBe(true);
+      expect(longsword.equipped).toBe(false);
+    });
+  });
+
   describe("toggleAttune", () => {
     it("should attune a magic item", async () => {
       setupOwnership();

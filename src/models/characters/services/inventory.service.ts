@@ -494,9 +494,15 @@ export class InventoryService {
       throw new NotFoundException("Item nao encontrado no inventario.");
     }
 
+    const eq = item.equipment;
+    const isShield =
+      eq.slug?.includes("shield") || eq.name?.toLowerCase().includes("shield");
+
     if (dto.hand === null) {
       item.mainHand = false;
       item.offHand = false;
+      // Escudo: AC calc lê `equipped`. Sincroniza ao guardar.
+      if (isShield) item.equipped = false;
       const saved = await this.charEquipRepo.save(item);
       return this.mapEquipItem(saved);
     }
@@ -529,6 +535,8 @@ export class InventoryService {
     if (dto.hand === "main" && isTwoHanded(item.equipment)) {
       item.offHand = true;
     }
+    // Escudo: AC calc lê `equipped`. Sincroniza ao empunhar.
+    if (isShield) item.equipped = true;
     const saved = await this.charEquipRepo.save(item);
     return this.mapEquipItem(saved);
   }

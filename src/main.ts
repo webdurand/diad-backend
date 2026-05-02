@@ -29,7 +29,7 @@ async function bootstrap() {
     },
     credentials: true,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    allowedHeaders: "Content-Type,Authorization,traceparent",
+    allowedHeaders: "Content-Type,Authorization,traceparent,x-diad-domain",
     exposedHeaders: "traceparent",
   });
   // Resolve infra de observability do DI antes de configurar pipes/filters.

@@ -9,6 +9,12 @@ import {
   generateTraceparent,
   generateTraceId,
 } from "../trace/trace-context";
+import {
+  DOMAIN_HEADER,
+  serializeDomainHeader,
+  type DomainContext,
+} from "../domain/domain-context";
+import { DOMAIN_CLS_KEY } from "../domain/domain-context.middleware";
 
 export interface OutboundRequestInit extends RequestInit {
   upstreamService: "diad-agents" | "diad-backend" | "diad-frontend" | string;
@@ -151,7 +157,20 @@ export class OutboundFetch {
       out["Content-Type"] = "application/json";
     }
     out[TRACEPARENT_HEADER] = this.buildOutboundTraceparent();
+    const domainHeader = this.buildOutboundDomainHeader();
+    if (domainHeader) out[DOMAIN_HEADER] = domainHeader;
     return out;
+  }
+
+  private buildOutboundDomainHeader(): string {
+    try {
+      if (!this.cls.isActive()) return "";
+      const ctx = this.cls.get<DomainContext>(DOMAIN_CLS_KEY);
+      if (!ctx || typeof ctx !== "object") return "";
+      return serializeDomainHeader(ctx);
+    } catch {
+      return "";
+    }
   }
 
   private buildOutboundTraceparent(): string {

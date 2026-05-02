@@ -279,7 +279,8 @@ export class CombatService {
         attacker.characterId,
       );
       const eq = sheet.equipment.find(
-        (e) => e.slug === equipSlug && e.equipped && !!e.damage,
+        (e) =>
+          e.slug === equipSlug && (e.mainHand || e.offHand) && !!e.damage,
       );
       if (!eq) {
         return failure(

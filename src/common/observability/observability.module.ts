@@ -1,4 +1,5 @@
 import { Global, MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ClsModule } from "nestjs-cls";
 import { LoggerModule } from "nestjs-pino";
@@ -7,7 +8,9 @@ import { DiadLogger } from "./logger/diad-logger.service";
 import { ProblemFactory } from "./errors/problem.factory";
 import { GlobalExceptionFilter } from "./errors/global-exception.filter";
 import { OutboundFetch } from "./http/outbound-fetch.service";
+import { RequestBodyLogInterceptor } from "./http/request-body.interceptor";
 import { TraceContextMiddleware } from "./trace/trace-context.middleware";
+import { DomainContextMiddleware } from "./domain/domain-context.middleware";
 import { HealthController } from "./health/health.controller";
 import { generateTraceId } from "./trace/trace-context";
 
@@ -33,7 +36,17 @@ import { generateTraceId } from "./trace/trace-context";
         }),
     }),
   ],
-  providers: [DiadLogger, ProblemFactory, OutboundFetch, GlobalExceptionFilter],
+  providers: [
+    DiadLogger,
+    ProblemFactory,
+    OutboundFetch,
+    GlobalExceptionFilter,
+    RequestBodyLogInterceptor,
+    {
+      provide: APP_INTERCEPTOR,
+      useExisting: RequestBodyLogInterceptor,
+    },
+  ],
   controllers: [HealthController],
   exports: [
     DiadLogger,
@@ -46,6 +59,8 @@ import { generateTraceId } from "./trace/trace-context";
 })
 export class ObservabilityModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(TraceContextMiddleware).forRoutes("*");
+    consumer
+      .apply(TraceContextMiddleware, DomainContextMiddleware)
+      .forRoutes("*");
   }
 }
