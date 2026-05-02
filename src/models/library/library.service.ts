@@ -18,6 +18,7 @@ import {
 } from "typeorm";
 import { LibraryQueryDto } from "./dto/library-query.dto";
 import { MonsterEntity } from "src/entities/monster.entity";
+import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -28,7 +29,12 @@ export interface PaginatedResult<T> {
 
 @Injectable()
 export class LibraryService {
-  constructor(private readonly entityManager: EntityManager) {}
+  constructor(
+    private readonly entityManager: EntityManager,
+    private readonly logger: DiadLogger,
+  ) {
+    this.logger.setContext(LibraryService.name);
+  }
 
   private validateEntity(entityClass: EntityTarget<any>) {
     if (!entityClass) {
@@ -296,7 +302,7 @@ export class LibraryService {
       );
     }
 
-    console.error(error); // Log para debug interno
+    this.logger.error("library.unexpected_error", error);
     throw new InternalServerErrorException("Erro inesperado no servidor");
   }
 }

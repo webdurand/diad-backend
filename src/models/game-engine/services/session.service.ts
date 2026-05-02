@@ -5,6 +5,7 @@ import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignEntity } from "src/entities/campaign.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { CharacterEntity } from "src/entities/character.entity";
+import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 export interface CreateSessionDto {
   name: string;
@@ -37,7 +38,10 @@ export class SessionService {
     private readonly campaignPlayerRepo: Repository<CampaignPlayerEntity>,
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
-  ) {}
+    private readonly logger: DiadLogger,
+  ) {
+    this.logger.setContext(SessionService.name);
+  }
 
   async create(
     ownerId: string,
@@ -123,12 +127,11 @@ export class SessionService {
           }
         }
       } catch (err) {
-        // Best-effort — falha aqui não derruba addCharacter (testes podem
-        // rodar com character.userId nulo). Log não-disruptivo.
-        // eslint-disable-next-line no-console
-        console.warn(
-          `session.addCharacter: campaign_players link falhou (session=${sessionId}, character=${characterId}): ${err instanceof Error ? err.message : String(err)}`,
-        );
+        this.logger.warn("session.add_character.campaign_players_link_failed", {
+          "session.id": sessionId,
+          "character.id": characterId,
+          "error.message": err instanceof Error ? err.message : String(err),
+        });
       }
     }
     return saved;

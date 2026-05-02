@@ -1,4 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
+import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
@@ -36,8 +37,6 @@ import type { GenericActionDto } from "../dto/generic-action.dto";
  */
 @Injectable()
 export class AiTurnService {
-  private readonly logger = new Logger(AiTurnService.name);
-
   constructor(
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
@@ -49,7 +48,10 @@ export class AiTurnService {
     private readonly genericActionsService: GenericActionsService,
     private readonly movementService: MovementService,
     private readonly spellCastingService: SpellCastingService,
-  ) {}
+    private readonly logger: DiadLogger,
+  ) {
+    this.logger.setContext(AiTurnService.name);
+  }
 
   async executeAiTurn(
     encounterId: string,
@@ -58,23 +60,27 @@ export class AiTurnService {
   ): Promise<GameResult<TurnExecutionResult>> {
     const start = Date.now();
 
-    this.logger.log(
-      `[AI-TURN-START] encounter=${encounterId} participant=${participantId}`,
-    );
+    this.logger.info("ai.turn.start", {
+      "encounter.id": encounterId,
+      "participant.id": participantId,
+    });
 
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
     if (!encounter) {
-      this.logger.warn(
-        `[AI-TURN-FAIL] encounter_not_found encounter=${encounterId}`,
-      );
+      this.logger.warn("ai.turn.fail", {
+        "fail.reason": "encounter_not_found",
+        "encounter.id": encounterId,
+      });
       return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
     }
     if (encounter.status !== "active") {
-      this.logger.warn(
-        `[AI-TURN-FAIL] encounter_not_active encounter=${encounterId} status=${encounter.status}`,
-      );
+      this.logger.warn("ai.turn.fail", {
+        "fail.reason": "encounter_not_active",
+        "encounter.id": encounterId,
+        "encounter.status": encounter.status,
+      });
       return failure(GameErrorCode.ENCOUNTER_NOT_ACTIVE);
     }
 
@@ -82,9 +88,10 @@ export class AiTurnService {
       where: { id: participantId },
     });
     if (!participant) {
-      this.logger.warn(
-        `[AI-TURN-FAIL] participant_not_found participant=${participantId}`,
-      );
+      this.logger.warn("ai.turn.fail", {
+        "fail.reason": "participant_not_found",
+        "participant.id": participantId,
+      });
       return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
     }
 
@@ -110,38 +117,48 @@ export class AiTurnService {
           s.kind === "help",
       );
       if (hasUsefulStep) {
-        this.logger.log(
-          `[AI-TURN-CACHE] hit participant=${participantId} round=${encounter.currentRound} steps=${JSON.stringify(cachedSteps)}`,
-        );
+        this.logger.info("ai.turn.cache_hit", {
+          "participant.id": participantId,
+          "encounter.round": encounter.currentRound,
+          "cached.steps": cachedSteps,
+        });
         return success(participant.lastAiTurnResult);
       }
-      this.logger.log(
-        `[AI-TURN-CACHE] discard stale participant=${participantId} round=${encounter.currentRound} steps=${JSON.stringify(cachedSteps)} (degenerado, recomputando)`,
-      );
+      this.logger.info("ai.turn.cache_discard", {
+        "participant.id": participantId,
+        "encounter.round": encounter.currentRound,
+        "cached.steps": cachedSteps,
+        reason: "degenerated_steps",
+      });
     }
 
     if (participant.controlledBy !== "ai") {
-      this.logger.warn(
-        `[AI-TURN-FAIL] not_ai_controlled participant=${participantId} ` +
-          `controlledBy=${participant.controlledBy}`,
-      );
+      this.logger.warn("ai.turn.fail", {
+        "fail.reason": "not_ai_controlled",
+        "participant.id": participantId,
+        "participant.controlled_by": participant.controlledBy,
+      });
       return failure(GameErrorCode.NOT_AI_CONTROLLED);
     }
     if (encounter.turnOrder[encounter.currentTurnIndex] !== participant.id) {
-      this.logger.warn(
-        `[AI-TURN-FAIL] not_your_turn participant=${participantId} ` +
-          `currentTurnIndex=${encounter.currentTurnIndex} ` +
-          `turnOrder[idx]=${encounter.turnOrder[encounter.currentTurnIndex]}`,
-      );
+      this.logger.warn("ai.turn.fail", {
+        "fail.reason": "not_your_turn",
+        "participant.id": participantId,
+        "encounter.current_turn_index": encounter.currentTurnIndex,
+        "encounter.turn_owner_id":
+          encounter.turnOrder[encounter.currentTurnIndex],
+      });
       return failure(GameErrorCode.NOT_YOUR_TURN);
     }
 
     // Build snapshot
     const snapRes = await this.snapshotService.build(encounterId, authUserId);
     if (!snapRes.ok) {
-      this.logger.warn(
-        `[AI-TURN-FAIL] snapshot_build_failed encounter=${encounterId} code=${snapRes.code}`,
-      );
+      this.logger.warn("ai.turn.fail", {
+        "fail.reason": "snapshot_build_failed",
+        "encounter.id": encounterId,
+        "error.code": snapRes.code,
+      });
       return snapRes;
     }
 
@@ -158,31 +175,33 @@ export class AiTurnService {
         p.dyingState !== "dead" &&
         p.hp.current > 0,
     );
-    this.logger.log(
-      `[AI-TURN-SNAPSHOT] encounter=${encounterId} ` +
-        `round=${encounter.currentRound} turnIdx=${encounter.currentTurnIndex} ` +
-        `participants=${snapRes.value.participants.length} ` +
-        `monster="${monsterPart?.displayName ?? "?"}" ` +
-        `pos=(${monsterPart?.position?.x},${monsterPart?.position?.y}) ` +
-        `hp=${monsterPart?.hp?.current}/${monsterPart?.hp?.max} ` +
-        `faction=${monsterPart?.faction} ` +
-        `actionsCount=${monsterPart?.statblockRef?.actions?.length ?? 0} ` +
-        `enemiesAlive=${enemiesAlive.length}`,
-    );
-    // Spec 027 (M2 follow-up logs) — breakdown completo dos participantes.
-    // Crítico quando enemiesAlive=0: revela se PC está dying, faction errada
-    // do witness propagation, ou encontro stuck que deveria ter resolvido.
-    const breakdown = snapRes.value.participants
-      .map(
-        (p) =>
-          `${p.id.slice(0, 8)}/"${p.displayName}"/` +
-          `${p.type}/${p.faction}/` +
-          `hp=${p.hp?.current}/${p.hp?.max}/` +
-          `dying=${p.dyingState}/` +
-          `pos=(${p.position?.x},${p.position?.y})`,
-      )
-      .join(" | ");
-    this.logger.log(`[AI-TURN-PARTICIPANTS] ${breakdown}`);
+    this.logger.info("ai.turn.snapshot", {
+      "encounter.id": encounterId,
+      "encounter.round": encounter.currentRound,
+      "encounter.current_turn_index": encounter.currentTurnIndex,
+      "snapshot.participants_count": snapRes.value.participants.length,
+      "monster.name": monsterPart?.displayName ?? null,
+      "monster.position": monsterPart?.position ?? null,
+      "monster.hp_current": monsterPart?.hp?.current ?? null,
+      "monster.hp_max": monsterPart?.hp?.max ?? null,
+      "monster.faction": monsterPart?.faction ?? null,
+      "monster.actions_count":
+        monsterPart?.statblockRef?.actions?.length ?? 0,
+      "snapshot.enemies_alive": enemiesAlive.length,
+    });
+    // Breakdown dos participantes — útil pra entender encontros stuck.
+    this.logger.info("ai.turn.participants_breakdown", {
+      participants: snapRes.value.participants.map((p) => ({
+        id: p.id,
+        name: p.displayName,
+        type: p.type,
+        faction: p.faction,
+        "hp.current": p.hp?.current,
+        "hp.max": p.hp?.max,
+        "dying.state": p.dyingState,
+        position: p.position,
+      })),
+    });
 
     // Chama executor
     const planRes = await this.executor.executeTurn(
@@ -190,10 +209,12 @@ export class AiTurnService {
       participantId,
     );
     if (!planRes.ok) {
-      this.logger.warn(
-        `[AI-TURN-FAIL] executor_failed encounter=${encounterId} ` +
-          `participant=${participantId} code=${planRes.code}`,
-      );
+      this.logger.warn("ai.turn.fail", {
+        "fail.reason": "executor_failed",
+        "encounter.id": encounterId,
+        "participant.id": participantId,
+        "error.code": planRes.code,
+      });
       if (planRes.code === GameErrorCode.AI_TIMEOUT) {
         return this.fallbackEndTurn(
           encounter,
@@ -206,9 +227,12 @@ export class AiTurnService {
     }
 
     // Aplica steps
-    this.logger.log(
-      `[AI-TURN] participant=${participantId} round=${encounter.currentRound} steps=${JSON.stringify(planRes.value.steps)}`,
-    );
+    this.logger.info("ai.turn.steps_planned", {
+      "participant.id": participantId,
+      "encounter.round": encounter.currentRound,
+      "steps.count": planRes.value.steps.length,
+      steps: planRes.value.steps,
+    });
     const executedSteps: ActionStep[] = [];
     for (const step of planRes.value.steps) {
       const executed = await this.applyStep(
@@ -218,15 +242,20 @@ export class AiTurnService {
         authUserId,
       );
       executedSteps.push(executed);
-      this.logger.log(
-        `[AI-TURN] step.kind=${step.kind} ok=${executed.result.ok} summary="${executed.result.summary}" error=${executed.result.error?.code ?? "-"}`,
-      );
+      this.logger.info("ai.turn.step_executed", {
+        "step.kind": step.kind,
+        "step.ok": executed.result.ok,
+        "step.summary": executed.result.summary,
+        "step.error.code": executed.result.error?.code ?? null,
+      });
       // Se step falhou criticamente (ex: TARGET_DEFEATED), para — o
       // frontend/executor pode re-chamar com continuationFrom.
       if (!executed.result.ok && step.kind !== "end-turn") {
-        this.logger.warn(
-          `Step ${step.kind} falhou: ${executed.result.error?.code} — ${executed.result.summary}`,
-        );
+        this.logger.warn("ai.turn.step_failed", {
+          "step.kind": step.kind,
+          "step.error.code": executed.result.error?.code,
+          "step.summary": executed.result.summary,
+        });
         break;
       }
     }
@@ -345,13 +374,23 @@ export class AiTurnService {
               targetDefeated: res.value.targetDefeated,
               targetHpAfter: res.value.targetHpAfter ?? null,
             });
-            this.logger.log(
-              `[AI-ATTACK] emit attack_resolved attacker=${participantId} target=${target} hit=${res.value.attackRoll.hit} crit=${res.value.attackRoll.critical} dmg=${res.value.damageRoll?.finalDamage ?? 0} hpAfter=${res.value.targetHpAfter ?? "n/a"} defeated=${res.value.targetDefeated}`,
-            );
+            this.logger.info("ai.attack.resolved", {
+              "attacker.participant_id": participantId,
+              "target.participant_id": target,
+              "attack.hit": res.value.attackRoll.hit,
+              "attack.critical": res.value.attackRoll.critical,
+              "damage.dealt": res.value.damageRoll?.finalDamage ?? 0,
+              "target.hp_after": res.value.targetHpAfter ?? null,
+              "target.defeated": res.value.targetDefeated,
+            });
           } else {
-            this.logger.warn(
-              `[AI-ATTACK] resolveAttack falhou attacker=${participantId} target=${target} action=${step.actionName} code=${(res as { code?: string }).code ?? "?"} err=${(res as { error?: string }).error ?? "?"}`,
-            );
+            this.logger.warn("ai.attack.failed", {
+              "attacker.participant_id": participantId,
+              "target.participant_id": target,
+              "action.name": step.actionName,
+              "error.code": (res as { code?: string }).code ?? null,
+              "error.message": (res as { error?: string }).error ?? null,
+            });
           }
           return {
             kind: "attack",

@@ -13,6 +13,9 @@ import { generateTraceId } from "../trace/trace-context";
 
 const ERROR_TYPE_BASE = "https://diad.dev/errors/";
 
+/** SCREAMING_SNAKE válido — alfanumérico, ao menos um `_`. */
+const CODE_FORMAT_REGEX = /^[A-Z]+(_[A-Z0-9]+)+$/;
+
 interface NormalizedHttpBody {
   message?: string;
   detail?: string;
@@ -105,6 +108,15 @@ export class ProblemFactory {
     status: number,
   ): ErrorCode {
     if (body?.code && isErrorCode(body.code)) return body.code;
+    // Aceita qualquer code SCREAMING_SNAKE como `error.code`. O catálogo central
+    // continua sendo fonte canônica pra metadata (httpStatus/title/hint) — quando
+    // o code não está catalogado, esses campos saem do statusToCode (genérico).
+    // Isso permite que regras D&D do GameErrorCode local (SPELL_OUT_OF_RANGE,
+    // OUT_OF_RANGE, NOT_YOUR_TURN, etc) cheguem ao envelope/log com error.code
+    // específico, sem precisar mover 80+ codes pro catálogo TS.
+    if (body?.code && CODE_FORMAT_REGEX.test(body.code)) {
+      return body.code as ErrorCode;
+    }
     return this.statusToCode(status);
   }
 

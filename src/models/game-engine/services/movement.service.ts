@@ -9,6 +9,7 @@ import { CharacterStateService } from "src/models/characters/services/character-
 import { EncounterService } from "./encounter.service";
 import { PersistentAreaService } from "./persistent-area.service";
 import { ExhaustionService } from "./exhaustion.service";
+import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 import {
   GameResult,
   GameEventData,
@@ -53,7 +54,10 @@ export class MovementService {
     private readonly stateService: CharacterStateService,
     private readonly persistentArea: PersistentAreaService,
     private readonly exhaustion: ExhaustionService,
-  ) {}
+    private readonly logger: DiadLogger,
+  ) {
+    this.logger.setContext(MovementService.name);
+  }
 
   /**
    * Get the base movement speed for a participant.
@@ -628,8 +632,14 @@ export class MovementService {
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
   ): Promise<void> {
-    // eslint-disable-next-line no-console
-    console.log(`[INIT-TURN] participantId=${participant.id} type=${participant.type} controlledBy=${participant.controlledBy} prev{actionUsed=${participant.actionUsed}, bonusActionUsed=${participant.bonusActionUsed}, movementRemaining=${participant.movementRemaining}}`);
+    this.logger.debug("encounter.turn.initialize", {
+      "participant.id": participant.id,
+      "participant.type": participant.type,
+      "participant.controlled_by": participant.controlledBy,
+      "previous.action_used": participant.actionUsed,
+      "previous.bonus_action_used": participant.bonusActionUsed,
+      "previous.movement_remaining": participant.movementRemaining,
+    });
     const speed = await this.getSpeed(participant, ownerUserId);
     participant.movementRemaining = speed;
     participant.actionUsed = false;
