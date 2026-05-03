@@ -66,6 +66,7 @@ export const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "revivify_eligibility_checked",
     "event_bus_listener_registered",
     "session_resumed",
+    "scene_changed",
     // Spec 027 (M2, AC2.5)
     "npc_witnessed_event",
     "guard_dispatched",

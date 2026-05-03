@@ -8,12 +8,17 @@ import { GameSessionEntity } from "src/entities/game-session.entity";
 import { VowEntity } from "src/entities/vow.entity";
 import { CampaignService } from "src/models/world/services/campaign.service";
 import { SceneContextCacheService } from "./scene-context-cache.service";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
+import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 export interface CreateSceneDto {
   locationId?: string;
   title?: string;
   description?: string;
   mood?: string;
+  /** Razão semântica da transição (ex: "player_left_chamber", "director_advanced"). */
+  reason?: string;
 }
 
 const BEAT_ORDER: ArcBeat[] = [
@@ -42,7 +47,12 @@ export class SceneService {
     private readonly vowRepo: Repository<VowEntity>,
     private readonly campaignService: CampaignService,
     private readonly contextCache: SceneContextCacheService,
-  ) {}
+    private readonly eventBus: EventBusService,
+    private readonly envelopeFactory: EventEnvelopeFactory,
+    private readonly logger: DiadLogger,
+  ) {
+    this.logger.setContext(SceneService.name);
+  }
 
   async create(sessionId: string, dto: CreateSceneDto): Promise<SceneEntity> {
     // Deactivate current active scene + invalidate cache pra cena saindo.
@@ -79,7 +89,70 @@ export class SceneService {
       startedAt: new Date(),
       arcBeat,
     });
-    return this.sceneRepo.save(scene);
+    const saved = await this.sceneRepo.save(scene);
+
+    // Emite scene_changed (Spec 017 NarrativeEvent). Audiences:
+    //  - Director: pode replanejar beat sabendo que cena trocou
+    //  - Narrator: ancora próximo turn na nova cena
+    //  - HUD: animação de transição
+    //  - Telemetry: continuidade observável
+    // Best-effort — falha em publish não rollback no save da cena.
+    await this.publishSceneChanged({
+      sessionId,
+      campaignId: campaign?.id ?? null,
+      fromSceneId: previousActive?.id ?? null,
+      toSceneId: saved.id,
+      sceneNumber: nextNumber,
+      locationId: dto.locationId ?? null,
+      arcBeat: arcBeat ?? null,
+      reason: dto.reason ?? null,
+    });
+
+    return saved;
+  }
+
+  private async publishSceneChanged(payload: {
+    sessionId: string;
+    campaignId: string | null;
+    fromSceneId: string | null;
+    toSceneId: string;
+    sceneNumber: number;
+    locationId: string | null;
+    arcBeat: ArcBeat | null;
+    reason: string | null;
+  }): Promise<void> {
+    if (!payload.campaignId) return;
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "scene_changed",
+        source: { service: "diad-backend", module: "SceneService.create" },
+        scope: {
+          campaignId: payload.campaignId,
+          sessionId: payload.sessionId,
+          sceneId: payload.toSceneId,
+        },
+        audiences: ["Director", "Narrator", "HUD"],
+        narrativeDescriptor: payload.fromSceneId
+          ? `Cena transicionou (${payload.fromSceneId.slice(0, 8)} → ${payload.toSceneId.slice(0, 8)})`
+          : `Cena ${payload.sceneNumber} iniciada`,
+        payload: {
+          fromSceneId: payload.fromSceneId,
+          toSceneId: payload.toSceneId,
+          sceneNumber: payload.sceneNumber,
+          locationId: payload.locationId,
+          arcBeat: payload.arcBeat,
+          reason: payload.reason,
+        },
+      });
+      await this.eventBus.publish(envelope);
+    } catch (err) {
+      this.logger.error("scene.changed.publish_failed", err, {
+        "session.id": payload.sessionId,
+        "scene.from": payload.fromSceneId ?? "(none)",
+        "scene.to": payload.toSceneId,
+      });
+    }
   }
 
   // ===== Spec 014 M1: Harmon Story Circle arc beat =====
