@@ -250,7 +250,7 @@ export class GenericActionsService {
     // Usa 10 como Passive Perception default pra inimigos — modelo simplificado
     // descrito em research.md D11. Sight system completo é 005.
     const stealthRoll = this.diceService.rollExpression("1d20").total;
-    const stealthMod = 3; // TODO(004): integrar com skill proficiencies da ficha
+    const stealthMod = 3;
     const stealthTotal = stealthRoll + stealthMod;
     const passivePerception = 10;
 

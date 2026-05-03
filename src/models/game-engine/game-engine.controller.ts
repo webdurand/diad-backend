@@ -828,14 +828,6 @@ export class GameEngineController {
     return this.encounterService.resolveEncounter(id, body, userId);
   }
 
-  @Post("encounters/:id/difficulty")
-  async calculateDifficulty(
-    @Param("id") id: string,
-    @Body("partyLevels") partyLevels: number[],
-  ) {
-    return this.encounterService.calculateDifficulty(id, partyLevels);
-  }
-
   // ==================== COMBAT ====================
 
   @Get("encounters/:id/turn")
@@ -1071,99 +1063,6 @@ export class GameEngineController {
     const result = await this.combatService.endTurn(id);
     this.emitEncounterInvalidate(id, "end-turn");
     return result;
-  }
-
-  // ==================== SPEC 004: RAW COMBAT ENDPOINTS ====================
-
-  @Post("encounters/:id/legendary-action")
-  async legendaryAction(
-    @Req() req: AuthRequest,
-    @Param("id") id: string,
-    @Body() body: LegendaryActionDto,
-  ) {
-    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
-      body.monsterParticipantId,
-      getUserId(req),
-      id,
-    );
-    const monster = await this.participantRepo.findOne({
-      where: { id: body.monsterParticipantId, encounterId: id },
-      relations: ["monster"],
-    });
-    if (!monster) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
-    const can = this.legendaryActionService.canExecute(
-      monster,
-      body.actionName,
-    );
-    if (!can.ok) return can;
-    const cost = can.value.cost;
-    const spent = await this.legendaryActionService.spendPoints(
-      monster,
-      cost,
-      body.actionName,
-    );
-    void ownerUserId; // resolveMutationOwner garante autorização
-    return { ok: true, value: spent.result, events: spent.events };
-  }
-
-  @Post("encounters/:id/grapple-escape")
-  async grappleEscape(
-    @Req() req: AuthRequest,
-    @Param("id") id: string,
-    @Body() body: GrappleEscapeDto,
-  ) {
-    await this.permissionResolver.resolveMutationOwner(
-      body.participantId,
-      getUserId(req),
-      id,
-    );
-    const target = await this.participantRepo.findOne({
-      where: { id: body.participantId, encounterId: id },
-    });
-    if (!target) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
-    // Modificadores simples para v1: usar bonus de proficiência fixo (refinar com character-sheet em iteração futura)
-    const targetMod = body.ability === "athletics" ? 3 : 3;
-    const grapplerMod = 3;
-    return this.grappleEscapeService.attemptEscape(
-      target,
-      body.ability,
-      targetMod,
-      grapplerMod,
-    );
-  }
-
-  @Post("encounters/:id/lair-action")
-  async lairAction(
-    @Req() req: AuthRequest,
-    @Param("id") id: string,
-    @Body() body: LairActionDto,
-  ) {
-    await this.permissionResolver.resolveMutationOwner(
-      body.monsterParticipantId,
-      getUserId(req),
-      id,
-    );
-    const encounter = await this.encounterRepo.findOne({ where: { id } });
-    if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
-    return this.lairActionService.execute(
-      encounter,
-      body.monsterParticipantId,
-      body.actionIndex,
-    );
-  }
-
-  @Patch("encounters/:id/in-lair")
-  async setInLair(
-    @Req() req: AuthRequest,
-    @Param("id") id: string,
-    @Body() body: { inLair: boolean },
-  ) {
-    const encounter = await this.encounterRepo.findOne({ where: { id } });
-    if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
-    encounter.inLair = !!body.inLair;
-    await this.encounterRepo.save(encounter);
-    void req;
-    return { ok: true, value: { inLair: encounter.inLair } };
   }
 
   @Delete("encounters/:id/conditions/:instanceId")
@@ -1804,17 +1703,6 @@ export class GameEngineController {
       }
     }
     return updated;
-  }
-
-  @Patch("encounters/:id/participants/:participantId/visibility")
-  async updateParticipantVisibility(
-    @Param("participantId") participantId: string,
-    @Body() body: { visible: boolean },
-  ) {
-    return this.encounterService.updateParticipantVisibility(
-      participantId,
-      body.visible,
-    );
   }
 
   /**
@@ -2616,44 +2504,6 @@ export class GameEngineController {
   @Post("dice/roll")
   async rollDice(@Body("expression") expression: string) {
     return this.diceService.rollExpression(expression);
-  }
-
-  /**
-   * Spec 016 M2 — Active dice check request (frontend SSE).
-   * Body: { characterId, kind, ability, skill?, dc, advantage?, modifiers }
-   * Retorna { rollId, targetD20, totalModifier } pro frontend renderizar
-   * `<DiceRollCard>`. Storage in-memory (TTL 1h).
-   */
-  @Post("dice/request")
-  @HttpCode(HttpStatus.OK)
-  async requestDiceRoll(
-    @Body()
-    body: {
-      characterId?: string;
-      kind: "ability_check" | "saving_throw" | "attack_roll" | "death_save";
-      ability: "STR" | "DEX" | "CON" | "INT" | "WIS" | "CHA";
-      skill?: string | null;
-      dc: number;
-      advantage?: "normal" | "advantage" | "disadvantage";
-      modifiers: Array<{ label: string; value: number }>;
-      narrativeFraming?: string;
-    },
-  ) {
-    const result = this.diceRollService.requestRoll({
-      characterId: body.characterId,
-      kind: body.kind,
-      ability: body.ability,
-      skill: body.skill,
-      dc: body.dc,
-      advantage: body.advantage,
-      modifiers: body.modifiers ?? [],
-      narrativeFraming: body.narrativeFraming,
-    });
-    return {
-      rollId: result.rollId,
-      targetD20: result.targetD20,
-      totalModifier: result.totalModifier,
-    };
   }
 
   /**

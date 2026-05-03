@@ -1,17 +1,7 @@
 /**
- * TypeScript mirror de specs/017-world-encounter-bridge/contracts/event-envelope.json.
- *
- * EventEnvelope é a unidade canônica que circula no EventBus (Princípio X v1.4.0).
- * Todo envelope carrega traceId W3C (Princípio XI), eventCategory (1 das 4),
- * audiences[] calculadas por AudienceMap, e narrativeDescriptor PT-BR opcional.
- *
- * Future-proofing pra Event Sourcing (ADR-017):
- *  - `version` permite schema versioning de payloads
- *  - `aggregateId` permite reconstrução por aggregate em replay futuro
- *  - **Self-contained payloads obrigatórios** — campo `payload` carrega estado
- *    pré e pós (ex: `damage_applied` inclui hpBefore + hpAfter, não só damage
- *    delta). Listener pode reagir sem ler banco; replay determinístico fica
- *    viável. Bus não valida shape interno — convenção docada aqui.
+ * Mirror de contracts/event-envelope.json. Unidade canônica do EventBus.
+ * Self-contained payloads (hpBefore + hpAfter, não só delta) — listeners
+ * reagem sem ler banco; replay determinístico fica viável.
  */
 
 export const EVENT_CATEGORIES = [

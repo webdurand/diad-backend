@@ -334,60 +334,16 @@ export class AiProxyController {
     });
   }
 
-  /**
-   * Spec 027 (M1, AC1.7+1.8) — endpoint legado removido. Pipeline DM agent
-   * monolítico (40 tools, prompt leak, ataques ignorados) substituído pelo
-   * Coordinator multi-agent. Frontend migrou pra `/ai/narrative/:sessionId/turn`
-   * (commit cd957d9). Mantemos a rota só pra responder 410 estruturado a
-   * clients antigos cacheados.
-   */
-  @Post("solo/:sessionId/narrate-start")
-  async soloNarrateStartDeprecated(
-    @Param("sessionId") sessionId: string,
-  ): Promise<never> {
-    throw new DomainException(
-      ErrorCode.LEGACY_ENDPOINT_DEPRECATED,
-      "Endpoint legado removido na spec 027.",
-      {
-        context: { sessionId, replacement: "/ai/narrative/:sessionId/turn" },
-      },
-    );
-  }
-
-  /**
-   * Spec 027 (M1, AC1.7+1.8) — ver `soloNarrateStartDeprecated`.
-   */
-  @Post("solo/:sessionId/message")
-  async soloMessageDeprecated(
-    @Param("sessionId") sessionId: string,
-  ): Promise<never> {
-    throw new DomainException(
-      ErrorCode.LEGACY_ENDPOINT_DEPRECATED,
-      "Endpoint legado removido na spec 027.",
-      {
-        context: { sessionId, replacement: "/ai/narrative/:sessionId/turn" },
-      },
-    );
-  }
-
   // ────── Multi-agent narrative pipeline (Spec 014/026 Pillar 4) ──────
 
   /**
-   * Spec 026 Pillar 4 — proxy para `/narrative/turn` do diad-agents.
-   *
-   * Substitui `solo/:sessionId/message` para usuários migrados ao pipeline
-   * multi-agent (Director / Narrator / Archivist / PreFlightOracle / Chaos).
-   * Faz mesmo enrichment server-authoritative do soloMessage (sceneContext,
-   * recentMessages, isResumed, previousSessionSummary, gap minutes) e
-   * persiste player_action + narration via SseNarrationCollector.
-   *
-   * Diferenças vs `solo/:sessionId/message`:
-   *  - body usa `playerInput` (alinhado ao contract /narrative/turn).
-   *  - injeta headers `X-Service-Key` + `X-User-Id` no upstream pra que o
-   *    BackendClient interno do agents impersone o owner da campanha.
-   *  - emite SSE chunks com tipos do pipeline novo (`narrator`, `director`,
-   *    `combat_starting`, `preflight_rolls`, `chaos_evaluated`, ...).
-   *    Frontend (`useAiStream`) trata `narrator` como prose chunk.
+   * Proxy pra `/narrative/turn` do diad-agents (pipeline multi-agent —
+   * Director / Narrator / Archivist / PreFlightOracle / Chaos). Faz enrichment
+   * server-authoritative (sceneContext, recentMessages, isResumed,
+   * previousSessionSummary, gapMinutes), injeta `X-Service-Key` + `X-User-Id`
+   * pra impersonar owner no agents, e persiste player_action + narration via
+   * SseNarrationCollector. Frontend (`useAiStream`) trata chunks `narrator`
+   * como prose.
    */
   @Post("narrative/:sessionId/turn")
   async narrativeTurn(
@@ -477,6 +433,14 @@ export class AiProxyController {
         body.clientId,
       );
 
+      // Sync antecipado: emite `session_sync` logo após persistir o
+      // `player_action` (server +1). Sem isso, se o stream cair entre
+      // `persistNarration` (server +2) e o `emitSessionSync` final, o ref do
+      // front fica defasado em 2 e o próximo turn cai em 409
+      // SESSION_LAST_MESSAGE_MISMATCH. Com o sync precoce, mesmo stream
+      // truncado deixa o ref no máximo 1 atrás (tolerado pelo detectMismatch).
+      await this.emitSessionSync(sessionId, res);
+
       // Spec 026 Pillar 4 — `SceneContext` (Spec 018) não carrega `sceneId`
       // no top-level (só `scene.{title,description,mood,location}`). O
       // Coordinator agents precisa do sceneId pra dispatch
@@ -548,13 +512,9 @@ export class AiProxyController {
   }
 
   /**
-   * Spec 026 Pillar 4 — abertura de sessão via pipeline multi-agent.
-   *
-   * Substitui `/ai/solo/:sessionId/narrate-start` (legacy DM agent que vazava
-   * system prompt em sessões novas, ex: "Preciso do character_id..."). Mesmo
-   * pipeline do `/ai/narrative/:sessionId/turn` mas com `playerInput=null`
-   * — Director resolve via forcing rule "scene 1 → YOU beat" (Spec 014).
-   * Filtros de leak (Pillar 2 camadas A+B+C) já cobrem o stream.
+   * Abertura de sessão via pipeline multi-agent. Mesmo pipeline do
+   * `/ai/narrative/:sessionId/turn` mas com `playerInput=null` — Director
+   * resolve via forcing rule "scene 1 → YOU beat".
    */
   @Post("narrative/:sessionId/start")
   async narrativeStart(
@@ -639,100 +599,6 @@ export class AiProxyController {
       res.end();
     } finally {
       releaseIdempotency(idempotencyKey);
-    }
-  }
-
-  @Post("solo/:sessionId/action")
-  async soloAction(
-    @Param("sessionId") sessionId: string,
-    @Body()
-    body: {
-      type: string;
-      actionId?: string;
-      targetId?: string;
-      spellId?: string;
-      text?: string;
-      lastMessageId?: number | null;
-      clientId?: string;
-    },
-    @Req() req: AuthRequest,
-    @Res() res: Response,
-  ) {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    try {
-      // Backend-authoritative — combat actions precisam de scene_context +
-      // recent_messages pro DM narrar coerente. Mesmo padrão de soloMessage.
-      const ctx = await this.resumeService.assemble(sessionId, {
-        lastMessageIdFromClient: body.lastMessageId ?? null,
-      });
-
-      if (ctx.lastMessageMismatch) {
-        res.statusCode = 409;
-        res.write(
-          `data: ${JSON.stringify({
-            type: "error",
-            code: ErrorCode.SESSION_LAST_MESSAGE_MISMATCH,
-            content:
-              "Histórico desincronizado — recarregue para continuar a sessão.",
-          })}\n\n`,
-        );
-        res.end();
-        return;
-      }
-
-      // Spec 024 follow-up — persiste a intenção do jogador como player_action.
-      // Body livre (`text`) tem prioridade; senão monta string sintética da
-      // ação estruturada pra ficar legível na timeline + retomada.
-      const actionContent =
-        body.text && body.text.trim().length > 0
-          ? body.text
-          : `${body.type}${body.actionId ? `:${body.actionId}` : ""}${
-              body.targetId ? ` → ${body.targetId}` : ""
-            }${body.spellId ? ` (${body.spellId})` : ""}`;
-      await this.persistPlayerAction(
-        sessionId,
-        req.user!.id,
-        actionContent,
-        body.clientId,
-      );
-      const collector = new SseNarrationCollector();
-      await this.aiProxyService.pipeStream(
-        `/solo/${sessionId}/action`,
-        {
-          ...body,
-          user_id: req.user!.id,
-          sessionId,
-          campaignId: ctx.campaignId,
-          isResumed: ctx.isResumed,
-          previousSessionId: ctx.previousSessionId,
-          sceneContext: ctx.sceneContext,
-          recentMessages: ctx.recentMessages,
-          previousSessionSummary: ctx.previousSessionSummary,
-          lastMessageId: body.lastMessageId ?? ctx.serverLastMessageId,
-          gapMinutes: ctx.gapMinutes,
-        },
-        res,
-        (chunk) => collector.feed(chunk),
-        async () => {
-          const persisted = await this.persistNarration(
-            sessionId,
-            req.user!.id,
-            collector.finalize(),
-          );
-          if (persisted) {
-            this.emitNarrationPersisted(res, persisted.serverId, body.clientId);
-          }
-          await this.emitSessionSync(sessionId, res);
-        },
-      );
-    } catch (err: any) {
-      this.logger.error(`Solo action error: ${err.message}`);
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-      res.end();
     }
   }
 

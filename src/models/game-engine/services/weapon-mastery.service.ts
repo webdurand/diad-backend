@@ -442,7 +442,6 @@ export class WeaponMasteryService {
       if (hasProf) mod += m.proficiency_bonus ?? 0;
     }
     // PC: delegar save seria ideal; por ora usa 0 (conservador — fica como debt).
-    // TODO Fase 1.1: delegar pra SavingThrowService quando tiver userId disponível.
     const roll = this.dice.roll(20);
     return { roll, total: roll + mod, mod };
   }

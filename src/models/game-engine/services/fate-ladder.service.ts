@@ -22,22 +22,12 @@ import {
 } from "./fate-ladder-helpers";
 
 /**
- * Spec 016 M0 — Fate Ladder service stub.
- *
- * Trigger ao 3º death save fail OU massive damage 2024 (remaining ≥ HP max).
- * Apresenta 4 opções narrativas (em hardcore mode, apenas A):
+ * Fate Ladder — death moment ritual. Triggered ao 3º failed death save ou
+ * massive damage 2024. Presents 4 options (hardcore mode = só A):
  *   A) Aceitar morte — epilogue forçado
  *   B) Sacrifício heroico — great feat narrativo
  *   C) Pagar o preço — sobrevive perdendo algo permanente
- *   D) Ressurreição RAW — só se world state confirma diamante+caster
- *
- * Fabula Ultima (Heroic Sacrifice) + Ironsworn (Pay the Price) + RAW
- * 2024 Resurrection. RAW preservado em death saves; Fate Ladder é
- * layer narrativa opt-in (categoria já aceita: morale system não-RAW).
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §5 + contract `fate-ladder.json`.
- *
- * STUB M0 — métodos retornam `failure('not_implemented')`. M3 wira lógica.
+ *   D) Ressurreição RAW — requires diamond+caster
  */
 export type FateLadderTrigger =
   | "three_failed_death_saves"

@@ -19,7 +19,7 @@ import type { ArcBeat } from "src/entities/campaign.entity";
 import { ClockService } from "./services/clock.service";
 import type { AdvanceClockDto, CreateClockDto } from "./services/clock.service";
 import { VowService } from "./services/vow.service";
-import type { CreateVowDto, UpdateVowDto } from "./services/vow.service";
+import type { CreateVowDto } from "./services/vow.service";
 import { NarrativeDecisionService } from "./services/narrative-decision.service";
 import type { CreateNarrativeDecisionDto } from "./services/narrative-decision.service";
 import { LoreEntryService } from "./services/lore-entry.service";
@@ -123,20 +123,6 @@ export class AiDmController {
     return this.vowService.listByCampaign(campaignId);
   }
 
-  @Patch("vows/:vowId")
-  async updateVow(
-    @Req() req: AuthRequest,
-    @Param("vowId") vowId: string,
-    @Body() dto: UpdateVowDto,
-  ) {
-    const vow = await this.vowService.getById(vowId);
-    await this.campaignService.ensureDmOwnership(
-      vow.campaignId,
-      getUserId(req),
-    );
-    return this.vowService.update(vowId, dto);
-  }
-
   @Post("vows/:vowId/fulfill")
   async fulfillVow(@Req() req: AuthRequest, @Param("vowId") vowId: string) {
     const vow = await this.vowService.getById(vowId);
@@ -232,14 +218,4 @@ export class AiDmController {
     return this.aiUsageService.log({ ...dto, campaignId });
   }
 
-  @Get("campaigns/:id/cost-summary")
-  async costSummary(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) campaignId: string,
-    @Query("targetPerSessionUsd") target?: string,
-  ) {
-    await this.campaignService.ensureMembership(campaignId, getUserId(req));
-    const targetUsd = target ? parseFloat(target) : 0.5;
-    return this.aiUsageService.summaryForCampaign(campaignId, targetUsd);
-  }
 }

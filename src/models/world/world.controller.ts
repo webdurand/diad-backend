@@ -37,12 +37,9 @@ import type {
   UpdateLocationDto,
   AddConnectionDto,
 } from "./services/location.service";
-import type { CreateNpcDto, AddRelationshipDto } from "./services/npc.service";
+import type { CreateNpcDto } from "./services/npc.service";
 import { isDmOmniscient } from "./services/npc-projection";
-import type {
-  CreateFactionDto,
-  SetFactionRelationDto,
-} from "./services/faction.service";
+import type { CreateFactionDto } from "./services/faction.service";
 import type { CreateQuestDto, UpdateQuestDto } from "./services/quest.service";
 // Spec 027 (M2, AC2.10 / bug D3) — resolve slug-ou-UUID em `:id`.
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
@@ -393,17 +390,6 @@ export class WorldController {
     return this.npcService.remove(npcId);
   }
 
-  @Post(":id/npcs/:npcId/relationships")
-  async addRelationship(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("npcId") npcId: string,
-    @Body() dto: AddRelationshipDto,
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.npcService.addRelationship(npcId, dto);
-  }
-
   @Patch(":id/npcs/:npcId/move")
   async moveNpc(
     @Req() req: AuthRequest,
@@ -442,22 +428,6 @@ export class WorldController {
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
     return this.factionService.update(facId, dto);
-  }
-
-  @Post(":id/factions/relations")
-  async setFactionRelation(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Body() body: { factionAId: string } & SetFactionRelationDto,
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.factionService.setRelation(body.factionAId, body);
-  }
-
-  @Get(":id/factions/relations")
-  async getFactionRelations(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
-    await this.campaignService.ensureMembership(id, getUserId(req));
-    return this.factionService.getRelations(id);
   }
 
   // ==================== QUESTS ====================
@@ -510,28 +480,4 @@ export class WorldController {
     return this.questService.updateObjectiveStatus(oId, status as any);
   }
 
-  @Post(":id/quests/:qId/prerequisites")
-  async addPrerequisite(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("qId") qId: string,
-    @Body() body: { requiredQuestId: string; requiredStatus?: string },
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.questService.addPrerequisite(
-      qId,
-      body.requiredQuestId,
-      body.requiredStatus,
-    );
-  }
-
-  @Delete(":id/quests/:qId")
-  async removeQuest(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("qId") qId: string,
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.questService.remove(qId);
-  }
 }
