@@ -50,8 +50,33 @@ export interface ListSoloWorldsQuery {
   isDraft?: boolean;
 }
 
+export interface SoloWorldListItem {
+  id: string;
+  slug: string | null;
+  name: string;
+  description: string | null;
+  setting: string | null;
+  difficulty: string | null;
+  status: string;
+  dmMode: "ai" | "human";
+  scope: "solo" | "party";
+  isDraft: boolean;
+  tonalAnchor: CampaignTonalAnchor | null;
+  worldLore: string | null;
+  updatedAt: Date;
+  createdAt: Date;
+  /** Contagens reais das tabelas filhas (não usa campaign.currentCounts que é só pra cenas/budget). */
+  counts: {
+    npcs: number;
+    locations: number;
+    factions: number;
+    loreEntries: number;
+    quests: number;
+  };
+}
+
 export interface ListSoloWorldsResult {
-  items: CampaignEntity[];
+  items: SoloWorldListItem[];
   total: number;
   page: number;
   pageSize: number;
@@ -159,13 +184,61 @@ export class CampaignService {
       qb.andWhere("c.name ILIKE :q", { q: `%${query.q.trim()}%` });
     }
 
-    const [items, total] = await qb
+    const [campaigns, total] = await qb
       .orderBy("c.updated_at", "DESC")
       .skip(offset)
       .take(pageSize)
       .getManyAndCount();
 
+    // Counts reais via subquery agregada — campaign.currentCounts só rastreia cenas
+    // pra budget de gameplay, não os items criados no wizard.
+    const items: SoloWorldListItem[] = await Promise.all(
+      campaigns.map(async (c) => {
+        const counts = await this.fetchCountsForCampaign(c.id);
+        return {
+          id: c.id,
+          slug: c.slug ?? null,
+          name: c.name,
+          description: c.description ?? null,
+          setting: c.setting ?? null,
+          difficulty: c.difficulty ?? null,
+          status: c.status,
+          dmMode: c.dmMode,
+          scope: c.scope,
+          isDraft: c.isDraft,
+          tonalAnchor: c.tonalAnchor ?? null,
+          worldLore: c.worldLore ?? null,
+          updatedAt: c.updatedAt,
+          createdAt: c.createdAt,
+          counts,
+        };
+      }),
+    );
+
     return { items, total, page, pageSize };
+  }
+
+  /** Conta items reais nas tabelas filhas pra um campaign — usado em listSoloWorlds. */
+  private async fetchCountsForCampaign(
+    campaignId: string,
+  ): Promise<SoloWorldListItem["counts"]> {
+    const result = (await this.campaignRepo.query(
+      `SELECT
+         (SELECT COUNT(*) FROM npcs WHERE campaign_id = $1) AS npcs,
+         (SELECT COUNT(*) FROM locations WHERE campaign_id = $1) AS locations,
+         (SELECT COUNT(*) FROM factions WHERE campaign_id = $1) AS factions,
+         (SELECT COUNT(*) FROM lore_entries WHERE campaign_id = $1) AS lore,
+         (SELECT COUNT(*) FROM quests WHERE campaign_id = $1) AS quests`,
+      [campaignId],
+    )) as Array<{ npcs: string; locations: string; factions: string; lore: string; quests: string }>;
+    const row = result[0] ?? { npcs: "0", locations: "0", factions: "0", lore: "0", quests: "0" };
+    return {
+      npcs: parseInt(row.npcs, 10) || 0,
+      locations: parseInt(row.locations, 10) || 0,
+      factions: parseInt(row.factions, 10) || 0,
+      loreEntries: parseInt(row.lore, 10) || 0,
+      quests: parseInt(row.quests, 10) || 0,
+    };
   }
 
   /**
