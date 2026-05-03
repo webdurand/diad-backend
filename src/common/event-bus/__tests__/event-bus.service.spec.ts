@@ -1,5 +1,4 @@
-import { Repository } from "typeorm";
-import { SessionEventEntity } from "src/entities/session-event.entity";
+import { DataSource } from "typeorm";
 import { EventBusService } from "../event-bus.service";
 import { AudienceMapService } from "../audience-map.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
@@ -21,22 +20,35 @@ function makeLogger(): DiadLogger {
   } as unknown as DiadLogger;
 }
 
-interface FakeSessionEventRepo {
+interface FakeManager {
+  query: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
   createQueryBuilder: jest.Mock;
 }
 
-function makeRepo(): FakeSessionEventRepo {
+interface FakeDataSource {
+  manager: FakeManager;
+  transaction: jest.Mock;
+}
+
+function makeDataSource(): FakeDataSource {
   const qb = {
     select: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     getRawOne: jest.fn().mockResolvedValue({ max: 0 }),
   };
-  return {
-    create: jest.fn((row: Record<string, unknown>) => row),
+  const manager: FakeManager = {
+    query: jest.fn().mockResolvedValue(undefined),
+    create: jest.fn((_entity, row: Record<string, unknown>) => row),
     save: jest.fn().mockResolvedValue(undefined),
     createQueryBuilder: jest.fn().mockReturnValue(qb),
+  };
+  return {
+    manager,
+    transaction: jest.fn(
+      async (cb: (m: FakeManager) => Promise<unknown>) => cb(manager),
+    ),
   };
 }
 
@@ -75,19 +87,19 @@ function makeEnvelope(
 }
 
 describe("EventBusService", () => {
-  let repo: FakeSessionEventRepo;
+  let dataSource: FakeDataSource;
   let audienceMap: AudienceMapService;
   let logger: DiadLogger;
   let service: EventBusService;
 
   beforeEach(() => {
-    repo = makeRepo();
+    dataSource = makeDataSource();
     audienceMap = makeAudienceMap();
     logger = makeLogger();
     service = new EventBusService(
-      repo as unknown as Repository<SessionEventEntity>,
       audienceMap,
       logger,
+      dataSource as unknown as DataSource,
     );
   });
 
@@ -135,21 +147,27 @@ describe("EventBusService", () => {
     await expect(service.publish(env)).rejects.toBeInstanceOf(DomainException);
   });
 
-  it("publish() persiste em session_events em background com sessionId presente", async () => {
+  it("publish() persiste em session_events em background dentro de tx com advisory lock", async () => {
     const env = makeEnvelope();
     await service.publish(env);
     // background — flush microtasks
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
 
-    expect(repo.create).toHaveBeenCalled();
-    const saveArg = repo.create.mock.calls[0][0];
+    expect(dataSource.transaction).toHaveBeenCalled();
+    expect(dataSource.manager.query).toHaveBeenCalledWith(
+      expect.stringContaining("pg_advisory_xact_lock"),
+      [`session_event:${env.scope.sessionId}`],
+    );
+    expect(dataSource.manager.create).toHaveBeenCalled();
+    const saveArg = dataSource.manager.create.mock.calls[0][1];
     expect(saveArg.eventCategory).toBe("EncounterEvent");
     expect(saveArg.eventType).toBe("damage_applied");
     expect(saveArg.traceId).toBe(env.source.traceId);
     expect(saveArg.aggregateId).toBe(env.aggregateId);
     expect(saveArg.version).toBe(1);
-    expect(repo.save).toHaveBeenCalled();
+    expect(dataSource.manager.save).toHaveBeenCalled();
   });
 
   it("publish() não rollback se listener falha — outros listeners ainda executam", async () => {

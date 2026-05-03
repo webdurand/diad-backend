@@ -26,39 +26,14 @@ import { SceneService } from "../session/services/scene.service";
 import { SessionMessageService } from "../session/services/session-message.service";
 import { SseNarrationCollector } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
-import { DomainException } from "src/common/observability/errors/diad-exception";
 import { GameEventEntity } from "src/entities/game-event.entity";
 import type { AuthRequest } from "../auth/auth.types";
 
-/**
- * Spec 027 (M2 follow-up) — mapping systemHint → eventType injetado
- * em sceneContext.recent_events. Quando o frontend dispara um turn com
- * `systemHint='post_combat'` ou `'post_fate_choice'`, o backend lê o
- * último evento estruturado correspondente do `game_events` e adiciona
- * em `sceneContext.recent_events` ANTES de fazer proxy pro agno. O
- * Coordinator branch correspondente lê esse evento pra montar guidance
- * estruturado por outcome (vitória/derrota/retreat ou A/B/C/D).
- *
- * Mapping é exhaustive — qualquer systemHint não listado é forwarded
- * sem injeção (no-op).
- */
 const SYSTEM_HINT_EVENT_MAP: Record<string, string> = {
   post_combat: "encounter_outcome_summary",
   post_fate_choice: "fate_ladder_resolved",
 };
 
-/**
- * Spec 027 (M1, AC1.12) — guard in-flight pra evitar dois POST idênticos
- * em paralelo (jogador clica 2× rápido demais antes do `persistPlayerAction`
- * gravar a primeira). Não é cache de resposta — é apenas um Set de chaves
- * sob TTL curto (60s) que rejeita o duplicado com 409
- * IDEMPOTENCY_CACHE_MISS_AFTER_RACE.
- *
- * In-memory simples — DIAD não tem Redis. Em multi-replica, a colisão real
- * que importa (mesma sessão batendo no mesmo replica em ms) ainda é
- * mitigada pelo advisory lock no `getNextSequence`; este guard cobre o
- * caso single-replica + click duplo do user.
- */
 const IDEMPOTENCY_TTL_MS = 60_000;
 const inFlightRequests = new Map<string, number>();
 
@@ -113,15 +88,6 @@ export class AiProxyController {
     private readonly gameEventRepo: Repository<GameEventEntity>,
   ) {}
 
-  /**
-   * Spec 027 (M2 follow-up) — busca último evento de um tipo na sessão e
-   * injeta em `sceneContext.recent_events`. Quando systemHint='post_combat',
-   * lê `encounter_outcome_summary`; quando 'post_fate_choice', lê
-   * `fate_ladder_resolved`. No-op pra hints não-mapeados.
-   *
-   * Best-effort: erro de query loga warn mas não derruba o turn (Narrator
-   * cai num fallback genérico).
-   */
   private async injectSystemHintEvent(
     sessionId: string,
     systemHint: string | undefined,
@@ -157,11 +123,7 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Persiste input do user (`player_action`) ANTES do pipeStream pra garantir
-   * que o turno fica registrado mesmo se o agents falhar mid-stream. Idempotente
-   * via `clientId` — frontend usa `entry-N`, backend usa `srv-act-*`.
-   */
+  
   private async persistPlayerAction(
     sessionId: string,
     userId: string,
@@ -184,18 +146,6 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Persiste narração final (`narration`) DEPOIS do pipeStream finalizar.
-   * Bloqueante (await) — o stream já foi entregue ao client via `res.end()`
-   * interno do pipeStream; aguardar aqui só atrasa a Promise do controller,
-   * garantindo que `GET /sessions/:id/messages` logo em seguida veja a
-   * narração nova. Tolera erro pra não derrubar o request.
-   *
-   * Spec 027 (M2/AC2.11) — retorna o serverId persistido pra que o caller
-   * emita `narration_persisted` SSE event antes de fechar o stream. Frontend
-   * usa esse event pra substituir o `entry-N` otimista por `srv-narr-<uuid>`
-   * inline (sem esperar `session_sync` do fim do stream).
-   */
   private async persistNarration(
     sessionId: string,
     userId: string,
@@ -220,14 +170,6 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Spec 027 (M2/AC2.11) — emite SSE event `narration_persisted` carregando
-   * o serverId real da narração (`srv-narr-<uuid>`). Frontend substitui o
-   * `entry-N` otimista por esse id, eliminando o duplicado D4.
-   *
-   * Best-effort — falha não derruba stream. Caller passa `clientTempId` se
-   * tiver (vem do request body); nulo é aceito.
-   */
   private emitNarrationPersisted(
     res: Response,
     serverId: string,
@@ -248,12 +190,6 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Spec 024 follow-up — emite chunk SSE `session_sync` com o `lastSequenceNumber`
-   * server-authoritative ao final do stream. Frontend usa pra ressincronizar
-   * `lastMessageIdRef` e evitar 409 (`SESSION_LAST_MESSAGE_MISMATCH`) no
-   * próximo turn. Best-effort: falha aqui não derruba o stream.
-   */
   private async emitSessionSync(
     sessionId: string,
     res: Response,
@@ -336,15 +272,6 @@ export class AiProxyController {
 
   // ────── Multi-agent narrative pipeline (Spec 014/026 Pillar 4) ──────
 
-  /**
-   * Proxy pra `/narrative/turn` do diad-agents (pipeline multi-agent —
-   * Director / Narrator / Archivist / PreFlightOracle / Chaos). Faz enrichment
-   * server-authoritative (sceneContext, recentMessages, isResumed,
-   * previousSessionSummary, gapMinutes), injeta `X-Service-Key` + `X-User-Id`
-   * pra impersonar owner no agents, e persiste player_action + narration via
-   * SseNarrationCollector. Frontend (`useAiStream`) trata chunks `narrator`
-   * como prose.
-   */
   @Post("narrative/:sessionId/turn")
   async narrativeTurn(
     @Param("sessionId") sessionId: string,

@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { DataSource, EntityManager, Repository } from "typeorm";
 import { GameEventEntity } from "src/entities/game-event.entity";
 import { GameEventData } from "../interfaces/result.type";
 
@@ -9,6 +9,7 @@ export class EventService {
   constructor(
     @InjectRepository(GameEventEntity)
     private readonly eventRepo: Repository<GameEventEntity>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async emit(
@@ -18,20 +19,26 @@ export class EventService {
   ): Promise<GameEventEntity[]> {
     if (events.length === 0) return [];
 
-    const startSeq = await this.getNextSequence(sessionId);
-    const entities = events.map((e, i) =>
-      this.eventRepo.create({
-        sessionId,
-        encounterId: encounterId ?? undefined,
-        sequence: startSeq + i,
-        eventType: e.event_type,
-        actorParticipantId: e.actor_participant_id,
-        targetParticipantId: e.target_participant_id,
-        data: e.data,
-      }),
-    );
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+        `game_event:${sessionId}`,
+      ]);
 
-    return this.eventRepo.save(entities);
+      const startSeq = await this.computeNextSequence(manager, sessionId);
+      const entities = events.map((e, i) =>
+        manager.create(GameEventEntity, {
+          sessionId,
+          encounterId: encounterId ?? undefined,
+          sequence: startSeq + i,
+          eventType: e.event_type,
+          actorParticipantId: e.actor_participant_id,
+          targetParticipantId: e.target_participant_id,
+          data: e.data,
+        }),
+      );
+
+      return manager.save(GameEventEntity, entities);
+    });
   }
 
   async getSessionTimeline(
@@ -88,12 +95,17 @@ export class EventService {
     return { events, total };
   }
 
-  private async getNextSequence(sessionId: string): Promise<number> {
-    const result = await this.eventRepo
-      .createQueryBuilder("e")
+  private async computeNextSequence(
+    manager: EntityManager,
+    sessionId: string,
+  ): Promise<number> {
+    const result = await manager
+      .createQueryBuilder(GameEventEntity, "e")
       .select("COALESCE(MAX(e.sequence), 0)", "max")
       .where("e.session_id = :sessionId", { sessionId })
-      .getRawOne();
-    return (parseInt(result.max, 10) || 0) + 1;
+      .getRawOne<{ max: string | number }>();
+    const raw = result?.max ?? 0;
+    const parsed = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+    return (Number.isFinite(parsed) ? parsed : 0) + 1;
   }
 }

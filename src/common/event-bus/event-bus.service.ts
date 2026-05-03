@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { DataSource, EntityManager } from "typeorm";
 import { SessionEventEntity } from "src/entities/session-event.entity";
 import { DomainException } from "../observability/errors/diad-exception";
 import { ErrorCode } from "../observability/errors/error-codes.catalog";
@@ -13,35 +12,14 @@ import {
   EventEnvelope,
 } from "./event-envelope.types";
 
-/**
- * Spec 017 — Pub/sub in-process síncrono pra eventos cross-domain.
- *
- * Princípio X v1.4.0 NON-NEGOTIABLE — toda feature mecânica/ambient/social/persona
- * publica `EventEnvelope` aqui; bus despacha pra listeners por categoria com
- * audiences resolvidas via `AudienceMapService`.
- *
- * Garantias:
- *  - **Catalog gate** — `eventType` fora do catálogo (event-categories.json)
- *    é rejeitado com `EVENT_TYPE_NOT_REGISTERED` 422 (Princípio XI envelope).
- *  - **Persistência best-effort** — row em `session_events` enfileirada em
- *    background (não bloqueia despacho dos listeners).
- *  - **Listener crash NÃO rollback** — try/catch envolve cada `handle`; falha
- *    vira log estruturado `event_bus.listener_failed` (Princípio XI).
- *  - **Audiences computadas** — se publish chama sem `audiences`, resolve via
- *    `AudienceMapService` com cache TTL 60s.
- *
- * Não é Event Sourcing puro. Listeners são at-least-once em side-effects
- * — devem ser idempotentes (`event_listener_processed` table, ADR-017).
- */
 @Injectable()
 export class EventBusService {
   private readonly listeners = new Map<EventCategory, Set<EventListener>>();
 
   constructor(
-    @InjectRepository(SessionEventEntity)
-    private readonly eventRepo: Repository<SessionEventEntity>,
     private readonly audienceMap: AudienceMapService,
     private readonly logger: DiadLogger,
+    private readonly dataSource: DataSource,
   ) {
     this.logger.setContext(EventBusService.name);
   }
@@ -145,27 +123,34 @@ export class EventBusService {
         // session_events.session_id é NOT NULL. Compat mantém legado funcionando.
         return;
       }
-      const sequence = await this.getNextSequence(sessionId);
-      await this.eventRepo.save(
-        this.eventRepo.create({
-          sessionId,
-          sceneId: envelope.scope.sceneId,
-          eventType: envelope.eventType,
-          summary: envelope.narrativeDescriptor ?? envelope.eventType,
-          details: {},
-          isVisibleToPlayers: true,
-          sequence,
-          eventCategory: envelope.eventCategory,
-          eventPayload: envelope.payload,
-          audiences: envelope.audiences,
-          traceId: envelope.source.traceId,
-          spanId: envelope.source.spanId ?? null,
-          narrativeDescriptor: envelope.narrativeDescriptor ?? null,
-          metadata: (envelope.metadata as Record<string, unknown>) ?? {},
-          version: envelope.version,
-          aggregateId: envelope.aggregateId,
-        }),
-      );
+      await this.dataSource.transaction(async (manager) => {
+        await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+          `session_event:${sessionId}`,
+        ]);
+
+        const sequence = await this.computeNextSequence(manager, sessionId);
+        await manager.save(
+          SessionEventEntity,
+          manager.create(SessionEventEntity, {
+            sessionId,
+            sceneId: envelope.scope.sceneId,
+            eventType: envelope.eventType,
+            summary: envelope.narrativeDescriptor ?? envelope.eventType,
+            details: {},
+            isVisibleToPlayers: true,
+            sequence,
+            eventCategory: envelope.eventCategory,
+            eventPayload: envelope.payload,
+            audiences: envelope.audiences,
+            traceId: envelope.source.traceId,
+            spanId: envelope.source.spanId ?? null,
+            narrativeDescriptor: envelope.narrativeDescriptor ?? null,
+            metadata: (envelope.metadata as Record<string, unknown>) ?? {},
+            version: envelope.version,
+            aggregateId: envelope.aggregateId,
+          }),
+        );
+      });
     } catch (err) {
       this.logger.error("event_bus.persist_failed", err, {
         "event.id": envelope.eventId,
@@ -176,9 +161,12 @@ export class EventBusService {
     }
   }
 
-  private async getNextSequence(sessionId: string): Promise<number> {
-    const result = await this.eventRepo
-      .createQueryBuilder("e")
+  private async computeNextSequence(
+    manager: EntityManager,
+    sessionId: string,
+  ): Promise<number> {
+    const result = await manager
+      .createQueryBuilder(SessionEventEntity, "e")
       .select("COALESCE(MAX(e.sequence), 0)", "max")
       .where("e.session_id = :sessionId", { sessionId })
       .getRawOne<{ max: string | number }>();
