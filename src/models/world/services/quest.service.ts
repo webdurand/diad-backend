@@ -4,6 +4,8 @@ import { Repository } from "typeorm";
 import { QuestEntity } from "src/entities/quest.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 import { QuestPrerequisiteEntity } from "src/entities/quest-prerequisite.entity";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { randomBytes } from "crypto";
 
 export interface CreateQuestDto {
@@ -25,6 +27,11 @@ export interface CreateQuestDto {
     pathGroup?: string;
     isOptional?: boolean;
   }>;
+  // Spec NNN — quest pipeline
+  isMainQuest?: boolean;
+  triggerNpcName?: string;
+  triggerLocationName?: string;
+  activationKeys?: string[];
 }
 
 export interface UpdateQuestDto {
@@ -44,6 +51,19 @@ export interface UpdateQuestDto {
   rewards?: Record<string, any>;
 }
 
+/** Resultado de revealQuest — mostra qual quest foi revelada e seus objectives. */
+export interface RevealQuestResult {
+  quest: QuestEntity;
+  alreadyRevealed: boolean;
+}
+
+/** Resultado de advanceObjective — pode trigger auto-completion da quest. */
+export interface AdvanceObjectiveResult {
+  objective: QuestObjectiveEntity;
+  questAutoCompleted: boolean;
+  questAutoFailed: boolean;
+}
+
 @Injectable()
 export class QuestService {
   constructor(
@@ -53,7 +73,37 @@ export class QuestService {
     private readonly objectiveRepo: Repository<QuestObjectiveEntity>,
     @InjectRepository(QuestPrerequisiteEntity)
     private readonly prereqRepo: Repository<QuestPrerequisiteEntity>,
+    private readonly eventBus: EventBusService,
+    private readonly envelopeFactory: EventEnvelopeFactory,
   ) {}
+
+  /** Best-effort SSE publish — falha não bloqueia o write principal. */
+  private async publishQuestEvent(
+    eventType:
+      | "quest_revealed"
+      | "quest_advanced"
+      | "quest_completed",
+    campaignId: string,
+    payload: Record<string, unknown>,
+    narrativeDescriptor?: string,
+  ): Promise<void> {
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "WorldEvent",
+        eventType,
+        source: {
+          service: "diad-backend",
+          module: `QuestService.${eventType}`,
+        },
+        scope: { campaignId },
+        payload,
+        narrativeDescriptor,
+      });
+      await this.eventBus.publish(envelope);
+    } catch {
+      /* best-effort — quest write já persistiu */
+    }
+  }
 
   async create(campaignId: string, dto: CreateQuestDto): Promise<QuestEntity> {
     const slug = this.generateSlug(dto.name);
@@ -69,11 +119,19 @@ export class QuestService {
       rewards: dto.rewards ?? {},
       levelRange: dto.levelRange,
       status: "unknown",
+      isMainQuest: dto.isMainQuest ?? false,
+      triggerNpcName: dto.triggerNpcName,
+      triggerLocationName: dto.triggerLocationName,
+      activationKeys: (dto.activationKeys ?? []).map((k) =>
+        k.toLowerCase().trim(),
+      ),
     });
 
     const saved = await this.questRepo.save(quest);
 
     if (dto.objectives?.length) {
+      // Primeiro objetivo nasce active, restantes locked (sequência ordenada).
+      // Director destrava o próximo conforme advance.
       const objectives = dto.objectives.map((o, i) =>
         this.objectiveRepo.create({
           questId: saved.id,
@@ -81,13 +139,176 @@ export class QuestService {
           pathGroup: o.pathGroup,
           isOptional: o.isOptional ?? false,
           sortOrder: i,
-          status: "locked",
+          status: i === 0 ? "active" : "locked",
         }),
       );
       await this.objectiveRepo.save(objectives);
     }
 
     return this.getById(saved.id);
+  }
+
+  /**
+   * Spec NNN — reveal pipeline. Transição `unknown` → `active`.
+   *
+   * Emitido pelo Director quando a cena justifica revelar a quest (main quest
+   * ao fim do primeiro turn, side quests por trigger). Persiste evidence pra
+   * audit ("Player encontrou Padre Anselmo no Cais Velho").
+   *
+   * Idempotente: chamadas repetidas após reveal retornam alreadyRevealed=true
+   * sem tocar no estado. Dispara EventBus quest_revealed na primeira chamada.
+   */
+  async revealQuest(
+    campaignId: string,
+    slug: string,
+    evidence: string | null,
+  ): Promise<RevealQuestResult> {
+    const quest = await this.questRepo.findOne({
+      where: { campaignId, slug },
+      relations: ["objectives"],
+    });
+    if (!quest) {
+      throw new NotFoundException({
+        ok: false,
+        error: `Quest '${slug}' nao encontrada na campanha.`,
+        code: "QUEST_NOT_FOUND",
+      });
+    }
+
+    if (quest.status !== "unknown") {
+      return { quest, alreadyRevealed: true };
+    }
+
+    quest.status = "active";
+    quest.revealedAt = new Date();
+    quest.discoveredAt = new Date();
+    if (evidence) quest.revealEvidence = evidence;
+    const saved = await this.questRepo.save(quest);
+
+    await this.publishQuestEvent(
+      "quest_revealed",
+      campaignId,
+      {
+        questId: saved.id,
+        questSlug: saved.slug,
+        questName: saved.name,
+        isMainQuest: saved.isMainQuest,
+        evidence: evidence ?? null,
+      },
+      evidence ?? `Quest revelada: ${saved.name}`,
+    );
+
+    return { quest: saved, alreadyRevealed: false };
+  }
+
+  /**
+   * Spec NNN — advance pipeline. Marca um objetivo `completed`/`failed` e
+   * destrava o próximo `locked` na sequência. Se todos requeridos terminam
+   * `completed`, auto-completa a quest.
+   *
+   * `objectiveIdx` é o `sortOrder` do objetivo (0-indexed). Persiste evidence
+   * pra audit.
+   */
+  async advanceObjective(
+    campaignId: string,
+    slug: string,
+    objectiveIdx: number,
+    newStatus: "completed" | "failed",
+    evidence: string | null,
+  ): Promise<AdvanceObjectiveResult> {
+    const quest = await this.questRepo.findOne({
+      where: { campaignId, slug },
+      relations: ["objectives"],
+    });
+    if (!quest) {
+      throw new NotFoundException({
+        ok: false,
+        error: `Quest '${slug}' nao encontrada.`,
+        code: "QUEST_NOT_FOUND",
+      });
+    }
+
+    const objectives = (quest.objectives ?? []).slice().sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
+    const target = objectives.find((o) => o.sortOrder === objectiveIdx);
+    if (!target) {
+      throw new NotFoundException({
+        ok: false,
+        error: `Objetivo idx=${objectiveIdx} nao encontrado em '${slug}'.`,
+        code: "QUEST_OBJECTIVE_NOT_FOUND",
+      });
+    }
+
+    target.status = newStatus;
+    if (evidence) target.advanceEvidence = evidence;
+    await this.objectiveRepo.save(target);
+
+    // Destrava próximo objetivo `locked` na sequência (apenas em completed)
+    if (newStatus === "completed") {
+      const next = objectives.find(
+        (o) => o.sortOrder > objectiveIdx && o.status === "locked",
+      );
+      if (next) {
+        next.status = "active";
+        await this.objectiveRepo.save(next);
+      }
+    }
+
+    // Auto-complete quest se todos requeridos done
+    const refreshed = await this.objectiveRepo.find({
+      where: { questId: quest.id },
+    });
+    const required = refreshed.filter((o) => !o.isOptional);
+    const allRequiredCompleted =
+      required.length > 0 &&
+      required.every((o) => o.status === "completed");
+    const anyRequiredFailed = required.some((o) => o.status === "failed");
+
+    let questAutoCompleted = false;
+    let questAutoFailed = false;
+
+    if (allRequiredCompleted && quest.status === "active") {
+      quest.status = "completed";
+      await this.questRepo.save(quest);
+      await this.cascadeUnlock(quest);
+      questAutoCompleted = true;
+    } else if (anyRequiredFailed && quest.status === "active") {
+      // Failure de objetivo NÃO faliu a quest — Director pode marcar fail
+      // explícito via update(). Mantemos só no advanceObjective o objetivo.
+      // (Ajuste futuro: flag isCriticalObjective.)
+    }
+
+    // Eventos: advanced sempre; completed se cascade auto-fechou
+    await this.publishQuestEvent(
+      "quest_advanced",
+      campaignId,
+      {
+        questId: quest.id,
+        questSlug: quest.slug,
+        objectiveId: target.id,
+        objectiveIdx,
+        objectiveDescription: target.description,
+        newStatus,
+        evidence: evidence ?? null,
+      },
+      evidence ?? `Objetivo ${newStatus}: ${target.description}`,
+    );
+    if (questAutoCompleted) {
+      await this.publishQuestEvent(
+        "quest_completed",
+        campaignId,
+        {
+          questId: quest.id,
+          questSlug: quest.slug,
+          questName: quest.name,
+          isMainQuest: quest.isMainQuest,
+        },
+        `Quest concluída: ${quest.name}`,
+      );
+    }
+
+    return { objective: target, questAutoCompleted, questAutoFailed };
   }
 
   async getById(questId: string): Promise<QuestEntity> {

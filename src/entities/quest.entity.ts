@@ -86,6 +86,27 @@ export class QuestEntity {
   @Column({ name: "sort_order", type: "int", default: 0 })
   sortOrder: number;
 
+  @Column({ name: "is_main_quest", type: "boolean", default: false })
+  isMainQuest: boolean;
+
+  @Column({ name: "trigger_npc_name", type: "varchar", nullable: true })
+  triggerNpcName?: string;
+
+  @Column({ name: "trigger_location_name", type: "varchar", nullable: true })
+  triggerLocationName?: string;
+
+  @Column({ name: "activation_keys", type: "jsonb", default: [] })
+  activationKeys: string[];
+
+  @Column({ name: "revealed_at", type: "timestamptz", nullable: true })
+  revealedAt?: Date;
+
+  @Column({ name: "discovered_at", type: "timestamptz", nullable: true })
+  discoveredAt?: Date;
+
+  @Column({ name: "reveal_evidence", type: "text", nullable: true })
+  revealEvidence?: string;
+
   @OneToMany(() => QuestObjectiveEntity, (o) => o.quest)
   objectives?: QuestObjectiveEntity[];
 

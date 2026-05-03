@@ -37,4 +37,7 @@ export class QuestObjectiveEntity {
 
   @Column({ name: "completion_conditions", type: "jsonb", default: {} })
   completionConditions: Record<string, any>;
+
+  @Column({ name: "advance_evidence", type: "text", nullable: true })
+  advanceEvidence?: string;
 }

@@ -633,4 +633,46 @@ export class WorldController {
     return this.questService.updateObjectiveStatus(oId, status as any);
   }
 
+  /**
+   * Spec NNN — Director chama via service-key pra revelar quest após cena.
+   * Idempotente: 2ª chamada após reveal retorna alreadyRevealed=true.
+   * Dispara EventBus quest_revealed → frontend mostra modal.
+   */
+  @Post(":id/quests/:slug/reveal")
+  async revealQuest(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Param("slug") slug: string,
+    @Body() body: { evidence?: string },
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.questService.revealQuest(id, slug, body.evidence ?? null);
+  }
+
+  /**
+   * Spec NNN — Director chama pra avançar objetivo após inferir da cena.
+   * Auto-completa quest se todos required objectives done. Dispara
+   * EventBus quest_advanced (+ quest_completed se cascade fechou).
+   */
+  @Post(":id/quests/:slug/advance-objective")
+  async advanceObjective(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Param("slug") slug: string,
+    @Body()
+    body: {
+      objectiveIdx: number;
+      newStatus: "completed" | "failed";
+      evidence?: string;
+    },
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.questService.advanceObjective(
+      id,
+      slug,
+      body.objectiveIdx,
+      body.newStatus,
+      body.evidence ?? null,
+    );
+  }
 }
