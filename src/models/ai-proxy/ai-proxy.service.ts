@@ -39,7 +39,7 @@ export class AiProxyService {
    */
   getServiceKey(): string {
     return (
-      this.configService.get<string>("DIAD_SERVICE_KEY") ?? "diad-internal-dev"
+      this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev"
     );
   }
 
@@ -210,7 +210,7 @@ export class AiProxyService {
     continuationFrom?: number | null;
   }): Promise<MonsterDecideResponse> {
     const serviceKey =
-      this.configService.get<string>("DIAD_SERVICE_KEY") ?? "diad-internal-dev";
+      this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev";
 
     const timeoutMs = Number(
       this.configService.get<string>("AI_TURN_TIMEOUT_MS") ?? "30000",
