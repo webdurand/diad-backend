@@ -17,6 +17,16 @@ import { LocationService } from "./services/location.service";
 import { NpcService } from "./services/npc.service";
 import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
+import {
+  StoryArcService,
+  type CreateStoryArcDto,
+  type UpdateStoryArcDto,
+} from "./services/story-arc.service";
+import {
+  NpcRelationshipService,
+  type CreateNpcRelationshipDto,
+  type UpdateNpcRelationshipDto,
+} from "./services/npc-relationship.service";
 // Spec 019 — Living World & Ambiance
 import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService, type Biome } from "./services/weather.service";
@@ -93,6 +103,9 @@ export class WorldController {
     private readonly weatherService: WeatherService,
     private readonly gameClockService: GameClockService,
     private readonly chaosFactorService: ChaosFactorService,
+    // Spec NNN — Mundo + Aventura (story arcs + NPC relationships)
+    private readonly storyArcService: StoryArcService,
+    private readonly npcRelationshipService: NpcRelationshipService,
   ) {}
 
   // ==================== AMBIANCE (Spec 019) ====================
@@ -199,6 +212,146 @@ export class WorldController {
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
     return this.campaignService.update(id, dto);
+  }
+
+  // ==================== Spec NNN: Mundo + Aventura ====================
+
+  /**
+   * Lista paginada de mundos solo (dm_mode='ai') do user.
+   * Usado em /jogar/preparar mode='pick_world'.
+   * Default: só publicados (isDraft=false).
+   */
+  @Get("solo/list")
+  async listSoloWorlds(
+    @Req() req: AuthRequest,
+    @Query("q") q?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+    @Query("draft") draft?: string,
+  ) {
+    const userId = getUserId(req);
+    return this.campaignService.listSoloWorlds(userId, {
+      q,
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      isDraft: draft === "true" ? true : draft === "false" ? false : undefined,
+    });
+  }
+
+  /**
+   * Publica mundo (transição draft → published). Usado no submit final do wizard.
+   */
+  @Post(":id/publish")
+  async publishWorld(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.campaignService.publishWorld(id);
+  }
+
+  /**
+   * Persiste generation_seed (snapshot do dict do wizard pra replay/audit).
+   */
+  @Post(":id/generation-seed")
+  async setGenerationSeed(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Body() body: { seed: Record<string, unknown> },
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.campaignService.setGenerationSeed(id, body.seed);
+  }
+
+  // ==================== Story Arcs (Spec NNN) ====================
+
+  @Post(":id/story-arcs")
+  async createStoryArc(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+    @Body() dto: CreateStoryArcDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    return this.storyArcService.create(campaignId, dto);
+  }
+
+  @Get(":id/story-arcs")
+  async listStoryArcs(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+  ) {
+    await this.campaignService.ensureMembership(campaignId, getUserId(req));
+    return this.storyArcService.listByCampaign(campaignId);
+  }
+
+  @Patch(":id/story-arcs/:arcId")
+  async updateStoryArc(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("arcId") arcId: string,
+    @Body() dto: UpdateStoryArcDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    return this.storyArcService.update(arcId, dto);
+  }
+
+  @Delete(":id/story-arcs/:arcId")
+  async deleteStoryArc(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("arcId") arcId: string,
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    await this.storyArcService.remove(arcId);
+    return { ok: true };
+  }
+
+  // ==================== NPC Relationships (Spec NNN) ====================
+
+  @Post(":id/npcs/:npcId/relationships")
+  async createNpcRelationship(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("npcId") npcId: string,
+    @Body() dto: Omit<CreateNpcRelationshipDto, "sourceNpcId">,
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    return this.npcRelationshipService.create({
+      ...dto,
+      sourceNpcId: npcId,
+    });
+  }
+
+  @Get(":id/npcs/:npcId/relationships")
+  async listNpcRelationships(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("npcId") npcId: string,
+  ) {
+    await this.campaignService.ensureMembership(campaignId, getUserId(req));
+    return this.npcRelationshipService.listBySourceNpc(npcId);
+  }
+
+  @Patch(":id/npcs/:npcId/relationships/:relId")
+  async updateNpcRelationship(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("relId") relId: string,
+    @Body() dto: UpdateNpcRelationshipDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    return this.npcRelationshipService.update(relId, dto);
+  }
+
+  @Delete(":id/npcs/:npcId/relationships/:relId")
+  async deleteNpcRelationship(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("relId") relId: string,
+  ) {
+    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
+    await this.npcRelationshipService.remove(relId);
+    return { ok: true };
   }
 
   // ==================== Spec 014 M1: BOUNDED WORLD ====================

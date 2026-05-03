@@ -190,11 +190,13 @@ export class AiProxyService {
     method: "GET" | "POST" | "DELETE",
     path: string,
     body?: Record<string, unknown>,
+    options?: { timeoutMs?: number },
   ): Promise<T> {
     const url = `${this.agentBaseUrl}${path}`;
     return this.outbound.request<T>(url, {
       method,
       upstreamService: "diad-agents",
+      ...(options?.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
   }

@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   CampaignEntity,
@@ -29,12 +29,16 @@ import {
   SceneEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
+import { AiProxyModule } from "../ai-proxy/ai-proxy.module";
 import { WorldController } from "./world.controller";
+import { WorldSynthController } from "./world-synth.controller";
 import { CampaignService } from "./services/campaign.service";
 import { LocationService } from "./services/location.service";
 import { NpcService } from "./services/npc.service";
 import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
+import { StoryArcService } from "./services/story-arc.service";
+import { NpcRelationshipService } from "./services/npc-relationship.service";
 // Spec 019 — Living World & Ambiance
 import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService } from "./services/weather.service";
@@ -73,14 +77,17 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       SceneEntity,
     ]),
     AuthModule,
+    forwardRef(() => AiProxyModule),
   ],
-  controllers: [WorldController],
+  controllers: [WorldController, WorldSynthController],
   providers: [
     CampaignService,
     LocationService,
     NpcService,
     FactionService,
     QuestService,
+    StoryArcService,
+    NpcRelationshipService,
     // Spec 019 — Living World & Ambiance
     AmbianceService,
     WeatherService,
@@ -95,6 +102,8 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     NpcService,
     FactionService,
     QuestService,
+    StoryArcService,
+    NpcRelationshipService,
     // Spec 019
     AmbianceService,
     WeatherService,

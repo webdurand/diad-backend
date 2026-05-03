@@ -92,6 +92,21 @@ export class CampaignEntity {
   @Column({ type: "varchar", default: "draft" })
   status: "draft" | "active" | "paused" | "completed" | "archived";
 
+  // ─── Spec NNN: distinção mundo IA vs campanha humana ───
+  @Column({ name: "dm_mode", type: "varchar", default: "ai" })
+  dmMode: "ai" | "human";
+
+  @Column({ type: "varchar", default: "solo" })
+  scope: "solo" | "party";
+
+  // Wizard cria draft, submit publica. Auto-cleanup > 7 dias sem activity.
+  @Column({ name: "is_draft", type: "boolean", default: false })
+  isDraft: boolean;
+
+  // Snapshot do dict usado pra criar a campaign (replay/audit).
+  @Column({ name: "generation_seed", type: "jsonb", nullable: true })
+  generationSeed?: Record<string, unknown>;
+
   @Column({ name: "world_lore", type: "text", nullable: true })
   worldLore?: string;
 

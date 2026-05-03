@@ -23,6 +23,12 @@ export interface CreateCampaignDto {
   setting?: string;
   theme?: string;
   difficulty?: string;
+  worldLore?: string;
+  // ─── Spec NNN: mundo IA vs campanha humana ───
+  dmMode?: "ai" | "human";
+  scope?: "solo" | "party";
+  isDraft?: boolean;
+  generationSeed?: Record<string, unknown>;
 }
 
 export interface UpdateCampaignDto {
@@ -33,6 +39,22 @@ export interface UpdateCampaignDto {
   difficulty?: string;
   status?: "draft" | "active" | "paused" | "completed" | "archived";
   worldLore?: string;
+  isDraft?: boolean;
+  generationSeed?: Record<string, unknown>;
+}
+
+export interface ListSoloWorldsQuery {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+  isDraft?: boolean;
+}
+
+export interface ListSoloWorldsResult {
+  items: CampaignEntity[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface InitializeBudgetDto {
@@ -77,9 +99,14 @@ export class CampaignService {
       setting: dto.setting,
       theme: dto.theme,
       difficulty: dto.difficulty ?? "standard",
+      worldLore: dto.worldLore,
       dmUserId,
       status: "draft",
       inviteCode,
+      dmMode: dto.dmMode ?? "ai",
+      scope: dto.scope ?? "solo",
+      isDraft: dto.isDraft ?? false,
+      generationSeed: dto.generationSeed,
     });
 
     const saved = await this.campaignRepo.save(campaign);
@@ -101,6 +128,66 @@ export class CampaignService {
       relations: ["campaign"],
     });
     return players.map((p) => p.campaign).filter(Boolean);
+  }
+
+  /**
+   * Spec NNN — lista paginada de mundos solo do user (dm_mode='ai').
+   * Filtra por isDraft (default: só publicados; passar isDraft=true pra rascunhos).
+   * Usado em /jogar/preparar mode='pick_world'.
+   */
+  async listSoloWorlds(
+    userId: string,
+    query: ListSoloWorldsQuery = {},
+  ): Promise<ListSoloWorldsResult> {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(50, Math.max(1, query.pageSize ?? 12));
+    const offset = (page - 1) * pageSize;
+
+    const qb = this.campaignRepo
+      .createQueryBuilder("c")
+      .where("c.dm_user_id = :userId", { userId })
+      .andWhere("c.dm_mode = 'ai'")
+      .andWhere("c.scope = 'solo'");
+
+    if (typeof query.isDraft === "boolean") {
+      qb.andWhere("c.is_draft = :isDraft", { isDraft: query.isDraft });
+    } else {
+      qb.andWhere("c.is_draft = false");
+    }
+
+    if (query.q && query.q.trim().length > 0) {
+      qb.andWhere("c.name ILIKE :q", { q: `%${query.q.trim()}%` });
+    }
+
+    const [items, total] = await qb
+      .orderBy("c.updated_at", "DESC")
+      .skip(offset)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return { items, total, page, pageSize };
+  }
+
+  /**
+   * Spec NNN — publica mundo (transição draft → published).
+   * Usado no submit final do wizard.
+   */
+  async publishWorld(campaignId: string): Promise<CampaignEntity> {
+    const campaign = await this.getById(campaignId);
+    campaign.isDraft = false;
+    return this.campaignRepo.save(campaign);
+  }
+
+  /**
+   * Spec NNN — atualiza generation_seed (snapshot final do dict do wizard).
+   */
+  async setGenerationSeed(
+    campaignId: string,
+    seed: Record<string, unknown>,
+  ): Promise<CampaignEntity> {
+    const campaign = await this.getById(campaignId);
+    campaign.generationSeed = seed;
+    return this.campaignRepo.save(campaign);
   }
 
   /**
