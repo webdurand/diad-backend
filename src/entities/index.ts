@@ -65,6 +65,7 @@ import { LocationConnectionEntity } from "./location-connection.entity";
 import { NpcEntity } from "./npc.entity";
 import { NpcArchetypeTemplateEntity } from "./npc-archetype-template.entity";
 import { NpcRelationshipEntity } from "./npc-relationship.entity";
+import { PendingGuardDispatchEntity } from "./pending-guard-dispatch.entity";
 import { FactionEntity } from "./faction.entity";
 import { FactionRelationEntity } from "./faction-relation.entity";
 import { StoryArcEntity } from "./story-arc.entity";
@@ -170,6 +171,7 @@ export {
   NpcEntity,
   NpcArchetypeTemplateEntity,
   NpcRelationshipEntity,
+  PendingGuardDispatchEntity,
   FactionEntity,
   FactionRelationEntity,
   StoryArcEntity,
@@ -273,6 +275,7 @@ export const ENTITIES = [
   NpcEntity,
   NpcArchetypeTemplateEntity,
   NpcRelationshipEntity,
+  PendingGuardDispatchEntity,
   FactionEntity,
   FactionRelationEntity,
   StoryArcEntity,

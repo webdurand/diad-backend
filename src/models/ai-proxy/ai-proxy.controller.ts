@@ -27,6 +27,8 @@ import { SessionMessageService } from "../session/services/session-message.servi
 import { SseNarrationCollector } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { GameEventEntity } from "src/entities/game-event.entity";
+import { PendingGuardDispatchEntity } from "src/entities/pending-guard-dispatch.entity";
+import { StartEncounterFromNarrativeService } from "../game-engine/services/start-encounter-from-narrative.service";
 import type { AuthRequest } from "../auth/auth.types";
 
 const SYSTEM_HINT_EVENT_MAP: Record<string, string> = {
@@ -86,6 +88,9 @@ export class AiProxyController {
     private readonly sessionMessageService: SessionMessageService,
     @InjectRepository(GameEventEntity)
     private readonly gameEventRepo: Repository<GameEventEntity>,
+    @InjectRepository(PendingGuardDispatchEntity)
+    private readonly pendingGuardRepo: Repository<PendingGuardDispatchEntity>,
+    private readonly startEncounterFromNarrative: StartEncounterFromNarrativeService,
   ) {}
 
   private async injectSystemHintEvent(
@@ -207,6 +212,117 @@ export class AiProxyController {
       this.logger.warn(
         `session_sync emit failed (session=${sessionId}): ${err?.message}`,
       );
+    }
+  }
+
+  private async tryMaterializeGuardArrival(args: {
+    sessionId: string;
+    campaignId: string;
+    userId: string;
+    traceId?: string;
+  }): Promise<{
+    encounterId: string;
+    participantIds: string[];
+    guardCount: number;
+    dispatchReason?: string | null;
+  } | null> {
+    const currentMaxSeq =
+      await this.sessionMessageService.getMaxSequenceNumber(args.sessionId);
+
+    const pending = await this.pendingGuardRepo
+      .createQueryBuilder("p")
+      .where("p.sessionId = :sessionId", { sessionId: args.sessionId })
+      .andWhere("p.status = 'pending'")
+      .andWhere("p.targetSequence <= :seq", { seq: currentMaxSeq })
+      .orderBy("p.targetSequence", "ASC")
+      .limit(1)
+      .getOne();
+
+    if (!pending) return null;
+
+    const activeScene = await this.sceneService
+      .getActive(args.sessionId)
+      .catch(() => null);
+    if (!activeScene) {
+      await this.pendingGuardRepo.update(
+        { id: pending.id },
+        { status: "expired" },
+      );
+      return null;
+    }
+
+    if (
+      activeScene.locationId &&
+      pending.locationId &&
+      activeScene.locationId !== pending.locationId
+    ) {
+      await this.pendingGuardRepo.update(
+        { id: pending.id },
+        { status: "expired" },
+      );
+      this.logger.log(
+        `guard arrival expired (PC moved): session=${args.sessionId} pending=${pending.id}`,
+      );
+      return null;
+    }
+
+    try {
+      const result = await this.startEncounterFromNarrative.run({
+        sessionId: args.sessionId,
+        sceneId: activeScene.id,
+        targetNpcIds: pending.guardNpcIds,
+        surpriseRound: false,
+        autoPlaceTokens: true,
+        narrativeTrigger: "crime_response_arrival",
+        campaignId: args.campaignId,
+        ownerUserId: args.userId,
+        traceId: args.traceId,
+      });
+
+      await this.pendingGuardRepo.update(
+        { id: pending.id },
+        {
+          status: "materialized",
+          materializedAt: new Date(),
+          materializedEncounterId: result.encounterId,
+        },
+      );
+
+      return {
+        encounterId: result.encounterId,
+        participantIds: result.participantIds,
+        guardCount: pending.guardNpcIds.length,
+        dispatchReason: pending.dispatchReason,
+      };
+    } catch (err: any) {
+      this.logger.warn(
+        `guard arrival materialize failed (session=${args.sessionId}): ${err?.message}`,
+      );
+      return null;
+    }
+  }
+
+  private async persistSystemNarration(
+    sessionId: string,
+    userId: string,
+    content: string,
+  ): Promise<{ serverId: string } | null> {
+    if (!content.trim()) return null;
+    const serverId = `srv-sys-${randomUUID()}`;
+    try {
+      await this.sessionMessageService.append({
+        sessionId,
+        userId,
+        kind: "system",
+        content,
+        clientId: serverId,
+      });
+      return { serverId };
+    } catch (err: any) {
+      this.logger.warn(
+        `system narration persist failed (session=${sessionId}): ${err?.message}`,
+      );
+      return null;
     }
   }
 
@@ -367,6 +483,42 @@ export class AiProxyController {
       // SESSION_LAST_MESSAGE_MISMATCH. Com o sync precoce, mesmo stream
       // truncado deixa o ref no máximo 1 atrás (tolerado pelo detectMismatch).
       await this.emitSessionSync(sessionId, res);
+
+      const guardArrival = ctx.campaignId
+        ? await this.tryMaterializeGuardArrival({
+            sessionId,
+            campaignId: ctx.campaignId,
+            userId: req.user!.id,
+          })
+        : null;
+
+      if (guardArrival) {
+        const arrivalNote =
+          guardArrival.guardCount === 1
+            ? "Um guarda chega ao local."
+            : `${guardArrival.guardCount} guardas chegam ao local.`;
+        await this.persistSystemNarration(
+          sessionId,
+          req.user!.id,
+          `${arrivalNote} Eles te identificam — combate iminente.`,
+        );
+
+        res.write(
+          `data: ${JSON.stringify({
+            type: "combat_starting",
+            encounterId: guardArrival.encounterId,
+            participantIds: guardArrival.participantIds,
+            surprise: false,
+            trigger: "crime_response_arrival",
+            dispatchReason: guardArrival.dispatchReason,
+          })}\n\n`,
+        );
+
+        await this.emitSessionSync(sessionId, res);
+        res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        res.end();
+        return;
+      }
 
       // Spec 026 Pillar 4 — `SceneContext` (Spec 018) não carrega `sceneId`
       // no top-level (só `scene.{title,description,mood,location}`). O

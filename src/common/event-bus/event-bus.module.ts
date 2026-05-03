@@ -8,6 +8,7 @@ import {
   SessionEventEntity,
 } from "src/entities";
 import { NpcEntity } from "src/entities/npc.entity";
+import { PendingGuardDispatchEntity } from "src/entities/pending-guard-dispatch.entity";
 import { EventBusService } from "./event-bus.service";
 import { AudienceMapService } from "./audience-map.service";
 import { EventEnvelopeFactory } from "./event-envelope.factory";
@@ -15,6 +16,7 @@ import { HUDListener } from "./listeners/hud.listener";
 import { WitnessPropagationListener } from "./listeners/witness-propagation.listener";
 import { ReputationListener } from "./listeners/reputation.listener";
 import { GuardDispatchListener } from "./listeners/guard-dispatch.listener";
+import { GuardArrivalListener } from "./listeners/guard-arrival.listener";
 
 /**
  * Spec 017 — EventBus Foundation Module (Global).
@@ -40,6 +42,7 @@ import { GuardDispatchListener } from "./listeners/guard-dispatch.listener";
       EventSubscriberEntity,
       EventListenerProcessedEntity,
       NpcEntity,
+      PendingGuardDispatchEntity,
     ]),
   ],
   providers: [
@@ -50,6 +53,7 @@ import { GuardDispatchListener } from "./listeners/guard-dispatch.listener";
     WitnessPropagationListener,
     ReputationListener,
     GuardDispatchListener,
+    GuardArrivalListener,
   ],
   exports: [
     EventBusService,
@@ -65,14 +69,14 @@ export class EventBusModule implements OnModuleInit {
     private readonly witnessPropagationListener: WitnessPropagationListener,
     private readonly reputationListener: ReputationListener,
     private readonly guardDispatchListener: GuardDispatchListener,
+    private readonly guardArrivalListener: GuardArrivalListener,
   ) {}
 
   onModuleInit(): void {
-    // Spec 017 — HUD M1 stub (logging + idempotency).
     this.eventBus.registerListener(this.hudListener);
-    // Spec 027 (M2, AC2.5) — listeners cross-domain default.
     this.eventBus.registerListener(this.witnessPropagationListener);
     this.eventBus.registerListener(this.reputationListener);
     this.eventBus.registerListener(this.guardDispatchListener);
+    this.eventBus.registerListener(this.guardArrivalListener);
   }
 }

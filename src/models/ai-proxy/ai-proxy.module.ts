@@ -1,8 +1,10 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { GameEventEntity } from "src/entities/game-event.entity";
+import { PendingGuardDispatchEntity } from "src/entities/pending-guard-dispatch.entity";
 import { AuthModule } from "../auth/auth.module";
 import { SessionModule } from "../session/session.module";
+import { GameEngineModule } from "../game-engine/game-engine.module";
 import { AiProxyController } from "./ai-proxy.controller";
 import { AiProxyService } from "./ai-proxy.service";
 
@@ -10,12 +12,8 @@ import { AiProxyService } from "./ai-proxy.service";
   imports: [
     AuthModule,
     SessionModule,
-    // Spec 027 (M2 follow-up) — read-only de game_events pra injetar
-    // `encounter_outcome_summary` / `fate_ladder_resolved` em sceneContext
-    // quando systemHint='post_combat'|'post_fate_choice'. Forfeature
-    // cobre o repo sem importar GameEngineModule (que importaria AiProxyModule
-    // de volta — circular).
-    TypeOrmModule.forFeature([GameEventEntity]),
+    TypeOrmModule.forFeature([GameEventEntity, PendingGuardDispatchEntity]),
+    forwardRef(() => GameEngineModule),
   ],
   controllers: [AiProxyController],
   providers: [AiProxyService],

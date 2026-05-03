@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { DataSource, Repository } from "typeorm";
+import { randomUUID } from "crypto";
 import { EventListenerProcessedEntity } from "src/entities/event-listener-processed.entity";
 import { NpcEntity } from "src/entities/npc.entity";
 import { DiadLogger } from "../../observability/logger/diad-logger.service";
@@ -12,35 +13,36 @@ import {
   EventEnvelope,
 } from "../event-envelope.types";
 
-/**
- * Spec 027 (M2, AC2.5) — GuardDispatchListener (M2 stub).
- *
- * Reage a `NarrativeEvent.npc_witnessed_event` quando severity ≥ 2 e há ao
- * menos 1 NPC com archetype 'guard' presente no mesmo location_id (ou faction
- * 'city-watch'). Em M2, apenas EMITE `NarrativeEvent.guard_dispatched` com
- * delay e payload — orchestration real (clock advance + materialização via
- * `start_encounter_from_narrative`) fica em AC3.1 / M3 com GuardDispatchService
- * cron.
- *
- * Pattern: BG3 Patch 7 crime model — guards "respondem" só se um witness com
- * archetype guard existir OU se a cena estava no `city-watch` patrol radius.
- * Esta listener cobre o primeiro caso (lookup por archetype).
- *
- * Idempotente via `event_listener_processed`.
- */
+const GUARD_DISPATCH_CONFIG = {
+  // Quantos guards spawnam por nível de severity (1=witness leve, 3=morte/lethal).
+  countBySeverity: { 1: 1, 2: 2, 3: 3 } as Record<number, number>,
+  // Atraso em turns até guards chegarem na cena.
+  delayTurnsBySeverity: { 1: 2, 2: 2, 3: 1 } as Record<number, number>,
+  // Slugs de monstros que contam como "guard authority" disponíveis.
+  monsterSlugs: ["guard", "veteran", "knight"] as const,
+  // Slug primário usado quando precisa spawnar do template.
+  primarySpawnSlug: "guard" as const,
+  // Pool de nomes próprios pros guards auto-spawnados.
+  spawnNamePool: [
+    "Marek",
+    "Telon",
+    "Veska",
+    "Doran",
+    "Asha",
+    "Bren",
+    "Korin",
+    "Mira",
+  ] as const,
+  // Disposição inicial dos guards spawnados.
+  initialDisposition: "hostile" as const,
+  provenance: "auto-materialized" as const,
+  tags: ["auto-spawned-guard", "crime-response"] as const,
+} as const;
+
 @Injectable()
 export class GuardDispatchListener implements EventListener {
   readonly name = "GuardDispatchListener";
   readonly categories: readonly EventCategory[] = ["NarrativeEvent"];
-
-  // Tags do NPC archetype que disparam dispatch (consultadas em
-  // `npc_archetype_templates` via campos do NpcEntity ou simplesmente via
-  // tags JSONB). M2 stub: lookup pela coluna `monster_id` resolvendo slug.
-  private static readonly GUARD_TAG_SLUGS = new Set([
-    "guard",
-    "veteran",
-    "knight",
-  ]);
 
   constructor(
     @InjectRepository(EventListenerProcessedEntity)
@@ -50,6 +52,7 @@ export class GuardDispatchListener implements EventListener {
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
+    private readonly dataSource: DataSource,
   ) {
     this.logger.setContext(GuardDispatchListener.name);
   }
@@ -60,7 +63,6 @@ export class GuardDispatchListener implements EventListener {
 
     const severity = Number(envelope.payload?.severity ?? 1);
     if (severity < 2) {
-      // Soft severity não dispatcha guards.
       await this.markProcessed(envelope.eventId);
       return;
     }
@@ -72,17 +74,37 @@ export class GuardDispatchListener implements EventListener {
       return;
     }
 
-    const guardWitnessId = await this.findGuardInLocation(
+    const desiredCount =
+      GUARD_DISPATCH_CONFIG.countBySeverity[Math.min(severity, 3)] ?? 1;
+
+    const existing = await this.findGuardsInLocation(
       campaignId,
       locationId,
+      desiredCount,
     );
 
-    if (!guardWitnessId) {
-      // Sem guards na cena → sem dispatch automático. M3 vai checar patrol
-      // radius via `npc_patrols` (não existe ainda).
+    let guardIds: string[];
+    if (existing.length >= desiredCount) {
+      guardIds = existing.slice(0, desiredCount);
+    } else {
+      const missing = desiredCount - existing.length;
+      const spawned = await this.spawnGuards(campaignId, locationId, missing);
+      guardIds = [...existing, ...spawned];
+    }
+
+    if (guardIds.length === 0) {
+      this.logger.warn("guard_dispatch.no_template_available", {
+        "event.id": envelope.eventId,
+        "campaign.id": campaignId,
+        "location.id": locationId,
+        "monster.slug.primary": GUARD_DISPATCH_CONFIG.primarySpawnSlug,
+      });
       await this.markProcessed(envelope.eventId);
       return;
     }
+
+    const delayTurns =
+      GUARD_DISPATCH_CONFIG.delayTurnsBySeverity[Math.min(severity, 3)] ?? 2;
 
     try {
       const built = this.envelopeFactory.build({
@@ -99,26 +121,26 @@ export class GuardDispatchListener implements EventListener {
           sceneId: envelope.scope.sceneId,
           encounterId: envelope.scope.encounterId,
         },
-        aggregateId: guardWitnessId,
+        aggregateId: guardIds[0],
         payload: {
-          guardWitnessId,
+          guardWitnessIds: guardIds,
           locationId,
           severity,
           sourceEventId: envelope.eventId,
-          delaySec: severity >= 3 ? 30 : 90,
+          delayTurns,
           dispatchReason:
             severity >= 3 ? "lethal_witnessed" : "assault_witnessed",
         },
         narrativeDescriptor:
           severity >= 3
-            ? "Um guarda viu — a guarda foi acionada."
-            : "Um guarda observa — algo será relatado.",
+            ? `${guardIds.length} guarda(s) foram acionados — chegada iminente.`
+            : `${guardIds.length} guarda(s) observam — chegada em ${delayTurns} turn(s).`,
       });
       await this.eventBus.publish(built);
     } catch (err) {
       this.logger.warn("event_bus.guard_dispatch.publish_failed", {
         "event.id": envelope.eventId,
-        "guard.id": guardWitnessId,
+        "guard.ids": guardIds,
         "error.message": err instanceof Error ? err.message : String(err),
       });
     }
@@ -126,17 +148,12 @@ export class GuardDispatchListener implements EventListener {
     await this.markProcessed(envelope.eventId);
   }
 
-  /**
-   * M2 stub — lookup direto por slug de monster (archetype) via JOIN.
-   * Resolve guard se algum NPC alive na location tem monster_id mapeado pra
-   * slug em `GUARD_TAG_SLUGS`. M3 vai consultar `npc_archetype_templates`
-   * já existente (1784000000000-CreateNpcArchetypeTemplates).
-   */
-  private async findGuardInLocation(
+  private async findGuardsInLocation(
     campaignId: string,
     locationId: string,
-  ): Promise<string | null> {
-    const slugList = Array.from(GuardDispatchListener.GUARD_TAG_SLUGS);
+    limit: number,
+  ): Promise<string[]> {
+    const slugList = Array.from(GUARD_DISPATCH_CONFIG.monsterSlugs);
     const rows = await this.npcRepo.query(
       `
       SELECT n."id"
@@ -146,14 +163,80 @@ export class GuardDispatchListener implements EventListener {
         AND n."current_location_id" = $2
         AND n."status" = 'alive'
         AND (m."slug" = ANY($3::text[]))
-      LIMIT 1
+      LIMIT $4
       `,
-      [campaignId, locationId, slugList],
+      [campaignId, locationId, slugList, limit],
     );
-    if (Array.isArray(rows) && rows.length > 0 && rows[0]?.id) {
-      return rows[0].id as string;
+    if (Array.isArray(rows)) {
+      return rows
+        .map((r: { id: string }) => r?.id)
+        .filter((id: string | undefined): id is string => Boolean(id));
     }
-    return null;
+    return [];
+  }
+
+  private async spawnGuards(
+    campaignId: string,
+    locationId: string,
+    count: number,
+  ): Promise<string[]> {
+    if (count <= 0) return [];
+
+    const monsterRows = await this.dataSource.query(
+      `SELECT id FROM monsters WHERE slug = $1 LIMIT 1`,
+      [GUARD_DISPATCH_CONFIG.primarySpawnSlug],
+    );
+    const monsterId =
+      Array.isArray(monsterRows) && monsterRows.length > 0
+        ? (monsterRows[0]?.id as string | undefined)
+        : undefined;
+    if (!monsterId) return [];
+
+    const usedNamesRows = await this.dataSource.query(
+      `SELECT name FROM npcs WHERE campaign_id = $1`,
+      [campaignId],
+    );
+    const usedNames = new Set<string>(
+      Array.isArray(usedNamesRows)
+        ? usedNamesRows.map((r: { name: string }) => r.name)
+        : [],
+    );
+    const available = GUARD_DISPATCH_CONFIG.spawnNamePool.filter(
+      (n) => !usedNames.has(`Guarda ${n}`),
+    );
+
+    const created: string[] = [];
+    const target = Math.min(count, available.length);
+    for (let i = 0; i < target; i++) {
+      const properName = available[i];
+      const fullName = `Guarda ${properName}`;
+      const slug = `guarda-${properName.toLowerCase()}-${randomUUID().slice(0, 8)}`;
+      try {
+        const saved = await this.npcRepo.save(
+          this.npcRepo.create({
+            campaignId,
+            monsterId,
+            currentLocationId: locationId,
+            name: fullName,
+            slug,
+            status: "alive",
+            disposition: GUARD_DISPATCH_CONFIG.initialDisposition,
+            provenance: GUARD_DISPATCH_CONFIG.provenance,
+            tags: [...GUARD_DISPATCH_CONFIG.tags],
+          }),
+        );
+        created.push(saved.id);
+      } catch (err) {
+        this.logger.warn("guard_dispatch.spawn_failed", {
+          "campaign.id": campaignId,
+          "location.id": locationId,
+          "name": fullName,
+          "error.message":
+            err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return created;
   }
 
   private async alreadyProcessed(eventId: string): Promise<boolean> {

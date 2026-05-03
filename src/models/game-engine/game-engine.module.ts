@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from "@nestjs/common";
+import { forwardRef, Module, OnModuleInit } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   GameSessionEntity,
@@ -156,7 +156,7 @@ import { NpcEntity } from "src/entities/npc.entity";
     AuthModule,
     CharactersModule,
     WorldModule,
-    AiProxyModule,
+    forwardRef(() => AiProxyModule),
     RealtimeModule,
     CombatActionsModule,
   ],
@@ -317,6 +317,7 @@ import { NpcEntity } from "src/entities/npc.entity";
     RestService,
     // Spec 016 M2 — Dice request lifecycle
     DiceRollService,
+    StartEncounterFromNarrativeService,
   ],
 })
 export class GameEngineModule implements OnModuleInit {
