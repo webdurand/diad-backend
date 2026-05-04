@@ -29,11 +29,43 @@ import { GameSessionEntity } from "src/entities/game-session.entity";
 import { EncounterService } from "./encounter.service";
 import { CombatService } from "./combat.service";
 import { DiceService } from "./dice.service";
+import { NpcService } from "src/models/world/services/npc.service";
+import { SceneContextService } from "src/models/session/services/scene-context.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { getAbilityModifier } from "src/shared/srd-utils";
+
+/** UUID v4-ish detection — distingue UUID de nome livre nos targets. */
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Extrai descritor do alvo a partir do label da choice clicada (ex:
+ * "Atacar o homem grande de primeira" → "homem grande"). Heurística:
+ * remove verbo de ataque inicial, artigos e modificadores de ordem,
+ * mantém núcleo nominal. Quando não consegue isolar, devolve trigger
+ * inteiro pra o archetype-picker tentar matchear keywords.
+ */
+const TRIGGER_VERB_RE =
+  /^\s*(atacar|ataco|ataca|atacando|lutar|luto|luta|brigar|brigo|briga|agredir|agrido|agride|investir contra|investe contra|enfrentar|enfrento|enfrenta|matar|mato|mata)\s+/i;
+const TRIGGER_ARTICLE_RE = /^\s*(o|a|os|as|um|uma|uns|umas|aquele|aquela)\s+/i;
+const TRIGGER_TAIL_RE =
+  /\s+(de\s+(primeira|primeiro|imediato|im[eé]diato|repente)|primeiro|primeira|agora|j[áa]|aqui|l[áa])\s*$/i;
+
+function extractTargetDescriptor(trigger: string): string {
+  const raw = (trigger ?? "").trim();
+  if (!raw) return "";
+
+  let stripped = raw.replace(TRIGGER_VERB_RE, "");
+  stripped = stripped.replace(TRIGGER_ARTICLE_RE, "");
+  stripped = stripped.replace(TRIGGER_TAIL_RE, "");
+  stripped = stripped.replace(/[!.?]+$/, "").trim();
+
+  if (stripped.length >= 2 && stripped.length <= 60) return stripped;
+  return raw.length <= 60 ? raw : raw.slice(0, 60);
+}
 
 export interface TokenLayoutEntry {
   /** characterId (PC) ou npcId — backend resolve pra participantId. */
@@ -45,9 +77,20 @@ export interface TokenLayoutEntry {
 
 export interface StartEncounterFromNarrativeInput {
   sessionId: string;
-  sceneId: string;
+  /** Quando ausente, backend resolve via active OU cria stub auto. */
+  sceneId?: string;
   attackerParticipantId?: string | null;
-  targetNpcIds: string[];
+  /**
+   * NPC UUIDs já materializados (path otimizado — PreFlightOracle resolveu
+   * placeholders via materializations sequenciais). Mantido pra back-compat.
+   */
+  targetNpcIds?: string[];
+  /**
+   * Lista mista UUID + nome livre. Backend detecta por elemento: UUID carrega
+   * NpcEntity, nome materializa stub via archetype heurístico. Quando ambos
+   * `targetNpcIds` e `targets` são passados, são merged.
+   */
+  targets?: string[];
   surpriseRound?: boolean;
   autoPlaceTokens?: boolean;
   narrativeTrigger?: string;
@@ -85,6 +128,8 @@ export class StartEncounterFromNarrativeService {
     private readonly encounterService: EncounterService,
     private readonly combatService: CombatService,
     private readonly diceService: DiceService,
+    private readonly npcService: NpcService,
+    private readonly sceneContextService: SceneContextService,
     private readonly eventBus: EventBusService,
     private readonly factory: EventEnvelopeFactory,
   ) {}
@@ -92,21 +137,66 @@ export class StartEncounterFromNarrativeService {
   async run(
     input: StartEncounterFromNarrativeInput,
   ): Promise<StartEncounterFromNarrativeResult> {
-    // 1. Valida cena
-    const scene = await this.sceneRepo.findOne({ where: { id: input.sceneId } });
-    if (!scene || scene.sessionId !== input.sessionId) {
+    // 1. Resolve cena (combate é prioridade — nunca falha por scene ausente).
+    //    Ordem: sceneId explícito → active scene da session → cria stub auto.
+    const scene = await this.resolveOrCreateScene(input);
+    const resolvedSceneId = scene.id;
+
+    // 2. Resolve targets mistos (UUID + nome). Nomes materializam stub via
+    // NpcService com archetype heurístico.
+    let resolvedIds = await this.resolveOrMaterializeTargets(
+      input.targetNpcIds ?? [],
+      input.targets ?? [],
+      input.campaignId ?? null,
+    );
+
+    // 2.5. Fallback do botão "Iniciar combate": quando frontend envia request
+    // sem targets, primeiro tenta npcsPresent da cena (hostis primeiro;
+    // figurantes auto-materializados ficam neutral, então caem no segundo).
+    if (resolvedIds.length === 0) {
+      const sceneCtx = await this.sceneContextService.assembleContext(scene.id);
+      const hostiles = sceneCtx.npcsPresent.filter(
+        (n) => n.disposition === "hostile",
+      );
+      const fallback = hostiles.length > 0 ? hostiles : sceneCtx.npcsPresent;
+      resolvedIds = fallback.map((n) => n.id);
+    }
+
+    // 2.6. Último recurso: NPCs que vivem só na prosa do Narrator (não
+    // materializados em scene_npcs). Extrai descritor do narrativeTrigger
+    // (label da choice clicada — ex: "Atacar o homem grande") e cria stub.
+    if (resolvedIds.length === 0 && input.narrativeTrigger && input.campaignId) {
+      const descriptor = extractTargetDescriptor(input.narrativeTrigger);
+      if (descriptor) {
+        try {
+          const stub = await this.npcService.materializeStubFromName(
+            input.campaignId,
+            descriptor,
+            input.narrativeTrigger,
+            "hostile",
+          );
+          resolvedIds = [stub.id];
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `materialize from narrativeTrigger '${descriptor}' falhou: ${msg}`,
+          );
+        }
+      }
+    }
+
+    if (resolvedIds.length === 0) {
       throw new DomainException(
-        ErrorCode.SCENE_NOT_FOUND,
-        `Cena ${input.sceneId} não encontrada na sessão ${input.sessionId}.`,
+        ErrorCode.ENCOUNTER_NO_TARGETS_IN_SCENE,
+        "Nenhum oponente identificado na cena.",
         {
-          context: { sceneId: input.sceneId, sessionId: input.sessionId },
-          hint: "Cena pode ter sido encerrada — chamar get_active_scene.",
+          context: { sessionId: input.sessionId, sceneId: resolvedSceneId },
+          hint: "Descreva quem você ataca via free-text antes de iniciar combate.",
         },
       );
     }
 
-    // 2. Valida NPCs alvos (existem + têm monsterId)
-    const npcs = await this.loadAndValidateNpcs(input.targetNpcIds);
+    const npcs = await this.loadAndValidateNpcs(resolvedIds);
 
     // 3. Cria encounter (auto-anexa PCs da session/campaign)
     let encounter;
@@ -122,7 +212,7 @@ export class StartEncounterFromNarrativeService {
         ErrorCode.ENCOUNTER_CREATE_FAILED,
         `Falha ao criar encounter: ${msg}`,
         {
-          context: { sessionId: input.sessionId, sceneId: input.sceneId },
+          context: { sessionId: input.sessionId, sceneId: resolvedSceneId },
           cause: err,
         },
       );
@@ -213,12 +303,12 @@ export class StartEncounterFromNarrativeService {
           scope: {
             campaignId,
             sessionId: input.sessionId,
-            sceneId: input.sceneId,
+            sceneId: resolvedSceneId,
             encounterId: encounter.id,
           },
           payload: {
             encounterId: encounter.id,
-            sceneId: input.sceneId,
+            sceneId: resolvedSceneId,
             triggerSource: "narrative",
             attackerParticipantId: input.attackerParticipantId ?? null,
             surprised: surprisedIds,
@@ -247,6 +337,107 @@ export class StartEncounterFromNarrativeService {
   }
 
   // --- helpers ---
+
+  /**
+   * Resolve scene em ordem de preferência:
+   *   1. sceneId explícito do input → valida existe + pertence à session
+   *   2. Active scene da session (isActive=true)
+   *   3. Cria scene stub auto (campanhas custom sem world building formal)
+   *
+   * Combate é prioridade — nunca falha aqui. Sempre retorna SceneEntity válida.
+   */
+  private async resolveOrCreateScene(
+    input: StartEncounterFromNarrativeInput,
+  ): Promise<SceneEntity> {
+    if (input.sceneId) {
+      const scene = await this.sceneRepo.findOne({
+        where: { id: input.sceneId },
+      });
+      if (!scene || scene.sessionId !== input.sessionId) {
+        throw new DomainException(
+          ErrorCode.SCENE_NOT_FOUND,
+          `Cena ${input.sceneId} não encontrada na sessão ${input.sessionId}.`,
+          {
+            context: { sceneId: input.sceneId, sessionId: input.sessionId },
+            hint: "Cena pode ter sido encerrada — chamar get_active_scene.",
+          },
+        );
+      }
+      return scene;
+    }
+
+    const active = await this.sceneRepo.findOne({
+      where: { sessionId: input.sessionId, isActive: true },
+    });
+    if (active) return active;
+
+    const nextNumber =
+      ((
+        await this.sceneRepo.count({
+          where: { sessionId: input.sessionId },
+        })
+      ) ?? 0) + 1;
+
+    const stub = this.sceneRepo.create({
+      sessionId: input.sessionId,
+      sceneNumber: nextNumber,
+      title: input.narrativeTrigger ?? "Combate iminente",
+      description: "Cena criada automaticamente para hospedar combate.",
+      isActive: true,
+    });
+    const saved = await this.sceneRepo.save(stub);
+    this.logger.log(
+      `auto_scene_stub_created session=${input.sessionId} scene=${saved.id}`,
+    );
+    return saved;
+  }
+
+  /**
+   * Resolve lista mista (UUID + name) para lista de UUIDs. UUIDs passam direto.
+   * Nomes resolvem via `findByNameInCampaign`; se não acharem, materializam
+   * stub auto via archetype heurístico.
+   */
+  private async resolveOrMaterializeTargets(
+    uuidTargets: string[],
+    mixedTargets: string[],
+    campaignId: string | null,
+  ): Promise<string[]> {
+    const resolved: string[] = [...uuidTargets];
+
+    for (const raw of mixedTargets) {
+      const candidate = (raw || "").trim();
+      if (!candidate) continue;
+
+      if (UUID_REGEX.test(candidate)) {
+        resolved.push(candidate);
+        continue;
+      }
+
+      // É nome livre — precisa de campaignId pra resolver/materializar
+      if (!campaignId) {
+        this.logger.warn(
+          `target name '${candidate}' sem campaignId; pulando.`,
+        );
+        continue;
+      }
+
+      try {
+        const stub = await this.npcService.materializeStubFromName(
+          campaignId,
+          candidate,
+          undefined,
+          "hostile",
+        );
+        resolved.push(stub.id);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `auto-materialize falhou pra '${candidate}': ${msg}`,
+        );
+      }
+    }
+    return resolved;
+  }
 
   private async loadAndValidateNpcs(npcIds: string[]): Promise<NpcEntity[]> {
     const npcs: NpcEntity[] = [];

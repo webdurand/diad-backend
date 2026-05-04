@@ -52,18 +52,40 @@ export class TokenLayoutEntryDto {
  *  - campaignId: explícito; senão derivado da session.
  */
 export class StartEncounterFromNarrativeDto {
+  /**
+   * Cena ativa (FK SceneEntity). Quando ausente, backend resolve via
+   * `SceneService.getActive(sessionId)` ou cria scene stub auto. Combate
+   * deve sempre disparar — nunca falhar por ausência de scene formal
+   * (campanhas custom/world fluido).
+   */
+  @IsOptional()
   @IsUUID()
-  sceneId: string;
+  sceneId?: string;
 
   @IsOptional()
   @IsUUID()
   attackerParticipantId?: string | null;
 
+  /**
+   * NPC UUIDs já materializados (path otimizado — PreFlightOracle resolveu).
+   * Pelo menos um de `targetNpcIds` ou `targets` deve estar presente.
+   */
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(12)
   @IsUUID("all", { each: true })
-  targetNpcIds: string[];
+  targetNpcIds?: string[];
+
+  /**
+   * Lista mista UUID + nome livre. Backend detecta por elemento: UUID carrega
+   * NpcEntity direto, nome materializa stub via archetype heurístico.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  targets?: string[];
 
   @IsOptional()
   @IsBoolean()

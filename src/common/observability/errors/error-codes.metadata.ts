@@ -245,6 +245,13 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Verificar se a cena ainda existe e se os NPCs alvos estão na mesma localização.",
     domain: "encounter",
   },
+  [ErrorCode.ENCOUNTER_NO_TARGETS_IN_SCENE]: {
+    httpStatus: 422,
+    defaultTitle: "No targets identified in current scene",
+    defaultHint:
+      "Nenhum oponente foi identificado na cena. Descreva quem você ataca via free-text.",
+    domain: "encounter",
+  },
   [ErrorCode.REVIVIFY_INELIGIBLE]: {
     httpStatus: 422,
     defaultTitle: "Revivify not applicable",

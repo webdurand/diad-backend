@@ -192,6 +192,13 @@ export class NarrativeDecisionService {
         candidate,
       );
       if (npc) return npc.id;
+      // Sem match canônico → materializa stub (provenance auto-materialized,
+      // archetype heurístico). Decisions seguem em vez de 422.
+      const stub = await this.npcService.materializeStubFromName(
+        campaignId,
+        candidate,
+      );
+      return stub.id;
     } else if (entityType === "location") {
       const loc = await this.locationService.findByNameInCampaign(
         campaignId,

@@ -94,6 +94,7 @@ import { CapstonesService } from "./services/capstones.service";
 import { AiProxyModule } from "../ai-proxy/ai-proxy.module";
 import { CloudinaryService } from "src/shared/cloudinary.service";
 import { WorldModule } from "../world/world.module";
+import { SessionModule } from "../session/session.module";
 // Spec 002 — realtime + join-request loop
 import { RealtimeModule } from "src/realtime/realtime.module";
 import { RoomAuthorizerRegistry } from "src/realtime/room-authorizer.registry";
@@ -156,6 +157,7 @@ import { NpcEntity } from "src/entities/npc.entity";
     AuthModule,
     CharactersModule,
     WorldModule,
+    SessionModule,
     forwardRef(() => AiProxyModule),
     RealtimeModule,
     CombatActionsModule,

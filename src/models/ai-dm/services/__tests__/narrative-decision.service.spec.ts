@@ -29,11 +29,16 @@ describe("NarrativeDecisionService.create — D2 name→UUID resolution", () => 
       }),
     } as never;
     const eventLog = { logEvent: jest.fn().mockResolvedValue(undefined) };
+    const STUB_ID = "stub-npc-id";
     const npcService = {
       findByNameInCampaign: jest.fn(
         async (_cId: string, name: string) =>
           opts.npcByName?.[name.toLowerCase()] ?? null,
       ),
+      materializeStubFromName: jest.fn(async (_cId: string, name: string) => ({
+        id: STUB_ID,
+        name,
+      })),
     };
     const locationService = {
       findByNameInCampaign: jest.fn(
@@ -107,22 +112,23 @@ describe("NarrativeDecisionService.create — D2 name→UUID resolution", () => 
     );
   });
 
-  it("422 quando nome de NPC não casa com nenhum na campanha", async () => {
-    const { svc } = makeService({
-      // Eda não está cadastrada
+  it("auto-materializa stub quando nome de NPC não casa com nenhum canônico", async () => {
+    const { svc, saved, npcService } = makeService({
+      // Eda não está cadastrada → cai no path de materializeStubFromName
       npcByName: {},
     });
-    await expect(
-      svc.create(CAMPAIGN_ID, {
-        ...baseDto(),
-        affectedEntityType: "npc",
-        affectedEntityId: "eda",
-      }),
-    ).rejects.toMatchObject({
-      response: {
-        code: ErrorCode.NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND,
-      },
+    await svc.create(CAMPAIGN_ID, {
+      ...baseDto(),
+      affectedEntityType: "npc",
+      affectedEntityId: "eda",
     });
+    expect(npcService.materializeStubFromName).toHaveBeenCalledWith(
+      CAMPAIGN_ID,
+      "eda",
+    );
+    expect((saved[0] as { affectedEntityId: string }).affectedEntityId).toBe(
+      "stub-npc-id",
+    );
   });
 
   it("422 quando vem nome sem entityType (não-resolvível)", async () => {

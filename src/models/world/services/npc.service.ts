@@ -11,6 +11,7 @@ import {
   projectNpc,
   projectNpcs,
 } from "./npc-projection";
+import { pickArchetypeFromDescriptor } from "./archetype-picker";
 
 export interface CreateNpcDto {
   name: string;
@@ -188,6 +189,30 @@ export class NpcService {
     const npc = await this.getById(npcId);
     Object.assign(npc, dto);
     return this.npcRepo.save(npc);
+  }
+
+  /**
+   * Materializa NPC stub a partir de nome livre. Idempotente (retorna o
+   * existente se já houver match). Archetype escolhido por heurística word-match
+   * — stats vêm do template, não inventados.
+   */
+  async materializeStubFromName(
+    campaignId: string,
+    name: string,
+    descriptor?: string,
+    disposition: "friendly" | "neutral" | "hostile" | "indifferent" = "neutral",
+  ): Promise<NpcEntity> {
+    const existing = await this.findByNameInCampaign(campaignId, name);
+    if (existing) return existing;
+
+    const archetypeSlug = pickArchetypeFromDescriptor(descriptor || name);
+    return this.create(campaignId, {
+      name: name.trim(),
+      description: descriptor ?? `${name} mencionado pelo narrador.`,
+      disposition,
+      archetypeSlug,
+      provenance: "auto-materialized",
+    });
   }
 
   async remove(npcId: string): Promise<void> {

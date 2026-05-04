@@ -47,6 +47,23 @@ export class SessionService {
     ownerId: string,
     dto: CreateSessionDto,
   ): Promise<GameSessionEntity> {
+    // Valida campaignId antes do insert — erro amigável vs FK violation 500
+    // (mundo deletado, querystring stale, etc).
+    if (dto.campaignId) {
+      const campaign = await this.campaignRepo.findOne({
+        where: { id: dto.campaignId },
+        select: { id: true },
+      });
+      if (!campaign) {
+        throw new NotFoundException({
+          ok: false,
+          code: "CAMPAIGN_NOT_FOUND",
+          error:
+            "Mundo nao existe mais. Pode ter sido apagado — recarregue a tela e selecione um mundo da lista atualizada.",
+        });
+      }
+    }
+
     const session = this.sessionRepo.create({
       name: dto.name,
       ownerId,
@@ -138,17 +155,10 @@ export class SessionService {
   }
 
   async delete(sessionId: string): Promise<void> {
-    const session = await this.sessionRepo.findOne({
-      where: { id: sessionId },
-    });
-    const campaignId = session?.campaignId;
-
+    // Mundo (campaign) é setting reusável: 1 mundo → N aventuras. Apagar
+    // aventura NÃO apaga o mundo — cleanup de campaign é explícito via
+    // DELETE /campaigns/:id.
     await this.sessionRepo.delete(sessionId);
-
-    // Delete associated campaign (cascade removes locations, NPCs, quests, etc.)
-    if (campaignId) {
-      await this.campaignRepo.delete(campaignId);
-    }
   }
 
   async removeCharacter(

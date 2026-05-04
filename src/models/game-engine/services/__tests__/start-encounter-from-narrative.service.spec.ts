@@ -28,9 +28,30 @@ interface RepoOverrides {
   session?: Partial<GameSessionEntity> | null;
 }
 
-function makeSceneRepo(scene: Partial<SceneEntity> | null) {
+function makeSceneRepo(
+  scene: Partial<SceneEntity> | null,
+  active: Partial<SceneEntity> | null = null,
+) {
+  let savedStub: Partial<SceneEntity> | null = null;
   return {
-    findOne: jest.fn(async () => scene as SceneEntity | null),
+    findOne: jest.fn(async (opts: any) => {
+      // findOne by id (primeiro lookup do path com sceneId explícito)
+      if (opts?.where?.id) return scene as SceneEntity | null;
+      // findOne by isActive=true (lookup do path sem sceneId)
+      if (opts?.where?.isActive === true) {
+        return (savedStub ?? active) as SceneEntity | null;
+      }
+      return null;
+    }),
+    count: jest.fn(async () => 0),
+    create: jest.fn((data: any) => ({
+      id: "auto-scene-99999999-9999-4999-8999-999999999999",
+      ...data,
+    })),
+    save: jest.fn(async (data: any) => {
+      savedStub = { ...data, id: data.id ?? "auto-scene-99999999-9999-4999-8999-999999999999" };
+      return savedStub;
+    }),
   } as unknown as Repository<SceneEntity>;
 }
 
@@ -179,6 +200,27 @@ function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
   const diceSvc = makeDiceService();
   const bus = makeEventBus();
 
+  // NpcService stub — materializeStubFromName usado só no path de targets por
+  // nome livre; testes existentes passam UUIDs e não tocam aqui.
+  const npcSvc = {
+    materializeStubFromName: jest.fn(),
+    findByNameInCampaign: jest.fn(),
+  } as unknown as import("src/models/world/services/npc.service").NpcService;
+
+  // SceneContextService stub — assembleContext só roda no fallback "targets
+  // vazios" do botão "Iniciar combate"; testes que passam targetNpcIds não
+  // tocam aqui.
+  const sceneCtxSvc = {
+    assembleContext: jest.fn().mockResolvedValue({
+      scene: {},
+      npcsPresent: [],
+      recentEvents: [],
+      partyKnowledge: [],
+      locationChain: [],
+      recentChronicles: [],
+    }),
+  } as unknown as import("src/models/session/services/scene-context.service").SceneContextService;
+
   const svc = new StartEncounterFromNarrativeService(
     sceneRepo,
     npcRepo,
@@ -188,6 +230,8 @@ function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
     encounterSvc,
     combatSvc,
     diceSvc,
+    npcSvc,
+    sceneCtxSvc,
     bus,
     new EventEnvelopeFactory(undefined),
   );
@@ -291,6 +335,151 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
       ownerUserId: OWNER_USER_ID,
     });
     expect(encounterSvc.batchUpdatePositions).not.toHaveBeenCalled();
+  });
+
+  it("sceneId omitido + active scene existe → usa a active", async () => {
+    // Override sceneRepo direto pra retornar active mock
+    const activeScene: Partial<SceneEntity> = {
+      id: "active-scene-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      sessionId: SESSION_ID,
+      isActive: true,
+    };
+    const sceneRepo = makeSceneRepo(null, activeScene);
+    const npcRepo = makeNpcRepo({
+      [NPC_ID_OK]: {
+        id: NPC_ID_OK,
+        name: "Goblin",
+        monsterId: MONSTER_ID,
+        monster: {
+          id: MONSTER_ID,
+          name: "Goblin",
+          hit_points: 7,
+          hit_points_roll: "2d6",
+          dexterity: 14,
+        } as any,
+      },
+    });
+    const monsterRepo = makeMonsterRepo({
+      id: MONSTER_ID,
+      hit_points: 7,
+      hit_points_roll: "2d6",
+      dexterity: 14,
+    });
+    const partRepo = makeParticipantRepo();
+    const sessionRepo = makeSessionRepo({ id: SESSION_ID, campaignId: CAMPAIGN_ID });
+    savedParticipants = [];
+    const encounterSvc = makeEncounterService([]);
+    const npcSvc = {
+      materializeStubFromName: jest.fn(),
+      findByNameInCampaign: jest.fn(),
+    } as unknown as import("src/models/world/services/npc.service").NpcService;
+    const sceneCtxSvc = {
+      assembleContext: jest.fn().mockResolvedValue({
+        scene: {},
+        npcsPresent: [],
+        recentEvents: [],
+        partyKnowledge: [],
+        locationChain: [],
+        recentChronicles: [],
+      }),
+    } as unknown as import("src/models/session/services/scene-context.service").SceneContextService;
+
+    const svc = new StartEncounterFromNarrativeService(
+      sceneRepo,
+      npcRepo,
+      monsterRepo,
+      partRepo,
+      sessionRepo,
+      encounterSvc,
+      makeCombatService(),
+      makeDiceService(),
+      npcSvc,
+      sceneCtxSvc,
+      makeEventBus(),
+      new EventEnvelopeFactory(undefined),
+    );
+
+    const result = await svc.run({
+      sessionId: SESSION_ID,
+      // sem sceneId
+      targetNpcIds: [NPC_ID_OK],
+      ownerUserId: OWNER_USER_ID,
+    });
+
+    expect(result.encounterId).toBe(ENCOUNTER_ID);
+    // Não criou stub — usou active
+    expect((sceneRepo.save as jest.Mock)).not.toHaveBeenCalled();
+  });
+
+  it("sceneId omitido + sem active → cria stub auto", async () => {
+    const sceneRepo = makeSceneRepo(null, null); // nenhuma active
+    const npcRepo = makeNpcRepo({
+      [NPC_ID_OK]: {
+        id: NPC_ID_OK,
+        name: "Goblin",
+        monsterId: MONSTER_ID,
+        monster: {
+          id: MONSTER_ID,
+          name: "Goblin",
+          hit_points: 7,
+          hit_points_roll: "2d6",
+          dexterity: 14,
+        } as any,
+      },
+    });
+    const monsterRepo = makeMonsterRepo({
+      id: MONSTER_ID,
+      hit_points: 7,
+      hit_points_roll: "2d6",
+      dexterity: 14,
+    });
+    const partRepo = makeParticipantRepo();
+    const sessionRepo = makeSessionRepo({ id: SESSION_ID, campaignId: CAMPAIGN_ID });
+    savedParticipants = [];
+    const encounterSvc = makeEncounterService([]);
+    const npcSvc = {
+      materializeStubFromName: jest.fn(),
+      findByNameInCampaign: jest.fn(),
+    } as unknown as import("src/models/world/services/npc.service").NpcService;
+    const sceneCtxSvc = {
+      assembleContext: jest.fn().mockResolvedValue({
+        scene: {},
+        npcsPresent: [],
+        recentEvents: [],
+        partyKnowledge: [],
+        locationChain: [],
+        recentChronicles: [],
+      }),
+    } as unknown as import("src/models/session/services/scene-context.service").SceneContextService;
+
+    const svc = new StartEncounterFromNarrativeService(
+      sceneRepo,
+      npcRepo,
+      monsterRepo,
+      partRepo,
+      sessionRepo,
+      encounterSvc,
+      makeCombatService(),
+      makeDiceService(),
+      npcSvc,
+      sceneCtxSvc,
+      makeEventBus(),
+      new EventEnvelopeFactory(undefined),
+    );
+
+    const result = await svc.run({
+      sessionId: SESSION_ID,
+      targetNpcIds: [NPC_ID_OK],
+      narrativeTrigger: "Combate em câmara",
+      ownerUserId: OWNER_USER_ID,
+    });
+
+    expect(result.encounterId).toBe(ENCOUNTER_ID);
+    expect(sceneRepo.save).toHaveBeenCalled();
+    const savedArg = (sceneRepo.save as jest.Mock).mock.calls[0][0];
+    expect(savedArg.sessionId).toBe(SESSION_ID);
+    expect(savedArg.isActive).toBe(true);
+    expect(savedArg.title).toBe("Combate em câmara");
   });
 
   it("emite EncounterEvent.encounter_started no event bus", async () => {

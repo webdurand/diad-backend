@@ -319,6 +319,7 @@ export class GameEngineController {
       sceneId: dto.sceneId,
       attackerParticipantId: dto.attackerParticipantId ?? null,
       targetNpcIds: dto.targetNpcIds,
+      targets: dto.targets,
       surpriseRound: dto.surpriseRound ?? false,
       autoPlaceTokens: dto.autoPlaceTokens ?? true,
       narrativeTrigger: dto.narrativeTrigger,
