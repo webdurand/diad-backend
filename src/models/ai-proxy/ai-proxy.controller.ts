@@ -471,6 +471,19 @@ export class AiProxyController {
         lastMessageIdFromClient: body.lastMessageId ?? null,
       });
 
+      res.setHeader(
+        "X-Session-Resume-Hot-Recap",
+        ctx.hotRecapTriggered
+          ? "pending"
+          : ctx.previousSessionSummary
+          ? "cached"
+          : "none",
+      );
+      res.setHeader(
+        "X-Session-Is-Resumed",
+        ctx.isResumed ? "true" : "false",
+      );
+
       if (ctx.lastMessageMismatch) {
         // Cliente ficou para trás (stream truncado, aba inativa durante a
         // narração, refresh durante turn). Server é fonte da verdade — em
@@ -485,19 +498,6 @@ export class AiProxyController {
         });
         await this.emitSessionSync(sessionId, res);
       }
-
-      res.setHeader(
-        "X-Session-Resume-Hot-Recap",
-        ctx.hotRecapTriggered
-          ? "pending"
-          : ctx.previousSessionSummary
-          ? "cached"
-          : "none",
-      );
-      res.setHeader(
-        "X-Session-Is-Resumed",
-        ctx.isResumed ? "true" : "false",
-      );
 
       await this.persistPlayerAction(
         sessionId,
