@@ -44,7 +44,6 @@ import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService } from "./services/weather.service";
 import { GameClockService } from "./services/game-clock.service";
 import { ChaosFactorService } from "./services/chaos-factor.service";
-import { ReputationDecayService } from "./services/reputation-decay.service";
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 
 @Module({
@@ -94,8 +93,6 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     WeatherService,
     GameClockService,
     ChaosFactorService,
-    // Spec 027 M3/AC3.2 — decay de reputação no long rest
-    ReputationDecayService,
     // Spec 027 D3 — slug→UUID pipe pra `/campaigns/:id/*`
     CampaignIdPipe,
   ],
@@ -112,8 +109,6 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     WeatherService,
     GameClockService,
     ChaosFactorService,
-    // Spec 027 M3/AC3.2
-    ReputationDecayService,
   ],
 })
 export class WorldModule {}

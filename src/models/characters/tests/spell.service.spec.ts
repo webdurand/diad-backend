@@ -39,6 +39,8 @@ describe("SpellService", () => {
       repos.charLevelUp as any,
       repos.spell as any,
       repos.spellClass as any,
+      // Spec 027 (M3/AC3.2) — stub do ReputationDecayService.
+      { applyOnLongRest: async () => ({ campaignsAffected: 0, npcsDecayed: 0 }) } as any,
     );
   });
 

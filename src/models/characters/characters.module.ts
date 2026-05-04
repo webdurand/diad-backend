@@ -40,6 +40,7 @@ import {
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { CombatActionsModule } from "../combat-actions/combat-actions.module";
+import { ReputationDecayService } from "../world/services/reputation-decay.service";
 import { CharactersController } from "./characters.controller";
 import { CharactersService } from "./services/characters.service";
 import { CharacterSheetService } from "./services/character-sheet.service";
@@ -107,6 +108,11 @@ import { PcPersonaService } from "./services/pc-persona.service";
     ReactionPrefsService,
     // Spec 018 — PC Persona Injection
     PcPersonaService,
+    // Spec 027 (M3/AC3.2) — decay de reputação no long rest. Service só
+    // depende de DataSource global, então fica direto aqui pra evitar
+    // ciclo CharactersModule → WorldModule → AiProxyModule → SessionModule
+    // → CharactersModule.
+    ReputationDecayService,
   ],
   exports: [
     CharactersService,

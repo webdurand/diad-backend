@@ -39,6 +39,7 @@ import {
   getPreparedFormula,
 } from "src/shared/edition-rules";
 import { CLASS_FEATURE_CATALOG } from "src/models/game-engine/services/action-resolvers/class-feature-catalog";
+import { ReputationDecayService } from "src/models/world/services/reputation-decay.service";
 
 type CasterType = CasterClassType;
 
@@ -161,6 +162,8 @@ export class SpellService {
     private readonly spellRepo: Repository<SpellEntity>,
     @InjectRepository(SpellClassEntity)
     private readonly spellClassRepo: Repository<SpellClassEntity>,
+    // Spec 027 (M3/AC3.2) — long rest dispara decay de reputação.
+    private readonly reputationDecayService: ReputationDecayService,
   ) {}
 
   // ---- Helpers ----
@@ -1213,6 +1216,25 @@ export class SpellService {
         summary.push(
           `Magia trocada: '${toRemove.spell.name}' -> '${newSpell.name}'.`,
         );
+      }
+    }
+
+    // Spec 027 (M3/AC3.2) — long rest dispara decay de reputação 1 step
+    // toward 0 em todos os NPCs do(s) campaign(s) ativo(s) do PC. Tags
+    // históricas (witnessed-murder etc) preservadas; só pontuação numérica
+    // decai. Best-effort — falha não derruba o rest.
+    if (dto.type === "long") {
+      try {
+        const decay = await this.reputationDecayService.applyOnLongRest(
+          characterId,
+        );
+        if (decay.npcsDecayed > 0) {
+          summary.push(
+            `Reputação esfriou: ${decay.npcsDecayed} NPC(s) suavizaram seus ânimos.`,
+          );
+        }
+      } catch {
+        /* best-effort — silencia (service já loga warn) */
       }
     }
 
