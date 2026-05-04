@@ -42,10 +42,7 @@ export class FactionEntity {
   alignment?: string;
 
   @Column({ name: "influence_level", type: "int", default: 5 })
-  influenceLevel: number; // 1-10
-
-  @Column({ name: "is_known_to_party", type: "boolean", default: false })
-  isKnownToParty: boolean;
+  influenceLevel: number;
 
   @Column({ name: "headquarters_location_id", type: "uuid", nullable: true })
   headquartersLocationId?: string;

@@ -4,6 +4,7 @@ import { DataSource, Repository } from "typeorm";
 import { randomUUID } from "crypto";
 import { EventListenerProcessedEntity } from "src/entities/event-listener-processed.entity";
 import { NpcEntity } from "src/entities/npc.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { DiadLogger } from "../../observability/logger/diad-logger.service";
 import { EventListener } from "../event-bus.types";
 import { EventBusService } from "../event-bus.service";
@@ -49,6 +50,8 @@ export class GuardDispatchListener implements EventListener {
     private readonly processedRepo: Repository<EventListenerProcessedEntity>,
     @InjectRepository(NpcEntity)
     private readonly npcRepo: Repository<NpcEntity>,
+    @InjectRepository(SessionNpcStateEntity)
+    private readonly npcStateRepo: Repository<SessionNpcStateEntity>,
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
@@ -77,8 +80,14 @@ export class GuardDispatchListener implements EventListener {
     const desiredCount =
       GUARD_DISPATCH_CONFIG.countBySeverity[Math.min(severity, 3)] ?? 1;
 
+    const sessionId = envelope.scope.sessionId;
+    if (!sessionId) {
+      // Sem sessionId não tem session_npc_state pra plotar guards na location.
+      await this.markProcessed(envelope.eventId);
+      return;
+    }
     const existing = await this.findGuardsInLocation(
-      campaignId,
+      sessionId,
       locationId,
       desiredCount,
     );
@@ -88,7 +97,12 @@ export class GuardDispatchListener implements EventListener {
       guardIds = existing.slice(0, desiredCount);
     } else {
       const missing = desiredCount - existing.length;
-      const spawned = await this.spawnGuards(campaignId, locationId, missing);
+      const spawned = await this.spawnGuards(
+        campaignId,
+        sessionId,
+        locationId,
+        missing,
+      );
       guardIds = [...existing, ...spawned];
     }
 
@@ -149,7 +163,7 @@ export class GuardDispatchListener implements EventListener {
   }
 
   private async findGuardsInLocation(
-    campaignId: string,
+    sessionId: string,
     locationId: string,
     limit: number,
   ): Promise<string[]> {
@@ -158,14 +172,15 @@ export class GuardDispatchListener implements EventListener {
       `
       SELECT n."id"
       FROM "npcs" n
+      JOIN "session_npc_state" s ON s."npc_id" = n."id"
       LEFT JOIN "monsters" m ON m."id" = n."monster_id"
-      WHERE n."campaign_id" = $1
-        AND n."current_location_id" = $2
-        AND n."status" = 'alive'
+      WHERE s."game_session_id" = $1
+        AND s."current_location_id" = $2
+        AND s."status" = 'alive'
         AND (m."slug" = ANY($3::text[]))
       LIMIT $4
       `,
-      [campaignId, locationId, slugList, limit],
+      [sessionId, locationId, slugList, limit],
     );
     if (Array.isArray(rows)) {
       return rows
@@ -177,6 +192,7 @@ export class GuardDispatchListener implements EventListener {
 
   private async spawnGuards(
     campaignId: string,
+    sessionId: string,
     locationId: string,
     count: number,
   ): Promise<string[]> {
@@ -212,23 +228,30 @@ export class GuardDispatchListener implements EventListener {
       const fullName = `Guarda ${properName}`;
       const slug = `guarda-${properName.toLowerCase()}-${randomUUID().slice(0, 8)}`;
       try {
-        const saved = await this.npcRepo.save(
-          this.npcRepo.create({
-            campaignId,
-            monsterId,
-            currentLocationId: locationId,
-            name: fullName,
-            slug,
+        const npc = this.npcRepo.create({
+          campaignId,
+          gameSessionId: sessionId,
+          monsterId,
+          name: fullName,
+          slug,
+          provenance: GUARD_DISPATCH_CONFIG.provenance,
+          tags: [...GUARD_DISPATCH_CONFIG.tags],
+        });
+        const saved = await this.npcRepo.save(npc);
+        await this.npcStateRepo.save(
+          this.npcStateRepo.create({
+            gameSessionId: sessionId,
+            npcId: saved.id,
             status: "alive",
             disposition: GUARD_DISPATCH_CONFIG.initialDisposition,
-            provenance: GUARD_DISPATCH_CONFIG.provenance,
-            tags: [...GUARD_DISPATCH_CONFIG.tags],
+            currentLocationId: locationId,
           }),
         );
         created.push(saved.id);
       } catch (err) {
         this.logger.warn("guard_dispatch.spawn_failed", {
           "campaign.id": campaignId,
+          "session.id": sessionId,
           "location.id": locationId,
           "name": fullName,
           "error.message":

@@ -102,6 +102,10 @@ import { EventListenerProcessedEntity } from "./event-listener-processed.entity"
 // Spec 019 — Living World & Ambiance
 import { WeatherEntity } from "./weather.entity";
 import { GameClockEntity } from "./game-clock.entity";
+// Adventure-scope split
+import { SessionNpcStateEntity } from "./session-npc-state.entity";
+import { SessionFactionStateEntity } from "./session-faction-state.entity";
+import { SessionStoryArcStateEntity } from "./session-story-arc-state.entity";
 
 export {
   AbilityScoreEntity,
@@ -205,6 +209,9 @@ export {
   EventListenerProcessedEntity,
   WeatherEntity,
   GameClockEntity,
+  SessionNpcStateEntity,
+  SessionFactionStateEntity,
+  SessionStoryArcStateEntity,
 };
 
 export const ENTITIES = [
@@ -309,6 +316,9 @@ export const ENTITIES = [
   EventListenerProcessedEntity,
   WeatherEntity,
   GameClockEntity,
+  SessionNpcStateEntity,
+  SessionFactionStateEntity,
+  SessionStoryArcStateEntity,
 ];
 
 export * from "./enums";

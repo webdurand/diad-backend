@@ -41,15 +41,13 @@ describe("projectNpc — Spec 020 redaction filter (AI3 leak fix)", () => {
     expect(out.dialogueStyle).toBeUndefined();
   });
 
-  it("preserva campos sempre visíveis (id, name, description, disposition)", () => {
+  it("preserva campos sempre visíveis (id, name, description)", () => {
     const npc = makeNpc();
     const out = projectNpc(npc);
 
     expect(out.id).toBe(npc.id);
     expect(out.name).toBe("Greta");
     expect(out.description).toBe("ruiva atarracada, ri alto");
-    expect(out.disposition).toBe("friendly");
-    expect(out.currentLocationId).toBeDefined();
   });
 
   it("dmOmniscient bypass: libera todos os campos", () => {

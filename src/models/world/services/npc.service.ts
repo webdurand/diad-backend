@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, IsNull, Repository } from "typeorm";
 import { NpcEntity } from "src/entities/npc.entity";
 import { NpcArchetypeTemplateEntity } from "src/entities/npc-archetype-template.entity";
 import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { randomBytes } from "crypto";
 import {
   NpcProjectionOptions,
@@ -12,6 +14,7 @@ import {
   projectNpcs,
 } from "./npc-projection";
 import { pickArchetypeFromDescriptor } from "./archetype-picker";
+import { SessionNpcStateService } from "./session-npc-state.service";
 
 export interface CreateNpcDto {
   name: string;
@@ -19,19 +22,8 @@ export interface CreateNpcDto {
   race?: string;
   description?: string;
   descriptionHidden?: string;
-  disposition?: "friendly" | "neutral" | "hostile" | "indifferent";
-  currentLocationId?: string;
   monsterId?: string;
-  /**
-   * Spec 026 Pillar 6 — slug de archetype RAW (`thug`, `bandit_captain`, ...).
-   * Quando fornecido (e `monsterId` ausente), service resolve via
-   * `npc_archetype_templates` e popula `monsterId` automaticamente.
-   */
   archetypeSlug?: string;
-  /**
-   * Origem do NPC. Default `manual` (criado pelo DM via UI). Agents devem
-   * passar `auto-materialized` quando criam via PreFlightOracle.
-   */
   provenance?: "manual" | "auto-materialized" | "director-planned";
   personalityBig5?: Record<string, number>;
   motivation?: string;
@@ -50,10 +42,19 @@ export interface AddRelationshipDto {
   isKnownToParty?: boolean;
 }
 
+/**
+ * NPC com state de aventura mergeado (status, disposition, currentLocationId).
+ * Retornado por listForSession / getForSession quando o caller precisa do estado
+ * "como aparece nessa aventura" em vez da ficha canônica pura.
+ */
+export type NpcWithSessionState = NpcEntity & {
+  status: "alive" | "dead" | "missing" | "unknown";
+  disposition: "friendly" | "neutral" | "hostile" | "indifferent";
+  currentLocationId?: string;
+};
+
 @Injectable()
 export class NpcService {
-  /** Cache em memória do registry — cresce até 14 entries; sem invalidation
-   * porque seed roda em migration, não muda em runtime. */
   private archetypeCache = new Map<string, NpcArchetypeTemplateEntity>();
 
   constructor(
@@ -63,12 +64,13 @@ export class NpcService {
     private readonly relationRepo: Repository<NpcRelationshipEntity>,
     @InjectRepository(NpcArchetypeTemplateEntity)
     private readonly archetypeRepo: Repository<NpcArchetypeTemplateEntity>,
+    @InjectRepository(GameSessionEntity)
+    private readonly sessionRepo: Repository<GameSessionEntity>,
+    @InjectRepository(SessionNpcStateEntity)
+    private readonly stateRepo: Repository<SessionNpcStateEntity>,
+    private readonly stateService: SessionNpcStateService,
   ) {}
 
-  /**
-   * Spec 026 Pillar 6 — resolve slug de archetype para template completo.
-   * Throws BadRequestException se slug inválido (handlers convertem em 400).
-   */
   async resolveArchetype(slug: string): Promise<NpcArchetypeTemplateEntity> {
     const cached = this.archetypeCache.get(slug);
     if (cached) return cached;
@@ -84,8 +86,12 @@ export class NpcService {
     return template;
   }
 
+  /**
+   * Cria NPC canônico do mundo (gameSessionId NULL). Usado pelo setup
+   * de mundo via UI do dono. NPCs auto-materializados pelo Archivist
+   * usam materializeStubFromName.
+   */
   async create(campaignId: string, dto: CreateNpcDto): Promise<NpcEntity> {
-    // Spec 026 Pillar 6: archetypeSlug resolve pra monsterId quando ausente.
     let monsterId = dto.monsterId;
     if (!monsterId && dto.archetypeSlug) {
       const template = await this.resolveArchetype(dto.archetypeSlug);
@@ -95,14 +101,13 @@ export class NpcService {
     const slug = this.generateSlug(dto.name);
     const npc = this.npcRepo.create({
       campaignId,
+      gameSessionId: undefined,
       slug,
       name: dto.name,
       title: dto.title,
       race: dto.race,
       description: dto.description,
       descriptionHidden: dto.descriptionHidden,
-      disposition: dto.disposition ?? "neutral",
-      currentLocationId: dto.currentLocationId,
       monsterId,
       provenance: dto.provenance ?? "manual",
       personalityBig5: dto.personalityBig5 ?? {},
@@ -115,21 +120,15 @@ export class NpcService {
     return this.npcRepo.save(npc);
   }
 
-  /**
-   * Retorna NPC RAW (sem redaction). Uso interno do backend (services
-   * que dependem de descriptionHidden/personality/etc — ex: scene-builders,
-   * combat AI, dm-omniscient bypass). Controllers devem preferir getProjectedById.
-   */
   async getById(npcId: string): Promise<NpcEntity> {
     const npc = await this.npcRepo.findOne({
       where: { id: npcId },
-      relations: ["currentLocation", "monster"],
+      relations: ["monster"],
     });
     if (!npc) throw new NotFoundException("NPC nao encontrado.");
     return npc;
   }
 
-  /** Spec 020 — variante com redaction filter aplicado. */
   async getProjectedById(
     npcId: string,
     options: NpcProjectionOptions = {},
@@ -138,25 +137,72 @@ export class NpcService {
     return projectNpc(npc, options);
   }
 
-  /**
-   * Retorna lista RAW (sem redaction). Uso interno apenas. Controllers do
-   * agent-facing devem usar listByCampaignProjected.
-   */
-  async listByCampaign(campaignId: string): Promise<NpcEntity[]> {
+  /** Lista NPCs canônicos da campanha (sem state de sessão). */
+  async listCanonical(campaignId: string): Promise<NpcEntity[]> {
     return this.npcRepo.find({
-      where: { campaignId },
-      relations: ["currentLocation"],
+      where: { campaignId, gameSessionId: IsNull() },
       order: { name: "ASC" },
     });
   }
 
+  async listCanonicalProjected(
+    campaignId: string,
+    options: NpcProjectionOptions = {},
+  ): Promise<ProjectedNpc[]> {
+    const npcs = await this.listCanonical(campaignId);
+    return projectNpcs(npcs, options);
+  }
+
   /**
-   * Spec 027 (M2, AC2.9 / bug D2) — resolve `name → UUID` dentro do escopo
-   * da campanha. Match case-insensitive exato; sem fuzzy. Multiple match com
-   * mesmo nome retorna `null` (caller decide entre erro 422 ou disambiguation).
-   *
-   * Usado por NarrativeDecisionService quando Archivist envia "eda" em vez
-   * de UUID em `affectedEntityId`.
+   * Lista NPCs visíveis nessa aventura: canônicos do mundo + auto-materializados
+   * da própria sessão. Cada um vem com state mergeado da `session_npc_state`
+   * (status/disposition/currentLocationId), criando defaults se ainda não existir.
+   */
+  async listForSession(gameSessionId: string): Promise<NpcWithSessionState[]> {
+    const session = await this.sessionRepo.findOne({
+      where: { id: gameSessionId },
+      select: { id: true, campaignId: true },
+    });
+    if (!session) {
+      throw new NotFoundException("GameSession não encontrada.");
+    }
+
+    const npcs = await this.npcRepo.find({
+      where: [
+        ...(session.campaignId
+          ? [{ campaignId: session.campaignId, gameSessionId: IsNull() }]
+          : []),
+        { gameSessionId },
+      ],
+      order: { name: "ASC" },
+    });
+
+    if (npcs.length === 0) return [];
+
+    const states = await this.stateRepo.find({
+      where: { gameSessionId, npcId: In(npcs.map((n) => n.id)) },
+    });
+    const byNpc = new Map(states.map((s) => [s.npcId, s]));
+
+    return npcs.map((npc) => this.mergeState(npc, byNpc.get(npc.id)));
+  }
+
+  async listForSessionProjected(
+    gameSessionId: string,
+    options: NpcProjectionOptions = {},
+  ): Promise<(ProjectedNpc & { status: string; disposition: string; currentLocationId?: string })[]> {
+    const merged = await this.listForSession(gameSessionId);
+    return merged.map((m) => ({
+      ...projectNpc(m, options),
+      status: m.status,
+      disposition: m.disposition,
+      currentLocationId: m.currentLocationId,
+    }));
+  }
+
+  /**
+   * Match canônico por nome dentro da campanha (excluí auto-materializados).
+   * Case-insensitive exato; sem fuzzy. Multiple match retorna `null`.
    */
   async findByNameInCampaign(
     campaignId: string,
@@ -164,25 +210,45 @@ export class NpcService {
   ): Promise<NpcEntity | null> {
     const trimmed = (name || "").trim();
     if (!trimmed) return null;
-    // Case-insensitive exact match. ILIKE sem wildcard = igualdade
-    // case-insensitive em Postgres; em outros DBs o queryBuilder normaliza.
     const matches = await this.npcRepo
       .createQueryBuilder("npc")
       .where("npc.campaign_id = :campaignId", { campaignId })
+      .andWhere("npc.game_session_id IS NULL")
       .andWhere("LOWER(npc.name) = LOWER(:name)", { name: trimmed })
       .limit(2)
       .getMany();
-    // Disambiguation: 0 → null; 1 → match; 2+ → null (ambiguous, caller decide).
     return matches.length === 1 ? matches[0] : null;
   }
 
-  /** Spec 020 — variante com redaction filter aplicado. */
-  async listByCampaignProjected(
-    campaignId: string,
-    options: NpcProjectionOptions = {},
-  ): Promise<ProjectedNpc[]> {
-    const npcs = await this.listByCampaign(campaignId);
-    return projectNpcs(npcs, options);
+  /**
+   * Match por nome dentro da aventura: canônicos do mundo + auto-materializados
+   * dessa sessão. Idempotência do materialize usa esta lookup.
+   */
+  async findByNameInSession(
+    gameSessionId: string,
+    name: string,
+  ): Promise<NpcEntity | null> {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const session = await this.sessionRepo.findOne({
+      where: { id: gameSessionId },
+      select: { id: true, campaignId: true },
+    });
+    if (!session) return null;
+
+    const qb = this.npcRepo
+      .createQueryBuilder("npc")
+      .where("LOWER(npc.name) = LOWER(:name)", { name: trimmed })
+      .andWhere(
+        session.campaignId
+          ? "(npc.game_session_id = :gameSessionId OR (npc.game_session_id IS NULL AND npc.campaign_id = :campaignId))"
+          : "npc.game_session_id = :gameSessionId",
+        { gameSessionId, campaignId: session.campaignId },
+      )
+      .limit(2);
+
+    const matches = await qb.getMany();
+    return matches.length === 1 ? matches[0] : null;
   }
 
   async update(npcId: string, dto: Partial<CreateNpcDto>): Promise<NpcEntity> {
@@ -192,42 +258,94 @@ export class NpcService {
   }
 
   /**
-   * Materializa NPC stub a partir de nome livre. Idempotente (retorna o
-   * existente se já houver match). Archetype escolhido por heurística word-match
-   * — stats vêm do template, não inventados.
+   * Materializa NPC stub a partir de nome livre, scoped à aventura. Idempotente:
+   * retorna o NPC existente (canônico ou auto da mesma sessão) se já houver
+   * match por nome. Auto-materializados criados aqui têm gameSessionId setado e
+   * são deletados em cascade quando a sessão é deletada.
    */
   async materializeStubFromName(
-    campaignId: string,
+    gameSessionId: string,
     name: string,
     descriptor?: string,
     disposition: "friendly" | "neutral" | "hostile" | "indifferent" = "neutral",
   ): Promise<NpcEntity> {
-    const existing = await this.findByNameInCampaign(campaignId, name);
-    if (existing) return existing;
+    const existing = await this.findByNameInSession(gameSessionId, name);
+    if (existing) {
+      // garante state inicial pra esse NPC nessa sessão
+      await this.stateService.getOrCreate(gameSessionId, existing.id, {
+        disposition,
+      });
+      return existing;
+    }
+
+    const session = await this.sessionRepo.findOne({
+      where: { id: gameSessionId },
+      select: { id: true, campaignId: true },
+    });
+    if (!session?.campaignId) {
+      throw new BadRequestException(
+        "Não é possível materializar NPC: sessão sem campaignId.",
+      );
+    }
 
     const archetypeSlug = pickArchetypeFromDescriptor(descriptor || name);
-    return this.create(campaignId, {
+    let monsterId: string | undefined;
+    if (archetypeSlug) {
+      const template = await this.resolveArchetype(archetypeSlug);
+      monsterId = template.monsterId;
+    }
+
+    const slug = this.generateSlug(name);
+    const npc = this.npcRepo.create({
+      campaignId: session.campaignId,
+      gameSessionId,
+      slug,
       name: name.trim(),
       description: descriptor ?? `${name} mencionado pelo narrador.`,
-      disposition,
-      archetypeSlug,
+      monsterId,
       provenance: "auto-materialized",
+      personalityBig5: {},
+      knowledgeScope: [],
+      tags: [],
     });
+    const saved = await this.npcRepo.save(npc);
+
+    await this.stateService.getOrCreate(gameSessionId, saved.id, {
+      disposition,
+    });
+
+    return saved;
   }
 
   async remove(npcId: string): Promise<void> {
     await this.npcRepo.delete(npcId);
   }
 
-  async moveNpc(npcId: string, locationId: string | null): Promise<NpcEntity> {
-    const npc = await this.getById(npcId);
-    npc.currentLocationId = locationId ?? undefined;
-    return this.npcRepo.save(npc);
+  /**
+   * Move NPC pra location dentro da aventura. Atualiza session_npc_state,
+   * não a tabela canônica.
+   */
+  async moveNpc(
+    gameSessionId: string,
+    npcId: string,
+    locationId: string | null,
+  ): Promise<SessionNpcStateEntity> {
+    return this.stateService.upsert(gameSessionId, npcId, {
+      currentLocationId: locationId,
+    });
   }
 
-  async getNpcsAtLocation(locationId: string): Promise<NpcEntity[]> {
+  async getNpcsAtLocation(
+    gameSessionId: string,
+    locationId: string,
+  ): Promise<NpcEntity[]> {
+    const states = await this.stateService.listByLocation(
+      gameSessionId,
+      locationId,
+    );
+    if (states.length === 0) return [];
     return this.npcRepo.find({
-      where: { currentLocationId: locationId },
+      where: { id: In(states.map((s) => s.npcId)) },
       order: { name: "ASC" },
     });
   }
@@ -257,6 +375,17 @@ export class NpcService {
 
   async removeRelationship(relationshipId: string): Promise<void> {
     await this.relationRepo.delete(relationshipId);
+  }
+
+  private mergeState(
+    npc: NpcEntity,
+    state: SessionNpcStateEntity | undefined,
+  ): NpcWithSessionState {
+    return Object.assign({}, npc, {
+      status: state?.status ?? "alive",
+      disposition: state?.disposition ?? "neutral",
+      currentLocationId: state?.currentLocationId,
+    }) as NpcWithSessionState;
   }
 
   private generateSlug(name: string): string {

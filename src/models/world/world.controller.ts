@@ -16,7 +16,6 @@ import { CampaignService } from "./services/campaign.service";
 import { LocationService } from "./services/location.service";
 import { NpcService } from "./services/npc.service";
 import { FactionService } from "./services/faction.service";
-import { QuestService } from "./services/quest.service";
 import {
   StoryArcService,
   type CreateStoryArcDto,
@@ -50,7 +49,6 @@ import type {
 import type { CreateNpcDto } from "./services/npc.service";
 import { isDmOmniscient } from "./services/npc-projection";
 import type { CreateFactionDto } from "./services/faction.service";
-import type { CreateQuestDto, UpdateQuestDto } from "./services/quest.service";
 // Spec 027 (M2, AC2.10 / bug D3) — resolve slug-ou-UUID em `:id`.
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 
@@ -97,7 +95,6 @@ export class WorldController {
     private readonly locationService: LocationService,
     private readonly npcService: NpcService,
     private readonly factionService: FactionService,
-    private readonly questService: QuestService,
     // Spec 019 — Living World & Ambiance
     private readonly ambianceService: AmbianceService,
     private readonly weatherService: WeatherService,
@@ -503,7 +500,7 @@ export class WorldController {
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     // Spec 020 — redaction filter default-on. dm-omniscient bypass via header.
-    return this.npcService.listByCampaignProjected(id, {
+    return this.npcService.listCanonicalProjected(id, {
       dmOmniscient: isDmOmniscient(headers),
     });
   }
@@ -543,17 +540,6 @@ export class WorldController {
     return this.npcService.remove(npcId);
   }
 
-  @Patch(":id/npcs/:npcId/move")
-  async moveNpc(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("npcId") npcId: string,
-    @Body("locationId") locationId: string | null,
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.npcService.moveNpc(npcId, locationId);
-  }
-
   // ==================== FACTIONS ====================
 
   @Post(":id/factions")
@@ -583,96 +569,5 @@ export class WorldController {
     return this.factionService.update(facId, dto);
   }
 
-  // ==================== QUESTS ====================
-
-  @Post(":id/quests")
-  async createQuest(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Body() dto: CreateQuestDto,
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.questService.create(id, dto);
-  }
-
-  @Get(":id/quests")
-  async listQuests(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Query("status") status?: string,
-  ) {
-    await this.campaignService.ensureMembership(id, getUserId(req));
-    return this.questService.listByCampaign(id, status);
-  }
-
-  @Get(":id/quests/available")
-  async getAvailableQuests(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
-    await this.campaignService.ensureMembership(id, getUserId(req));
-    return this.questService.getAvailableQuests(id);
-  }
-
-  @Patch(":id/quests/:qId")
-  async updateQuest(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("qId") qId: string,
-    @Body() dto: UpdateQuestDto,
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.questService.update(qId, dto);
-  }
-
-  @Patch(":id/quests/:qId/objectives/:oId")
-  async updateObjectiveStatus(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("oId") oId: string,
-    @Body("status") status: string,
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.questService.updateObjectiveStatus(oId, status as any);
-  }
-
-  /**
-   * Spec NNN — Director chama via service-key pra revelar quest após cena.
-   * Idempotente: 2ª chamada após reveal retorna alreadyRevealed=true.
-   * Dispara EventBus quest_revealed → frontend mostra modal.
-   */
-  @Post(":id/quests/:slug/reveal")
-  async revealQuest(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("slug") slug: string,
-    @Body() body: { evidence?: string },
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.questService.revealQuest(id, slug, body.evidence ?? null);
-  }
-
-  /**
-   * Spec NNN — Director chama pra avançar objetivo após inferir da cena.
-   * Auto-completa quest se todos required objectives done. Dispara
-   * EventBus quest_advanced (+ quest_completed se cascade fechou).
-   */
-  @Post(":id/quests/:slug/advance-objective")
-  async advanceObjective(
-    @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) id: string,
-    @Param("slug") slug: string,
-    @Body()
-    body: {
-      objectiveIdx: number;
-      newStatus: "completed" | "failed";
-      evidence?: string;
-    },
-  ) {
-    await this.campaignService.ensureDmOwnership(id, getUserId(req));
-    return this.questService.advanceObjective(
-      id,
-      slug,
-      body.objectiveIdx,
-      body.newStatus,
-      body.evidence ?? null,
-    );
-  }
+  // Quests migraram pra SessionScopedWorldController (POST/GET/PATCH /sessions/:sessionId/quests).
 }

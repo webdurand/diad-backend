@@ -32,12 +32,6 @@ export class StoryArcEntity {
   @Column({ name: "sort_order", type: "int", default: 0 })
   sortOrder: number;
 
-  @Column({ name: "current_phase", type: "varchar", default: "hook" })
-  currentPhase: "hook" | "development" | "climax" | "resolution";
-
-  @Column({ name: "phase_notes", type: "jsonb", default: {} })
-  phaseNotes: Record<string, string>;
-
   @Column({ name: "is_active", type: "boolean", default: true })
   isActive: boolean;
 

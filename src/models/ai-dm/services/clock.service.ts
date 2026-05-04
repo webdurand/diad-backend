@@ -82,17 +82,11 @@ export class ClockService {
     return clock;
   }
 
-  /**
-   * Avanço atômico com clamp em [0..segments].
-   * Retorna o clock atualizado + `filled === segments` dispara on_full_action
-   * via EventLogService (se houver sessionId; senão registra só o update).
-   */
   async advance(
     clockId: string,
     dto: AdvanceClockDto,
   ): Promise<{ clock: ClockEntity; triggered: boolean }> {
     const amount = dto.amount ?? 1;
-    // Captura filled ANTES do update pra detectar apenas a transição <segments → =segments.
     const before = await this.getById(clockId);
     const wasFull = before.filled >= before.segments;
 
@@ -129,8 +123,6 @@ export class ClockService {
       expiresAt: row.expires_at ?? undefined,
     };
 
-    // Triggered APENAS na transição: antes <segments, agora ==segments.
-    // Isso evita re-emitir o on_full_action em advances após já estar cheio.
     const isNowFull = clock.filled >= clock.segments;
     const triggered = isNowFull && !wasFull;
     if (triggered) {
@@ -160,8 +152,6 @@ export class ClockService {
     clock: ClockEntity,
     advance: AdvanceClockDto,
   ): Promise<void> {
-    // Precisa de sessionId pra logar — escolhe o fornecido, ou a session
-    // ativa mais recente da campanha (se existir), ou skippa o log.
     let sessionId = advance.sessionId;
     if (!sessionId) {
       const latest = await this.sessionRepo.findOne({

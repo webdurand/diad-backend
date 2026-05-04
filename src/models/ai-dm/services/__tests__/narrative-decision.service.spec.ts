@@ -31,11 +31,11 @@ describe("NarrativeDecisionService.create — D2 name→UUID resolution", () => 
     const eventLog = { logEvent: jest.fn().mockResolvedValue(undefined) };
     const STUB_ID = "stub-npc-id";
     const npcService = {
-      findByNameInCampaign: jest.fn(
-        async (_cId: string, name: string) =>
+      findByNameInSession: jest.fn(
+        async (_sId: string, name: string) =>
           opts.npcByName?.[name.toLowerCase()] ?? null,
       ),
-      materializeStubFromName: jest.fn(async (_cId: string, name: string) => ({
+      materializeStubFromName: jest.fn(async (_sId: string, name: string) => ({
         id: STUB_ID,
         name,
       })),
@@ -46,9 +46,16 @@ describe("NarrativeDecisionService.create — D2 name→UUID resolution", () => 
           opts.locationByName?.[name.toLowerCase()] ?? null,
       ),
     };
+    const sessionRepo = {
+      findOne: jest.fn(async () => ({
+        id: "session-id",
+        campaignId: CAMPAIGN_ID,
+      })),
+    } as never;
 
     const svc = new NarrativeDecisionService(
       repo,
+      sessionRepo,
       eventLog as never,
       npcService as never,
       locationService as never,
@@ -85,7 +92,7 @@ describe("NarrativeDecisionService.create — D2 name→UUID resolution", () => 
       affectedEntityType: "npc",
       affectedEntityId: "eda",
     });
-    expect(npcService.findByNameInCampaign).toHaveBeenCalledWith(
+    expect(npcService.findByNameInSession).toHaveBeenCalledWith(
       CAMPAIGN_ID,
       "eda",
     );

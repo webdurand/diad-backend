@@ -8,6 +8,7 @@ import {
   SessionEventEntity,
 } from "src/entities";
 import { NpcEntity } from "src/entities/npc.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { PendingGuardDispatchEntity } from "src/entities/pending-guard-dispatch.entity";
 import { EventBusService } from "./event-bus.service";
 import { AudienceMapService } from "./audience-map.service";
@@ -42,6 +43,7 @@ import { GuardArrivalListener } from "./listeners/guard-arrival.listener";
       EventSubscriberEntity,
       EventListenerProcessedEntity,
       NpcEntity,
+      SessionNpcStateEntity,
       PendingGuardDispatchEntity,
     ]),
   ],

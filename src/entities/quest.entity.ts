@@ -10,25 +10,25 @@ import {
   Unique,
   UpdateDateColumn,
 } from "typeorm";
-import { CampaignEntity } from "./campaign.entity";
+import { GameSessionEntity } from "./game-session.entity";
 import { StoryArcEntity } from "./story-arc.entity";
 import { NpcEntity } from "./npc.entity";
 import { LocationEntity } from "./location.entity";
 import { QuestObjectiveEntity } from "./quest-objective.entity";
 
 @Entity("quests")
-@Unique(["campaignId", "slug"])
+@Unique(["gameSessionId", "slug"])
 export class QuestEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ name: "campaign_id", type: "uuid" })
-  campaignId: string;
+  @Column({ name: "game_session_id", type: "uuid" })
+  gameSessionId: string;
 
-  @ManyToOne(() => CampaignEntity, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "campaign_id" })
-  campaign: CampaignEntity;
+  @ManyToOne(() => GameSessionEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "game_session_id" })
+  gameSession: GameSessionEntity;
 
   @Column({ name: "story_arc_id", type: "uuid", nullable: true })
   storyArcId?: string;

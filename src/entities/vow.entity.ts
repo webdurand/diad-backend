@@ -7,7 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from "typeorm";
-import { CampaignEntity } from "./campaign.entity";
+import { GameSessionEntity } from "./game-session.entity";
 
 export type VowRank =
   | "troublesome"
@@ -41,12 +41,12 @@ export class VowEntity {
   id: string;
 
   @Index()
-  @Column({ name: "campaign_id", type: "uuid" })
-  campaignId: string;
+  @Column({ name: "game_session_id", type: "uuid" })
+  gameSessionId: string;
 
-  @ManyToOne(() => CampaignEntity, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "campaign_id" })
-  campaign: CampaignEntity;
+  @ManyToOne(() => GameSessionEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "game_session_id" })
+  gameSession: GameSessionEntity;
 
   @Column({ type: "text" })
   description: string;

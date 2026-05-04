@@ -42,15 +42,18 @@ export class VowService {
     private readonly vowRepo: Repository<VowEntity>,
   ) {}
 
-  async create(campaignId: string, dto: CreateVowDto): Promise<VowEntity> {
+  async create(
+    gameSessionId: string,
+    dto: CreateVowDto,
+  ): Promise<VowEntity> {
     if (dto.isMainVow) {
       const existing = await this.vowRepo.findOne({
-        where: { campaignId, isMainVow: true, status: "open" },
+        where: { gameSessionId, isMainVow: true, status: "open" },
       });
       if (existing) {
         throw new ConflictException({
           ok: false,
-          error: "Esta campanha já possui uma Vow principal aberta.",
+          error: "Esta aventura já possui uma Vow principal aberta.",
           code: "MAIN_VOW_ALREADY_EXISTS",
           existingVowId: existing.id,
         });
@@ -65,7 +68,7 @@ export class VowService {
       });
     }
     const vow = this.vowRepo.create({
-      campaignId,
+      gameSessionId,
       description: dto.description,
       rank: dto.rank,
       progress,
@@ -76,9 +79,9 @@ export class VowService {
     return this.vowRepo.save(vow);
   }
 
-  async listByCampaign(campaignId: string): Promise<VowEntity[]> {
+  async listBySession(gameSessionId: string): Promise<VowEntity[]> {
     return this.vowRepo.find({
-      where: { campaignId },
+      where: { gameSessionId },
       order: { isMainVow: "DESC", createdAt: "ASC" },
     });
   }
@@ -116,19 +119,6 @@ export class VowService {
     return this.vowRepo.save(vow);
   }
 
-  /**
-   * Ironsworn close-roll (momentum IGNORADO):
-   *   target = floor(progress / 2)  ∈ [0..5]
-   *   rola 2d10 (challenge dice c1, c2)
-   *   progress-boxes-filled-comparison é contra boxes preenchidos (target*2),
-   *   mas no Ironsworn a comparação canônica é:
-   *       target >= c1 && target >= c2 → strong_hit
-   *       target >= c1 || target >= c2 → weak_hit
-   *       target < c1 && target < c2   → miss
-   *
-   * Efeito: vow fica `fulfilled` apenas em strong_hit ou weak_hit.
-   * miss mantém status=open (vow muda ou fica harder — decisão narrativa).
-   */
   async fulfill(vowId: string): Promise<FulfillVowResponse> {
     const vow = await this.getById(vowId);
     if (vow.status !== "open") {

@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   ClockEntity,
@@ -13,6 +13,7 @@ import {
 import { AuthModule } from "../auth/auth.module";
 import { WorldModule } from "../world/world.module";
 import { SessionModule } from "../session/session.module";
+import { GameEngineModule } from "../game-engine/game-engine.module";
 import { AiDmController } from "./ai-dm.controller";
 import { ClockService } from "./services/clock.service";
 import { VowService } from "./services/vow.service";
@@ -36,6 +37,7 @@ import { AiUsageService } from "./services/ai-usage.service";
     AuthModule,
     WorldModule,
     SessionModule,
+    forwardRef(() => GameEngineModule),
   ],
   controllers: [AiDmController],
   providers: [

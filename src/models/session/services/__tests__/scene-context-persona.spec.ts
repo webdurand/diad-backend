@@ -9,6 +9,8 @@ import {
   NpcEntity,
   NpcRelationshipEntity,
   QuestEntity,
+  SessionNpcStateEntity,
+  SessionStoryArcStateEntity,
 } from "src/entities";
 import { SceneContextService } from "../scene-context.service";
 import { SceneContextCacheService } from "../scene-context-cache.service";
@@ -41,6 +43,12 @@ function buildService(opts: {
   const npcRepo = {} as unknown as Repository<NpcEntity>;
   const relRepo = {} as unknown as Repository<NpcRelationshipEntity>;
   const questRepo = {} as unknown as Repository<QuestEntity>;
+  const npcStateRepo = {
+    find: jest.fn().mockResolvedValue([]),
+  } as unknown as Repository<SessionNpcStateEntity>;
+  const arcStateRepo = {
+    findOne: jest.fn().mockResolvedValue(null),
+  } as unknown as Repository<SessionStoryArcStateEntity>;
 
   const eventLog = {
     getRecentEvents: jest.fn().mockResolvedValue([]),
@@ -85,6 +93,8 @@ function buildService(opts: {
     npcRepo,
     relRepo,
     questRepo,
+    npcStateRepo,
+    arcStateRepo,
     eventLog,
     chronicle,
     persona,

@@ -7,7 +7,6 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from "typeorm";
-import { CampaignEntity } from "./campaign.entity";
 import { GameSessionEntity } from "./game-session.entity";
 import { SceneEntity } from "./scene.entity";
 
@@ -45,25 +44,18 @@ export interface NarrativeDecisionProvenance {
 }
 
 @Entity("narrative_decisions")
-@Index(["campaignId", "createdAt"])
+@Index(["sessionId", "createdAt"])
 export class NarrativeDecisionEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
-  @Column({ name: "campaign_id", type: "uuid" })
-  campaignId: string;
+  @Column({ name: "session_id", type: "uuid" })
+  sessionId: string;
 
-  @ManyToOne(() => CampaignEntity, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "campaign_id" })
-  campaign: CampaignEntity;
-
-  @Column({ name: "session_id", type: "uuid", nullable: true })
-  sessionId?: string;
-
-  @ManyToOne(() => GameSessionEntity, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => GameSessionEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "session_id" })
-  session?: GameSessionEntity;
+  session: GameSessionEntity;
 
   @Column({ name: "scene_id", type: "uuid", nullable: true })
   sceneId?: string;

@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Param,
-  Patch,
   Post,
   Query,
   Req,
@@ -12,9 +11,9 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CampaignService } from "../world/services/campaign.service";
-// Spec 027 (M2, AC2.10 / bug D3) — slug→UUID resolution em `/campaigns/:id/*`.
 import { CampaignIdPipe } from "../world/pipes/campaign-id.pipe";
 import { SceneService } from "../session/services/scene.service";
+import { SessionService } from "../game-engine/services/session.service";
 import type { ArcBeat } from "src/entities/campaign.entity";
 import { ClockService } from "./services/clock.service";
 import type { AdvanceClockDto, CreateClockDto } from "./services/clock.service";
@@ -44,6 +43,7 @@ export class AiDmController {
   constructor(
     private readonly campaignService: CampaignService,
     private readonly sceneService: SceneService,
+    private readonly sessionService: SessionService,
     private readonly clockService: ClockService,
     private readonly vowService: VowService,
     private readonly decisionService: NarrativeDecisionService,
@@ -82,10 +82,12 @@ export class AiDmController {
   }
 
   @Get("campaigns/:id/clocks")
-  async listClocks(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) campaignId: string) {
+  async listClocks(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+  ) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));
     const clocks = await this.clockService.listByCampaign(campaignId);
-    // Hidden clocks ficam visíveis ao DM sempre, e ao player só se visibleToPlayer=true.
     const campaign = await this.campaignService.getById(campaignId);
     const isDm = campaign.dmUserId === getUserId(req);
     return isDm ? clocks : clocks.filter((c) => c.visibleToPlayer);
@@ -105,69 +107,84 @@ export class AiDmController {
     return this.clockService.advance(clockId, dto);
   }
 
-  // ============= VOWS =============
+  // ============= VOWS (session-scoped) =============
 
-  @Post("campaigns/:id/vows")
+  @Post("sessions/:sessionId/vows")
   async createVow(
     @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("sessionId") sessionId: string,
     @Body() dto: CreateVowDto,
   ) {
-    await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
-    return this.vowService.create(campaignId, dto);
+    const session = await this.sessionService.ensureAccess(
+      sessionId,
+      getUserId(req),
+    );
+    if (session.campaignId) {
+      await this.campaignService.ensureDmOwnership(
+        session.campaignId,
+        getUserId(req),
+      );
+    }
+    return this.vowService.create(sessionId, dto);
   }
 
-  @Get("campaigns/:id/vows")
-  async listVows(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) campaignId: string) {
-    await this.campaignService.ensureMembership(campaignId, getUserId(req));
-    return this.vowService.listByCampaign(campaignId);
+  @Get("sessions/:sessionId/vows")
+  async listVows(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.vowService.listBySession(sessionId);
   }
 
   @Post("vows/:vowId/fulfill")
   async fulfillVow(@Req() req: AuthRequest, @Param("vowId") vowId: string) {
     const vow = await this.vowService.getById(vowId);
-    await this.campaignService.ensureDmOwnership(
-      vow.campaignId,
-      getUserId(req),
-    );
+    const session = await this.sessionService.getById(vow.gameSessionId);
+    if (session.campaignId) {
+      await this.campaignService.ensureDmOwnership(
+        session.campaignId,
+        getUserId(req),
+      );
+    }
     return this.vowService.fulfill(vowId);
   }
 
-  // ============= NARRATIVE DECISIONS =============
+  // ============= NARRATIVE DECISIONS (session-scoped) =============
 
-  @Post("campaigns/:id/narrative-decisions")
+  @Post("sessions/:sessionId/narrative-decisions")
   async createDecision(
     @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("sessionId") sessionId: string,
     @Body() dto: CreateNarrativeDecisionDto,
   ) {
-    await this.campaignService.ensureMembership(campaignId, getUserId(req));
-    return this.decisionService.create(campaignId, dto);
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.decisionService.create(sessionId, dto);
   }
 
-  @Get("campaigns/:id/narrative-decisions")
+  @Get("sessions/:sessionId/narrative-decisions")
   async listDecisions(
     @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("sessionId") sessionId: string,
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
   ) {
-    await this.campaignService.ensureMembership(campaignId, getUserId(req));
-    return this.decisionService.listByCampaign(campaignId, {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.decisionService.listBySession(sessionId, {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
   }
 
-  @Get("campaigns/:id/narrative-decisions/top")
+  @Get("sessions/:sessionId/narrative-decisions/top")
   async topDecisions(
     @Req() req: AuthRequest,
-    @Param("id", CampaignIdPipe) campaignId: string,
+    @Param("sessionId") sessionId: string,
     @Query("limit") limit?: string,
   ) {
-    await this.campaignService.ensureMembership(campaignId, getUserId(req));
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
     return this.decisionService.top(
-      campaignId,
+      sessionId,
       limit ? parseInt(limit, 10) : 5,
     );
   }
@@ -191,8 +208,6 @@ export class AiDmController {
   }
 
   // ============= VOICE PROFILES =============
-  // path `/voice-profiles` (não /library/voice-profiles) pra evitar conflito
-  // com LibraryController genérico que intercepta /library/:entity.
 
   @Get("voice-profiles")
   async listVoices() {
@@ -205,8 +220,6 @@ export class AiDmController {
   }
 
   // ============= AI USAGE / COST TRACKING =============
-  // Ingest chamado por diad-agents com X-Service-Key (rotas internas tratadas
-  // em service-to-service; aqui versão DM-authenticated pra telemetria manual).
 
   @Post("campaigns/:id/ai-usage")
   async ingestAiUsage(
@@ -217,5 +230,4 @@ export class AiDmController {
     await this.campaignService.ensureDmOwnership(campaignId, getUserId(req));
     return this.aiUsageService.log({ ...dto, campaignId });
   }
-
 }

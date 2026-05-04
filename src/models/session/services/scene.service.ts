@@ -75,7 +75,7 @@ export class SceneService {
     let arcBeat: ArcBeat | undefined;
     if (campaign) {
       await this.campaignService.incrementCount(campaign.id, "scenes");
-      arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber);
+      arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber, sessionId);
     }
 
     const scene = this.sceneRepo.create({
@@ -169,6 +169,7 @@ export class SceneService {
   async computeAndAdvanceArcBeat(
     campaignId: string,
     sceneNumber: number,
+    sessionId?: string,
   ): Promise<ArcBeat> {
     const campaign = await this.campaignRepo.findOne({
       where: { id: campaignId },
@@ -192,7 +193,7 @@ export class SceneService {
     } else if (campaign.questionAnswered) {
       next = "RETURN";
       reason = "central_question_answered";
-    } else if (await this.mainVowFulfilled(campaignId)) {
+    } else if (sessionId && (await this.mainVowFulfilled(sessionId))) {
       next = "RETURN";
       reason = "main_vow_fulfilled";
     } else {
@@ -303,9 +304,9 @@ export class SceneService {
     return session;
   }
 
-  private async mainVowFulfilled(campaignId: string): Promise<boolean> {
+  private async mainVowFulfilled(sessionId: string): Promise<boolean> {
     const vow = await this.vowRepo.findOne({
-      where: { campaignId, isMainVow: true, status: "fulfilled" },
+      where: { gameSessionId: sessionId, isMainVow: true, status: "fulfilled" },
     });
     return !!vow;
   }

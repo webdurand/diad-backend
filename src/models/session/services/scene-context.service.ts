@@ -10,6 +10,9 @@ import { StoryArcEntity } from "src/entities/story-arc.entity";
 import { NpcEntity } from "src/entities/npc.entity";
 import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
 import { QuestEntity } from "src/entities/quest.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
+import { SessionStoryArcStateEntity } from "src/entities/session-story-arc-state.entity";
+import { In } from "typeorm";
 import { EventLogService } from "./event-log.service";
 import { ChronicleService } from "./chronicle.service";
 import { SceneContextCacheService } from "./scene-context-cache.service";
@@ -108,6 +111,10 @@ export class SceneContextService {
     private readonly relRepo: Repository<NpcRelationshipEntity>,
     @InjectRepository(QuestEntity)
     private readonly questRepo: Repository<QuestEntity>,
+    @InjectRepository(SessionNpcStateEntity)
+    private readonly npcStateRepo: Repository<SessionNpcStateEntity>,
+    @InjectRepository(SessionStoryArcStateEntity)
+    private readonly arcStateRepo: Repository<SessionStoryArcStateEntity>,
     private readonly eventLogService: EventLogService,
     private readonly chronicleService: ChronicleService,
     private readonly pcPersonaService: PcPersonaService,
@@ -145,17 +152,27 @@ export class SceneContextService {
       relations: ["npc"],
     });
 
+    const presentNpcIds = sceneNpcs
+      .filter((sn) => sn.npc)
+      .map((sn) => sn.npc.id);
+    const npcStates =
+      presentNpcIds.length > 0
+        ? await this.npcStateRepo.find({
+            where: { gameSessionId: scene.sessionId, npcId: In(presentNpcIds) },
+          })
+        : [];
+    const dispositionByNpc = new Map(
+      npcStates.map((s) => [s.npcId, s.disposition]),
+    );
+
     const npcsPresent = sceneNpcs
       .filter((sn) => sn.npc)
       .map((sn) => ({
-        // Spec 026 Pillar 1+4 — `id` é necessário pro PreFlightOracle
-        // Camada 0 resolver target sem cair pro Haiku LLM. Sem ele, ataques
-        // a NPCs presentes na cena viravam fall-through silencioso.
         id: sn.npc.id,
         name: sn.npc.name,
         title: sn.npc.title,
         race: sn.npc.race,
-        disposition: sn.npc.disposition,
+        disposition: dispositionByNpc.get(sn.npc.id) ?? "neutral",
         personalityBig5: sn.npc.personalityBig5 as Record<string, number>,
         motivation: sn.npc.motivation,
         knowledgeScope: sn.npc.knowledgeScope,
@@ -213,17 +230,20 @@ export class SceneContextService {
       }));
     }
 
-    // Story arc
+    // Story arc — template no Campaign, progresso na ponte session_story_arc_state.
     let storyArc: SceneContext["storyArc"];
     if (campaignId) {
       const arc = await this.arcRepo.findOne({
         where: { campaignId, isActive: true, isMainArc: true },
       });
       if (arc) {
+        const arcState = await this.arcStateRepo.findOne({
+          where: { gameSessionId: scene.sessionId, storyArcId: arc.id },
+        });
         storyArc = {
           name: arc.name,
-          currentPhase: arc.currentPhase,
-          phaseNotes: arc.phaseNotes,
+          currentPhase: arcState?.currentPhase ?? "hook",
+          phaseNotes: arcState?.phaseNotes ?? {},
         };
       }
     }

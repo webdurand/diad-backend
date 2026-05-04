@@ -15,6 +15,8 @@ import {
   NpcRelationshipEntity,
   QuestEntity,
   VowEntity,
+  SessionNpcStateEntity,
+  SessionStoryArcStateEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { WorldModule } from "../world/world.module";
@@ -46,6 +48,8 @@ import { SessionResumeService } from "./services/session-resume.service";
       NpcRelationshipEntity,
       QuestEntity,
       VowEntity,
+      SessionNpcStateEntity,
+      SessionStoryArcStateEntity,
     ]),
     AuthModule,
     WorldModule,

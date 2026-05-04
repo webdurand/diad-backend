@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EventListenerProcessedEntity } from "src/entities/event-listener-processed.entity";
 import { NpcEntity } from "src/entities/npc.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { DiadLogger } from "../../observability/logger/diad-logger.service";
 import { EventListener } from "../event-bus.types";
 import { EventBusService } from "../event-bus.service";
@@ -46,6 +47,8 @@ export class WitnessPropagationListener implements EventListener {
     private readonly processedRepo: Repository<EventListenerProcessedEntity>,
     @InjectRepository(NpcEntity)
     private readonly npcRepo: Repository<NpcEntity>,
+    @InjectRepository(SessionNpcStateEntity)
+    private readonly npcStateRepo: Repository<SessionNpcStateEntity>,
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
@@ -76,14 +79,22 @@ export class WitnessPropagationListener implements EventListener {
       envelope.payload?.participantId ??
       null) as string | null;
 
-    const witnesses = await this.npcRepo.find({
+    const sessionId = envelope.scope.sessionId;
+    if (!sessionId) {
+      await this.markProcessed(envelope.eventId);
+      return;
+    }
+    // Witnesses são NPCs com state ativo nessa session na location do evento
+    // (state.status='alive', state.current_location_id=locationId).
+    const states = await this.npcStateRepo.find({
       where: {
-        campaignId: envelope.scope.campaignId,
+        gameSessionId: sessionId,
         currentLocationId: locationId,
         status: "alive",
       },
-      select: ["id", "currentLocationId"],
+      select: ["npcId"],
     });
+    const witnesses = states.map((s) => ({ id: s.npcId } as Pick<NpcEntity, "id">));
 
     const filtered = witnesses.filter((npc) => {
       if (perpetratorId && npc.id === perpetratorId) return false;

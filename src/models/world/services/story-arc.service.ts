@@ -7,8 +7,6 @@ export interface CreateStoryArcDto {
   name: string;
   description?: string;
   sortOrder?: number;
-  currentPhase?: "hook" | "development" | "climax" | "resolution";
-  phaseNotes?: Record<string, string>;
   isMainArc?: boolean;
   isActive?: boolean;
 }
@@ -31,8 +29,6 @@ export class StoryArcService {
       name: dto.name,
       description: dto.description,
       sortOrder: dto.sortOrder ?? 0,
-      currentPhase: dto.currentPhase ?? "hook",
-      phaseNotes: dto.phaseNotes ?? {},
       isMainArc: dto.isMainArc ?? false,
       isActive: dto.isActive ?? true,
     });
@@ -64,15 +60,6 @@ export class StoryArcService {
   ): Promise<StoryArcEntity> {
     const arc = await this.getById(arcId);
     Object.assign(arc, dto);
-    return this.arcRepo.save(arc);
-  }
-
-  async advancePhase(
-    arcId: string,
-    nextPhase: "hook" | "development" | "climax" | "resolution",
-  ): Promise<StoryArcEntity> {
-    const arc = await this.getById(arcId);
-    arc.currentPhase = nextPhase;
     return this.arcRepo.save(arc);
   }
 

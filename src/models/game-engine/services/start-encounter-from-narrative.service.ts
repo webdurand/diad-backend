@@ -165,12 +165,12 @@ export class StartEncounterFromNarrativeService {
     // 2.6. Último recurso: NPCs que vivem só na prosa do Narrator (não
     // materializados em scene_npcs). Extrai descritor do narrativeTrigger
     // (label da choice clicada — ex: "Atacar o homem grande") e cria stub.
-    if (resolvedIds.length === 0 && input.narrativeTrigger && input.campaignId) {
+    if (resolvedIds.length === 0 && input.narrativeTrigger && input.sessionId) {
       const descriptor = extractTargetDescriptor(input.narrativeTrigger);
       if (descriptor) {
         try {
           const stub = await this.npcService.materializeStubFromName(
-            input.campaignId,
+            input.sessionId,
             descriptor,
             input.narrativeTrigger,
             "hostile",
@@ -394,13 +394,13 @@ export class StartEncounterFromNarrativeService {
 
   /**
    * Resolve lista mista (UUID + name) para lista de UUIDs. UUIDs passam direto.
-   * Nomes resolvem via `findByNameInCampaign`; se não acharem, materializam
+   * Nomes resolvem via `findByNameInSession`; se não acharem, materializam
    * stub auto via archetype heurístico.
    */
   private async resolveOrMaterializeTargets(
     uuidTargets: string[],
     mixedTargets: string[],
-    campaignId: string | null,
+    sessionId: string | null,
   ): Promise<string[]> {
     const resolved: string[] = [...uuidTargets];
 
@@ -413,17 +413,16 @@ export class StartEncounterFromNarrativeService {
         continue;
       }
 
-      // É nome livre — precisa de campaignId pra resolver/materializar
-      if (!campaignId) {
+      if (!sessionId) {
         this.logger.warn(
-          `target name '${candidate}' sem campaignId; pulando.`,
+          `target name '${candidate}' sem sessionId; pulando.`,
         );
         continue;
       }
 
       try {
         const stub = await this.npcService.materializeStubFromName(
-          campaignId,
+          sessionId,
           candidate,
           undefined,
           "hostile",

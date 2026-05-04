@@ -1,4 +1,4 @@
-import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
@@ -8,6 +8,7 @@ import {
   NarrativeDecisionProvenance,
   NarrativeDecisionTag,
 } from "src/entities/narrative-decision.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
 import { EventLogService } from "src/models/session/services/event-log.service";
 import { NpcService } from "src/models/world/services/npc.service";
 import { LocationService } from "src/models/world/services/location.service";
@@ -26,16 +27,10 @@ const CANONICAL_TAGS: readonly NarrativeDecisionTag[] = [
   "bond_forged",
 ];
 
-/**
- * Spec 027 (M2, AC2.9 / bug D2) — UUID detector. Archivist (agno) às vezes
- * envia nome ("eda") em campo UUID; service resolve antes de persistir
- * pra evitar 500 do Postgres ("invalid input syntax for type uuid").
- */
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface CreateNarrativeDecisionDto {
-  sessionId?: string;
   sceneId?: string;
   actorParticipantId?: string;
   decisionText: string;
@@ -53,31 +48,37 @@ export class NarrativeDecisionService {
   constructor(
     @InjectRepository(NarrativeDecisionEntity)
     private readonly repo: Repository<NarrativeDecisionEntity>,
+    @InjectRepository(GameSessionEntity)
+    private readonly sessionRepo: Repository<GameSessionEntity>,
     private readonly eventLog: EventLogService,
-    // Spec 027 M2 D2 — name→UUID resolution dependencies.
     private readonly npcService: NpcService,
     private readonly locationService: LocationService,
   ) {}
 
   async create(
-    campaignId: string,
+    sessionId: string,
     dto: CreateNarrativeDecisionDto,
   ): Promise<NarrativeDecisionEntity> {
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+      select: { id: true, campaignId: true },
+    });
+    if (!session) {
+      throw new NotFoundException("GameSession não encontrada.");
+    }
+
     const tags = (dto.tags ?? []).filter((t) => CANONICAL_TAGS.includes(t));
     const impactWeight = this.clampImpact(dto.impactWeight ?? 5);
 
-    // Spec 027 (M2, AC2.9 / bug D2) — resolve `affectedEntityId` se vier
-    // como nome (Archivist envia "eda" em campo UUID, Postgres rejeita).
-    // Ausência → null; nome resolvido → UUID; nome inexistente → 422.
     const resolvedEntityId = await this.resolveAffectedEntityId(
-      campaignId,
+      sessionId,
+      session.campaignId,
       dto.affectedEntityType,
       dto.affectedEntityId,
     );
 
     const entity = this.repo.create({
-      campaignId,
-      sessionId: dto.sessionId,
+      sessionId,
       sceneId: dto.sceneId,
       actorParticipantId: dto.actorParticipantId,
       decisionText: dto.decisionText,
@@ -94,45 +95,45 @@ export class NarrativeDecisionService {
     });
     const saved = await this.repo.save(entity);
 
-    // Princípio X: toda mutação narrativa emite evento consumível pelo Narrator.
-    if (dto.sessionId) {
-      await this.eventLog.logEvent({
-        sessionId: dto.sessionId,
-        sceneId: dto.sceneId,
-        eventType: "player_decision",
-        summary: dto.decisionText.slice(0, 240),
-        details: {
-          narrativeDecisionId: saved.id,
-          tags,
-          impactWeight,
-          payoffWindow: saved.payoffWindow,
-          payoffSceneTarget: saved.payoffSceneTarget,
-          affectedEntity: dto.affectedEntityType
-            ? { type: dto.affectedEntityType, id: dto.affectedEntityId }
-            : undefined,
-        },
-        actorCharacterId: undefined,
-      });
-    }
+    await this.eventLog.logEvent({
+      sessionId,
+      sceneId: dto.sceneId,
+      eventType: "player_decision",
+      summary: dto.decisionText.slice(0, 240),
+      details: {
+        narrativeDecisionId: saved.id,
+        tags,
+        impactWeight,
+        payoffWindow: saved.payoffWindow,
+        payoffSceneTarget: saved.payoffSceneTarget,
+        affectedEntity: dto.affectedEntityType
+          ? { type: dto.affectedEntityType, id: dto.affectedEntityId }
+          : undefined,
+      },
+      actorCharacterId: undefined,
+    });
 
     return saved;
   }
 
-  async listByCampaign(
-    campaignId: string,
+  async listBySession(
+    sessionId: string,
     opts: { limit?: number; offset?: number } = {},
   ): Promise<NarrativeDecisionEntity[]> {
     return this.repo.find({
-      where: { campaignId },
+      where: { sessionId },
       order: { createdAt: "DESC" },
       skip: opts.offset ?? 0,
       take: opts.limit ?? 100,
     });
   }
 
-  async top(campaignId: string, limit = 5): Promise<NarrativeDecisionEntity[]> {
+  async top(
+    sessionId: string,
+    limit = 5,
+  ): Promise<NarrativeDecisionEntity[]> {
     return this.repo.find({
-      where: { campaignId },
+      where: { sessionId },
       order: { impactWeight: "DESC", createdAt: "DESC" },
       take: limit,
     });
@@ -155,20 +156,9 @@ export class NarrativeDecisionService {
     return Math.max(1, Math.min(10, Math.round(value)));
   }
 
-  /**
-   * Spec 027 (M2, AC2.9 / bug D2) — resolve `affectedEntityId` quando vem
-   * como nome em vez de UUID.
-   *
-   * Política:
-   *  - Ausente → undefined (decision sem affected entity é válido)
-   *  - UUID-shape → passthrough (não confirma existência aqui; trust)
-   *  - Nome + type='npc' → NpcService.findByNameInCampaign
-   *  - Nome + type='location' → LocationService.findByNameInCampaign
-   *  - Nome + outro type não suportado ainda → 422 (forçar UUID)
-   *  - Nome não resolvido → 422 NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND
-   */
   private async resolveAffectedEntityId(
-    campaignId: string,
+    sessionId: string,
+    campaignId: string | undefined,
     entityType: NarrativeDecisionAffectedEntityType | undefined,
     rawId: string | undefined,
   ): Promise<string | null> {
@@ -176,7 +166,6 @@ export class NarrativeDecisionService {
     const candidate = rawId.trim();
     if (UUID_REGEX.test(candidate)) return candidate;
 
-    // Não-UUID: precisa de entityType + resolver suportado.
     if (!entityType) {
       throw new UnprocessableEntityException({
         code: ErrorCode.NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND,
@@ -187,19 +176,24 @@ export class NarrativeDecisionService {
     }
 
     if (entityType === "npc") {
-      const npc = await this.npcService.findByNameInCampaign(
-        campaignId,
+      const npc = await this.npcService.findByNameInSession(
+        sessionId,
         candidate,
       );
       if (npc) return npc.id;
-      // Sem match canônico → materializa stub (provenance auto-materialized,
-      // archetype heurístico). Decisions seguem em vez de 422.
+      // Materializa stub na sessão atual.
       const stub = await this.npcService.materializeStubFromName(
-        campaignId,
+        sessionId,
         candidate,
       );
       return stub.id;
     } else if (entityType === "location") {
+      if (!campaignId) {
+        throw new UnprocessableEntityException({
+          code: ErrorCode.NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND,
+          message: `Não foi possível resolver "${candidate}" como ${entityType}: sessão sem campaignId.`,
+        });
+      }
       const loc = await this.locationService.findByNameInCampaign(
         campaignId,
         candidate,
@@ -207,10 +201,9 @@ export class NarrativeDecisionService {
       if (loc) return loc.id;
     }
 
-    // Tipos restantes (item/quest/faction/party): exigem UUID por enquanto.
     throw new UnprocessableEntityException({
       code: ErrorCode.NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND,
-      message: `Não foi possível resolver "${candidate}" como ${entityType} na campanha.`,
+      message: `Não foi possível resolver "${candidate}" como ${entityType} na aventura.`,
       hint: "Confirme o nome (case-insensitive exato) ou passe o UUID direto.",
     });
   }

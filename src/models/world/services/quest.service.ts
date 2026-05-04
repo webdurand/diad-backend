@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { QuestEntity } from "src/entities/quest.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 import { QuestPrerequisiteEntity } from "src/entities/quest-prerequisite.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { randomBytes } from "crypto";
@@ -27,7 +28,6 @@ export interface CreateQuestDto {
     pathGroup?: string;
     isOptional?: boolean;
   }>;
-  // Spec NNN — quest pipeline
   isMainQuest?: boolean;
   triggerNpcName?: string;
   triggerLocationName?: string;
@@ -51,13 +51,11 @@ export interface UpdateQuestDto {
   rewards?: Record<string, any>;
 }
 
-/** Resultado de revealQuest — mostra qual quest foi revelada e seus objectives. */
 export interface RevealQuestResult {
   quest: QuestEntity;
   alreadyRevealed: boolean;
 }
 
-/** Resultado de advanceObjective — pode trigger auto-completion da quest. */
 export interface AdvanceObjectiveResult {
   objective: QuestObjectiveEntity;
   questAutoCompleted: boolean;
@@ -73,21 +71,24 @@ export class QuestService {
     private readonly objectiveRepo: Repository<QuestObjectiveEntity>,
     @InjectRepository(QuestPrerequisiteEntity)
     private readonly prereqRepo: Repository<QuestPrerequisiteEntity>,
+    @InjectRepository(GameSessionEntity)
+    private readonly sessionRepo: Repository<GameSessionEntity>,
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
   ) {}
 
-  /** Best-effort SSE publish — falha não bloqueia o write principal. */
   private async publishQuestEvent(
-    eventType:
-      | "quest_revealed"
-      | "quest_advanced"
-      | "quest_completed",
-    campaignId: string,
+    eventType: "quest_revealed" | "quest_advanced" | "quest_completed",
+    gameSessionId: string,
     payload: Record<string, unknown>,
     narrativeDescriptor?: string,
   ): Promise<void> {
     try {
+      const session = await this.sessionRepo.findOne({
+        where: { id: gameSessionId },
+        select: { id: true, campaignId: true },
+      });
+      if (!session?.campaignId) return;
       const envelope = this.envelopeFactory.build({
         eventCategory: "WorldEvent",
         eventType,
@@ -95,20 +96,26 @@ export class QuestService {
           service: "diad-backend",
           module: `QuestService.${eventType}`,
         },
-        scope: { campaignId },
+        scope: {
+          campaignId: session.campaignId,
+          sessionId: gameSessionId,
+        },
         payload,
         narrativeDescriptor,
       });
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort — quest write já persistiu */
+      /* best-effort */
     }
   }
 
-  async create(campaignId: string, dto: CreateQuestDto): Promise<QuestEntity> {
+  async create(
+    gameSessionId: string,
+    dto: CreateQuestDto,
+  ): Promise<QuestEntity> {
     const slug = this.generateSlug(dto.name);
     const quest = this.questRepo.create({
-      campaignId,
+      gameSessionId,
       slug,
       name: dto.name,
       description: dto.description,
@@ -130,8 +137,6 @@ export class QuestService {
     const saved = await this.questRepo.save(quest);
 
     if (dto.objectives?.length) {
-      // Primeiro objetivo nasce active, restantes locked (sequência ordenada).
-      // Director destrava o próximo conforme advance.
       const objectives = dto.objectives.map((o, i) =>
         this.objectiveRepo.create({
           questId: saved.id,
@@ -148,29 +153,19 @@ export class QuestService {
     return this.getById(saved.id);
   }
 
-  /**
-   * Spec NNN — reveal pipeline. Transição `unknown` → `active`.
-   *
-   * Emitido pelo Director quando a cena justifica revelar a quest (main quest
-   * ao fim do primeiro turn, side quests por trigger). Persiste evidence pra
-   * audit ("Player encontrou Padre Anselmo no Cais Velho").
-   *
-   * Idempotente: chamadas repetidas após reveal retornam alreadyRevealed=true
-   * sem tocar no estado. Dispara EventBus quest_revealed na primeira chamada.
-   */
   async revealQuest(
-    campaignId: string,
+    gameSessionId: string,
     slug: string,
     evidence: string | null,
   ): Promise<RevealQuestResult> {
     const quest = await this.questRepo.findOne({
-      where: { campaignId, slug },
+      where: { gameSessionId, slug },
       relations: ["objectives"],
     });
     if (!quest) {
       throw new NotFoundException({
         ok: false,
-        error: `Quest '${slug}' nao encontrada na campanha.`,
+        error: `Quest '${slug}' nao encontrada na aventura.`,
         code: "QUEST_NOT_FOUND",
       });
     }
@@ -187,7 +182,7 @@ export class QuestService {
 
     await this.publishQuestEvent(
       "quest_revealed",
-      campaignId,
+      gameSessionId,
       {
         questId: saved.id,
         questSlug: saved.slug,
@@ -201,23 +196,15 @@ export class QuestService {
     return { quest: saved, alreadyRevealed: false };
   }
 
-  /**
-   * Spec NNN — advance pipeline. Marca um objetivo `completed`/`failed` e
-   * destrava o próximo `locked` na sequência. Se todos requeridos terminam
-   * `completed`, auto-completa a quest.
-   *
-   * `objectiveIdx` é o `sortOrder` do objetivo (0-indexed). Persiste evidence
-   * pra audit.
-   */
   async advanceObjective(
-    campaignId: string,
+    gameSessionId: string,
     slug: string,
     objectiveIdx: number,
     newStatus: "completed" | "failed",
     evidence: string | null,
   ): Promise<AdvanceObjectiveResult> {
     const quest = await this.questRepo.findOne({
-      where: { campaignId, slug },
+      where: { gameSessionId, slug },
       relations: ["objectives"],
     });
     if (!quest) {
@@ -228,9 +215,9 @@ export class QuestService {
       });
     }
 
-    const objectives = (quest.objectives ?? []).slice().sort(
-      (a, b) => a.sortOrder - b.sortOrder,
-    );
+    const objectives = (quest.objectives ?? [])
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder);
     const target = objectives.find((o) => o.sortOrder === objectiveIdx);
     if (!target) {
       throw new NotFoundException({
@@ -244,7 +231,6 @@ export class QuestService {
     if (evidence) target.advanceEvidence = evidence;
     await this.objectiveRepo.save(target);
 
-    // Destrava próximo objetivo `locked` na sequência (apenas em completed)
     if (newStatus === "completed") {
       const next = objectives.find(
         (o) => o.sortOrder > objectiveIdx && o.status === "locked",
@@ -255,14 +241,12 @@ export class QuestService {
       }
     }
 
-    // Auto-complete quest se todos requeridos done
     const refreshed = await this.objectiveRepo.find({
       where: { questId: quest.id },
     });
     const required = refreshed.filter((o) => !o.isOptional);
     const allRequiredCompleted =
-      required.length > 0 &&
-      required.every((o) => o.status === "completed");
+      required.length > 0 && required.every((o) => o.status === "completed");
     const anyRequiredFailed = required.some((o) => o.status === "failed");
 
     let questAutoCompleted = false;
@@ -274,15 +258,12 @@ export class QuestService {
       await this.cascadeUnlock(quest);
       questAutoCompleted = true;
     } else if (anyRequiredFailed && quest.status === "active") {
-      // Failure de objetivo NÃO faliu a quest — Director pode marcar fail
-      // explícito via update(). Mantemos só no advanceObjective o objetivo.
-      // (Ajuste futuro: flag isCriticalObjective.)
+      // failure de objetivo NÃO falha quest automaticamente
     }
 
-    // Eventos: advanced sempre; completed se cascade auto-fechou
     await this.publishQuestEvent(
       "quest_advanced",
-      campaignId,
+      gameSessionId,
       {
         questId: quest.id,
         questSlug: quest.slug,
@@ -297,7 +278,7 @@ export class QuestService {
     if (questAutoCompleted) {
       await this.publishQuestEvent(
         "quest_completed",
-        campaignId,
+        gameSessionId,
         {
           questId: quest.id,
           questSlug: quest.slug,
@@ -320,11 +301,11 @@ export class QuestService {
     return quest;
   }
 
-  async listByCampaign(
-    campaignId: string,
+  async listBySession(
+    gameSessionId: string,
     status?: string,
   ): Promise<QuestEntity[]> {
-    const where: any = { campaignId };
+    const where: any = { gameSessionId };
     if (status) where.status = status;
     return this.questRepo.find({
       where,
@@ -338,7 +319,6 @@ export class QuestService {
     Object.assign(quest, dto);
     const saved = await this.questRepo.save(quest);
 
-    // If quest completed, unlock dependent quests
     if (dto.status === "completed" || dto.status === "failed") {
       await this.cascadeUnlock(saved);
     }
@@ -371,9 +351,9 @@ export class QuestService {
     return this.prereqRepo.save(prereq);
   }
 
-  async getAvailableQuests(campaignId: string): Promise<QuestEntity[]> {
+  async getAvailableQuests(gameSessionId: string): Promise<QuestEntity[]> {
     const allQuests = await this.questRepo.find({
-      where: { campaignId },
+      where: { gameSessionId },
     });
 
     const prereqs = await this.prereqRepo.find();
@@ -400,13 +380,11 @@ export class QuestService {
   }
 
   private async cascadeUnlock(quest: QuestEntity): Promise<void> {
-    // Find quests that depend on this one
     const dependents = await this.prereqRepo.find({
       where: { requiredQuestId: quest.id },
     });
 
     for (const dep of dependents) {
-      // Check if ALL prereqs for the dependent quest are met
       const allPrereqs = await this.prereqRepo.find({
         where: { questId: dep.questId },
       });

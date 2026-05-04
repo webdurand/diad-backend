@@ -222,13 +222,17 @@ export class CampaignService {
   private async fetchCountsForCampaign(
     campaignId: string,
   ): Promise<SoloWorldListItem["counts"]> {
+    // NPCs canônicos = game_session_id IS NULL; quests vivem por session, então
+    // count de "quests do mundo" agrega através de game_sessions.campaign_id.
     const result = (await this.campaignRepo.query(
       `SELECT
-         (SELECT COUNT(*) FROM npcs WHERE campaign_id = $1) AS npcs,
+         (SELECT COUNT(*) FROM npcs WHERE campaign_id = $1 AND game_session_id IS NULL) AS npcs,
          (SELECT COUNT(*) FROM locations WHERE campaign_id = $1) AS locations,
          (SELECT COUNT(*) FROM factions WHERE campaign_id = $1) AS factions,
          (SELECT COUNT(*) FROM lore_entries WHERE campaign_id = $1) AS lore,
-         (SELECT COUNT(*) FROM quests WHERE campaign_id = $1) AS quests`,
+         (SELECT COUNT(*) FROM quests q
+            JOIN game_sessions s ON s.id = q.game_session_id
+            WHERE s.campaign_id = $1) AS quests`,
       [campaignId],
     )) as Array<{ npcs: string; locations: string; factions: string; lore: string; quests: string }>;
     const row = result[0] ?? { npcs: "0", locations: "0", factions: "0", lore: "0", quests: "0" };
