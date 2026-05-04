@@ -41,32 +41,6 @@ import { getAbilityModifier } from "src/shared/srd-utils";
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/**
- * Extrai descritor do alvo a partir do label da choice clicada (ex:
- * "Atacar o homem grande de primeira" → "homem grande"). Heurística:
- * remove verbo de ataque inicial, artigos e modificadores de ordem,
- * mantém núcleo nominal. Quando não consegue isolar, devolve trigger
- * inteiro pra o archetype-picker tentar matchear keywords.
- */
-const TRIGGER_VERB_RE =
-  /^\s*(atacar|ataco|ataca|atacando|lutar|luto|luta|brigar|brigo|briga|agredir|agrido|agride|investir contra|investe contra|enfrentar|enfrento|enfrenta|matar|mato|mata)\s+/i;
-const TRIGGER_ARTICLE_RE = /^\s*(o|a|os|as|um|uma|uns|umas|aquele|aquela)\s+/i;
-const TRIGGER_TAIL_RE =
-  /\s+(de\s+(primeira|primeiro|imediato|im[eé]diato|repente)|primeiro|primeira|agora|j[áa]|aqui|l[áa])\s*$/i;
-
-function extractTargetDescriptor(trigger: string): string {
-  const raw = (trigger ?? "").trim();
-  if (!raw) return "";
-
-  let stripped = raw.replace(TRIGGER_VERB_RE, "");
-  stripped = stripped.replace(TRIGGER_ARTICLE_RE, "");
-  stripped = stripped.replace(TRIGGER_TAIL_RE, "");
-  stripped = stripped.replace(/[!.?]+$/, "").trim();
-
-  if (stripped.length >= 2 && stripped.length <= 60) return stripped;
-  return raw.length <= 60 ? raw : raw.slice(0, 60);
-}
-
 export interface TokenLayoutEntry {
   /** characterId (PC) ou npcId — backend resolve pra participantId. */
   ref: string;
@@ -150,9 +124,9 @@ export class StartEncounterFromNarrativeService {
       input.campaignId ?? null,
     );
 
-    // 2.5. Fallback do botão "Iniciar combate": quando frontend envia request
-    // sem targets, primeiro tenta npcsPresent da cena (hostis primeiro;
-    // figurantes auto-materializados ficam neutral, então caem no segundo).
+    // 2.5. Fallback do botão "Iniciar combate": resolve hostis a partir da
+    // cena ativa. Hostis primeiro; figurantes neutros materializados pelo
+    // narrator entram só se não houver hostis declarados.
     if (resolvedIds.length === 0) {
       const sceneCtx = await this.sceneContextService.assembleContext(scene.id);
       const hostiles = sceneCtx.npcsPresent.filter(
@@ -162,36 +136,13 @@ export class StartEncounterFromNarrativeService {
       resolvedIds = fallback.map((n) => n.id);
     }
 
-    // 2.6. Último recurso: NPCs que vivem só na prosa do Narrator (não
-    // materializados em scene_npcs). Extrai descritor do narrativeTrigger
-    // (label da choice clicada — ex: "Atacar o homem grande") e cria stub.
-    if (resolvedIds.length === 0 && input.narrativeTrigger && input.sessionId) {
-      const descriptor = extractTargetDescriptor(input.narrativeTrigger);
-      if (descriptor) {
-        try {
-          const stub = await this.npcService.materializeStubFromName(
-            input.sessionId,
-            descriptor,
-            input.narrativeTrigger,
-            "hostile",
-          );
-          resolvedIds = [stub.id];
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.logger.warn(
-            `materialize from narrativeTrigger '${descriptor}' falhou: ${msg}`,
-          );
-        }
-      }
-    }
-
     if (resolvedIds.length === 0) {
       throw new DomainException(
         ErrorCode.ENCOUNTER_NO_TARGETS_IN_SCENE,
         "Nenhum oponente identificado na cena.",
         {
           context: { sessionId: input.sessionId, sceneId: resolvedSceneId },
-          hint: "Descreva quem você ataca via free-text antes de iniciar combate.",
+          hint: "Narrator deve materializar hostis via create_npc_from_narrative antes do combate.",
         },
       );
     }

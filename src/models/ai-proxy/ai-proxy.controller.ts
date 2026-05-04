@@ -435,6 +435,7 @@ export class AiProxyController {
       // o fim de um encounter; Narrator deve fechar o arco diegeticamente
       // usando session_events recentes (encounter_ended, xp_awarded, etc).
       systemHint?: string;
+      restEventKind?: string;
     },
     @Req() req: AuthRequest,
     @Res() res: Response,
@@ -592,6 +593,7 @@ export class AiProxyController {
           // Spec 027 (M2 follow-up) — forward do systemHint pro Narrator
           // ('post_combat' | 'post_fate_choice' = closure narrativa estruturada).
           ...(body.systemHint ? { systemHint: body.systemHint } : {}),
+          ...(body.restEventKind ? { restEventKind: body.restEventKind } : {}),
         },
         res,
         (chunk) => collector.feed(chunk),

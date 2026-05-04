@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, IsNull, Repository } from "typeorm";
 import { NpcEntity } from "src/entities/npc.entity";
@@ -6,6 +6,8 @@ import { NpcArchetypeTemplateEntity } from "src/entities/npc-archetype-template.
 import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
+import { SceneEntity } from "src/entities/scene.entity";
+import { SceneNpcEntity } from "src/entities/scene-npc.entity";
 import { randomBytes } from "crypto";
 import {
   NpcProjectionOptions,
@@ -31,6 +33,8 @@ export interface CreateNpcDto {
   dialogueStyle?: string;
   voiceNotes?: string;
   tags?: string[];
+  gameSessionId?: string;
+  initialDisposition?: "friendly" | "neutral" | "hostile" | "indifferent";
 }
 
 export interface AddRelationshipDto {
@@ -55,6 +59,7 @@ export type NpcWithSessionState = NpcEntity & {
 
 @Injectable()
 export class NpcService {
+  private readonly logger = new Logger(NpcService.name);
   private archetypeCache = new Map<string, NpcArchetypeTemplateEntity>();
 
   constructor(
@@ -68,6 +73,10 @@ export class NpcService {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     @InjectRepository(SessionNpcStateEntity)
     private readonly stateRepo: Repository<SessionNpcStateEntity>,
+    @InjectRepository(SceneEntity)
+    private readonly sceneRepo: Repository<SceneEntity>,
+    @InjectRepository(SceneNpcEntity)
+    private readonly sceneNpcRepo: Repository<SceneNpcEntity>,
     private readonly stateService: SessionNpcStateService,
   ) {}
 
@@ -87,9 +96,9 @@ export class NpcService {
   }
 
   /**
-   * Cria NPC canônico do mundo (gameSessionId NULL). Usado pelo setup
-   * de mundo via UI do dono. NPCs auto-materializados pelo Archivist
-   * usam materializeStubFromName.
+   * Cria NPC. Sem gameSessionId = canônico do mundo (setup via UI). Com
+   * gameSessionId = scoped à aventura, auto-anexado à scene ativa e com state
+   * inicializado. Caminho da narrativa (create_npc_from_narrative tool).
    */
   async create(campaignId: string, dto: CreateNpcDto): Promise<NpcEntity> {
     let monsterId = dto.monsterId;
@@ -99,9 +108,10 @@ export class NpcService {
     }
 
     const slug = this.generateSlug(dto.name);
+    const sessionScoped = !!dto.gameSessionId;
     const npc = this.npcRepo.create({
       campaignId,
-      gameSessionId: undefined,
+      gameSessionId: dto.gameSessionId,
       slug,
       name: dto.name,
       title: dto.title,
@@ -109,7 +119,7 @@ export class NpcService {
       description: dto.description,
       descriptionHidden: dto.descriptionHidden,
       monsterId,
-      provenance: dto.provenance ?? "manual",
+      provenance: dto.provenance ?? (sessionScoped ? "auto-materialized" : "manual"),
       personalityBig5: dto.personalityBig5 ?? {},
       motivation: dto.motivation,
       knowledgeScope: dto.knowledgeScope ?? [],
@@ -117,7 +127,63 @@ export class NpcService {
       voiceNotes: dto.voiceNotes,
       tags: dto.tags ?? [],
     });
-    return this.npcRepo.save(npc);
+    const saved = await this.npcRepo.save(npc);
+
+    if (sessionScoped) {
+      await this.attachToSessionContext(
+        saved,
+        dto.gameSessionId!,
+        dto.initialDisposition,
+      );
+    }
+
+    return saved;
+  }
+
+  /**
+   * NPC criado pelo narrador precisa virar tangível na cena ativa: state
+   * inicial + scene_npcs. Sem isso, o agent diz "5 homens chegam" mas o
+   * combate não acha hostis (`npcsPresent` empty) e o fallback heurístico
+   * inventa stub genérica do label do botão.
+   */
+  private async attachToSessionContext(
+    npc: NpcEntity,
+    gameSessionId: string,
+    disposition?: "friendly" | "neutral" | "hostile" | "indifferent",
+  ): Promise<void> {
+    try {
+      await this.stateService.getOrCreate(gameSessionId, npc.id, {
+        disposition: disposition ?? "neutral",
+      });
+    } catch (err) {
+      this.logger.warn(
+        `npc state init falhou npc=${npc.id} session=${gameSessionId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    try {
+      const activeScene = await this.sceneRepo.findOne({
+        where: { sessionId: gameSessionId, isActive: true },
+      });
+      if (!activeScene) return;
+      const existing = await this.sceneNpcRepo.findOne({
+        where: { sceneId: activeScene.id, npcId: npc.id },
+      });
+      if (existing) return;
+      const sceneNpc = this.sceneNpcRepo.create({
+        sceneId: activeScene.id,
+        npcId: npc.id,
+      });
+      await this.sceneNpcRepo.save(sceneNpc);
+    } catch (err) {
+      this.logger.warn(
+        `scene_npcs attach falhou npc=${npc.id} session=${gameSessionId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   async getById(npcId: string): Promise<NpcEntity> {
@@ -271,10 +337,7 @@ export class NpcService {
   ): Promise<NpcEntity> {
     const existing = await this.findByNameInSession(gameSessionId, name);
     if (existing) {
-      // garante state inicial pra esse NPC nessa sessão
-      await this.stateService.getOrCreate(gameSessionId, existing.id, {
-        disposition,
-      });
+      await this.attachToSessionContext(existing, gameSessionId, disposition);
       return existing;
     }
 
@@ -309,11 +372,7 @@ export class NpcService {
       tags: [],
     });
     const saved = await this.npcRepo.save(npc);
-
-    await this.stateService.getOrCreate(gameSessionId, saved.id, {
-      disposition,
-    });
-
+    await this.attachToSessionContext(saved, gameSessionId, disposition);
     return saved;
   }
 

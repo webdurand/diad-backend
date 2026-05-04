@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { DataSource, In, Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -12,10 +12,13 @@ import {
   CharacterSpellEntity,
   CharacterStateEntity,
   CharacterLevelUpEntity,
+  RestEventTemplateEntity,
   SpellEntity,
   SpellClassEntity,
 } from "src/entities";
+import { RestEventTriggered } from "src/entities/rest-session.entity";
 import { SpellSourceEnum, SpellStatusEnum } from "src/entities/enums";
+import { GameClockService } from "src/models/world/services/game-clock.service";
 import {
   CASTER_CLASS_TYPE,
   SPELLCASTING_ABILITY,
@@ -81,6 +84,7 @@ export interface RestResult {
   hitDiceRecovered: number;
   deathSavesReset: boolean;
   summary: string[];
+  restEvent?: { kind: RestEventTriggered } | null;
 }
 
 export interface AvailableSpellsResult {
@@ -162,9 +166,65 @@ export class SpellService {
     private readonly spellRepo: Repository<SpellEntity>,
     @InjectRepository(SpellClassEntity)
     private readonly spellClassRepo: Repository<SpellClassEntity>,
-    // Spec 027 (M3/AC3.2) — long rest dispara decay de reputação.
+    @InjectRepository(RestEventTemplateEntity)
+    private readonly restEventTplRepo: Repository<RestEventTemplateEntity>,
+    private readonly dataSource: DataSource,
     private readonly reputationDecayService: ReputationDecayService,
+    private readonly gameClockService: GameClockService,
   ) {}
+
+  private async findActiveCampaignsForCharacter(
+    characterId: string,
+  ): Promise<string[]> {
+    try {
+      const rows: Array<{ campaign_id: string }> = await this.dataSource.query(
+        `SELECT DISTINCT s.campaign_id
+           FROM "game_sessions" s
+          WHERE s.campaign_id IS NOT NULL
+            AND s.status IN ('active','paused')
+            AND s.character_ids @> jsonb_build_array($1::text)`,
+        [characterId],
+      );
+      return rows.map((r) => r.campaign_id).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  private async advanceClockAfterRest(
+    characterId: string,
+    hours: number,
+    trigger: "long_rest" | "short_rest",
+  ): Promise<void> {
+    const campaignIds = await this.findActiveCampaignsForCharacter(characterId);
+    for (const campaignId of campaignIds) {
+      try {
+        await this.gameClockService.advanceTime(campaignId, {
+          hours,
+          trigger,
+        });
+      } catch {
+        /* best-effort — clock advance falha não derruba o rest */
+      }
+    }
+  }
+
+  private async rollRestEvent(): Promise<RestEventTriggered | null> {
+    try {
+      const tpls = await this.restEventTplRepo.find();
+      if (tpls.length === 0) return null;
+      const total = tpls.reduce((s, t) => s + Math.max(0, t.weight), 0);
+      if (total <= 0) return null;
+      let r = Math.random() * total;
+      for (const t of tpls) {
+        r -= Math.max(0, t.weight);
+        if (r <= 0) return t.kind;
+      }
+      return tpls[tpls.length - 1].kind;
+    } catch {
+      return null;
+    }
+  }
 
   // ---- Helpers ----
 
@@ -1072,6 +1132,8 @@ export class SpellService {
       }
 
       await this.stateRepo.save(state);
+
+      await this.advanceClockAfterRest(characterId, 1, "short_rest");
     } else {
       // Long rest
       const maxHp = await this.computeMaxHp(
@@ -1219,10 +1281,7 @@ export class SpellService {
       }
     }
 
-    // Spec 027 (M3/AC3.2) — long rest dispara decay de reputação 1 step
-    // toward 0 em todos os NPCs do(s) campaign(s) ativo(s) do PC. Tags
-    // históricas (witnessed-murder etc) preservadas; só pontuação numérica
-    // decai. Best-effort — falha não derruba o rest.
+    let restEvent: { kind: RestEventTriggered } | null = null;
     if (dto.type === "long") {
       try {
         const decay = await this.reputationDecayService.applyOnLongRest(
@@ -1234,7 +1293,14 @@ export class SpellService {
           );
         }
       } catch {
-        /* best-effort — silencia (service já loga warn) */
+        /* best-effort */
+      }
+
+      await this.advanceClockAfterRest(characterId, 8, "long_rest");
+
+      const kind = await this.rollRestEvent();
+      if (kind) {
+        restEvent = { kind };
       }
     }
 
@@ -1246,6 +1312,7 @@ export class SpellService {
       hitDiceRecovered,
       deathSavesReset,
       summary,
+      restEvent,
     };
   }
 

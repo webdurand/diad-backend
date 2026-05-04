@@ -37,10 +37,13 @@ import {
   ReactionDefaultEntity,
   EncounterParticipantEntity,
   EncounterEntity,
+  RestEventTemplateEntity,
+  GameClockEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { CombatActionsModule } from "../combat-actions/combat-actions.module";
 import { ReputationDecayService } from "../world/services/reputation-decay.service";
+import { GameClockService } from "../world/services/game-clock.service";
 import { CharactersController } from "./characters.controller";
 import { CharactersService } from "./services/characters.service";
 import { CharacterSheetService } from "./services/character-sheet.service";
@@ -91,6 +94,8 @@ import { PcPersonaService } from "./services/pc-persona.service";
       ReactionDefaultEntity,
       EncounterParticipantEntity,
       EncounterEntity,
+      RestEventTemplateEntity,
+      GameClockEntity,
     ]),
     AuthModule,
     CombatActionsModule,
@@ -113,6 +118,7 @@ import { PcPersonaService } from "./services/pc-persona.service";
     // ciclo CharactersModule → WorldModule → AiProxyModule → SessionModule
     // → CharactersModule.
     ReputationDecayService,
+    GameClockService,
   ],
   exports: [
     CharactersService,

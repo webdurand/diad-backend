@@ -11,7 +11,12 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 export interface AdvanceTimeOptions {
   hours: number;
   /** Origem do delta — usado em narrativeDescriptor + audit. */
-  trigger?: "scene_transition" | "long_rest" | "combat_ended" | "manual_tool";
+  trigger?:
+    | "scene_transition"
+    | "long_rest"
+    | "short_rest"
+    | "combat_ended"
+    | "manual_tool";
   /** Trace propagado para o envelope (Princípio XI). */
   traceId?: string;
 }

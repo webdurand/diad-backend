@@ -27,6 +27,7 @@ import {
   GameClockEntity,
   ClockEntity,
   SceneEntity,
+  SceneNpcEntity,
   // Adventure-scope split
   GameSessionEntity,
   SessionNpcStateEntity,
@@ -85,6 +86,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       GameClockEntity,
       ClockEntity,
       SceneEntity,
+      SceneNpcEntity,
       GameSessionEntity,
       SessionNpcStateEntity,
       SessionFactionStateEntity,

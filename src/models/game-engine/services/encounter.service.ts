@@ -23,6 +23,7 @@ import { DiceService } from "./dice.service";
 import { EventService } from "./event.service";
 import { SessionService } from "./session.service";
 import { CampaignService } from "src/models/world/services/campaign.service";
+import { GameClockService } from "src/models/world/services/game-clock.service";
 import { CapstonesService } from "./capstones.service";
 import { XpAwardService } from "./xp-award.service";
 import { getAbilityModifier } from "src/shared/srd-utils";
@@ -105,6 +106,7 @@ export class EncounterService {
     @Inject(forwardRef(() => CapstonesService))
     private readonly capstones: CapstonesService,
     private readonly xpAwardService: XpAwardService,
+    private readonly gameClockService: GameClockService,
   ) {}
 
   async create(
@@ -1359,6 +1361,23 @@ export class EncounterService {
       },
     ];
     await this.eventService.emit(encounter.sessionId, encounterId, events);
+
+    if (campaignId) {
+      const rounds = Math.max(1, encounter.currentRound ?? 1);
+      const hours = Math.max(0.1, (rounds * 6) / 3600);
+      try {
+        await this.gameClockService.advanceTime(campaignId, {
+          hours,
+          trigger: "combat_ended",
+        });
+      } catch (err: unknown) {
+        this.logger.warn(
+          `gameClock.advance failed (encounter=${encounterId}): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
 
     return {
       ok: true,

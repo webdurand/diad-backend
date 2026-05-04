@@ -28,6 +28,7 @@ describe("SpellService", () => {
       charLevelUp: createMockRepository(),
       spell: createMockRepository(),
       spellClass: createMockRepository(),
+      restEventTpl: createMockRepository(),
     };
 
     service = new SpellService(
@@ -39,8 +40,10 @@ describe("SpellService", () => {
       repos.charLevelUp as any,
       repos.spell as any,
       repos.spellClass as any,
-      // Spec 027 (M3/AC3.2) — stub do ReputationDecayService.
+      repos.restEventTpl as any,
+      { query: async () => [] } as any,
       { applyOnLongRest: async () => ({ campaignsAffected: 0, npcsDecayed: 0 }) } as any,
+      { advanceTime: async () => undefined } as any,
     );
   });
 
