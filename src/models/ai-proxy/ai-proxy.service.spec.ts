@@ -48,6 +48,7 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
   function makeFakeRes() {
     const writes: Buffer[] = [];
     let ended = false;
+    const closeListeners: Array<() => void> = [];
     const res: any = {
       write: jest.fn((chunk: any) => {
         writes.push(
@@ -59,12 +60,19 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
         ended = true;
       }),
       flush: jest.fn(),
+      // C1 — pipeStream registra `res.on('close', ...)` pra detectar
+      // client disconnect mid-stream. Mock simples só armazena.
+      on: jest.fn((event: string, cb: () => void) => {
+        if (event === "close") closeListeners.push(cb);
+        return res;
+      }),
     };
     return {
       res,
       writes,
       isEnded: () => ended,
       joinedOutput: () => Buffer.concat(writes).toString("utf-8"),
+      simulateClose: () => closeListeners.forEach((cb) => cb()),
     };
   }
 

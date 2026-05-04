@@ -79,6 +79,34 @@ export class AiProxyService {
       const payload = JSON.stringify(body);
       const traceparent = this.buildOutboundTraceparent();
 
+      // C1 — telemetria de stream pra debug do bug "mensagem cortando no meio".
+      // Quando o SSE cai entre chunks, queremos saber: quantos bytes já saíram,
+      // quem cortou primeiro (client/upstream/network), e timing (firstChunk,
+      // lastChunk). Tudo isso vira log estruturado nos terminadores abaixo.
+      const startedAt = Date.now();
+      let chunkCount = 0;
+      let bytesWritten = 0;
+      let firstChunkAt: number | null = null;
+      let lastChunkAt: number | null = null;
+      let clientClosed = false;
+
+      const onClientClose = () => {
+        if (clientClosed) return;
+        clientClosed = true;
+        this.logger.warn("http.client.stream.client_closed_mid_stream", {
+          "upstream.service": "diad-agents",
+          "url.path": url.pathname,
+          "stream.chunk_count": chunkCount,
+          "stream.bytes_written": bytesWritten,
+          "stream.first_chunk_ms":
+            firstChunkAt !== null ? firstChunkAt - startedAt : null,
+          "stream.last_chunk_ms":
+            lastChunkAt !== null ? lastChunkAt - startedAt : null,
+          "stream.duration_ms": Date.now() - startedAt,
+        });
+      };
+      res.on("close", onClientClose);
+
       this.logger.debug("http.client.stream.start", {
         "http.request.method": "POST",
         "url.path": url.toString(),
@@ -119,6 +147,12 @@ export class AiProxyService {
 
           // Pipe chunks directly — no buffering
           proxyRes.on("data", (chunk: Buffer) => {
+            chunkCount += 1;
+            bytesWritten += chunk.length;
+            const now = Date.now();
+            if (firstChunkAt === null) firstChunkAt = now;
+            lastChunkAt = now;
+
             if (onChunk) {
               try {
                 onChunk(chunk);
@@ -126,15 +160,38 @@ export class AiProxyService {
                 // Side-channel collectors nunca podem derrubar o passthrough.
               }
             }
-            res.write(chunk);
-            if (typeof (res as any).flush === "function") {
-              (res as any).flush();
+            // Se o client já fechou, parar de tentar escrever (write no socket
+            // morto vira erro/eat-CPU). Drena upstream pra não vazar memória,
+            // mas não emite ao cliente.
+            if (!clientClosed) {
+              try {
+                res.write(chunk);
+                if (typeof (res as any).flush === "function") {
+                  (res as any).flush();
+                }
+              } catch (err: any) {
+                this.logger.warn("http.client.stream.write_failed", {
+                  "upstream.service": "diad-agents",
+                  "url.path": url.pathname,
+                  "stream.chunk_count": chunkCount,
+                  "stream.bytes_written": bytesWritten,
+                  "error.message": err?.message,
+                });
+                clientClosed = true;
+              }
             }
           });
 
           proxyRes.on("end", () => {
-            this.logger.debug("http.client.stream.end", {
+            this.logger.info("http.client.stream.end", {
               "upstream.service": "diad-agents",
+              "url.path": url.pathname,
+              "stream.chunk_count": chunkCount,
+              "stream.bytes_written": bytesWritten,
+              "stream.first_chunk_ms":
+                firstChunkAt !== null ? firstChunkAt - startedAt : null,
+              "stream.duration_ms": Date.now() - startedAt,
+              "stream.client_closed_before_end": clientClosed,
             });
             const finish = async () => {
               if (onEnd) {
@@ -156,6 +213,10 @@ export class AiProxyService {
           proxyRes.on("error", (err) => {
             this.logger.error("http.client.stream.proxy_error", err, {
               "upstream.service": "diad-agents",
+              "url.path": url.pathname,
+              "stream.chunk_count": chunkCount,
+              "stream.bytes_written": bytesWritten,
+              "stream.duration_ms": Date.now() - startedAt,
             });
             res.end();
             resolve();
@@ -166,10 +227,16 @@ export class AiProxyService {
       req.on("error", (err) => {
         this.logger.error("http.client.stream.network_error", err, {
           "upstream.service": "diad-agents",
+          "url.path": url.pathname,
+          "stream.chunk_count": chunkCount,
+          "stream.bytes_written": bytesWritten,
+          "stream.duration_ms": Date.now() - startedAt,
         });
-        res.write(
-          `data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`,
-        );
+        if (!clientClosed) {
+          res.write(
+            `data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`,
+          );
+        }
         res.end();
         resolve();
       });
