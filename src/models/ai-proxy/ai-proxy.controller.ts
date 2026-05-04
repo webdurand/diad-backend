@@ -24,7 +24,10 @@ import { SessionResumeService } from "../session/services/session-resume.service
 import { SessionRecapService } from "../session/services/session-recap.service";
 import { SceneService } from "../session/services/scene.service";
 import { SessionMessageService } from "../session/services/session-message.service";
-import { SseNarrationCollector } from "./sse-narration-collector";
+import {
+  SseNarrationCollector,
+  type CollectedChoice,
+} from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { GameEventEntity } from "src/entities/game-event.entity";
 import { PendingGuardDispatchEntity } from "src/entities/pending-guard-dispatch.entity";
@@ -172,6 +175,32 @@ export class AiProxyController {
         `narration persist failed (session=${sessionId}): ${err?.message}`,
       );
       return null;
+    }
+  }
+
+  /**
+   * Persiste choices da última narração como SessionMessage kind='choices'.
+   * Permite re-hidratar opções de ação após F5/reload — choices vivem
+   * vinculadas à mensagem do Narrator. Conteúdo é JSON serializado.
+   */
+  private async persistChoices(
+    sessionId: string,
+    userId: string,
+    choices: CollectedChoice[],
+  ): Promise<void> {
+    if (!choices || choices.length === 0) return;
+    try {
+      await this.sessionMessageService.append({
+        sessionId,
+        userId,
+        kind: "choices",
+        content: JSON.stringify(choices),
+        clientId: `srv-choices-${randomUUID()}`,
+      });
+    } catch (err: any) {
+      this.logger.warn(
+        `choices persist failed (session=${sessionId}): ${err?.message}`,
+      );
     }
   }
 
@@ -574,6 +603,11 @@ export class AiProxyController {
           if (persisted) {
             this.emitNarrationPersisted(res, persisted.serverId, body.clientId);
           }
+          await this.persistChoices(
+            sessionId,
+            req.user!.id,
+            collector.getChoices(),
+          );
           await this.emitSessionSync(sessionId, res);
         },
         {
@@ -665,6 +699,11 @@ export class AiProxyController {
           if (persisted) {
             this.emitNarrationPersisted(res, persisted.serverId, null);
           }
+          await this.persistChoices(
+            sessionId,
+            req.user!.id,
+            collector.getChoices(),
+          );
           await this.emitSessionSync(sessionId, res);
         },
         {

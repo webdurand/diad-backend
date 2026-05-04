@@ -25,9 +25,17 @@ const NARRATION_TYPES = new Set([
   "narrator",
 ]);
 
+export interface CollectedChoice {
+  id: string;
+  label: string;
+  icon?: string;
+  intentHint?: string;
+}
+
 export class SseNarrationCollector {
   private buffer = "";
   private narration = "";
+  private choices: CollectedChoice[] = [];
 
   feed(chunk: string | Buffer): void {
     const data = typeof chunk === "string" ? chunk : chunk.toString("utf8");
@@ -49,6 +57,11 @@ export class SseNarrationCollector {
     return this.narration;
   }
 
+  /** Última lista de choices emitida pelo upstream (pode estar vazia). */
+  getChoices(): CollectedChoice[] {
+    return this.choices;
+  }
+
   private processLine(line: string): void {
     const trimmed = line.replace(/\r$/, "").trim();
     if (!trimmed.startsWith("data:")) return;
@@ -61,8 +74,36 @@ export class SseNarrationCollector {
       return;
     }
     if (!parsed || typeof parsed !== "object") return;
-    const ev = parsed as { type?: unknown; content?: unknown; token?: unknown; text?: unknown };
-    if (typeof ev.type !== "string" || !NARRATION_TYPES.has(ev.type)) return;
+    const ev = parsed as {
+      type?: unknown;
+      content?: unknown;
+      token?: unknown;
+      text?: unknown;
+      choices?: unknown;
+    };
+    if (typeof ev.type !== "string") return;
+
+    if (ev.type === "choices" && Array.isArray(ev.choices)) {
+      const collected: CollectedChoice[] = [];
+      for (const raw of ev.choices) {
+        if (!raw || typeof raw !== "object") continue;
+        const c = raw as Record<string, unknown>;
+        const id = typeof c.id === "string" ? c.id : "";
+        const label = typeof c.label === "string" ? c.label : "";
+        if (!id || !label) continue;
+        collected.push({
+          id,
+          label,
+          icon: typeof c.icon === "string" ? c.icon : undefined,
+          intentHint: typeof c.intentHint === "string" ? c.intentHint : undefined,
+        });
+      }
+      // Última lista emitida ganha (turn pode emitir sentinel + final).
+      if (collected.length > 0) this.choices = collected;
+      return;
+    }
+
+    if (!NARRATION_TYPES.has(ev.type)) return;
     const piece =
       typeof ev.content === "string"
         ? ev.content
