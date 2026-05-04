@@ -474,18 +474,63 @@ export class CharactersService {
   ) {}
 
   async listByUser(userId: string): Promise<CharacterEntity[]> {
-    // Sub-relations (class, subclass, race, etc.) use eager:true on their entities
-    // so only first-level relations need to be specified
-    return this.characterRepository.find({
-      where: { userId },
-      order: { createdAt: "DESC" },
-      relations: [
-        "character_classes",
-        "character_origin",
-        "character_ability_scores",
-        "character_skills",
-      ],
-    });
+    return this.characterRepository
+      .createQueryBuilder("c")
+      .leftJoin("c.character_classes", "cc")
+      .leftJoin("cc.class", "klass")
+      .leftJoin("cc.subclass", "subclass")
+      .leftJoin("c.character_origin", "co")
+      .leftJoin("co.race", "race")
+      .leftJoin("co.subrace", "subrace")
+      .leftJoin("co.background", "bg")
+      .leftJoin("co.alignment", "align")
+      .leftJoin("c.character_ability_scores", "cas")
+      .leftJoin("cas.ability_score", "ab")
+      .leftJoin("c.character_skills", "cs")
+      .leftJoin("cs.skill", "skill")
+      .where("c.userId = :userId", { userId })
+      .orderBy("c.createdAt", "DESC")
+      .addOrderBy("cc.order", "ASC")
+      .select([
+        "c.id",
+        "c.name",
+        "c.createdAt",
+        "c.updatedAt",
+        "cc.id",
+        "cc.class_level",
+        "cc.order",
+        "klass.id",
+        "klass.slug",
+        "klass.name",
+        "subclass.id",
+        "subclass.slug",
+        "subclass.name",
+        "co.id",
+        "race.id",
+        "race.slug",
+        "race.name",
+        "subrace.id",
+        "subrace.slug",
+        "subrace.name",
+        "bg.id",
+        "bg.slug",
+        "bg.name",
+        "align.id",
+        "align.slug",
+        "align.name",
+        "cas.id",
+        "cas.base_score",
+        "cas.bonus",
+        "ab.id",
+        "ab.slug",
+        "ab.name",
+        "cs.id",
+        "cs.expertise",
+        "skill.id",
+        "skill.slug",
+        "skill.name",
+      ])
+      .getMany();
   }
 
   async getById(userId: string, id: string): Promise<CharacterEntity> {
