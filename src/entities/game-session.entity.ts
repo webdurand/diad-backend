@@ -70,6 +70,10 @@ export class GameSessionEntity {
   @Column({ name: "previous_session_id", type: "uuid", nullable: true })
   previousSessionId?: string;
 
+  /** Mythic GME chaos factor (1-9). Estado de aventura, não do mundo. */
+  @Column({ name: "chaos_factor", type: "smallint", default: 5 })
+  chaosFactor: number;
+
   @Column({ name: "ended_at", type: "timestamptz", nullable: true })
   endedAt?: Date;
 

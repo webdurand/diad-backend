@@ -30,10 +30,7 @@ import {
 import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService, type Biome } from "./services/weather.service";
 import { GameClockService } from "./services/game-clock.service";
-import {
-  ChaosFactorService,
-  type ChaosSource,
-} from "./services/chaos-factor.service";
+import type { ChaosSource } from "./services/chaos-factor.service";
 import { Headers } from "@nestjs/common";
 import type {
   CreateCampaignDto,
@@ -99,7 +96,6 @@ export class WorldController {
     private readonly ambianceService: AmbianceService,
     private readonly weatherService: WeatherService,
     private readonly gameClockService: GameClockService,
-    private readonly chaosFactorService: ChaosFactorService,
     // Spec NNN — Mundo + Aventura (story arcs + NPC relationships)
     private readonly storyArcService: StoryArcService,
     private readonly npcRelationshipService: NpcRelationshipService,
@@ -116,8 +112,13 @@ export class WorldController {
   async getAmbiance(
     @Param("id", CampaignIdPipe) campaignId: string,
     @Query("sceneId") sceneId?: string,
+    @Query("sessionId") sessionId?: string,
   ) {
-    return this.ambianceService.assemble(campaignId, sceneId ?? null);
+    return this.ambianceService.assemble(
+      campaignId,
+      sceneId ?? null,
+      sessionId ?? null,
+    );
   }
 
   @Post(":id/weather/roll")
@@ -156,24 +157,8 @@ export class WorldController {
     };
   }
 
-  /**
-   * Spec 019 — DM-only. `source` deve ser `director` ou `event` (decisão
-   * 2026-04-27: chaos não tem slider pra player).
-   */
-  @Patch(":id/chaos")
-  async setChaos(
-    @Param("id", CampaignIdPipe) campaignId: string,
-    @Body() body: SetChaosBody,
-    @Headers("traceparent") traceparent?: string,
-  ) {
-    const traceId = extractTraceId(traceparent);
-    return this.chaosFactorService.setChaosFactor(
-      campaignId,
-      body.value,
-      body.source,
-      { traceId },
-    );
-  }
+  // chaos_factor migrou pra session-scoped: PATCH /sessions/:sid/chaos
+  // (SessionScopedWorldController). Não há mais setter via /campaigns/:id/chaos.
 
   // ==================== CAMPAIGNS ====================
 

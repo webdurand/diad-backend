@@ -12,6 +12,15 @@ import {
   UseGuards,
   UnauthorizedException,
 } from "@nestjs/common";
+
+function extractTraceId(traceparent: string | undefined): string | undefined {
+  if (!traceparent) return undefined;
+  const parts = traceparent.split("-");
+  if (parts.length < 4) return undefined;
+  const traceId = parts[1];
+  if (!/^[0-9a-f]{32}$/.test(traceId)) return undefined;
+  return traceId;
+}
 import { AuthGuard } from "../auth/auth.guard";
 import { CampaignService } from "./services/campaign.service";
 import { SessionService } from "../game-engine/services/session.service";
@@ -30,7 +39,10 @@ import {
   type UpsertStoryArcStateDto,
   type StoryArcPhase,
 } from "./services/session-story-arc-state.service";
-import type { CreateNpcDto } from "./services/npc.service";
+import {
+  ChaosFactorService,
+  type ChaosSource,
+} from "./services/chaos-factor.service";
 import { isDmOmniscient } from "./services/npc-projection";
 import type { CreateQuestDto, UpdateQuestDto } from "./services/quest.service";
 
@@ -62,6 +74,7 @@ export class SessionScopedWorldController {
     private readonly npcStateService: SessionNpcStateService,
     private readonly factionStateService: SessionFactionStateService,
     private readonly arcStateService: SessionStoryArcStateService,
+    private readonly chaosFactorService: ChaosFactorService,
   ) {}
 
   private async ensureDm(
@@ -184,6 +197,30 @@ export class SessionScopedWorldController {
   ) {
     await this.sessionService.ensureAccess(sessionId, getUserId(req));
     return this.arcStateService.listBySession(sessionId);
+  }
+
+  // ==================== Chaos factor (session-scoped) ====================
+
+  /**
+   * Spec 019 — DM-only chaos factor (Mythic GME 1-9). `source` ∈
+   * {director, event}. Player não ajusta — chaos é decidido pelo mundo
+   * (Director agent ou consequência narrativa).
+   */
+  @Patch(":sessionId/chaos")
+  async setChaos(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Body() body: { value: number; source: ChaosSource },
+    @Headers("traceparent") traceparent?: string,
+  ) {
+    await this.ensureDm(sessionId, getUserId(req));
+    const traceId = extractTraceId(traceparent);
+    return this.chaosFactorService.setChaosFactor(
+      sessionId,
+      body.value,
+      body.source,
+      { traceId },
+    );
   }
 
   // ==================== Quests (session-scoped) ====================

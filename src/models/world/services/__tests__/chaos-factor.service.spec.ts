@@ -1,22 +1,24 @@
 import { Repository } from "typeorm";
-import { CampaignEntity } from "src/entities/campaign.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
 import { ChaosFactorService } from "../chaos-factor.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
-const CAMPAIGN_ID = "11111111-1111-4111-8111-111111111111";
+const SESSION_ID = "11111111-1111-4111-8111-111111111111";
+const CAMPAIGN_ID = "22222222-2222-4222-8222-222222222222";
 
-function makeRepo(chaosFactor = 5): Repository<CampaignEntity> {
+function makeRepo(chaosFactor = 5): Repository<GameSessionEntity> {
   const stored = {
-    id: CAMPAIGN_ID,
+    id: SESSION_ID,
+    campaignId: CAMPAIGN_ID,
     chaosFactor,
-  } as CampaignEntity;
+  } as unknown as GameSessionEntity;
   return {
     findOne: jest.fn(async () => stored),
-    save: jest.fn(async (c: CampaignEntity) => c),
-  } as unknown as Repository<CampaignEntity>;
+    save: jest.fn(async (s: GameSessionEntity) => s),
+  } as unknown as Repository<GameSessionEntity>;
 }
 
 function makeBus(): EventBusService {
@@ -34,7 +36,7 @@ describe("ChaosFactorService", () => {
     const factory = new EventEnvelopeFactory(undefined);
     const svc = new ChaosFactorService(repo, bus, factory);
 
-    const result = await svc.setChaosFactor(CAMPAIGN_ID, 7, "director");
+    const result = await svc.setChaosFactor(SESSION_ID, 7, "director");
     expect(result.oldValue).toBe(5);
     expect(result.newValue).toBe(7);
     expect(bus.publish).toHaveBeenCalled();
@@ -46,7 +48,7 @@ describe("ChaosFactorService", () => {
     const factory = new EventEnvelopeFactory(undefined);
     const svc = new ChaosFactorService(repo, bus, factory);
 
-    await svc.setChaosFactor(CAMPAIGN_ID, 5, "director");
+    await svc.setChaosFactor(SESSION_ID, 5, "director");
     expect(bus.publish).not.toHaveBeenCalled();
   });
 
@@ -57,20 +59,20 @@ describe("ChaosFactorService", () => {
     const svc = new ChaosFactorService(repo, bus, factory);
 
     await expect(
-      svc.setChaosFactor(CAMPAIGN_ID, v as number, "director"),
+      svc.setChaosFactor(SESSION_ID, v as number, "director"),
     ).rejects.toBeInstanceOf(DomainException);
   });
 
-  it("rejeita campaign não encontrada", async () => {
+  it("rejeita session não encontrada", async () => {
     const repo = {
       findOne: jest.fn(async () => null),
       save: jest.fn(),
-    } as unknown as Repository<CampaignEntity>;
+    } as unknown as Repository<GameSessionEntity>;
     const factory = new EventEnvelopeFactory(undefined);
     const svc = new ChaosFactorService(repo, makeBus(), factory);
 
     await expect(
-      svc.setChaosFactor(CAMPAIGN_ID, 7, "director"),
+      svc.setChaosFactor(SESSION_ID, 7, "director"),
     ).rejects.toMatchObject({ code: ErrorCode.CAMPAIGN_NOT_FOUND });
   });
 
@@ -80,8 +82,8 @@ describe("ChaosFactorService", () => {
     const factory = new EventEnvelopeFactory(undefined);
     const svc = new ChaosFactorService(repo, bus, factory);
 
-    await svc.setChaosFactor(CAMPAIGN_ID, 6, "event");
-    await svc.setChaosFactor(CAMPAIGN_ID, 7, "director");
+    await svc.setChaosFactor(SESSION_ID, 6, "event");
+    await svc.setChaosFactor(SESSION_ID, 7, "director");
     expect(bus.publish).toHaveBeenCalledTimes(2);
   });
 });

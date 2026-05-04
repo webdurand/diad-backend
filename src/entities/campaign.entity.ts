@@ -140,9 +140,6 @@ export class CampaignEntity {
   @Column({ name: "dm_personality", type: "jsonb", default: {} })
   dmPersonality: CampaignDmPersonality;
 
-  @Column({ name: "chaos_factor", type: "smallint", default: 5 })
-  chaosFactor: number;
-
   @Column({ name: "tonal_anchor", type: "jsonb", default: {} })
   tonalAnchor: CampaignTonalAnchor;
 

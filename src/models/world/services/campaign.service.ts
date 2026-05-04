@@ -85,7 +85,6 @@ export interface ListSoloWorldsResult {
 export interface InitializeBudgetDto {
   contentBudget?: Partial<CampaignContentBudget>;
   dmPersonality?: CampaignDmPersonality;
-  chaosFactor?: number;
   tonalAnchor?: CampaignTonalAnchor;
   centralQuestion?: string;
 }
@@ -93,7 +92,6 @@ export interface InitializeBudgetDto {
 export interface UpdateBudgetDto {
   contentBudget?: Partial<CampaignContentBudget>;
   dmPersonality?: CampaignDmPersonality;
-  chaosFactor?: number;
   tonalAnchor?: CampaignTonalAnchor;
   centralQuestion?: string;
   questionStatedAtScene?: number;
@@ -433,10 +431,6 @@ export class CampaignService {
       };
     }
     if (dto.dmPersonality) campaign.dmPersonality = dto.dmPersonality;
-    if (typeof dto.chaosFactor === "number") {
-      this.assertChaosRange(dto.chaosFactor);
-      campaign.chaosFactor = dto.chaosFactor;
-    }
     if (dto.tonalAnchor) campaign.tonalAnchor = dto.tonalAnchor;
     if (dto.centralQuestion) {
       campaign.centralQuestion = dto.centralQuestion;
@@ -460,10 +454,6 @@ export class CampaignService {
       };
     }
     if (dto.dmPersonality) campaign.dmPersonality = dto.dmPersonality;
-    if (typeof dto.chaosFactor === "number") {
-      this.assertChaosRange(dto.chaosFactor);
-      campaign.chaosFactor = dto.chaosFactor;
-    }
     if (dto.tonalAnchor) campaign.tonalAnchor = dto.tonalAnchor;
     if (dto.centralQuestion !== undefined) {
       campaign.centralQuestion = dto.centralQuestion;
@@ -563,14 +553,4 @@ export class CampaignService {
     return [];
   }
 
-  private assertChaosRange(value: number): void {
-    if (value < 1 || value > 9 || !Number.isInteger(value)) {
-      throw new ConflictException({
-        ok: false,
-        error: "chaosFactor deve ser inteiro entre 1 e 9.",
-        code: "CHAOS_FACTOR_OUT_OF_RANGE",
-        value,
-      });
-    }
-  }
 }

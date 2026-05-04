@@ -6,6 +6,7 @@ import { ClockEntity } from "src/entities/clock.entity";
 import { SceneEntity } from "src/entities/scene.entity";
 import { LocationEntity } from "src/entities/location.entity";
 import { WeatherEntity } from "src/entities/weather.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
 import { computeTimeOfDay, TimeOfDay } from "src/lib/time-of-day";
 import { WeatherService } from "./weather.service";
 import { GameClockService } from "./game-clock.service";
@@ -71,6 +72,8 @@ export class AmbianceService {
     private readonly locationRepo: Repository<LocationEntity>,
     @InjectRepository(WeatherEntity)
     private readonly weatherRepo: Repository<WeatherEntity>,
+    @InjectRepository(GameSessionEntity)
+    private readonly sessionRepo: Repository<GameSessionEntity>,
     private readonly weatherService: WeatherService,
     private readonly gameClockService: GameClockService,
   ) {}
@@ -78,12 +81,23 @@ export class AmbianceService {
   async assemble(
     campaignId: string,
     sceneId?: string | null,
+    sessionId?: string | null,
   ): Promise<AmbiancePayloadDto> {
     const campaign = await this.campaignRepo.findOne({
       where: { id: campaignId },
     });
     if (!campaign) {
       throw new Error(`Campaign ${campaignId} não encontrada.`);
+    }
+
+    // chaos_factor é session-scoped após split. Sem sessionId → default 5.
+    let chaosFactor = 5;
+    if (sessionId) {
+      const session = await this.sessionRepo.findOne({
+        where: { id: sessionId },
+        select: { id: true, chaosFactor: true },
+      });
+      if (session) chaosFactor = session.chaosFactor;
     }
 
     const clock = await this.gameClockService.getOrCreate(campaignId);
@@ -120,7 +134,7 @@ export class AmbianceService {
       summaryParts.push(weatherDto.narrativeSeed);
     }
     summaryParts.push(`É ${PERIOD_PT[timeOfDay]}.`);
-    if (campaign.chaosFactor >= 8) {
+    if (chaosFactor >= 8) {
       summaryParts.push("O ar pesa, algo está prestes a acontecer.");
     }
     const narrativeSummary = summaryParts.join(" ").slice(0, 240);
@@ -132,7 +146,7 @@ export class AmbianceService {
       timeOfDay,
       currentInGameDateTime: clock.currentInGameDateTime.toISOString(),
       daysPassed: clock.daysPassed,
-      chaosFactor: campaign.chaosFactor,
+      chaosFactor,
       visibleClocks: visibleClocks.map((c) => ({
         id: c.id,
         name: c.name,
