@@ -472,17 +472,18 @@ export class AiProxyController {
       });
 
       if (ctx.lastMessageMismatch) {
-        res.statusCode = 409;
-        res.write(
-          `data: ${JSON.stringify({
-            type: "error",
-            code: ErrorCode.SESSION_LAST_MESSAGE_MISMATCH,
-            content:
-              "Histórico desincronizado — recarregue para continuar a sessão.",
-          })}\n\n`,
-        );
-        res.end();
-        return;
+        // Cliente ficou para trás (stream truncado, aba inativa durante a
+        // narração, refresh durante turn). Server é fonte da verdade — em
+        // vez de 409, emitimos session_sync upfront pro front se atualizar
+        // e seguimos o turn normalmente. Mismatch só ocorre quando cliente
+        // está atrás (detectMismatch retorna true só para serverSeq - clientSeq > 1),
+        // e isso é sempre recuperável.
+        this.logger.warn("session.last_message_mismatch_recovered", {
+          "session.id": sessionId,
+          "client.lastMessageId": body.lastMessageId ?? null,
+          "server.lastMessageId": ctx.serverLastMessageId,
+        });
+        await this.emitSessionSync(sessionId, res);
       }
 
       res.setHeader(
