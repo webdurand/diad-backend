@@ -550,23 +550,6 @@ function transformOneMonster(monster: FiveToolsMonster): TransformedMonster {
   };
 }
 
-export function transformMonsters(): TransformedMonster[] {
-  const filesets = loadBestiaryFiles();
-  const all: TransformedMonster[] = [];
-  const seen = new Set<string>();
-
-  for (const { monsters } of filesets) {
-    for (const monster of monsters) {
-      const transformed = transformOneMonster(monster);
-      if (seen.has(transformed.slug)) continue;
-      seen.add(transformed.slug);
-      all.push(transformed);
-    }
-  }
-
-  return all;
-}
-
 export function transformMonstersByFile(): {
   file: string;
   monsters: TransformedMonster[];

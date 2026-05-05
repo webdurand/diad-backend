@@ -124,6 +124,7 @@ import { ToolEventEmitService } from "./services/tool-event-emit.service";
 import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
 import { SceneEntity } from "src/entities/scene.entity";
 import { NpcEntity } from "src/entities/npc.entity";
+import { SessionMessageEntity } from "src/entities/session-message.entity";
 
 @Module({
   imports: [
@@ -153,6 +154,7 @@ import { NpcEntity } from "src/entities/npc.entity";
       // Spec 020 — start_encounter_from_narrative
       SceneEntity,
       NpcEntity,
+      SessionMessageEntity,
     ]),
     AuthModule,
     CharactersModule,

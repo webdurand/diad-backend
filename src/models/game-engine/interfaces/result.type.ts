@@ -123,11 +123,7 @@ export enum GameErrorCode {
   LAY_ON_HANDS_INSUFFICIENT_POOL = "LAY_ON_HANDS_INSUFFICIENT_POOL",
 }
 
-/**
- * Canonical PT-BR messages per code.
- * Source of truth for error text. Tests should assert on `code`, not message.
- */
-export const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
+const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
   [GameErrorCode.INVALID_PAYLOAD]: "Payload invalido.",
   [GameErrorCode.FORBIDDEN]: "Voce nao tem permissao para esta operacao.",
   [GameErrorCode.UNAUTHORIZED]: "Sessao ausente.",

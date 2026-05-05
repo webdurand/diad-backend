@@ -24,7 +24,7 @@ export interface EventListener {
  * cresce o catálogo. Bus rejeita publish() com type fora desta lista
  * (EVENT_TYPE_NOT_REGISTERED).
  */
-export const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
+const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
   EncounterEvent: new Set([
     "damage_applied",
     "condition_added",

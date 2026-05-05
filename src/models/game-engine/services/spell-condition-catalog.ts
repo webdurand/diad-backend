@@ -25,7 +25,7 @@ export interface SpellConditionEntry {
   repeatSaveTiming: RepeatSaveTiming;
 }
 
-export const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
+const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
   "hold-person": {
     conditionSlug: "paralyzed",
     saveAbility: "wis",

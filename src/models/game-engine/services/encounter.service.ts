@@ -19,6 +19,7 @@ import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
 import { InventoryService } from "src/models/characters/services/inventory.service";
+import { SessionMessageService } from "src/models/session/services/session-message.service";
 import { DiceService } from "./dice.service";
 import { EventService } from "./event.service";
 import { SessionService } from "./session.service";
@@ -107,6 +108,7 @@ export class EncounterService {
     private readonly capstones: CapstonesService,
     private readonly xpAwardService: XpAwardService,
     private readonly gameClockService: GameClockService,
+    private readonly sessionMessageService: SessionMessageService,
   ) {}
 
   async create(
@@ -1362,6 +1364,63 @@ export class EncounterService {
     ];
     await this.eventService.emit(encounter.sessionId, encounterId, events);
 
+    // Persist combat_resolution SessionMessage so the rewards card survives
+    // F5/reload — without persistence the card lives only in the SSE chunk
+    // and disappears on remount. Owner is the encounter resolver (in solo
+    // auto-end this is the system pseudo-user, but assertOwnership of solo
+    // sessions accepts the session.userId so we use that).
+    try {
+      const cardOwnerId = session?.ownerId ?? dto.ownerUserId;
+      if (cardOwnerId) {
+        const cardPayload = {
+          encounterId,
+          outcome: dto.outcome,
+          summary: outcomeSummary.summary,
+          currency: outcomeSummary.gold,
+          xpAwards: xpApplied.map((x) => ({
+            characterId: x.characterId,
+            amount: x.xp,
+            source: "combat_kill",
+            reason: encounter.name,
+          })),
+          partyHpSnapshot: outcomeSummary.pcFinalHp
+            ? [
+                {
+                  characterId: outcomeSummary.pcFinalHp.characterId,
+                  name: outcomeSummary.pcFinalHp.name,
+                  hpBefore: outcomeSummary.pcFinalHp.max,
+                  hpAfter: outcomeSummary.pcFinalHp.current,
+                  deltaHp:
+                    outcomeSummary.pcFinalHp.current -
+                    outcomeSummary.pcFinalHp.max,
+                },
+              ]
+            : [],
+          lootDetected: itemsApplied.map((it) => ({
+            itemId: it.characterId,
+            name: it.itemName,
+            tier: "common",
+            valueGp: 0,
+            quantity: it.quantity,
+          })),
+          defeatedNpcs: outcomeSummary.defeatedNpcs,
+          narrativeHookPending: false,
+          fateLadderTriggered: false,
+        };
+        await this.sessionMessageService.append({
+          sessionId: encounter.sessionId,
+          userId: cardOwnerId,
+          kind: "combat_resolution",
+          content: JSON.stringify(cardPayload),
+          clientId: `srv-combat-res-${encounterId}`,
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `combat_resolution persist failed (encounter=${encounterId}): ${err?.message}`,
+      );
+    }
+
     if (campaignId) {
       const rounds = Math.max(1, encounter.currentRound ?? 1);
       const hours = Math.max(0.1, (rounds * 6) / 3600);
@@ -1455,7 +1514,13 @@ export class EncounterService {
     gold: { cp: number; sp: number; gp: number; pp: number };
     items: Array<{ name: string; quantity: number }>;
     pcFinalHp:
-      | { characterId: string; current: number; max: number; percent: number }
+      | {
+          characterId: string;
+          name: string;
+          current: number;
+          max: number;
+          percent: number;
+        }
       | null;
     summary: string;
   }> {
@@ -1496,7 +1561,13 @@ export class EncounterService {
       (p) => p.type === "pc" && p.characterId,
     );
     let pcFinalHp:
-      | { characterId: string; current: number; max: number; percent: number }
+      | {
+          characterId: string;
+          name: string;
+          current: number;
+          max: number;
+          percent: number;
+        }
       | null = null;
     if (pcParticipant?.characterId) {
       const current = pcParticipant.currentHp ?? 0;
@@ -1504,6 +1575,7 @@ export class EncounterService {
       const percent = max > 0 ? Math.round((current / max) * 100) : 0;
       pcFinalHp = {
         characterId: pcParticipant.characterId,
+        name: pcParticipant.displayName ?? "",
         current,
         max,
         percent,

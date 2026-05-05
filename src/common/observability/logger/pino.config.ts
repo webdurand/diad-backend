@@ -174,10 +174,4 @@ export function buildPinoOptions(args: BuildPinoOptionsArgs = {}): PinoParams {
   };
 }
 
-export const SENSITIVE_LOG_PATHS = SENSITIVE_PATHS;
-export {
-  serializeError as __serializeErrorForTest,
-  serializeRequestSlim as __serializeRequestSlimForTest,
-  serializeResponseSlim as __serializeResponseSlimForTest,
-  pickLogLevel as __pickLogLevelForTest,
-};
+export { serializeError as __serializeErrorForTest };

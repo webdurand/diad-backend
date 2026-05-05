@@ -20,7 +20,7 @@ import {
  * validadas contra o gridSize do encounter; entradas inválidas são
  * descartadas silenciosamente — o fallback auto-grid cobre os faltantes.
  */
-export class TokenLayoutEntryDto {
+class TokenLayoutEntryDto {
   @IsString()
   @MaxLength(100)
   ref: string;

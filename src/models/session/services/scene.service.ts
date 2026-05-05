@@ -7,6 +7,7 @@ import { ArcBeat, CampaignEntity } from "src/entities/campaign.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { VowEntity } from "src/entities/vow.entity";
 import { CampaignService } from "src/models/world/services/campaign.service";
+import { SessionNpcStateService } from "src/models/world/services/session-npc-state.service";
 import { SceneContextCacheService } from "./scene-context-cache.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
@@ -50,6 +51,7 @@ export class SceneService {
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
+    private readonly npcStateService: SessionNpcStateService,
   ) {
     this.logger.setContext(SceneService.name);
   }
@@ -357,6 +359,25 @@ export class SceneService {
     const sceneNpc = this.sceneNpcRepo.create({ sceneId, npcId });
     const saved = await this.sceneNpcRepo.save(sceneNpc);
     this.contextCache.invalidate(sceneId);
+
+    try {
+      const scene = await this.sceneRepo.findOne({
+        where: { id: sceneId },
+        select: ["sessionId", "locationId"],
+      });
+      if (scene?.sessionId && scene.locationId) {
+        await this.npcStateService.upsert(scene.sessionId, npcId, {
+          currentLocationId: scene.locationId,
+        });
+      }
+    } catch (err) {
+      this.logger.warn("scene.addNpc.state_sync_failed", {
+        "scene.id": sceneId,
+        "npc.id": npcId,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
+
     return saved;
   }
 

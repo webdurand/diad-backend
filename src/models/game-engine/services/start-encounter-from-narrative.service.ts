@@ -26,6 +26,7 @@ import { NpcEntity } from "src/entities/npc.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { MonsterEntity } from "src/entities/monster.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
+import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { EncounterService } from "./encounter.service";
 import { CombatService } from "./combat.service";
 import { DiceService } from "./dice.service";
@@ -36,6 +37,7 @@ import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factor
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { getAbilityModifier } from "src/shared/srd-utils";
+import { AiProxyService } from "src/models/ai-proxy/ai-proxy.service";
 
 /** UUID v4-ish detection — distingue UUID de nome livre nos targets. */
 const UUID_REGEX =
@@ -99,6 +101,8 @@ export class StartEncounterFromNarrativeService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     @InjectRepository(GameSessionEntity)
     private readonly sessionRepo: Repository<GameSessionEntity>,
+    @InjectRepository(SessionMessageEntity)
+    private readonly messageRepo: Repository<SessionMessageEntity>,
     private readonly encounterService: EncounterService,
     private readonly combatService: CombatService,
     private readonly diceService: DiceService,
@@ -106,6 +110,7 @@ export class StartEncounterFromNarrativeService {
     private readonly sceneContextService: SceneContextService,
     private readonly eventBus: EventBusService,
     private readonly factory: EventEnvelopeFactory,
+    private readonly aiProxy: AiProxyService,
   ) {}
 
   async run(
@@ -136,13 +141,42 @@ export class StartEncounterFromNarrativeService {
       resolvedIds = fallback.map((n) => n.id);
     }
 
+    // 2.6. Lazy extraction: cena sem hostis materializados é o caso comum
+    // (narrator descreve "5 homens armados" só na prosa). Chama o agno
+    // /narrative/extract-combat-targets passando a prosa recente — o Haiku
+    // identifica alvos, materializa via NpcService.create (auto-attach
+    // scene_npcs), e devolve os IDs prontos pra encounter. Frontend já mostra
+    // "Preparando..." no banner, então a latência (~3s) é coberta pela UX.
+    if (
+      resolvedIds.length === 0 &&
+      input.sessionId &&
+      input.campaignId
+    ) {
+      const recentProse = await this.collectRecentNarratorProse(
+        input.sessionId,
+      );
+      if (recentProse) {
+        const extracted = await this.requestLazyTargetExtraction({
+          campaignId: input.campaignId,
+          sessionId: input.sessionId,
+          narrativeTrigger: input.narrativeTrigger ?? "",
+          recentProse,
+          locationId: scene.locationId ?? "",
+          ownerUserId: input.ownerUserId,
+        });
+        if (extracted.length > 0) {
+          resolvedIds = extracted;
+        }
+      }
+    }
+
     if (resolvedIds.length === 0) {
       throw new DomainException(
         ErrorCode.ENCOUNTER_NO_TARGETS_IN_SCENE,
         "Nenhum oponente identificado na cena.",
         {
           context: { sessionId: input.sessionId, sceneId: resolvedSceneId },
-          hint: "Narrator deve materializar hostis via create_npc_from_narrative antes do combate.",
+          hint: "Descreva sua ação nomeando quem você ataca, ou peça ao DM pra detalhar a ameaça.",
         },
       );
     }
@@ -626,5 +660,67 @@ export class StartEncounterFromNarrativeService {
       .findOne({ where: { id: sessionId } })
       .catch(() => null);
     return session?.campaignId ?? undefined;
+  }
+
+  /**
+   * Pega as últimas N narrações da sessão (kind=narration) e concatena na
+   * ordem cronológica. Cap de tamanho pra controlar tokens da chamada Haiku
+   * (≈4k chars cobrem 4-5 cenas tranquilamente).
+   */
+  private async collectRecentNarratorProse(
+    sessionId: string,
+    limit = 5,
+    maxChars = 4000,
+  ): Promise<string> {
+    const rows = await this.messageRepo
+      .createQueryBuilder("m")
+      .where("m.session_id = :sessionId", { sessionId })
+      .andWhere("m.kind = :kind", { kind: "narration" })
+      .orderBy("m.sequence_number", "DESC")
+      .take(limit)
+      .getMany();
+    if (rows.length === 0) return "";
+    const ordered = rows.reverse();
+    const joined = ordered.map((r) => r.content).join("\n\n");
+    return joined.length > maxChars ? joined.slice(-maxChars) : joined;
+  }
+
+  private async requestLazyTargetExtraction(args: {
+    campaignId: string;
+    sessionId: string;
+    narrativeTrigger: string;
+    recentProse: string;
+    locationId: string;
+    ownerUserId: string;
+  }): Promise<string[]> {
+    try {
+      const response = await this.aiProxy.postJsonToAgent<{
+        targets?: Array<{ npcId?: string; name?: string }>;
+        count?: number;
+      }>(
+        "/narrative/extract-combat-targets",
+        {
+          campaignId: args.campaignId,
+          sessionId: args.sessionId,
+          narrativeTrigger: args.narrativeTrigger,
+          recentProse: args.recentProse,
+          locationId: args.locationId,
+        },
+        { timeoutMs: 12_000, userId: args.ownerUserId },
+      );
+      const ids = (response.targets ?? [])
+        .map((t) => t.npcId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+      this.logger.log(
+        `lazy_extract session=${args.sessionId} extracted=${ids.length}`,
+      );
+      return ids;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `lazy_extract falhou session=${args.sessionId}: ${msg}`,
+      );
+      return [];
+    }
   }
 }

@@ -43,7 +43,7 @@ function slotLinear(
  * Catálogo de cura RAW 2014/2024 (D&D 5e SRD).
  * Adicionar entries conforme harness cobrir mais spells. Cantrips não curam.
  */
-export const SPELL_HEALING_CATALOG: Record<string, SpellHealingEntry> = {
+const SPELL_HEALING_CATALOG: Record<string, SpellHealingEntry> = {
   // ── L1 ──────────────────────────────────────────────────────────────
   // Healing Word: 1d4 + mod em slot 1; +1d4 por slot acima.
   "healing-word": slotLinear(1, 1, 4, true),

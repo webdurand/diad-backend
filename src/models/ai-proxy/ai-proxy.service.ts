@@ -44,6 +44,36 @@ export class AiProxyService {
   }
 
   /**
+   * Request JSON síncrono (não-stream) pro diad-agents. Usado quando
+   * services backend precisam invocar uma rota POST do agno e ler a resposta
+   * estruturada — distinto do `pipeStream` que faz passthrough SSE.
+   *
+   * Timeout default 8s — deve ser maior que o timeout do extractor LLM
+   * (~4s) com folga pra serialização. Erros viram exception (caller decide
+   * fallback).
+   */
+  async postJsonToAgent<T = unknown>(
+    path: string,
+    body: Record<string, unknown>,
+    opts: { timeoutMs?: number; userId?: string } = {},
+  ): Promise<T> {
+    const url = `${this.agentBaseUrl}${path}`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-Service-Key": this.getServiceKey(),
+    };
+    if (opts.userId) headers["X-User-Id"] = opts.userId;
+
+    return this.outbound.request<T>(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      timeoutMs: opts.timeoutMs ?? 8000,
+      upstreamService: "diad-agents",
+    });
+  }
+
+  /**
    * Pipes an SSE stream from the Python agent to the Express response.
    * Uses raw http.request for reliable streaming (no fetch/undici issues).
    *

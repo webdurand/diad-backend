@@ -76,6 +76,7 @@ describe("SceneService.create — scene_changed emission", () => {
       eventBus as any,
       envelopeFactory as any,
       logger as any,
+      { upsert: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     return {

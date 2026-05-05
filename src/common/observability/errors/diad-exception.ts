@@ -100,7 +100,3 @@ export class ValidationException extends DiadException {
   }
 }
 
-/**
- * Erros de autenticação/autorização.
- */
-export class AuthException extends DiadException {}

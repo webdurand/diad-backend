@@ -143,6 +143,15 @@ export class SessionMessageService {
     }
   }
 
+  async findByClientId(
+    sessionId: string,
+    clientId: string,
+  ): Promise<SessionMessageEntity | null> {
+    return this.messageRepo.findOne({
+      where: { sessionId, clientId },
+    });
+  }
+
   /**
    * Spec 024 follow-up — exposto público pra ai-proxy emitir `session_sync`
    * chunk no fim de cada turn (frontend ressincroniza `lastMessageIdRef`).

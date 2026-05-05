@@ -66,6 +66,3 @@ export function serializeDomainHeader(ctx: DomainContext): string {
   return pairs.join(";");
 }
 
-export function isDomainKey(key: string): key is DomainKey {
-  return ALLOWED.has(key);
-}

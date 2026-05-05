@@ -51,58 +51,6 @@ export interface EditionRules {
   classFallbackSource?: string;
 }
 
-/** Default rules for 2014 (PHB) edition */
-export const PHB_RULES: EditionRules = {
-  subclassLevels: {
-    cleric: 1,
-    druid: 2,
-    sorcerer: 1,
-    warlock: 1,
-    wizard: 2,
-    default: 3,
-  },
-  casterTypes: {
-    ranger: "known",
-  },
-  preparedFormulas: {
-    paladin: "halfLevel+mod",
-  },
-  hasWeaponMastery: false,
-  hasDivineOrder: false,
-  hasPrimalOrder: false,
-  backgroundGrantsFeat: false,
-  backgroundGrantsAbilityBonuses: false,
-  exhaustionVariant: "2014_six_levels",
-  // Spec 005 — while PHB seed doesn't cover all (class, level) rows, resolve
-  // missing features/classes through XPHB. Delivers correct level-up for PHB
-  // PCs out of the box; spec 006 closes the seed gap later.
-  featureFallbackSource: "XPHB",
-  classFallbackSource: "XPHB",
-};
-
-/** Default rules for 2024 (XPHB) edition */
-export const XPHB_RULES: EditionRules = {
-  subclassLevels: {
-    default: 3,
-  },
-  casterTypes: {
-    ranger: "total_access",
-  },
-  preparedFormulas: {
-    paladin: "level+mod",
-  },
-  hasWeaponMastery: true,
-  hasDivineOrder: true,
-  hasPrimalOrder: true,
-  backgroundGrantsFeat: true,
-  backgroundGrantsAbilityBonuses: true,
-  exhaustionVariant: "2024_ten_levels",
-};
-
-/**
- * Get the subclass level for a class under given edition rules.
- * Falls back to the 'default' key, then to 3 if not defined.
- */
 export function getSubclassLevel(
   classSlug: string,
   rules?: EditionRules,

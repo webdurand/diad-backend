@@ -23,7 +23,7 @@ export const EVENT_AUDIENCES = [
 
 export type EventAudience = (typeof EVENT_AUDIENCES)[number];
 
-export const EMITTING_SERVICES = [
+const EMITTING_SERVICES = [
   "diad-backend",
   "diad-agents",
   "diad-frontend",
@@ -118,10 +118,3 @@ export const TRACE_ID_REGEX = /^[0-9a-f]{32}$/;
  */
 export const EVENT_TYPE_REGEX = /^[a-z][a-z0-9_]+$/;
 
-export function isEventCategory(v: unknown): v is EventCategory {
-  return typeof v === "string" && (EVENT_CATEGORIES as readonly string[]).includes(v);
-}
-
-export function isEventAudience(v: unknown): v is EventAudience {
-  return typeof v === "string" && (EVENT_AUDIENCES as readonly string[]).includes(v);
-}

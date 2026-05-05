@@ -13,7 +13,7 @@ import {
   Min,
 } from "class-validator";
 
-export const SUPPORTED_CLASS_SLUGS = [
+const SUPPORTED_CLASS_SLUGS = [
   "barbarian",
   "bard",
   "cleric",
@@ -30,7 +30,7 @@ export const SUPPORTED_CLASS_SLUGS = [
 
 export type SupportedClassSlug = (typeof SUPPORTED_CLASS_SLUGS)[number];
 
-export const SUPPORTED_LEVELS = [1, 3, 9, 10, 11, 13, 15, 20] as const;
+const SUPPORTED_LEVELS = [1, 3, 9, 10, 11, 13, 15, 20] as const;
 export type SupportedLevel = (typeof SUPPORTED_LEVELS)[number];
 
 /**

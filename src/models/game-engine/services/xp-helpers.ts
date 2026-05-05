@@ -34,7 +34,7 @@ export const XP_THRESHOLDS_2024 = [
   355000, // L20
 ] as const;
 
-export const MAX_LEVEL = XP_THRESHOLDS_2024.length;
+const MAX_LEVEL = XP_THRESHOLDS_2024.length;
 
 export type XpAwardSource =
   | "combat_kill"

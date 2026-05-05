@@ -21,8 +21,7 @@ export interface EventResponseDto {
   timestamp: string;
 }
 
-/** Converte snake_case para camelCase: 'attack_roll' → 'attackRoll' */
-export function snakeToCamelCase(s: string): string {
+function snakeToCamelCase(s: string): string {
   return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 

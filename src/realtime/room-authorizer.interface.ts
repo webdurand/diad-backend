@@ -10,7 +10,7 @@ export interface RoomAuthorizer {
 
 export const ROOM_AUTHORIZER = Symbol("ROOM_AUTHORIZER");
 
-export const ROOM_KEY_PATTERN = /^([a-z_]+):([a-zA-Z0-9_-]+)$/;
+const ROOM_KEY_PATTERN = /^([a-z_]+):([a-zA-Z0-9_-]+)$/;
 
 export interface ParsedRoomKey {
   prefix: string;

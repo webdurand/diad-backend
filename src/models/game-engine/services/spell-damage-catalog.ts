@@ -66,7 +66,7 @@ function cantripScaling(
   };
 }
 
-export const SPELL_DAMAGE_CATALOG: Record<string, SpellDamageEntry> = {
+const SPELL_DAMAGE_CATALOG: Record<string, SpellDamageEntry> = {
   // ── Cantrips ────────────────────────────────────────────────────────
   "fire-bolt": cantripScaling(1, 10, "fire"),
   "sacred-flame": cantripScaling(1, 8, "radiant"),

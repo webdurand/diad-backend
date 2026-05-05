@@ -96,6 +96,21 @@ export class AiProxyController {
     private readonly startEncounterFromNarrative: StartEncounterFromNarrativeService,
   ) {}
 
+  private async findLatestEncounterId(
+    sessionId: string,
+    eventType: string,
+  ): Promise<string | null> {
+    try {
+      const latest = await this.gameEventRepo.findOne({
+        where: { sessionId, eventType },
+        order: { sequence: "DESC" },
+      });
+      return latest?.encounterId ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   private async injectSystemHintEvent(
     sessionId: string,
     systemHint: string | undefined,
@@ -158,9 +173,10 @@ export class AiProxyController {
     sessionId: string,
     userId: string,
     narration: string,
+    overrideClientId?: string,
   ): Promise<{ serverId: string } | null> {
     if (!narration || !narration.trim()) return null;
-    const serverId = `srv-narr-${randomUUID()}`;
+    const serverId = overrideClientId ?? `srv-narr-${randomUUID()}`;
     try {
       await this.sessionMessageService.append({
         sessionId,
@@ -573,6 +589,33 @@ export class AiProxyController {
         sceneContextForAgent as Record<string, any> | null | undefined,
       )) as typeof sceneContextForAgent;
 
+      // Idempotência F5 — para `systemHint='post_combat'`, a narração é
+      // persistida com clientId determinístico por encounterId. Se já existe,
+      // não chamamos o agent — apenas re-emitimos `narration_persisted` (com
+      // o serverId existente) e `session_sync`. Cobre F5 mesmo quando o
+      // `lastMessageId` no payload mudou (idempotency global por hash falha
+      // nesse caso porque o key inclui lastMessageId).
+      const postCombatEncounterId =
+        body.systemHint === "post_combat"
+          ? await this.findLatestEncounterId(sessionId, "encounter_resolved")
+          : null;
+      const postCombatClientId = postCombatEncounterId
+        ? `srv-narr-post-combat-${postCombatEncounterId}`
+        : undefined;
+      if (postCombatClientId) {
+        const existing = await this.sessionMessageService.findByClientId(
+          sessionId,
+          postCombatClientId,
+        );
+        if (existing) {
+          this.emitNarrationPersisted(res, existing.clientId ?? postCombatClientId, body.clientId);
+          await this.emitSessionSync(sessionId, res);
+          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+          res.end();
+          return;
+        }
+      }
+
       const collector = new SseNarrationCollector();
       await this.aiProxyService.pipeStream(
         "/narrative/turn",
@@ -602,6 +645,7 @@ export class AiProxyController {
             sessionId,
             req.user!.id,
             collector.finalize(),
+            postCombatClientId,
           );
           if (persisted) {
             this.emitNarrationPersisted(res, persisted.serverId, body.clientId);

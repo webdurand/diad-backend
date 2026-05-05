@@ -457,7 +457,7 @@ export interface CharacterSheet {
  * `resourceCharges.current = max - used` quando ambos são literais; caso
  * contrário deixa `current` undefined e frontend decide fallback.
  */
-export function buildFeatureBlock(
+function buildFeatureBlock(
   cf: CharacterFeatureEntity,
   featureUsesUsed: Record<string, number>,
 ): FeatureBlock {

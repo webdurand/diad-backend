@@ -48,6 +48,11 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     pipeStream: jest.Mock;
     activeScene?: { id: string } | null;
     gameEventRepo?: { findOne: jest.Mock };
+    sessionMessageService?: {
+      append?: jest.Mock;
+      getMaxSequenceNumber?: jest.Mock;
+      findByClientId?: jest.Mock;
+    };
   }): AiProxyController {
     const aiProxyService: any = {
       pipeStream: opts.pipeStream,
@@ -74,12 +79,30 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     const sessionMessageService: any = {
       append: jest.fn().mockResolvedValue({ id: "m-1", sequenceNumber: 6 }),
       getMaxSequenceNumber: jest.fn().mockResolvedValue(6),
+      findByClientId: jest.fn().mockResolvedValue(null),
+      ...(opts.sessionMessageService ?? {}),
     };
     // Spec 027 (M2 follow-up) — repo de game_events pra inject de
     // encounter_outcome_summary / fate_ladder_resolved em sceneContext.
     // Default: nenhum evento (controller passa adiante sem mescla).
     const gameEventRepo: any = opts.gameEventRepo ?? {
       findOne: jest.fn().mockResolvedValue(null),
+    };
+    const pendingGuardRepo: any = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      }),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    const startEncounterFromNarrative: any = {
+      run: jest.fn().mockResolvedValue({
+        encounterId: "enc-1",
+        participantIds: [],
+      }),
     };
     return new AiProxyController(
       aiProxyService,
@@ -88,6 +111,8 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       sceneService,
       sessionMessageService,
       gameEventRepo,
+      pendingGuardRepo,
+      startEncounterFromNarrative,
     );
   }
 
@@ -363,10 +388,12 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         makeRes().res,
       );
 
-      // findOne foi chamado mas não retornou nada — não adiciona em recent_events.
-      expect(findOne).toHaveBeenCalledTimes(1);
+      // findOne é chamado 2x quando systemHint='post_combat':
+      //   1) findLatestEncounterId(eventType='encounter_resolved')
+      //   2) injectSystemHintEvent(eventType='encounter_outcome_summary')
+      // Ambas retornam null aqui — nenhuma resolve em mescla.
+      expect(findOne).toHaveBeenCalledTimes(2);
       const proxied = pipeStream.mock.calls[0][1];
-      // sceneContext.recent_events não deve conter encounter_outcome_summary.
       const recent = proxied.sceneContext?.recent_events ?? [];
       expect(
         recent.some((e: any) => e.type === "encounter_outcome_summary"),
@@ -442,6 +469,129 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       expect(
         recent.some((e: any) => e.type === "encounter_outcome_summary"),
       ).toBe(false);
+    });
+  });
+
+  // Idempotência F5 do post_combat — quando a narração pós-combate já foi
+  // persistida (clientId determinístico por encounterId), o segundo POST
+  // retorna do histórico sem chamar o agent.
+  describe("narrativeTurn: post_combat F5 idempotency", () => {
+    it("post_combat: narração já persistida → não chama agent, emite session_sync + done", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const findOne = jest.fn().mockImplementation((opts: any) => {
+        if (opts.where?.eventType === "encounter_resolved") {
+          return Promise.resolve({
+            sequence: 50,
+            data: {},
+            encounterId: "enc-abc",
+          });
+        }
+        return Promise.resolve(null);
+      });
+      const findByClientId = jest.fn().mockResolvedValue({
+        id: "msg-99",
+        clientId: "srv-narr-post-combat-enc-abc",
+        kind: "narration",
+        content: "old narration",
+      });
+
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+        sessionMessageService: { findByClientId },
+      });
+
+      const r = makeRes();
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "post_combat",
+          lastMessageId: 100,
+        },
+        { user: { id: USER_ID } } as any,
+        r.res,
+      );
+
+      // Não chama o agent (idempotência ativou).
+      expect(pipeStream).not.toHaveBeenCalled();
+      expect(findByClientId).toHaveBeenCalledWith(
+        SESSION_ID,
+        "srv-narr-post-combat-enc-abc",
+      );
+      // Emite narration_persisted (com clientId existente) + session_sync + done.
+      const writeStr = r.writes.join("");
+      expect(writeStr).toContain("narration_persisted");
+      expect(writeStr).toContain("session_sync");
+      expect(writeStr).toContain('"type":"done"');
+      expect(r.isEnded()).toBe(true);
+    });
+
+    it("post_combat: sem narração persistida → chama agent normalmente com clientId determinístico", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const findOne = jest.fn().mockImplementation((opts: any) => {
+        if (opts.where?.eventType === "encounter_resolved") {
+          return Promise.resolve({
+            sequence: 50,
+            data: {},
+            encounterId: "enc-abc",
+          });
+        }
+        return Promise.resolve(null);
+      });
+      const findByClientId = jest.fn().mockResolvedValue(null);
+
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+        sessionMessageService: { findByClientId },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "post_combat",
+          lastMessageId: 100,
+        },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      // Agent foi chamado normalmente.
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      // Lookup de existente foi feito mesmo assim (defesa contra race).
+      expect(findByClientId).toHaveBeenCalledWith(
+        SESSION_ID,
+        "srv-narr-post-combat-enc-abc",
+      );
+    });
+
+    it("post_combat: sem encounter_resolved no histórico → segue fluxo normal sem clientId determinístico", async () => {
+      const pipeStream = jest.fn(async () => {});
+      const findOne = jest.fn().mockResolvedValue(null);
+      const findByClientId = jest.fn();
+
+      const controller = makeController({
+        pipeStream,
+        gameEventRepo: { findOne },
+        sessionMessageService: { findByClientId },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "post_combat",
+          lastMessageId: 100,
+        },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      // Sem encounterId, lookup do clientId determinístico não roda.
+      expect(findByClientId).not.toHaveBeenCalled();
     });
   });
 });

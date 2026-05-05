@@ -177,6 +177,11 @@ export class NpcService {
         npcId: npc.id,
       });
       await this.sceneNpcRepo.save(sceneNpc);
+      if (activeScene.locationId) {
+        await this.stateService.upsert(gameSessionId, npc.id, {
+          currentLocationId: activeScene.locationId,
+        });
+      }
     } catch (err) {
       this.logger.warn(
         `scene_npcs attach falhou npc=${npc.id} session=${gameSessionId}: ${

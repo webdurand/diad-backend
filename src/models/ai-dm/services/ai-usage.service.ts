@@ -75,7 +75,7 @@ export interface CampaignCostSummary {
   withinTarget: boolean;
 }
 
-export function computeCostUsd(
+function computeCostUsd(
   modelId: string,
   inputTokens: number,
   outputTokens: number,

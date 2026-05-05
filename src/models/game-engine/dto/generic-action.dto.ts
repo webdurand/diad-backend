@@ -35,7 +35,7 @@ export type GenericActionKind =
 
 export type ReadyTriggerKind = "enemy_enters_range" | "enemy_attacks_ally";
 
-export class ReadyTriggerDto {
+class ReadyTriggerDto {
   @IsIn(["enemy_enters_range", "enemy_attacks_ally"])
   kind: ReadyTriggerKind;
 
@@ -54,7 +54,7 @@ export class ReadyTriggerDto {
 /** Ação armada via Ready — para esta spec, cobrimos só ataques e movimentos
  * como ações preparadas. Spells fica pra spec futura (requer resolver de DC
  * + slot no momento do trigger). */
-export class ReadiedActionDescriptorDto {
+class ReadiedActionDescriptorDto {
   @IsIn(["attack", "move"])
   kind: "attack" | "move";
 
@@ -71,7 +71,7 @@ export class ReadiedActionDescriptorDto {
   to?: { x: number; y: number };
 }
 
-export class ObjectRefDto {
+class ObjectRefDto {
   @IsIn(["inventory", "environment"])
   source: "inventory" | "environment";
 

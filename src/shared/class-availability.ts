@@ -19,7 +19,7 @@ export interface ClassAvailability {
   canonicalSubclasses: string[];
 }
 
-export const CLASS_AVAILABILITY: Record<string, ClassAvailability> = {
+const CLASS_AVAILABILITY: Record<string, ClassAvailability> = {
   fighter: { available: true, canonicalSubclasses: ["champion"] },
   barbarian: { available: true, canonicalSubclasses: ["berserker"] },
   cleric: { available: true, canonicalSubclasses: ["life"] },
