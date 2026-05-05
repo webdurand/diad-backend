@@ -119,7 +119,7 @@ describe("TravelTickService.tick", () => {
     });
   });
 
-  it("creates destination scene + clears travelState on arrival", async () => {
+  it("returns ready_to_arrive on last tick (does NOT create scene)", async () => {
     const session = makeSession({
       travelState: {
         active: true,
@@ -138,13 +138,70 @@ describe("TravelTickService.tick", () => {
         reason: "player_movement",
       },
     });
-    const { service, sessionRepo, sceneService, locationService } = buildService({ session });
+    const { service, sessionRepo, sceneService } = buildService({ session });
     const result = await service.tick("sess-1");
+    expect(result.status).toBe("ready_to_arrive");
+    if (result.status === "ready_to_arrive") {
+      expect(result.progressPercent).toBe(100);
+      expect(result.travelState.elapsedTurns).toBe(2);
+    }
+    expect(session.travelState).not.toBeNull();
+    expect(sessionRepo.save).toHaveBeenCalled();
+    expect(sceneService.create).not.toHaveBeenCalled();
+  });
+
+  it("subsequent ticks while ready_to_arrive stay at 100% (no further increment)", async () => {
+    const session = makeSession({
+      travelState: {
+        active: true,
+        elapsedTurns: 2,
+        totalTurns: 2,
+        minutesPerTurn: 120,
+        toLocationId: "loc-2",
+        toLocationName: "Florestas",
+        toLocationType: "wilderness",
+        destinationBiome: "wilderness",
+        connectionId: "conn-1",
+        fromLocationId: "loc-1",
+        totalMinutes: 240,
+        elapsedMinutes: 240,
+        startedAtIso: "2026-01-01T00:00:00Z",
+        reason: "player_movement",
+      },
+    });
+    const { service, gameClockService } = buildService({ session });
+    const result = await service.tick("sess-1");
+    expect(result.status).toBe("ready_to_arrive");
+    expect(gameClockService.advanceTime).not.toHaveBeenCalled();
+    expect(session.travelState?.elapsedTurns).toBe(2);
+  });
+
+  it("arrive() creates destination scene + clears travelState", async () => {
+    const session = makeSession({
+      travelState: {
+        active: true,
+        elapsedTurns: 2,
+        totalTurns: 2,
+        minutesPerTurn: 120,
+        toLocationId: "loc-2",
+        toLocationName: "Florestas",
+        toLocationType: "wilderness",
+        destinationBiome: "wilderness",
+        connectionId: "conn-1",
+        fromLocationId: "loc-1",
+        totalMinutes: 240,
+        elapsedMinutes: 240,
+        startedAtIso: "2026-01-01T00:00:00Z",
+        reason: "player_movement",
+      },
+    });
+    const { service, sessionRepo, sceneService, locationService } = buildService({ session });
+    const result = await service.arrive("sess-1");
     expect(result.status).toBe("arrived");
     if (result.status === "arrived") {
       expect(result.sceneId).toBe(newScene.id);
       expect(result.toLocationId).toBe("loc-2");
-      expect(result.progressPercent).toBe(100);
+      expect(result.fromLocationId).toBe("loc-1");
     }
     expect(session.travelState).toBeNull();
     expect(sessionRepo.save).toHaveBeenCalled();
@@ -155,5 +212,12 @@ describe("TravelTickService.tick", () => {
       skipBudgetIncrement: true,
     });
     expect(locationService.markVisited).toHaveBeenCalledWith("loc-2");
+  });
+
+  it("arrive() returns no_travel when no active travel", async () => {
+    const { service, sceneService } = buildService({ session: makeSession() });
+    const result = await service.arrive("sess-1");
+    expect(result.status).toBe("no_travel");
+    expect(sceneService.create).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,10 @@
-export const TRAVEL_MAX_TURNS = 5;
-export const TRAVEL_MIN_TURNS = 2;
+export const TRAVEL_MAX_TURNS = 8;
+export const TRAVEL_MIN_TURNS = 1;
+export const TRAVEL_MINUTES_PER_TURN = 30;
 export const TRAVEL_DEFAULT_MINUTES_FALLBACK = 30;
 
 export function computeTravelTurns(totalMinutes: number | null | undefined): number {
   if (totalMinutes == null || totalMinutes <= 0) return TRAVEL_MIN_TURNS;
-  if (totalMinutes <= 60) return 2;
-  if (totalMinutes <= 4 * 60) return 3;
-  if (totalMinutes <= 12 * 60) return 4;
-  return TRAVEL_MAX_TURNS;
+  const turns = Math.ceil(totalMinutes / TRAVEL_MINUTES_PER_TURN);
+  return Math.min(TRAVEL_MAX_TURNS, Math.max(TRAVEL_MIN_TURNS, turns));
 }

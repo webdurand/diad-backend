@@ -375,6 +375,12 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
+  @Post("sessions/:sessionId/travel/arrive")
+  async arriveTravel(@Param("sessionId") sessionId: string) {
+    const result = await this.travelTickService.arrive(sessionId);
+    return { ok: true as const, value: result };
+  }
+
   // ==================== SESSIONS ====================
 
   @Post("sessions")

@@ -26,11 +26,19 @@ export type TravelTickResult =
       progressPercent: number;
     }
   | {
+      status: "ready_to_arrive";
+      travelState: SessionTravelState;
+      progressPercent: 100;
+    };
+
+export type TravelArriveResult =
+  | { status: "no_travel" }
+  | {
       status: "arrived";
       sceneId: string;
       toLocationId: string;
       toLocationName: string;
-      progressPercent: 100;
+      fromLocationId: string | null;
     };
 
 @Injectable()
@@ -87,6 +95,18 @@ export class TravelTickService {
       }
     }
 
+    if (travel.elapsedTurns >= travel.totalTurns) {
+      this.logger.info("🚶 travel.tick already_ready_to_arrive", {
+        "session.id": sessionId,
+        "travel.total": travel.totalTurns,
+      });
+      return {
+        status: "ready_to_arrive",
+        travelState: travel,
+        progressPercent: 100,
+      };
+    }
+
     travel.elapsedTurns += 1;
     travel.elapsedMinutes += travel.minutesPerTurn;
 
@@ -104,43 +124,13 @@ export class TravelTickService {
       }
     }
 
-    const arrived = travel.elapsedTurns >= travel.totalTurns;
-
-    if (arrived) {
-      session.travelState = null;
-      await this.sessionRepo.save(session);
-
-      const newScene = await this.sceneService.create(sessionId, {
-        locationId: travel.toLocationId,
-        title: travel.toLocationName,
-        reason: "travel_arrival",
-        skipBudgetIncrement: true,
-      });
-      await this.locationService.markVisited(travel.toLocationId);
-
-      this.logger.info("🚶 travel.arrived", {
-        "session.id": sessionId,
-        "scene.id": newScene.id,
-        "location.to": travel.toLocationId,
-        "location.name": travel.toLocationName,
-        "travel.turns": travel.totalTurns,
-      });
-
-      return {
-        status: "arrived",
-        sceneId: newScene.id,
-        toLocationId: travel.toLocationId,
-        toLocationName: travel.toLocationName,
-        progressPercent: 100,
-      };
-    }
-
     session.travelState = travel;
     await this.sessionRepo.save(session);
 
     const progressPercent = Math.round(
       (travel.elapsedTurns / travel.totalTurns) * 100,
     );
+    const justReachedDestination = travel.elapsedTurns >= travel.totalTurns;
 
     this.logger.info("🚶 travel.tick", {
       "session.id": sessionId,
@@ -148,12 +138,68 @@ export class TravelTickService {
       "travel.total": travel.totalTurns,
       "travel.progress": progressPercent,
       "travel.destination_biome": travel.destinationBiome,
+      "travel.ready_to_arrive": justReachedDestination,
     });
+
+    if (justReachedDestination) {
+      return {
+        status: "ready_to_arrive",
+        travelState: travel,
+        progressPercent: 100,
+      };
+    }
 
     return {
       status: "in_transit",
       travelState: travel,
       progressPercent,
+    };
+  }
+
+  async arrive(sessionId: string): Promise<TravelArriveResult> {
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+    });
+    if (!session) {
+      throw new DomainException(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Sessão ${sessionId} não encontrada.`,
+      );
+    }
+    const travel = session.travelState;
+    if (!travel?.active) {
+      return { status: "no_travel" };
+    }
+
+    const fromLocationId = travel.fromLocationId;
+    const toLocationId = travel.toLocationId;
+    const toLocationName = travel.toLocationName;
+
+    session.travelState = null;
+    await this.sessionRepo.save(session);
+
+    const newScene = await this.sceneService.create(sessionId, {
+      locationId: toLocationId,
+      title: toLocationName,
+      reason: "travel_arrival",
+      skipBudgetIncrement: true,
+    });
+    await this.locationService.markVisited(toLocationId);
+
+    this.logger.info("🚶 travel.arrive", {
+      "session.id": sessionId,
+      "scene.id": newScene.id,
+      "location.from": fromLocationId ?? "(none)",
+      "location.to": toLocationId,
+      "location.name": toLocationName,
+    });
+
+    return {
+      status: "arrived",
+      sceneId: newScene.id,
+      toLocationId,
+      toLocationName,
+      fromLocationId,
     };
   }
 }
