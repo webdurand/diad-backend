@@ -5,6 +5,7 @@ import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignEntity } from "src/entities/campaign.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { CharacterEntity } from "src/entities/character.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 export interface CreateSessionDto {
@@ -38,6 +39,8 @@ export class SessionService {
     private readonly campaignPlayerRepo: Repository<CampaignPlayerEntity>,
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(EncounterEntity)
+    private readonly encounterRepo: Repository<EncounterEntity>,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(SessionService.name);
@@ -81,6 +84,17 @@ export class SessionService {
       where: { id: sessionId },
     });
     if (!session) throw new NotFoundException("Sessao nao encontrada.");
+
+    if (session.activeEncounterId) {
+      const enc = await this.encounterRepo.findOne({
+        where: { id: session.activeEncounterId },
+        select: ["id", "status"],
+      });
+      if (!enc || enc.status === "completed") {
+        await this.setActiveEncounter(sessionId, null);
+        session.activeEncounterId = null;
+      }
+    }
     return session;
   }
 
