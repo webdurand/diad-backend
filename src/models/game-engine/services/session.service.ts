@@ -116,6 +116,7 @@ export class SessionService {
       await this.sceneService.create(sessionId, {
         title: campaign.name,
         reason: "session_bootstrap",
+        skipBudgetIncrement: true,
       });
     } catch (err) {
       this.logger.warn("session.bootstrap_initial_scene.failed", {

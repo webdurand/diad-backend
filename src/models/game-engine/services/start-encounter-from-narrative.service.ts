@@ -376,6 +376,7 @@ export class StartEncounterFromNarrativeService {
       title: input.narrativeTrigger ?? "Combate iminente",
       description: "Cena criada automaticamente para hospedar combate.",
       reason: "auto_combat_stub",
+      skipBudgetIncrement: true,
     });
     this.logger.log(
       `auto_scene_stub_created session=${input.sessionId} scene=${saved.id} location=${saved.locationId ?? "(none)"}`,
