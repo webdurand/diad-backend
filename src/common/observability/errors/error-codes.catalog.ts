@@ -115,6 +115,10 @@ export const ErrorCode = {
   // /solo/{id}/message do pipeline legacy DM agent foram removidos. Frontend
   // usa /ai/narrative/:sessionId/turn (Coordinator multi-agent).
   LEGACY_ENDPOINT_DEPRECATED: "LEGACY_ENDPOINT_DEPRECATED",
+
+  // movement (sistema de localidade real)
+  LOCATION_CONNECTION_BLOCKED: "LOCATION_CONNECTION_BLOCKED",
+  LOCATION_REQUIREMENTS_NOT_MET: "LOCATION_REQUIREMENTS_NOT_MET",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

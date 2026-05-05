@@ -10,14 +10,8 @@ import {
 } from "../errors/error-codes.metadata";
 
 describe("Error Codes Catalog", () => {
-  it("contém os 70 codes do catálogo canônico", () => {
-    // Spec 017 +2 (event-bus). Spec 019 +4 (world+spell).
-    // Spec 020 +28 (encounter, spell, combat, inventory, npc, world, session, loot).
-    // Spec 024 +5 (session-recap incl SESSION_LAST_MESSAGE_MISMATCH).
-    // Spec 027 +4 (IDEMPOTENCY_CACHE_MISS_AFTER_RACE,
-    //   NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND, CAMPAIGN_SLUG_NOT_RESOLVED,
-    //   LEGACY_ENDPOINT_DEPRECATED).
-    expect(ALL_ERROR_CODES.length).toBe(70);
+  it("contém os codes do catálogo canônico", () => {
+    expect(ALL_ERROR_CODES.length).toBe(76);
   });
 
   it("todos os codes seguem o regex SCREAMING_SNAKE", () => {

@@ -131,6 +131,8 @@ import { NpcEntity } from "src/entities/npc.entity";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { MagicItemEntity } from "src/entities/magic-item.entity";
 import { LocationEntity } from "src/entities/location.entity";
+import { LocationConnectionEntity } from "src/entities/location-connection.entity";
+import { MoveToLocationService } from "./services/move-to-location.service";
 
 @Module({
   imports: [
@@ -163,6 +165,7 @@ import { LocationEntity } from "src/entities/location.entity";
       SessionMessageEntity,
       MagicItemEntity,
       LocationEntity,
+      LocationConnectionEntity,
     ]),
     AuthModule,
     CharactersModule,
@@ -266,6 +269,7 @@ import { LocationEntity } from "src/entities/location.entity";
     StartEncounterFromNarrativeService,
     // Spec 027 (M2 follow-up) — auto-end de combate em DIAD solo
     EncounterEndDetectorService,
+    MoveToLocationService,
   ],
   exports: [
     DiceService,

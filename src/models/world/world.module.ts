@@ -19,6 +19,7 @@ import {
   EncounterTemplateEntity,
   UserEntity,
   CharacterEntity,
+  CharacterStateEntity,
   MonsterEntity,
   EquipmentEntity,
   MagicItemEntity,
@@ -55,6 +56,8 @@ import { ChaosFactorService } from "./services/chaos-factor.service";
 import { SessionNpcStateService } from "./services/session-npc-state.service";
 import { SessionFactionStateService } from "./services/session-faction-state.service";
 import { SessionStoryArcStateService } from "./services/session-story-arc-state.service";
+import { NpcWealthService } from "./services/npc-wealth.service";
+import { NpcWealthController } from "./npc-wealth.controller";
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 
 @Module({
@@ -78,6 +81,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       EncounterTemplateEntity,
       UserEntity,
       CharacterEntity,
+      CharacterStateEntity,
       MonsterEntity,
       EquipmentEntity,
       MagicItemEntity,
@@ -96,7 +100,12 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     forwardRef(() => AiProxyModule),
     forwardRef(() => GameEngineModule),
   ],
-  controllers: [WorldController, WorldSynthController, SessionScopedWorldController],
+  controllers: [
+    WorldController,
+    WorldSynthController,
+    SessionScopedWorldController,
+    NpcWealthController,
+  ],
   providers: [
     CampaignService,
     LocationService,
@@ -114,6 +123,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionNpcStateService,
     SessionFactionStateService,
     SessionStoryArcStateService,
+    NpcWealthService,
     // Spec 027 D3 — slug→UUID pipe pra `/campaigns/:id/*`
     CampaignIdPipe,
   ],
@@ -134,6 +144,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionNpcStateService,
     SessionFactionStateService,
     SessionStoryArcStateService,
+    NpcWealthService,
   ],
 })
 export class WorldModule {}

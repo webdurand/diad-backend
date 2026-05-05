@@ -102,6 +102,7 @@ import type { DyingState, DyingReason } from "./services/dying-state.service";
 import { LootRollService } from "./services/loot-roll.service";
 import type { CRBand, LootMode } from "./services/loot-roll.service";
 import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
+import { MoveToLocationService } from "./services/move-to-location.service";
 // Spec 027 (M2 follow-up) — WS realtime substitui polling no frontend.
 import { RealtimeService } from "src/realtime/realtime.service";
 import { StartEncounterFromNarrativeDto } from "./dto/start-encounter-from-narrative.dto";
@@ -192,6 +193,7 @@ export class GameEngineController {
     private readonly dyingStateService: DyingStateService,
     private readonly lootRollService: LootRollService,
     private readonly startEncounterFromNarrativeService: StartEncounterFromNarrativeService,
+    private readonly moveToLocationService: MoveToLocationService,
     // Spec 027 (M2 follow-up) — WS realtime para invalidar cache do frontend
     // após mutações de turno/encontro. Sala: encounter:<id>.
     private readonly realtime: RealtimeService,
@@ -326,6 +328,30 @@ export class GameEngineController {
       campaignId: dto.campaignId,
       tokensLayout: dto.tokensLayout,
       ownerUserId,
+    });
+    return { ok: true as const, value: result };
+  }
+
+  /**
+   * Move PC pra location adjacente. Valida connection (existência, isLocked,
+   * requirements). Cria scene nova com locationId destino — emite scene_changed
+   * via SceneService.create. Idempotente quando target == current.
+   */
+  @Post("sessions/:sessionId/move-to-location")
+  async moveToLocation(
+    @Param("sessionId") sessionId: string,
+    @Body()
+    dto: {
+      targetLocationId?: string;
+      targetLocationName?: string;
+      reason?: string;
+    },
+  ) {
+    const result = await this.moveToLocationService.run({
+      sessionId,
+      targetLocationId: dto.targetLocationId,
+      targetLocationName: dto.targetLocationName,
+      reason: dto.reason,
     });
     return { ok: true as const, value: result };
   }

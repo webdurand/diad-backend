@@ -363,6 +363,20 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Verificar se a localização ainda existe na campanha.",
     domain: "world",
   },
+  [ErrorCode.LOCATION_CONNECTION_BLOCKED]: {
+    httpStatus: 400,
+    defaultTitle: "Location connection blocked",
+    defaultHint:
+      "Não há rota direta entre a location atual e o destino. Director deve narrar obstáculo ou revelar caminho.",
+    domain: "world",
+  },
+  [ErrorCode.LOCATION_REQUIREMENTS_NOT_MET]: {
+    httpStatus: 400,
+    defaultTitle: "Location connection requirements not met",
+    defaultHint:
+      "Conexão é locked e requirements não atendidos (key, spell, etc). Director deve narrar obstáculo.",
+    domain: "world",
+  },
   [ErrorCode.SCENE_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Scene not found",

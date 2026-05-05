@@ -91,6 +91,8 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "loot_rolled",
     "healing_received",
     "hp_lost_narrative",
+    "theft_from_pc",
+    "theft_from_npc",
     // Spec 027 (M2, AC2.5)
     "reputation_tag_added",
     "crime_committed",
