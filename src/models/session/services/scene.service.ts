@@ -20,6 +20,8 @@ export interface CreateSceneDto {
   mood?: string;
   /** Razão semântica da transição (ex: "player_left_chamber", "director_advanced"). */
   reason?: string;
+  /** Movement-driven scene não conta no budget de arc beats (Mythic). */
+  skipBudgetIncrement?: boolean;
 }
 
 const BEAT_ORDER: ArcBeat[] = [
@@ -76,8 +78,10 @@ export class SceneService {
     const campaign = await this.resolveCampaign(sessionId);
     let arcBeat: ArcBeat | undefined;
     if (campaign) {
-      await this.campaignService.incrementCount(campaign.id, "scenes");
-      arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber, sessionId);
+      if (!dto.skipBudgetIncrement) {
+        await this.campaignService.incrementCount(campaign.id, "scenes");
+        arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber, sessionId);
+      }
     }
 
     const resolvedLocationId =

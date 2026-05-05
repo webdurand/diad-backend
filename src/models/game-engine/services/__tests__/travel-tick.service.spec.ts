@@ -152,6 +152,7 @@ describe("TravelTickService.tick", () => {
       locationId: "loc-2",
       title: "Florestas",
       reason: "travel_arrival",
+      skipBudgetIncrement: true,
     });
     expect(locationService.markVisited).toHaveBeenCalledWith("loc-2");
   });

@@ -13,12 +13,12 @@ import { CampaignEntity } from "./campaign.entity";
 
 export interface SessionTravelState {
   active: true;
-  fromLocationId: string;
+  fromLocationId: string | null;
   toLocationId: string;
   toLocationName: string;
   toLocationType: string;
   destinationBiome: string;
-  connectionId: string;
+  connectionId: string | null;
   totalMinutes: number;
   elapsedMinutes: number;
   totalTurns: number;

@@ -33,7 +33,7 @@ export interface AmbiancePayloadDto {
   locationSlug: string | null;
   narrativeSummary: string;
   travelInProgress?: {
-    fromLocationId: string;
+    fromLocationId: string | null;
     toLocationId: string;
     toLocationName: string;
     destinationBiome: string;

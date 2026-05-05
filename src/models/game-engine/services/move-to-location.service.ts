@@ -8,7 +8,6 @@ import {
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { LocationEntity } from "src/entities/location.entity";
 import { LocationService } from "src/models/world/services/location.service";
-import { GameClockService } from "src/models/world/services/game-clock.service";
 import { SceneService } from "src/models/session/services/scene.service";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
@@ -16,7 +15,10 @@ import { DiadLogger } from "src/common/observability/logger/diad-logger.service"
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { parseTravelTimeToMinutes } from "src/lib/parse-travel-time";
-import { computeTravelTurns } from "src/lib/travel-turn-bucket";
+import {
+  computeTravelTurns,
+  TRAVEL_DEFAULT_MINUTES_FALLBACK,
+} from "src/lib/travel-turn-bucket";
 
 export interface MoveToLocationInput {
   sessionId: string;
@@ -27,17 +29,15 @@ export interface MoveToLocationInput {
 
 export type MoveToLocationResult =
   | {
-      travelMode: "instant";
+      travelMode: "already_there";
       sceneId: string;
       fromLocationId: string | null;
       toLocationId: string;
       toLocationName: string;
-      travelTime: string | null;
-      alreadyThere: boolean;
     }
   | {
       travelMode: "in_transit";
-      fromLocationId: string;
+      fromLocationId: string | null;
       toLocationId: string;
       toLocationName: string;
       travelTime: string | null;
@@ -71,7 +71,6 @@ export class MoveToLocationService {
     private readonly connectionRepo: Repository<LocationConnectionEntity>,
     private readonly locationService: LocationService,
     private readonly sceneService: SceneService,
-    private readonly gameClockService: GameClockService,
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
@@ -123,13 +122,11 @@ export class MoveToLocationService {
 
     if (fromLocationId === target.id) {
       return {
-        travelMode: "instant",
+        travelMode: "already_there",
         sceneId: currentScene!.id,
         fromLocationId,
         toLocationId: target.id,
         toLocationName: target.name,
-        travelTime: null,
-        alreadyThere: true,
       };
     }
 
@@ -166,25 +163,18 @@ export class MoveToLocationService {
       travelTime = connection.travelTime ?? null;
     }
 
-    const totalMinutes = parseTravelTimeToMinutes(travelTime) ?? 0;
+    const parsedMinutes = parseTravelTimeToMinutes(travelTime);
+    const totalMinutes =
+      parsedMinutes && parsedMinutes > 0
+        ? parsedMinutes
+        : TRAVEL_DEFAULT_MINUTES_FALLBACK;
     const totalTurns = computeTravelTurns(totalMinutes);
-
-    if (totalTurns === 0) {
-      return this.runInstant({
-        session,
-        target,
-        fromLocationId,
-        travelTime,
-        totalMinutes,
-        reason: input.reason,
-      });
-    }
 
     return this.runInTransit({
       session,
       target,
-      fromLocationId: fromLocationId!,
-      connection: connection!,
+      fromLocationId,
+      connection,
       travelTime,
       totalMinutes,
       totalTurns,
@@ -213,64 +203,11 @@ export class MoveToLocationService {
     }));
   }
 
-  private async runInstant(params: {
-    session: GameSessionEntity;
-    target: LocationEntity;
-    fromLocationId: string | null;
-    travelTime: string | null;
-    totalMinutes: number;
-    reason?: string;
-  }): Promise<MoveToLocationResult> {
-    const { session, target, fromLocationId, travelTime, totalMinutes, reason } = params;
-
-    if (totalMinutes > 0) {
-      try {
-        await this.gameClockService.advanceTime(session.campaignId!, {
-          hours: totalMinutes / 60,
-          trigger: "travel_instant",
-        });
-      } catch (err) {
-        this.logger.warn("travel_instant.clock_skip", {
-          "session.id": session.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
-    const newScene = await this.sceneService.create(session.id, {
-      locationId: target.id,
-      title: target.name,
-      reason: reason ?? "movement",
-    });
-
-    await this.locationService.markVisited(target.id);
-
-    this.logger.info("🚶 move_to_location.instant", {
-      "session.id": session.id,
-      "scene.id": newScene.id,
-      "location.from": fromLocationId ?? "(none)",
-      "location.to": target.id,
-      "location.name": target.name,
-      "travel.time": travelTime ?? "(none)",
-      "travel.minutes": totalMinutes,
-    });
-
-    return {
-      travelMode: "instant",
-      sceneId: newScene.id,
-      fromLocationId,
-      toLocationId: target.id,
-      toLocationName: target.name,
-      travelTime,
-      alreadyThere: false,
-    };
-  }
-
   private async runInTransit(params: {
     session: GameSessionEntity;
     target: LocationEntity;
-    fromLocationId: string;
-    connection: LocationConnectionEntity;
+    fromLocationId: string | null;
+    connection: LocationConnectionEntity | null;
     travelTime: string | null;
     totalMinutes: number;
     totalTurns: number;
@@ -297,7 +234,7 @@ export class MoveToLocationService {
       toLocationName: target.name,
       toLocationType: target.type,
       destinationBiome,
-      connectionId: connection.id,
+      connectionId: connection?.id ?? null,
       totalMinutes,
       elapsedMinutes: 0,
       totalTurns,

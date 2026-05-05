@@ -114,6 +114,7 @@ export class TravelTickService {
         locationId: travel.toLocationId,
         title: travel.toLocationName,
         reason: "travel_arrival",
+        skipBudgetIncrement: true,
       });
       await this.locationService.markVisited(travel.toLocationId);
 
