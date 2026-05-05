@@ -37,22 +37,22 @@ describe("parseTravelTimeToMinutes", () => {
 
 describe("computeTravelTurns", () => {
   it.each([
-    [null, 1],
-    [undefined, 1],
-    [0, 1],
-    [-10, 1],
-    [5, 1],
-    [29, 1],
-    [30, 1],
-    [60, 1],
-    [61, 2],
-    [240, 2],
-    [241, 3],
-    [12 * 60, 3],
-    [12 * 60 + 1, 4],
-    [24 * 60, 4],
-    [48 * 60, 4],
-  ])("computes %p minutes → %d turns (always >= 1, no instant)", (input, expected) => {
+    [null, 2],
+    [undefined, 2],
+    [0, 2],
+    [-10, 2],
+    [5, 2],
+    [29, 2],
+    [30, 2],
+    [60, 2],
+    [61, 3],
+    [240, 3],
+    [241, 4],
+    [12 * 60, 4],
+    [12 * 60 + 1, 5],
+    [24 * 60, 5],
+    [48 * 60, 5],
+  ])("computes %p minutes → %d turns (min 2, max 5)", (input, expected) => {
     expect(computeTravelTurns(input)).toBe(expected);
   });
 });
