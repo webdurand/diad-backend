@@ -1,25 +1,17 @@
-import { parseTravelTimeToMinutes } from "../parse-travel-time";
+import {
+  parseTravelTimeToMinutes,
+  formatTravelTimeLabel,
+} from "../parse-travel-time";
 import { computeTravelTurns } from "../travel-turn-bucket";
 
-describe("parseTravelTimeToMinutes", () => {
+describe("parseTravelTimeToMinutes (integer 1-24, hours)", () => {
   it.each([
-    ["5 minutes", 5],
-    ["30 min", 30],
-    ["30min", 30],
-    ["45 minutos", 45],
-    ["2 hours", 120],
-    ["2h", 120],
-    ["1 hora", 60],
-    ["1.5 hours", 90],
-    ["half day", 12 * 60],
-    ["meio dia", 12 * 60],
-    ["1 day", 24 * 60],
-    ["1d", 24 * 60],
-    ["2 dias", 48 * 60],
-    ["4-6 hours", 240],
-    ["4 to 6 hours", 240],
-    ["3 a 5 horas", 180],
-    ["  2 HOURS  ", 120],
+    ["1", 60],
+    ["2", 120],
+    ["4", 240],
+    ["12", 720],
+    ["24", 1440],
+    ["  4  ", 240],
   ])("parses %p → %d minutes", (input, expected) => {
     expect(parseTravelTimeToMinutes(input)).toBe(expected);
   });
@@ -28,10 +20,25 @@ describe("parseTravelTimeToMinutes", () => {
     [null, null],
     [undefined, null],
     ["", null],
-    ["unknown format", null],
-    ["very fast", null],
-  ])("returns null for unparseable %p", (input, expected) => {
+    ["0", null],
+    ["25", null],
+    ["abc", null],
+    ["4h", null],
+    ["half day", null],
+  ])("returns null for invalid %p", (input, expected) => {
     expect(parseTravelTimeToMinutes(input)).toBe(expected);
+  });
+});
+
+describe("formatTravelTimeLabel", () => {
+  it.each([
+    ["1", "1h"],
+    ["4", "4h"],
+    ["12", "12h"],
+    ["abc", null],
+    [null, null],
+  ])("formats %p → %p", (input, expected) => {
+    expect(formatTravelTimeLabel(input)).toBe(expected);
   });
 });
 
