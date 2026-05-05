@@ -129,6 +129,8 @@ export class StartEncounterFromNarrativeService {
       input.campaignId ?? null,
     );
 
+    let cachedPcSnapshot: { level: number; hpPercent: number; klass: string } | null = null;
+
     // 2.5. Fallback do botão "Iniciar combate": resolve hostis a partir da
     // cena ativa. Hostis primeiro; figurantes neutros materializados pelo
     // narrator entram só se não houver hostis declarados.
@@ -139,14 +141,22 @@ export class StartEncounterFromNarrativeService {
       );
       const fallback = hostiles.length > 0 ? hostiles : sceneCtx.npcsPresent;
       resolvedIds = fallback.map((n) => n.id);
+      const pc = sceneCtx.playerCharacter;
+      if (pc) {
+        cachedPcSnapshot = {
+          level: pc.level,
+          hpPercent: pc.currentHpPercent,
+          klass: pc.class,
+        };
+      }
     }
 
     // 2.6. Lazy extraction: cena sem hostis materializados é o caso comum
     // (narrator descreve "5 homens armados" só na prosa). Chama o agno
-    // /narrative/extract-combat-targets passando a prosa recente — o Haiku
-    // identifica alvos, materializa via NpcService.create (auto-attach
-    // scene_npcs), e devolve os IDs prontos pra encounter. Frontend já mostra
-    // "Preparando..." no banner, então a latência (~3s) é coberta pela UX.
+    // /narrative/extract-combat-targets passando a prosa recente + snapshot
+    // do PC (level/HP/classe) — o Haiku identifica alvos com CR adequado ao
+    // tier, materializa via NpcService.create (auto-attach scene_npcs), e
+    // devolve os IDs prontos pra encounter.
     if (
       resolvedIds.length === 0 &&
       input.sessionId &&
@@ -154,6 +164,9 @@ export class StartEncounterFromNarrativeService {
     ) {
       const recentProse = await this.collectRecentNarratorProse(
         input.sessionId,
+      );
+      this.logger.log(
+        `lazy_extract_pre session=${input.sessionId} prose_chars=${recentProse.length} pc_level=${cachedPcSnapshot?.level ?? "?"}`,
       );
       if (recentProse) {
         const extracted = await this.requestLazyTargetExtraction({
@@ -163,6 +176,7 @@ export class StartEncounterFromNarrativeService {
           recentProse,
           locationId: scene.locationId ?? "",
           ownerUserId: input.ownerUserId,
+          playerCharacter: cachedPcSnapshot,
         });
         if (extracted.length > 0) {
           resolvedIds = extracted;
@@ -581,6 +595,66 @@ export class StartEncounterFromNarrativeService {
       }
     }
 
+    // Layout BG3-like: PCs sul (centro da última linha), hostis norte (centro
+    // da primeira linha). Token spread horizontal pra evitar empilhar — ranged
+    // antes/depois do melee fica natural quando NPCs se movem no Round 1.
+    // Distância vertical mantém ~6 tiles (range típico de bow) entre as linhas.
+    const remainingPcs = participants.filter(
+      (p) =>
+        p.positionX == null &&
+        p.positionY == null &&
+        !placedParticipantIds.has(p.id) &&
+        p.type === "pc",
+    );
+    const remainingNpcs = participants.filter(
+      (p) =>
+        p.positionX == null &&
+        p.positionY == null &&
+        !placedParticipantIds.has(p.id) &&
+        p.type !== "pc",
+    );
+
+    const placeRow = (
+      row: number,
+      list: EncounterParticipantEntity[],
+    ): void => {
+      if (list.length === 0) return;
+      // Centra horizontalmente: spread N tokens em torno do meio.
+      const center = Math.floor(gridColumns / 2);
+      const startX = Math.max(0, center - Math.floor(list.length / 2));
+      let x = startX;
+      for (const p of list) {
+        // Avança até achar célula livre na linha (com wrap pra próxima linha
+        // se a linha alvo lotar — caso extremo de party gigante).
+        let y = row;
+        while (true) {
+          if (x >= gridColumns) {
+            x = 0;
+            y = row > gridRows / 2 ? y - 1 : y + 1;
+            if (y < 0 || y >= gridRows) {
+              throw new Error(
+                `Grid ${gridColumns}x${gridRows} cheio posicionando ${list.length} tokens em row=${row}.`,
+              );
+            }
+          }
+          const cellKey = `${x},${y}`;
+          if (!occupied.has(cellKey)) {
+            positions.push({ participantId: p.id, x, y });
+            occupied.add(cellKey);
+            placedParticipantIds.add(p.id);
+            x++;
+            break;
+          }
+          x++;
+        }
+      }
+    };
+
+    placeRow(gridRows - 1, remainingPcs);
+    placeRow(0, remainingNpcs);
+
+    // Fallback: alguém ainda não posicionado (caso layout proposto + rows
+    // cheios). Auto-grid top-left preenche o resto.
     let cursorX = 0;
     let cursorY = 0;
 
@@ -594,8 +668,8 @@ export class StartEncounterFromNarrativeService {
     };
 
     for (const p of participants) {
-      if (p.positionX != null && p.positionY != null) continue; // já posicionado
-      if (placedParticipantIds.has(p.id)) continue; // posicionado pelo layout
+      if (p.positionX != null && p.positionY != null) continue;
+      if (placedParticipantIds.has(p.id)) continue;
 
       while (occupied.has(`${cursorX},${cursorY}`)) {
         if (!advance()) {
@@ -607,7 +681,6 @@ export class StartEncounterFromNarrativeService {
       positions.push({ participantId: p.id, x: cursorX, y: cursorY });
       occupied.add(`${cursorX},${cursorY}`);
       if (!advance() && positions.length < participants.length) {
-        // só erra se ainda há quem precise posicionar
         const stillNeed = participants.length - positions.length;
         if (stillNeed > 0) {
           throw new Error(
@@ -672,13 +745,14 @@ export class StartEncounterFromNarrativeService {
     limit = 5,
     maxChars = 4000,
   ): Promise<string> {
-    const rows = await this.messageRepo
-      .createQueryBuilder("m")
-      .where("m.session_id = :sessionId", { sessionId })
-      .andWhere("m.kind = :kind", { kind: "narration" })
-      .orderBy("m.sequence_number", "DESC")
-      .take(limit)
-      .getMany();
+    const rows = await this.messageRepo.find({
+      where: { sessionId, kind: "narration" },
+      order: { sequenceNumber: "DESC" },
+      take: limit,
+    });
+    this.logger.log(
+      `recent_prose session=${sessionId} found=${rows.length} narrations`,
+    );
     if (rows.length === 0) return "";
     const ordered = rows.reverse();
     const joined = ordered.map((r) => r.content).join("\n\n");
@@ -692,6 +766,11 @@ export class StartEncounterFromNarrativeService {
     recentProse: string;
     locationId: string;
     ownerUserId: string;
+    playerCharacter: {
+      level: number;
+      hpPercent: number;
+      klass: string;
+    } | null;
   }): Promise<string[]> {
     try {
       const response = await this.aiProxy.postJsonToAgent<{
@@ -705,6 +784,7 @@ export class StartEncounterFromNarrativeService {
           narrativeTrigger: args.narrativeTrigger,
           recentProse: args.recentProse,
           locationId: args.locationId,
+          playerCharacter: args.playerCharacter,
         },
         { timeoutMs: 12_000, userId: args.ownerUserId },
       );

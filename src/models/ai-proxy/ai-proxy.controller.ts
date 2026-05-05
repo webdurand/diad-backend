@@ -617,6 +617,21 @@ export class AiProxyController {
       }
 
       const collector = new SseNarrationCollector();
+      const narrationClientId = postCombatClientId ?? `srv-narr-${randomUUID()}`;
+      let earlyPersistFired = false;
+      collector.onNarratorDone(async (narration) => {
+        if (earlyPersistFired) return;
+        earlyPersistFired = true;
+        const persisted = await this.persistNarration(
+          sessionId,
+          req.user!.id,
+          narration,
+          narrationClientId,
+        );
+        if (persisted) {
+          this.emitNarrationPersisted(res, persisted.serverId, body.clientId);
+        }
+      });
       await this.aiProxyService.pipeStream(
         "/narrative/turn",
         {
@@ -645,9 +660,9 @@ export class AiProxyController {
             sessionId,
             req.user!.id,
             collector.finalize(),
-            postCombatClientId,
+            narrationClientId,
           );
-          if (persisted) {
+          if (persisted && !earlyPersistFired) {
             this.emitNarrationPersisted(res, persisted.serverId, body.clientId);
           }
           await this.persistChoices(
@@ -721,6 +736,21 @@ export class AiProxyController {
         : ctx.sceneContext;
 
       const collector = new SseNarrationCollector();
+      const narrationClientId = `srv-narr-${randomUUID()}`;
+      let earlyPersistFired = false;
+      collector.onNarratorDone(async (narration) => {
+        if (earlyPersistFired) return;
+        earlyPersistFired = true;
+        const persisted = await this.persistNarration(
+          sessionId,
+          req.user!.id,
+          narration,
+          narrationClientId,
+        );
+        if (persisted) {
+          this.emitNarrationPersisted(res, persisted.serverId, null);
+        }
+      });
       await this.aiProxyService.pipeStream(
         "/narrative/turn",
         {
@@ -742,8 +772,9 @@ export class AiProxyController {
             sessionId,
             req.user!.id,
             collector.finalize(),
+            narrationClientId,
           );
-          if (persisted) {
+          if (persisted && !earlyPersistFired) {
             this.emitNarrationPersisted(res, persisted.serverId, null);
           }
           await this.persistChoices(

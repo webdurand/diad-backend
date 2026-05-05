@@ -222,13 +222,7 @@ function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
   } as unknown as import("src/models/session/services/scene-context.service").SceneContextService;
 
   const messageRepo = {
-    createQueryBuilder: jest.fn(() => ({
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([]),
-    })),
+    find: jest.fn().mockResolvedValue([]),
   } as unknown as import("typeorm").Repository<
     import("src/entities/session-message.entity").SessionMessageEntity
   >;
@@ -536,16 +530,9 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
 
   it("targets vazios → chama agno extract-combat-targets e usa npcIds devolvidos", async () => {
     const { svc, aiProxy, messageRepo } = build();
-    // Simula prosa recente disponível
-    (messageRepo.createQueryBuilder as jest.Mock).mockImplementation(() => ({
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([
-        { content: "Cinco homens ao redor do fogo. Um sexto se aproxima.", sequenceNumber: 10 },
-      ]),
-    }));
+    (messageRepo.find as jest.Mock).mockResolvedValueOnce([
+      { content: "Cinco homens ao redor do fogo. Um sexto se aproxima.", sequenceNumber: 10 },
+    ]);
     // Agno devolve os IDs já materializados
     (aiProxy.postJsonToAgent as jest.Mock).mockResolvedValueOnce({
       targets: [{ npcId: NPC_ID_OK, name: "Homem das listras" }],
@@ -575,15 +562,9 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
 
   it("targets vazios + agno falha → ENCOUNTER_NO_TARGETS_IN_SCENE limpo", async () => {
     const { svc, aiProxy, messageRepo } = build();
-    (messageRepo.createQueryBuilder as jest.Mock).mockImplementation(() => ({
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([
-        { content: "uma cena qualquer", sequenceNumber: 1 },
-      ]),
-    }));
+    (messageRepo.find as jest.Mock).mockResolvedValueOnce([
+      { content: "uma cena qualquer", sequenceNumber: 1 },
+    ]);
     (aiProxy.postJsonToAgent as jest.Mock).mockRejectedValueOnce(new Error("agno down"));
 
     await expect(

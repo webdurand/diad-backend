@@ -177,7 +177,7 @@ export class SessionService {
     encounterId: string | null,
   ): Promise<void> {
     await this.sessionRepo.update(sessionId, {
-      activeEncounterId: encounterId ?? undefined,
+      activeEncounterId: encounterId,
     });
   }
 

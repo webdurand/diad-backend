@@ -44,7 +44,7 @@ export class GameSessionEntity {
   characterIds: string[];
 
   @Column({ name: "active_encounter_id", type: "uuid", nullable: true })
-  activeEncounterId?: string;
+  activeEncounterId?: string | null;
 
   @Column({ type: "jsonb", default: {} })
   scene: {

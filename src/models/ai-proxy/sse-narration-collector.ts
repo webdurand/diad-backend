@@ -36,6 +36,21 @@ export class SseNarrationCollector {
   private buffer = "";
   private narration = "";
   private choices: CollectedChoice[] = [];
+  private narratorDoneFired = false;
+  private onNarratorDoneCb: ((narration: string) => void) | null = null;
+
+  /** Registra callback chamado uma única vez quando o evento SSE
+   * `narrator_done` é detectado. Permite persistir a narração antes do
+   * `stream.end` (que aguarda Archivist + judges + decisions, ~30s).
+   * Sem isso, lazy combat extract dispara com `session_messages` velho. */
+  onNarratorDone(cb: (narration: string) => void): void {
+    this.onNarratorDoneCb = cb;
+  }
+
+  /** Snapshot da narração acumulada até o momento (sem destruir buffer). */
+  getNarration(): string {
+    return this.narration;
+  }
 
   feed(chunk: string | Buffer): void {
     const data = typeof chunk === "string" ? chunk : chunk.toString("utf8");
@@ -82,6 +97,19 @@ export class SseNarrationCollector {
       choices?: unknown;
     };
     if (typeof ev.type !== "string") return;
+
+    if (ev.type === "narrator_done" && !this.narratorDoneFired) {
+      this.narratorDoneFired = true;
+      const cb = this.onNarratorDoneCb;
+      if (cb) {
+        try {
+          cb(this.narration);
+        } catch {
+          // Side-channel — nunca derrubar o stream.
+        }
+      }
+      return;
+    }
 
     if (ev.type === "choices" && Array.isArray(ev.choices)) {
       const collected: CollectedChoice[] = [];

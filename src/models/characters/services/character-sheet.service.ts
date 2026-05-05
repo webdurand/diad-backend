@@ -778,20 +778,46 @@ export class CharacterSheetService {
       };
     });
 
-    // Skills (all SRD skills, sorted alphabetically)
-    const allSkills = await this.skillRepo.find({
-      relations: ["ability_score"],
+    // Skills: catalog has 2 rows per skill (PHB 2014 + XPHB/SRD52 2024).
+    // Dedupe by name preferring 2024 row with ability_score defined.
+    const allSkillRows = await this.skillRepo.find({
+      relations: ["ability_score", "source"],
       order: { name: "ASC" },
     });
-    const proficientSkillIds = new Set(charSkills.map((s) => s.skill_id));
-    const expertiseSkillIds = new Set(
-      charSkills.filter((s) => s.expertise).map((s) => s.skill_id),
+    const isXphbSource = (s: (typeof allSkillRows)[number]) =>
+      s.source?.code === "XPHB" || s.source?.code === "SRD52";
+    const skillsByName = new Map<string, (typeof allSkillRows)[number]>();
+    for (const s of allSkillRows) {
+      const existing = skillsByName.get(s.name);
+      const better =
+        !existing ||
+        (!existing.ability_score && s.ability_score) ||
+        (!isXphbSource(existing) && isXphbSource(s));
+      if (better) skillsByName.set(s.name, s);
+    }
+    const uniqueSkills = [...skillsByName.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
     );
 
-    const skills: SkillBlock[] = allSkills.map((skill) => {
+    // Resolve proficiencies by skill name so legacy character_skills rows
+    // pointing to either edition still mark the canonical entry.
+    const skillNameById = new Map(allSkillRows.map((s) => [s.id, s.name]));
+    const proficientSkillNames = new Set(
+      charSkills
+        .map((s) => skillNameById.get(s.skill_id))
+        .filter((n): n is string => !!n),
+    );
+    const expertiseSkillNames = new Set(
+      charSkills
+        .filter((s) => s.expertise)
+        .map((s) => skillNameById.get(s.skill_id))
+        .filter((n): n is string => !!n),
+    );
+
+    const skills: SkillBlock[] = uniqueSkills.map((skill) => {
       const abilitySlug = skill.ability_score?.slug ?? "dex";
-      const isProficient = proficientSkillIds.has(skill.id);
-      const isExpertise = expertiseSkillIds.has(skill.id);
+      const isProficient = proficientSkillNames.has(skill.name);
+      const isExpertise = expertiseSkillNames.has(skill.name);
       const bonus =
         mod(abilitySlug) +
         (isProficient ? profBonus : 0) +
