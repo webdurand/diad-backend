@@ -120,11 +120,17 @@ import { DiceRollService } from "./services/dice-roll.service";
 import { RevivifyCheckService } from "./services/revivify-check.service";
 import { DyingStateService } from "./services/dying-state.service";
 import { LootRollService } from "./services/loot-roll.service";
+import { MagicItemSelectorService } from "./services/magic-item-selector.service";
+import { MonsterSelectorService } from "./services/monster-selector.service";
+import { RandomEncounterMaterializerService } from "./services/random-encounter-materializer.service";
+import { RandomEncounterController } from "./controllers/random-encounter.controller";
 import { ToolEventEmitService } from "./services/tool-event-emit.service";
 import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
 import { SceneEntity } from "src/entities/scene.entity";
 import { NpcEntity } from "src/entities/npc.entity";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
+import { MagicItemEntity } from "src/entities/magic-item.entity";
+import { LocationEntity } from "src/entities/location.entity";
 
 @Module({
   imports: [
@@ -155,6 +161,8 @@ import { SessionMessageEntity } from "src/entities/session-message.entity";
       SceneEntity,
       NpcEntity,
       SessionMessageEntity,
+      MagicItemEntity,
+      LocationEntity,
     ]),
     AuthModule,
     CharactersModule,
@@ -164,7 +172,7 @@ import { SessionMessageEntity } from "src/entities/session-message.entity";
     RealtimeModule,
     CombatActionsModule,
   ],
-  controllers: [GameEngineController],
+  controllers: [GameEngineController, RandomEncounterController],
   providers: [
     DiceService,
     ConditionEffectsService,
@@ -251,6 +259,9 @@ import { SessionMessageEntity } from "src/entities/session-message.entity";
     RevivifyCheckService,
     DyingStateService,
     LootRollService,
+    MagicItemSelectorService,
+    MonsterSelectorService,
+    RandomEncounterMaterializerService,
     ToolEventEmitService,
     StartEncounterFromNarrativeService,
     // Spec 027 (M2 follow-up) — auto-end de combate em DIAD solo

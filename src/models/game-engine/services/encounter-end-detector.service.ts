@@ -1,12 +1,33 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import { CharacterEntity } from "src/entities/character.entity";
 import { EncounterService } from "./encounter.service";
-import { LootRollService, type CRBand } from "./loot-roll.service";
+import {
+  EncounterDifficulty,
+  LootRollService,
+  type CRBand,
+} from "./loot-roll.service";
+import type { PartyTier } from "./magic-item-selector.service";
+
+const ENCOUNTER_TO_LOOT_DIFFICULTY: Record<string, EncounterDifficulty> = {
+  trivial: "trivial",
+  easy: "easy",
+  medium: "medium",
+  hard: "hard",
+  deadly: "deadly",
+};
+
+function deriveTier(level: number): PartyTier {
+  if (level <= 4) return "1";
+  if (level <= 10) return "2";
+  if (level <= 16) return "3";
+  return "4";
+}
 
 /**
  * Spec 027 (M2 follow-up) — auto-detecta fim de combate em DIAD solo.
@@ -41,6 +62,8 @@ export class EncounterEndDetectorService {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     @InjectRepository(CampaignPlayerEntity)
     private readonly campaignPlayerRepo: Repository<CampaignPlayerEntity>,
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo: Repository<CharacterEntity>,
     private readonly encounterService: EncounterService,
     private readonly lootRollService: LootRollService,
   ) {}
@@ -75,6 +98,12 @@ export class EncounterEndDetectorService {
         outcome: "victory" | "defeat";
         xpRewards?: { mode: "equal-split"; value: number };
         goldRewards?: { cp?: number; sp?: number; gp?: number; pp?: number };
+        itemRewards?: Array<{
+          name: string;
+          quantity: number;
+          magicItemId?: string;
+          equipmentId?: string;
+        }>;
       } = { outcome };
 
       if (outcome === "victory") {
@@ -91,9 +120,14 @@ export class EncounterEndDetectorService {
         if (rewards.gold && this.hasAnyCurrency(rewards.gold)) {
           payload.goldRewards = rewards.gold;
         }
+        if (rewards.items && rewards.items.length > 0) {
+          payload.itemRewards = rewards.items;
+        }
         this.logger.log(
           `auto-end victory rewards: encounter=${encounterId} xp=${rewards.totalXp} ` +
             `crBand=${rewards.crBand ?? "n/a"} gp=${rewards.gold?.gp ?? 0} ` +
+            `items=${rewards.items?.length ?? 0} ` +
+            `difficulty=${rewards.difficulty ?? "n/a"} ` +
             `monstersConsidered=${rewards.defeatedCount}`,
         );
       }
@@ -126,6 +160,13 @@ export class EncounterEndDetectorService {
     totalXp: number;
     crBand: CRBand | null;
     gold: { cp: number; sp: number; gp: number; pp: number } | null;
+    items: Array<{
+      name: string;
+      quantity: number;
+      magicItemId?: string;
+      equipmentId?: string;
+    }> | null;
+    difficulty: EncounterDifficulty | null;
     defeatedCount: number;
   }> {
     const participants = await this.participantRepo.find({
@@ -152,14 +193,30 @@ export class EncounterEndDetectorService {
     const crBand = this.crToBand(maxCr);
 
     let gold: { cp: number; sp: number; gp: number; pp: number } | null = null;
+    let items: Array<{
+      name: string;
+      quantity: number;
+      magicItemId?: string;
+      equipmentId?: string;
+    }> | null = null;
+    let difficulty: EncounterDifficulty | null = null;
+
     if (campaignId && crBand) {
+      const partyContext = await this.resolvePartyContext(
+        participants,
+        encounterId,
+      );
+      difficulty = partyContext.difficulty;
       try {
         const result = await this.lootRollService.roll({
           campaignId,
           crBand,
           hoardOrIndividual: "individual",
+          encounterDifficulty: partyContext.difficulty,
+          partyTier: partyContext.tier,
         });
         gold = result.currency;
+        items = result.items.length > 0 ? result.items : null;
       } catch (err) {
         this.logger.warn(
           `loot-roll falhou em ${encounterId}: ${err instanceof Error ? err.message : String(err)}`,
@@ -171,8 +228,58 @@ export class EncounterEndDetectorService {
       totalXp,
       crBand,
       gold,
+      items,
+      difficulty,
       defeatedCount: defeatedHostiles.length,
     };
+  }
+
+  private async resolvePartyContext(
+    participants: EncounterParticipantEntity[],
+    encounterId: string,
+  ): Promise<{ tier: PartyTier; difficulty: EncounterDifficulty }> {
+    const characterIds = participants
+      .filter((p) => p.type === "pc" && !!p.characterId)
+      .map((p) => p.characterId as string);
+
+    let partyLevels: number[] = [];
+    if (characterIds.length > 0) {
+      const characters = await this.characterRepo.find({
+        where: { id: In(characterIds) },
+        relations: ["character_classes"],
+      });
+      partyLevels = characters.map((c) => {
+        const total =
+          c.character_classes?.reduce(
+            (sum, cc) => sum + (cc.class_level ?? 0),
+            0,
+          ) ?? 0;
+        return total > 0 ? total : 1;
+      });
+    }
+
+    const avgLevel =
+      partyLevels.length > 0
+        ? Math.round(
+            partyLevels.reduce((a, b) => a + b, 0) / partyLevels.length,
+          )
+        : 1;
+
+    let difficulty: EncounterDifficulty = "medium";
+    try {
+      const calc = await this.encounterService.calculateDifficulty(
+        encounterId,
+        partyLevels.length > 0 ? partyLevels : [1],
+      );
+      difficulty =
+        ENCOUNTER_TO_LOOT_DIFFICULTY[calc.threshold] ?? "medium";
+    } catch (err) {
+      this.logger.warn(
+        `calculateDifficulty falhou em ${encounterId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    return { tier: deriveTier(avgLevel), difficulty };
   }
 
   private crToBand(cr: number): CRBand | null {

@@ -32,10 +32,53 @@ export interface CollectedChoice {
   intentHint?: string;
 }
 
+/**
+ * Shape persistido em `session_messages.content` quando kind='dice_roll'.
+ * Espelha `DiceRollCardProps` do frontend — qualquer mudança aqui exige
+ * acompanhar `diad-frontend/components/solo/DiceRollCard.tsx`.
+ */
+export interface CollectedDiceRoll {
+  rollId: string;
+  kind: string;
+  ability: string | null;
+  skill: string | null;
+  dc: number;
+  advantage: "normal" | "advantage" | "disadvantage";
+  modifiers: Array<{ label: string; value: number }>;
+  totalModifier: number;
+  targetD20: number;
+  narrativeFraming?: string;
+  resolved?: {
+    rawD20: number;
+    rawD20Disadv: number | null;
+    total: number;
+    verdict: "success" | "failure" | "crit_success" | "crit_failure";
+  };
+}
+
+function normalizeAdvantage(
+  v: unknown,
+): "normal" | "advantage" | "disadvantage" {
+  if (v === "advantage" || v === true) return "advantage";
+  if (v === "disadvantage") return "disadvantage";
+  return "normal";
+}
+
+function verdictFromPreflight(
+  rawD20: number,
+  success: boolean,
+): "success" | "failure" | "crit_success" | "crit_failure" {
+  if (rawD20 === 20) return "crit_success";
+  if (rawD20 === 1) return "crit_failure";
+  return success ? "success" : "failure";
+}
+
 export class SseNarrationCollector {
   private buffer = "";
   private narration = "";
   private choices: CollectedChoice[] = [];
+  private diceRolls = new Map<string, CollectedDiceRoll>();
+  private preflightCounter = 0;
   private narratorDoneFired = false;
   private onNarratorDoneCb: ((narration: string) => void) | null = null;
 
@@ -77,6 +120,18 @@ export class SseNarrationCollector {
     return this.choices;
   }
 
+  /**
+   * Rolls de skill check / saving throw / attack roll capturados do stream,
+   * já com `resolved` populado. Rolls que ficaram pendentes (request sem
+   * resolved) são omitidos pra não poluir o histórico com cards "rolando
+   * pra sempre" no resume.
+   */
+  getDiceRolls(): CollectedDiceRoll[] {
+    return Array.from(this.diceRolls.values()).filter(
+      (r) => r.resolved !== undefined,
+    );
+  }
+
   private processLine(line: string): void {
     const trimmed = line.replace(/\r$/, "").trim();
     if (!trimmed.startsWith("data:")) return;
@@ -111,6 +166,21 @@ export class SseNarrationCollector {
       return;
     }
 
+    if (ev.type === "dice_roll_request") {
+      this.handleDiceRollRequest(parsed as Record<string, unknown>);
+      return;
+    }
+
+    if (ev.type === "dice_roll_resolved") {
+      this.handleDiceRollResolved(parsed as Record<string, unknown>);
+      return;
+    }
+
+    if (ev.type === "preflight_rolls") {
+      this.handlePreflightRolls(parsed as Record<string, unknown>);
+      return;
+    }
+
     if (ev.type === "choices" && Array.isArray(ev.choices)) {
       const collected: CollectedChoice[] = [];
       for (const raw of ev.choices) {
@@ -141,5 +211,110 @@ export class SseNarrationCollector {
         ? ev.text
         : "";
     if (piece) this.narration += piece;
+  }
+
+  private handleDiceRollRequest(ev: Record<string, unknown>): void {
+    const rollId = typeof ev.rollId === "string" ? ev.rollId : null;
+    if (!rollId) return;
+
+    const modifiers = Array.isArray(ev.modifiers)
+      ? (ev.modifiers as unknown[])
+          .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
+          .map((m) => ({
+            label: typeof m.label === "string" ? m.label : "",
+            value: typeof m.value === "number" ? m.value : 0,
+          }))
+      : [];
+
+    const totalModifier =
+      typeof ev.totalModifier === "number" ? ev.totalModifier : 0;
+    const dc = typeof ev.dc === "number" ? ev.dc : 0;
+    const targetD20 =
+      typeof ev.targetD20 === "number"
+        ? ev.targetD20
+        : Math.max(1, dc - totalModifier);
+
+    const existing = this.diceRolls.get(rollId);
+    const resolved = existing?.resolved;
+    this.diceRolls.set(rollId, {
+      rollId,
+      kind: typeof ev.kind === "string" ? ev.kind : "ability_check",
+      ability: typeof ev.ability === "string" ? ev.ability : null,
+      skill: typeof ev.skill === "string" ? ev.skill : null,
+      dc,
+      advantage: normalizeAdvantage(ev.advantage),
+      modifiers,
+      totalModifier,
+      targetD20,
+      narrativeFraming:
+        typeof ev.narrativeFraming === "string"
+          ? ev.narrativeFraming
+          : undefined,
+      ...(resolved ? { resolved } : {}),
+    });
+  }
+
+  private handleDiceRollResolved(ev: Record<string, unknown>): void {
+    const rollId = typeof ev.rollId === "string" ? ev.rollId : null;
+    if (!rollId) return;
+    const rawD20 = typeof ev.rawD20 === "number" ? ev.rawD20 : null;
+    const total = typeof ev.total === "number" ? ev.total : null;
+    const verdict =
+      ev.verdict === "success" ||
+      ev.verdict === "failure" ||
+      ev.verdict === "crit_success" ||
+      ev.verdict === "crit_failure"
+        ? ev.verdict
+        : null;
+    if (rawD20 === null || total === null || !verdict) return;
+
+    const existing = this.diceRolls.get(rollId);
+    if (!existing) return; // resolved sem request prévio — ignora.
+    existing.resolved = {
+      rawD20,
+      rawD20Disadv:
+        typeof ev.rawD20Disadv === "number" ? ev.rawD20Disadv : null,
+      total,
+      verdict,
+    };
+  }
+
+  private handlePreflightRolls(ev: Record<string, unknown>): void {
+    const rolls = Array.isArray(ev.rolls) ? ev.rolls : [];
+    for (const raw of rolls) {
+      if (!raw || typeof raw !== "object") continue;
+      const r = raw as Record<string, unknown>;
+      const dc = typeof r.dc === "number" ? r.dc : 15;
+      const total = typeof r.total === "number" ? r.total : 0;
+      const rawD20 = typeof r.rawD20 === "number" ? r.rawD20 : 10;
+      const modifier = typeof r.modifier === "number" ? r.modifier : 0;
+      const success = Boolean(r.success);
+      const ability = typeof r.ability === "string" ? r.ability : null;
+      const skill = typeof r.skill === "string" ? r.skill : null;
+      const kindRaw = typeof r.kind === "string" ? r.kind : "skill_check";
+      const kind =
+        kindRaw === "saving_throw" ? "saving_throw" : "ability_check";
+
+      const rollId = `preflight-srv-${Date.now()}-${this.preflightCounter++}`;
+      this.diceRolls.set(rollId, {
+        rollId,
+        kind,
+        ability,
+        skill,
+        dc,
+        advantage: "normal",
+        modifiers: [
+          { label: skill ? skill : `${ability ?? "?"} mod`, value: modifier },
+        ],
+        totalModifier: modifier,
+        targetD20: Math.max(1, dc - modifier),
+        resolved: {
+          rawD20,
+          rawD20Disadv: null,
+          total,
+          verdict: verdictFromPreflight(rawD20, success),
+        },
+      });
+    }
   }
 }

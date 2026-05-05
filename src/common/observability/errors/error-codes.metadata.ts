@@ -409,6 +409,26 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Use cr_band para gerar loot ad-hoc.",
     domain: "loot",
   },
+  [ErrorCode.MONSTER_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Monster not found",
+    defaultHint: "Verifique se o slug do monstro existe no catálogo SRD.",
+    domain: "encounter",
+  },
+  [ErrorCode.RANDOM_ENCOUNTER_POOL_EMPTY]: {
+    httpStatus: 422,
+    defaultTitle: "No eligible monsters for random encounter",
+    defaultHint:
+      "Pool vazio após filtros — tente outro bioma ou difficulty mais baixa.",
+    domain: "encounter",
+  },
+  [ErrorCode.RANDOM_ENCOUNTER_INVALID_LOCATION]: {
+    httpStatus: 400,
+    defaultTitle: "Location type does not support random encounter",
+    defaultHint:
+      "Random encounters só em wilderness, dungeon ou dungeon_room.",
+    domain: "encounter",
+  },
   [ErrorCode.PARTICIPANT_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Participant not found",

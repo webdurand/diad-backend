@@ -27,6 +27,7 @@ import { SessionMessageService } from "../session/services/session-message.servi
 import {
   SseNarrationCollector,
   type CollectedChoice,
+  type CollectedDiceRoll,
 } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { GameEventEntity } from "src/entities/game-event.entity";
@@ -217,6 +218,35 @@ export class AiProxyController {
       this.logger.warn(
         `choices persist failed (session=${sessionId}): ${err?.message}`,
       );
+    }
+  }
+
+  /**
+   * Persiste cada dice roll resolvido como SessionMessage kind='dice_roll'.
+   * Sem isso, DiceRollCards somem da timeline após F5/login (eram só efêmeros
+   * do stream SSE — game_events guarda dado bruto mas o resume lê
+   * session_messages). Idempotência por rollId via clientId.
+   */
+  private async persistDiceRolls(
+    sessionId: string,
+    userId: string,
+    diceRolls: CollectedDiceRoll[],
+  ): Promise<void> {
+    if (!diceRolls || diceRolls.length === 0) return;
+    for (const roll of diceRolls) {
+      try {
+        await this.sessionMessageService.append({
+          sessionId,
+          userId,
+          kind: "dice_roll",
+          content: JSON.stringify(roll),
+          clientId: `srv-dice-${roll.rollId}`,
+        });
+      } catch (err: any) {
+        this.logger.warn(
+          `dice_roll persist failed (session=${sessionId}, roll=${roll.rollId}): ${err?.message}`,
+        );
+      }
     }
   }
 
@@ -670,6 +700,11 @@ export class AiProxyController {
             req.user!.id,
             collector.getChoices(),
           );
+          await this.persistDiceRolls(
+            sessionId,
+            req.user!.id,
+            collector.getDiceRolls(),
+          );
           await this.emitSessionSync(sessionId, res);
         },
         {
@@ -781,6 +816,11 @@ export class AiProxyController {
             sessionId,
             req.user!.id,
             collector.getChoices(),
+          );
+          await this.persistDiceRolls(
+            sessionId,
+            req.user!.id,
+            collector.getDiceRolls(),
           );
           await this.emitSessionSync(sessionId, res);
         },

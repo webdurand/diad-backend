@@ -56,6 +56,19 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
 
     const encounterService: any = {
       resolveEncounter: jest.fn().mockResolvedValue({ ok: true, value: {} }),
+      calculateDifficulty: jest.fn().mockResolvedValue({
+        totalMonsterXp: 100,
+        adjustedXp: 100,
+        threshold: "medium",
+        partySize: 1,
+        partyAverageLevel: 3,
+      }),
+    };
+
+    const characterRepo: any = {
+      find: jest.fn().mockResolvedValue([
+        { id: "char-1", character_classes: [{ class_level: 3 }] },
+      ]),
     };
 
     const lootRollService: any = {
@@ -79,6 +92,7 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
       participantRepo,
       sessionRepo,
       campaignPlayerRepo,
+      characterRepo,
       encounterService,
       lootRollService,
     );
@@ -89,6 +103,7 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
       participantRepo,
       sessionRepo,
       campaignPlayerRepo,
+      characterRepo,
       encounterService,
       lootRollService,
     };
@@ -150,6 +165,8 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
       campaignId: CAMPAIGN_ID,
       crBand: "cr_0_4",
       hoardOrIndividual: "individual",
+      encounterDifficulty: "medium",
+      partyTier: "1",
     });
     expect(encounterService.resolveEncounter).toHaveBeenCalledWith(
       ENCOUNTER_ID,

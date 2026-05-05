@@ -9,11 +9,12 @@
  * Emite SocialEvent.loot_rolled (audience: HUD, CompanionAI, Narrator).
  */
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { LootTableEntity } from "src/entities/loot-table.entity";
 import { LootService } from "./loot.service";
+import { MagicItemSelectorService, PartyTier } from "./magic-item-selector.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
@@ -21,6 +22,12 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
 export type CRBand = "cr_0_4" | "cr_5_10" | "cr_11_16" | "cr_17_plus";
 export type LootMode = "individual" | "hoard";
+export type EncounterDifficulty =
+  | "trivial"
+  | "easy"
+  | "medium"
+  | "hard"
+  | "deadly";
 
 export interface RollLootInput {
   campaignId: string;
@@ -29,6 +36,8 @@ export interface RollLootInput {
   monsterSlug?: string;
   hoardOrIndividual?: LootMode;
   awardToCharacterId?: string | null;
+  encounterDifficulty?: EncounterDifficulty;
+  partyTier?: PartyTier;
   traceId?: string;
 }
 
@@ -51,14 +60,43 @@ const CR_BAND_GP_RANGES: Record<CRBand, [number, number]> = {
   cr_17_plus: [5000, 50000],
 };
 
+const DIFFICULTY_GP_MULTIPLIER: Record<EncounterDifficulty, number> = {
+  trivial: 0.5,
+  easy: 0.75,
+  medium: 1.0,
+  hard: 1.5,
+  deadly: 2.0,
+};
+
+const MAGIC_ITEM_DROP_CHANCE: Record<EncounterDifficulty, number> = {
+  trivial: 0.0,
+  easy: 0.05,
+  medium: 0.10,
+  hard: 0.20,
+  deadly: 0.35,
+};
+
+const TIER_COIN_DISTRIBUTION: Record<
+  PartyTier,
+  { cp: number; sp: number; gp: number; pp: number }
+> = {
+  "1": { cp: 0.30, sp: 0.50, gp: 0.18, pp: 0.02 },
+  "2": { cp: 0.05, sp: 0.25, gp: 0.65, pp: 0.05 },
+  "3": { cp: 0.0, sp: 0.05, gp: 0.75, pp: 0.20 },
+  "4": { cp: 0.0, sp: 0.0, gp: 0.60, pp: 0.40 },
+};
+
 @Injectable()
 export class LootRollService {
+  rng: () => number = Math.random;
+
   constructor(
     @InjectRepository(LootTableEntity)
     private readonly tableRepo: Repository<LootTableEntity>,
     private readonly lootService: LootService,
     private readonly eventBus: EventBusService,
     private readonly factory: EventEnvelopeFactory,
+    @Optional() private readonly magicItemSelector?: MagicItemSelectorService,
   ) {}
 
   async roll(input: RollLootInput): Promise<LootRollResult> {
@@ -68,9 +106,11 @@ export class LootRollService {
     if (input.tableSlug) {
       result = await this.rollBySlug(input.tableSlug);
     } else if (input.crBand) {
-      result = this.rollByCrBand(
+      result = await this.rollByCrBand(
         input.crBand,
         input.hoardOrIndividual ?? "individual",
+        input.encounterDifficulty,
+        input.partyTier,
       );
     } else if (input.monsterSlug) {
       result = await this.rollByMonster(input.monsterSlug);
@@ -156,20 +196,58 @@ export class LootRollService {
     };
   }
 
-  /**
-   * Gera tabela transient por CR band — sem persistir, sem isLooted.
-   * V1 simples: rola gp dentro da faixa + multiplicador 5x se hoard.
-   */
-  private rollByCrBand(band: CRBand, mode: LootMode): LootRollResult {
+  private async rollByCrBand(
+    band: CRBand,
+    mode: LootMode,
+    difficulty?: EncounterDifficulty,
+    tier?: PartyTier,
+  ): Promise<LootRollResult> {
     const [min, max] = CR_BAND_GP_RANGES[band];
-    const baseGp = Math.floor(Math.random() * (max - min + 1)) + min;
-    const multiplier = mode === "hoard" ? 5 : 1;
+    const baseGp = Math.floor(this.rng() * (max - min + 1)) + min;
+    const hoardMultiplier = mode === "hoard" ? 5 : 1;
+    const diffMultiplier = difficulty
+      ? DIFFICULTY_GP_MULTIPLIER[difficulty]
+      : 1.0;
+    const totalGp = Math.floor(baseGp * hoardMultiplier * diffMultiplier);
+
+    const currency = tier
+      ? this.distributeCoinsByTier(totalGp, tier)
+      : { cp: 0, sp: 0, gp: totalGp, pp: 0 };
+
+    const items: LootRollResult["items"] = [];
+    if (difficulty && tier && this.magicItemSelector) {
+      const dropChance = MAGIC_ITEM_DROP_CHANCE[difficulty];
+      if (this.rng() < dropChance) {
+        const item = await this.magicItemSelector.pickByTier(tier);
+        if (item) {
+          items.push({
+            name: item.name,
+            quantity: 1,
+            magicItemId: item.id,
+          });
+        }
+      }
+    }
+
     return {
       lootTableId: null,
-      items: [],
-      currency: { cp: 0, sp: 0, gp: baseGp * multiplier, pp: 0 },
+      items,
+      currency,
       awarded: false,
     };
+  }
+
+  private distributeCoinsByTier(
+    totalGp: number,
+    tier: PartyTier,
+  ): { cp: number; sp: number; gp: number; pp: number } {
+    const dist = TIER_COIN_DISTRIBUTION[tier];
+    const totalCp = totalGp * 100;
+    const cp = Math.floor(totalCp * dist.cp);
+    const sp = Math.floor((totalCp * dist.sp) / 10);
+    const gp = Math.floor((totalCp * dist.gp) / 100);
+    const pp = Math.floor((totalCp * dist.pp) / 1000);
+    return { cp, sp, gp, pp };
   }
 
   private async rollByMonster(monsterSlug: string): Promise<LootRollResult> {
