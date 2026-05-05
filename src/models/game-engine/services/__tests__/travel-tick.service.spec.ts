@@ -31,6 +31,7 @@ describe("TravelTickService.tick", () => {
     };
     const sceneService = {
       create: jest.fn().mockResolvedValue(newScene),
+      getActive: jest.fn().mockResolvedValue({ id: "scene-active" }),
     };
     const locationService = {
       markVisited: jest.fn().mockResolvedValue(undefined),
@@ -38,12 +39,16 @@ describe("TravelTickService.tick", () => {
     const gameClockService = {
       advanceTime: jest.fn().mockResolvedValue(undefined),
     };
+    const contextCache = {
+      invalidate: jest.fn(),
+    };
     const service = new TravelTickService(
       sessionRepo as any,
       encounterRepo as any,
       sceneService as any,
       locationService as any,
       gameClockService as any,
+      contextCache as any,
       makeLogger() as any,
     );
     return { service, sessionRepo, sceneService, locationService, gameClockService };

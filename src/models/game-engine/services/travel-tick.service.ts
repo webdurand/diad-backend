@@ -9,6 +9,7 @@ import { EncounterEntity } from "src/entities/encounter.entity";
 import { LocationService } from "src/models/world/services/location.service";
 import { GameClockService } from "src/models/world/services/game-clock.service";
 import { SceneService } from "src/models/session/services/scene.service";
+import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
@@ -51,9 +52,15 @@ export class TravelTickService {
     private readonly sceneService: SceneService,
     private readonly locationService: LocationService,
     private readonly gameClockService: GameClockService,
+    private readonly contextCache: SceneContextCacheService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(TravelTickService.name);
+  }
+
+  private async invalidateActiveSceneCache(sessionId: string): Promise<void> {
+    const active = await this.sceneService.getActive(sessionId);
+    if (active?.id) this.contextCache.invalidate(active.id);
   }
 
   async tick(sessionId: string): Promise<TravelTickResult> {
@@ -126,6 +133,7 @@ export class TravelTickService {
 
     session.travelState = travel;
     await this.sessionRepo.save(session);
+    await this.invalidateActiveSceneCache(sessionId);
 
     const progressPercent = Math.round(
       (travel.elapsedTurns / travel.totalTurns) * 100,
@@ -177,6 +185,7 @@ export class TravelTickService {
 
     session.travelState = null;
     await this.sessionRepo.save(session);
+    await this.invalidateActiveSceneCache(sessionId);
 
     const newScene = await this.sceneService.create(sessionId, {
       locationId: toLocationId,
@@ -185,6 +194,7 @@ export class TravelTickService {
       skipBudgetIncrement: true,
     });
     await this.locationService.markVisited(toLocationId);
+    await this.invalidateActiveSceneCache(sessionId);
 
     this.logger.info("🚶 travel.arrive", {
       "session.id": sessionId,

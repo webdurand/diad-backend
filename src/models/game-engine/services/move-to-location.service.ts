@@ -9,6 +9,7 @@ import { LocationConnectionEntity } from "src/entities/location-connection.entit
 import { LocationEntity } from "src/entities/location.entity";
 import { LocationService } from "src/models/world/services/location.service";
 import { SceneService } from "src/models/session/services/scene.service";
+import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
@@ -73,6 +74,7 @@ export class MoveToLocationService {
     private readonly sceneService: SceneService,
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
+    private readonly contextCache: SceneContextCacheService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(MoveToLocationService.name);
@@ -246,6 +248,9 @@ export class MoveToLocationService {
 
     session.travelState = travelState;
     await this.sessionRepo.save(session);
+
+    const activeScene = await this.sceneService.getActive(session.id);
+    if (activeScene?.id) this.contextCache.invalidate(activeScene.id);
 
     const envelope = this.envelopeFactory.build({
       eventCategory: "WorldEvent",
