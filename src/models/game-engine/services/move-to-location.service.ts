@@ -26,6 +26,17 @@ export interface MoveToLocationResult {
   alreadyThere: boolean;
 }
 
+export interface AvailableTravel {
+  connectionId: string;
+  toLocationId: string;
+  toLocationName: string;
+  toLocationType: string;
+  travelTime: string | null;
+  description: string | null;
+  isLocked: boolean;
+  requirements: Record<string, any>;
+}
+
 @Injectable()
 export class MoveToLocationService {
   constructor(
@@ -137,6 +148,27 @@ export class MoveToLocationService {
       travelTime,
       alreadyThere: false,
     };
+  }
+
+  async listAvailableTravels(sessionId: string): Promise<AvailableTravel[]> {
+    const scene = await this.sceneService.getActive(sessionId);
+    if (!scene?.locationId) return [];
+
+    const connections = await this.connectionRepo.find({
+      where: { fromLocationId: scene.locationId, isHidden: false },
+      relations: ["toLocation"],
+    });
+
+    return connections.map((c) => ({
+      connectionId: c.id,
+      toLocationId: c.toLocationId,
+      toLocationName: c.toLocation?.name ?? "(?)",
+      toLocationType: c.toLocation?.type ?? "unknown",
+      travelTime: c.travelTime ?? null,
+      description: c.description ?? null,
+      isLocked: c.isLocked,
+      requirements: c.requirements ?? {},
+    }));
   }
 
   private async resolveTarget(

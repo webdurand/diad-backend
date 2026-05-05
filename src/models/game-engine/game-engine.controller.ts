@@ -356,6 +356,17 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
+  /**
+   * Lista connections (saídas) da scene ativa, filtrando hidden.
+   * Frontend renderiza chips TIER 3 (1 chip por travel disponível).
+   */
+  @Get("sessions/:sessionId/available-travels")
+  async availableTravels(@Param("sessionId") sessionId: string) {
+    const travels =
+      await this.moveToLocationService.listAvailableTravels(sessionId);
+    return { ok: true as const, value: travels };
+  }
+
   // ==================== SESSIONS ====================
 
   @Post("sessions")

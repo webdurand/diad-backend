@@ -20,7 +20,8 @@ export type SessionMessageKind =
   | "morning_briefing"
   | "combat_resolution"
   | "dice_roll"
-  | "choices";
+  | "choices"
+  | "rewards";
 
 /**
  * Histórico de mensagens narrativas da sessão de chat — fonte-de-verdade

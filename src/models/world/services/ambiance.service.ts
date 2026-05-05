@@ -28,6 +28,9 @@ export interface AmbiancePayloadDto {
     narrativeHint?: string;
   }>;
   locationType: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  locationSlug: string | null;
   narrativeSummary: string;
 }
 
@@ -121,12 +124,20 @@ export class AmbianceService {
     });
 
     let locationType: string | null = null;
+    let locationId: string | null = null;
+    let locationName: string | null = null;
+    let locationSlug: string | null = null;
     if (sceneId) {
       const scene = await this.sceneRepo.findOne({
         where: { id: sceneId },
         relations: ["location"],
       });
-      locationType = scene?.location?.type ?? null;
+      if (scene?.location) {
+        locationType = scene.location.type ?? null;
+        locationId = scene.location.id;
+        locationName = scene.location.name;
+        locationSlug = scene.location.slug;
+      }
     }
 
     const summaryParts: string[] = [];
@@ -156,6 +167,9 @@ export class AmbianceService {
         narrativeHint: c.onFullAction?.narrativeSeed,
       })),
       locationType,
+      locationId,
+      locationName,
+      locationSlug,
       narrativeSummary,
     };
   }
