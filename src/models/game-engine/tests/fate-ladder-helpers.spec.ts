@@ -95,21 +95,6 @@ describe("FateLadder Helpers — Sacrifice validation", () => {
     expect(r.reason).toMatch(/longa/);
   });
 
-  it('rejeita grand claim "salvo o mundo"', () => {
-    const r = validateSacrificeBounded(
-      "Lothar grita uma palavra antiga e salva o mundo inteiro do mal.",
-    );
-    expect(r.ok).toBe(false);
-    expect(r.reason).toMatch(/cena atual/);
-  });
-
-  it('rejeita grand claim "derroto deus"', () => {
-    const r = validateSacrificeBounded(
-      "Lothar usa sua espada e derrota o deus do caos.",
-    );
-    expect(r.ok).toBe(false);
-  });
-
   it("aceita feat bounded ao boss da cena", () => {
     const r = validateSacrificeBounded(
       "Lothar empurra o líder dos goblins do penhasco junto com ele.",

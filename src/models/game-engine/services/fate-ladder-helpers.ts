@@ -150,12 +150,6 @@ export function pickRandomPrice(
   return table[table.length - 1];
 }
 
-/**
- * Valida sacrifício heroico (option B). Bounded: deve referenciar cena
- * atual, não pode resolver arcs ungated, max 1 objetivo resolvido.
- *
- * Heurística textual; M5 adiciona validação semântica via Director LLM.
- */
 export interface SacrificeValidation {
   ok: boolean;
   reason?: string;
@@ -170,29 +164,13 @@ export function validateSacrificeBounded(
 ): SacrificeValidation {
   const trimmed = text.trim();
   const min = options?.minLength ?? 10;
-  const max = options?.maxLength ?? 300;
+  const max = options?.maxLength ?? 500;
 
   if (trimmed.length < min) {
     return { ok: false, reason: "Descrição muito curta. Use 1-2 frases." };
   }
   if (trimmed.length > max) {
     return { ok: false, reason: "Descrição muito longa. Limite: 1-2 frases." };
-  }
-  // Heurística anti-grand-claim: rejeita verbos que sugerem resolver arcs ungated.
-  const overreachPatterns = [
-    /salv[oa]\s+(o\s+)?(mundo|reino|continente|multiverso)/i,
-    /derrot[oa]\s+(o\s+|a\s+)?(deus|deusa)/i,
-    /resolv[oa]\s+toda\s+a\s+campanha/i,
-    /destru[oa]\s+todos?\s+os\s+(inimigos|orcs|dragões)/i,
-  ];
-  for (const pattern of overreachPatterns) {
-    if (pattern.test(trimmed)) {
-      return {
-        ok: false,
-        reason:
-          "Sacrifício deve fechar a cena atual, não resolver arcs futuros.",
-      };
-    }
   }
   return { ok: true };
 }

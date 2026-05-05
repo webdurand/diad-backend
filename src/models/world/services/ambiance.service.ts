@@ -127,9 +127,17 @@ export class AmbianceService {
     let locationId: string | null = null;
     let locationName: string | null = null;
     let locationSlug: string | null = null;
-    if (sceneId) {
+    let resolvedSceneId: string | null = sceneId ?? null;
+    if (!resolvedSceneId && sessionId) {
+      const active = await this.sceneRepo.findOne({
+        where: { sessionId, isActive: true },
+        select: ["id"],
+      });
+      resolvedSceneId = active?.id ?? null;
+    }
+    if (resolvedSceneId) {
       const scene = await this.sceneRepo.findOne({
-        where: { id: sceneId },
+        where: { id: resolvedSceneId },
         relations: ["location"],
       });
       if (scene?.location) {
@@ -152,7 +160,7 @@ export class AmbianceService {
 
     return {
       campaignId,
-      sceneId: sceneId ?? null,
+      sceneId: resolvedSceneId,
       weather: weatherDto,
       timeOfDay,
       currentInGameDateTime: clock.currentInGameDateTime.toISOString(),
