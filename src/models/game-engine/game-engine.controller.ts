@@ -103,6 +103,7 @@ import { LootRollService } from "./services/loot-roll.service";
 import type { CRBand, LootMode } from "./services/loot-roll.service";
 import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
 import { MoveToLocationService } from "./services/move-to-location.service";
+import { TravelTickService } from "./services/travel-tick.service";
 // Spec 027 (M2 follow-up) — WS realtime substitui polling no frontend.
 import { RealtimeService } from "src/realtime/realtime.service";
 import { StartEncounterFromNarrativeDto } from "./dto/start-encounter-from-narrative.dto";
@@ -194,6 +195,7 @@ export class GameEngineController {
     private readonly lootRollService: LootRollService,
     private readonly startEncounterFromNarrativeService: StartEncounterFromNarrativeService,
     private readonly moveToLocationService: MoveToLocationService,
+    private readonly travelTickService: TravelTickService,
     // Spec 027 (M2 follow-up) — WS realtime para invalidar cache do frontend
     // após mutações de turno/encontro. Sala: encounter:<id>.
     private readonly realtime: RealtimeService,
@@ -365,6 +367,12 @@ export class GameEngineController {
     const travels =
       await this.moveToLocationService.listAvailableTravels(sessionId);
     return { ok: true as const, value: travels };
+  }
+
+  @Post("sessions/:sessionId/travel/tick")
+  async tickTravel(@Param("sessionId") sessionId: string) {
+    const result = await this.travelTickService.tick(sessionId);
+    return { ok: true as const, value: result };
   }
 
   // ==================== SESSIONS ====================

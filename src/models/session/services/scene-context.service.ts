@@ -4,8 +4,12 @@ import { Repository } from "typeorm";
 import { SceneEntity } from "src/entities/scene.entity";
 import { SceneNpcEntity } from "src/entities/scene-npc.entity";
 import { LocationEntity } from "src/entities/location.entity";
+import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { CampaignEntity } from "src/entities/campaign.entity";
-import { GameSessionEntity } from "src/entities/game-session.entity";
+import {
+  GameSessionEntity,
+  SessionTravelState,
+} from "src/entities/game-session.entity";
 import { StoryArcEntity } from "src/entities/story-arc.entity";
 import { NpcEntity } from "src/entities/npc.entity";
 import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
@@ -88,6 +92,18 @@ export interface SceneContext {
 
   // Spec 018 — PC Persona block. Null em sessions multi-PC ou sem PC resolvido.
   playerCharacter?: PCPersona | null;
+
+  availableLocations: Array<{
+    connectionId: string;
+    toLocationId: string;
+    toLocationName: string;
+    toLocationType: string;
+    travelTime: string | null;
+    description: string | null;
+    isLocked: boolean;
+  }>;
+
+  travelState?: SessionTravelState | null;
 }
 
 @Injectable()
@@ -99,6 +115,8 @@ export class SceneContextService {
     private readonly sceneNpcRepo: Repository<SceneNpcEntity>,
     @InjectRepository(LocationEntity)
     private readonly locationRepo: Repository<LocationEntity>,
+    @InjectRepository(LocationConnectionEntity)
+    private readonly connectionRepo: Repository<LocationConnectionEntity>,
     @InjectRepository(CampaignEntity)
     private readonly campaignRepo: Repository<CampaignEntity>,
     @InjectRepository(GameSessionEntity)
@@ -248,6 +266,25 @@ export class SceneContextService {
       }
     }
 
+    let availableLocations: SceneContext["availableLocations"] = [];
+    if (scene.locationId) {
+      const connections = await this.connectionRepo.find({
+        where: { fromLocationId: scene.locationId, isHidden: false },
+        relations: ["toLocation"],
+      });
+      availableLocations = connections.map((c) => ({
+        connectionId: c.id,
+        toLocationId: c.toLocationId,
+        toLocationName: c.toLocation?.name ?? "(?)",
+        toLocationType: c.toLocation?.type ?? "unknown",
+        travelTime: c.travelTime ?? null,
+        description: c.description ?? null,
+        isLocked: c.isLocked,
+      }));
+    }
+
+    const travelState = session?.travelState ?? null;
+
     // Spec 018 — bloco PC. Solo flow: 1 PC por session em characterIds[0].
     // Multi-PC ou sem PC → playerCharacter: null (DM prompt cobre o caso).
     let playerCharacter: PCPersona | null = null;
@@ -287,6 +324,8 @@ export class SceneContextService {
       recentChronicles,
       storyArc,
       playerCharacter,
+      availableLocations,
+      travelState,
     };
   }
 
@@ -331,6 +370,8 @@ export class SceneContextService {
       locationChain: [],
       recentChronicles: [],
       playerCharacter: null,
+      availableLocations: [],
+      travelState: null,
     };
   }
 }

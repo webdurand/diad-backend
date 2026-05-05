@@ -3,6 +3,7 @@ import {
   SceneEntity,
   SceneNpcEntity,
   LocationEntity,
+  LocationConnectionEntity,
   CampaignEntity,
   GameSessionEntity,
   StoryArcEntity,
@@ -35,6 +36,7 @@ function buildService(opts: {
   };
   const sceneNpcRepo = { find: jest.fn().mockResolvedValue([]) };
   const locationRepo = { findOne: jest.fn().mockResolvedValue(null) };
+  const connectionRepo = { find: jest.fn().mockResolvedValue([]) };
   const campaignRepo = { findOne: jest.fn().mockResolvedValue(null) };
   const sessionRepo = {
     findOne: jest.fn().mockResolvedValue(opts.session ?? null),
@@ -87,6 +89,7 @@ function buildService(opts: {
     sceneRepo as unknown as Repository<SceneEntity>,
     sceneNpcRepo as unknown as Repository<SceneNpcEntity>,
     locationRepo as unknown as Repository<LocationEntity>,
+    connectionRepo as unknown as Repository<LocationConnectionEntity>,
     campaignRepo as unknown as Repository<CampaignEntity>,
     sessionRepo as unknown as Repository<GameSessionEntity>,
     arcRepo as unknown as Repository<StoryArcEntity>,

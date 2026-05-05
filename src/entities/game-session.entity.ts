@@ -11,6 +11,23 @@ import {
 import { UserEntity } from "./user.entity";
 import { CampaignEntity } from "./campaign.entity";
 
+export interface SessionTravelState {
+  active: true;
+  fromLocationId: string;
+  toLocationId: string;
+  toLocationName: string;
+  toLocationType: string;
+  destinationBiome: string;
+  connectionId: string;
+  totalMinutes: number;
+  elapsedMinutes: number;
+  totalTurns: number;
+  elapsedTurns: number;
+  minutesPerTurn: number;
+  startedAtIso: string;
+  reason: string;
+}
+
 @Entity("game_sessions")
 export class GameSessionEntity {
   @PrimaryGeneratedColumn("uuid")
@@ -73,6 +90,9 @@ export class GameSessionEntity {
   /** Mythic GME chaos factor (1-9). Estado de aventura, não do mundo. */
   @Column({ name: "chaos_factor", type: "smallint", default: 5 })
   chaosFactor: number;
+
+  @Column({ name: "travel_state", type: "jsonb", nullable: true })
+  travelState?: SessionTravelState | null;
 
   @Column({ name: "ended_at", type: "timestamptz", nullable: true })
   endedAt?: Date;

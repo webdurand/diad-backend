@@ -32,6 +32,15 @@ export interface AmbiancePayloadDto {
   locationName: string | null;
   locationSlug: string | null;
   narrativeSummary: string;
+  travelInProgress?: {
+    fromLocationId: string;
+    toLocationId: string;
+    toLocationName: string;
+    destinationBiome: string;
+    elapsedTurns: number;
+    totalTurns: number;
+    progressPercent: number;
+  } | null;
 }
 
 const FALLBACK_WEATHER_DTO = (campaignId: string) => ({
@@ -93,14 +102,28 @@ export class AmbianceService {
       throw new Error(`Campaign ${campaignId} não encontrada.`);
     }
 
-    // chaos_factor é session-scoped após split. Sem sessionId → default 5.
     let chaosFactor = 5;
+    let travelInProgress: AmbiancePayloadDto["travelInProgress"] = null;
     if (sessionId) {
       const session = await this.sessionRepo.findOne({
         where: { id: sessionId },
-        select: { id: true, chaosFactor: true },
+        select: { id: true, chaosFactor: true, travelState: true },
       });
-      if (session) chaosFactor = session.chaosFactor;
+      if (session) {
+        chaosFactor = session.chaosFactor;
+        if (session.travelState?.active) {
+          const t = session.travelState;
+          travelInProgress = {
+            fromLocationId: t.fromLocationId,
+            toLocationId: t.toLocationId,
+            toLocationName: t.toLocationName,
+            destinationBiome: t.destinationBiome,
+            elapsedTurns: t.elapsedTurns,
+            totalTurns: t.totalTurns,
+            progressPercent: Math.round((t.elapsedTurns / t.totalTurns) * 100),
+          };
+        }
+      }
     }
 
     const clock = await this.gameClockService.getOrCreate(campaignId);
@@ -179,6 +202,7 @@ export class AmbianceService {
       locationName,
       locationSlug,
       narrativeSummary,
+      travelInProgress,
     };
   }
 }

@@ -9,6 +9,8 @@ const fakeCtx = (title: string): SceneContext => ({
   locationChain: [],
   recentChronicles: [],
   playerCharacter: null,
+  availableLocations: [],
+  travelState: null,
 });
 
 describe("SceneContextCacheService", () => {

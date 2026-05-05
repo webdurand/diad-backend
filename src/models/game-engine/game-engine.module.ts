@@ -133,6 +133,7 @@ import { MagicItemEntity } from "src/entities/magic-item.entity";
 import { LocationEntity } from "src/entities/location.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { MoveToLocationService } from "./services/move-to-location.service";
+import { TravelTickService } from "./services/travel-tick.service";
 
 @Module({
   imports: [
@@ -270,6 +271,7 @@ import { MoveToLocationService } from "./services/move-to-location.service";
     // Spec 027 (M2 follow-up) — auto-end de combate em DIAD solo
     EncounterEndDetectorService,
     MoveToLocationService,
+    TravelTickService,
   ],
   exports: [
     DiceService,

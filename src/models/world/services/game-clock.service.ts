@@ -16,7 +16,10 @@ export interface AdvanceTimeOptions {
     | "long_rest"
     | "short_rest"
     | "combat_ended"
-    | "manual_tool";
+    | "manual_tool"
+    | "travel_instant"
+    | "travel_tick"
+    | "travel_arrival";
   /** Trace propagado para o envelope (Princípio XI). */
   traceId?: string;
 }
