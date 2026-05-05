@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
   NarrativeDecisionAffectedEntityType,
+  NarrativeDecisionCanonicalTag,
   NarrativeDecisionEntity,
   NarrativeDecisionPayoffWindow,
   NarrativeDecisionProvenance,
@@ -14,7 +15,7 @@ import { NpcService } from "src/models/world/services/npc.service";
 import { LocationService } from "src/models/world/services/location.service";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
-const CANONICAL_TAGS: readonly NarrativeDecisionTag[] = [
+const CANONICAL_TAGS: readonly NarrativeDecisionCanonicalTag[] = [
   "violence",
   "mercy",
   "alliance_formed",
@@ -67,7 +68,11 @@ export class NarrativeDecisionService {
       throw new NotFoundException("GameSession não encontrada.");
     }
 
-    const tags = (dto.tags ?? []).filter((t) => CANONICAL_TAGS.includes(t));
+    const tags = (dto.tags ?? []).filter(
+      (t): t is NarrativeDecisionTag =>
+        CANONICAL_TAGS.includes(t as NarrativeDecisionCanonicalTag) ||
+        t.startsWith("_meta:"),
+    );
     const impactWeight = this.clampImpact(dto.impactWeight ?? 5);
 
     const resolvedEntityId = await this.resolveAffectedEntityId(

@@ -52,6 +52,8 @@ interface PreviewBody {
   partySize: number;
   targetDifficulty: Difficulty;
   recentAnchors?: string[];
+  creatureTypeHint?: string | null;
+  narrativeTags?: string[];
 }
 
 interface MaterializeBody {
@@ -159,6 +161,8 @@ export class RandomEncounterController {
       locationType,
       targetDifficulty: body.targetDifficulty,
       recentAnchors: body.recentAnchors,
+      creatureTypeHint: body.creatureTypeHint ?? null,
+      narrativeTags: body.narrativeTags,
     });
 
     if (!composition) {

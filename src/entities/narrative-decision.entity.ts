@@ -10,7 +10,7 @@ import {
 import { GameSessionEntity } from "./game-session.entity";
 import { SceneEntity } from "./scene.entity";
 
-export type NarrativeDecisionTag =
+export type NarrativeDecisionCanonicalTag =
   | "violence"
   | "mercy"
   | "alliance_formed"
@@ -21,6 +21,12 @@ export type NarrativeDecisionTag =
   | "cowardly"
   | "secret_kept"
   | "bond_forged";
+
+export type NarrativeDecisionMetaTag = `_meta:${string}`;
+
+export type NarrativeDecisionTag =
+  | NarrativeDecisionCanonicalTag
+  | NarrativeDecisionMetaTag;
 
 export type NarrativeDecisionPayoffWindow = "immediate" | "act" | "campaign";
 

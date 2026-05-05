@@ -15,6 +15,8 @@ export interface SelectCompositionInput {
   locationType: LocationType;
   targetDifficulty: Difficulty;
   recentAnchors?: string[];
+  creatureTypeHint?: string | null;
+  narrativeTags?: string[];
 }
 
 export interface MonsterComposition {
@@ -97,6 +99,13 @@ function getEnvironment(monster: MonsterEntity): string[] {
   return raw?.environment ?? [];
 }
 
+function getNarrativeTags(monster: MonsterEntity): string[] {
+  const raw = monster.raw as { tags?: string[] } | undefined;
+  return [...(raw?.tags ?? []), ...getEnvironment(monster)].map((t) =>
+    t.toLowerCase(),
+  );
+}
+
 function isLegendaryUnique(monster: MonsterEntity): boolean {
   const raw = monster.raw as
     | { legendary?: boolean; unique?: boolean; isUnique?: boolean }
@@ -118,7 +127,12 @@ export class MonsterSelectorService {
   ): Promise<MonsterComposition | null> {
     const tier = deriveTier(input.partyAvgLevel);
     const crCap = CR_CAP_PER_TIER[tier];
-    const blacklistedTypes = TYPE_BLACKLIST_PER_LOCATION[input.locationType] ?? [];
+    const baseBlacklist = TYPE_BLACKLIST_PER_LOCATION[input.locationType] ?? [];
+    const hint = input.creatureTypeHint?.toLowerCase() || null;
+    const narrativeTags = (input.narrativeTags ?? []).map((t) => t.toLowerCase());
+    const blacklistedTypes = hint
+      ? baseBlacklist.filter((t) => t !== hint)
+      : baseBlacklist;
     const recentAnchors = input.recentAnchors ?? [];
     const budget =
       (ENCOUNTER_BUDGET_PER_CHARACTER[Math.max(1, Math.min(20, input.partyAvgLevel))][
@@ -147,6 +161,30 @@ export class MonsterSelectorService {
         pool = matched;
       } else {
         biomeRelaxed = true;
+      }
+    }
+
+    let typeHintRelaxed = false;
+    if (hint) {
+      const byType = pool.filter((m) => m.type.toLowerCase() === hint);
+      if (byType.length > 0) {
+        pool = byType;
+      } else {
+        typeHintRelaxed = true;
+      }
+    }
+
+    let narrativeTagsRelaxed = false;
+    if (narrativeTags.length > 0 && pool.length > 0) {
+      const byTags = pool.filter((m) => {
+        const monsterTags = getNarrativeTags(m);
+        if (monsterTags.length === 0) return true;
+        return narrativeTags.some((t) => monsterTags.includes(t));
+      });
+      if (byTags.length > 0) {
+        pool = byTags;
+      } else {
+        narrativeTagsRelaxed = true;
       }
     }
 
@@ -190,8 +228,19 @@ export class MonsterSelectorService {
       (s) => pool.find((p) => p.slug === s)?.name ?? s,
     );
 
+    const poolSuffix = [
+      biomeRelaxed ? "biome relaxed" : null,
+      typeHintRelaxed ? "type hint relaxed" : null,
+      narrativeTagsRelaxed ? "narrative tags relaxed" : null,
+      hint && !typeHintRelaxed ? `type=${hint}` : null,
+      narrativeTags.length > 0 && !narrativeTagsRelaxed
+        ? `tags=[${narrativeTags.join(",")}]`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("; ");
     const reasonChain = [
-      `pool=${pool.length}${biomeRelaxed ? " (biome relaxed)" : ""}`,
+      `pool=${pool.length}${poolSuffix ? ` (${poolSuffix})` : ""}`,
       `tier=${tier}`,
       `budget=${budget}`,
       `anchor=${anchor.slug}`,
