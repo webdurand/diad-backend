@@ -41,6 +41,7 @@ export interface UpdateCampaignDto {
   worldLore?: string;
   isDraft?: boolean;
   generationSeed?: Record<string, unknown>;
+  startingLocationId?: string | null;
 }
 
 export interface ListSoloWorldsQuery {

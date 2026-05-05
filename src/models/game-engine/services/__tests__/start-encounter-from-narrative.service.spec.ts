@@ -28,6 +28,20 @@ interface RepoOverrides {
   session?: Partial<GameSessionEntity> | null;
 }
 
+function makeSceneService() {
+  return {
+    create: jest.fn(async (sessionId: string, dto: any) => ({
+      id: "auto-scene-99999999-9999-4999-8999-999999999999",
+      sessionId,
+      sceneNumber: 1,
+      isActive: true,
+      title: dto?.title ?? "auto",
+      description: dto?.description,
+      locationId: dto?.locationId ?? null,
+    })),
+  } as unknown as import("src/models/session/services/scene.service").SceneService;
+}
+
 function makeSceneRepo(
   scene: Partial<SceneEntity> | null,
   active: Partial<SceneEntity> | null = null,
@@ -243,6 +257,7 @@ function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
     diceSvc,
     npcSvc,
     sceneCtxSvc,
+    makeSceneService(),
     bus,
     new EventEnvelopeFactory(undefined),
     aiProxy,
@@ -423,6 +438,7 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
       makeDiceService(),
       npcSvc,
       sceneCtxSvc,
+      makeSceneService(),
       makeEventBus(),
       new EventEnvelopeFactory(undefined),
       aiProxy,
@@ -496,6 +512,8 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
       postJsonToAgent: jest.fn().mockResolvedValue({ targets: [], count: 0 }),
     } as unknown as import("src/models/ai-proxy/ai-proxy.service").AiProxyService;
 
+    const sceneService = makeSceneService();
+
     const svc = new StartEncounterFromNarrativeService(
       sceneRepo,
       npcRepo,
@@ -508,6 +526,7 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
       makeDiceService(),
       npcSvc,
       sceneCtxSvc,
+      sceneService,
       makeEventBus(),
       new EventEnvelopeFactory(undefined),
       aiProxy,
@@ -521,11 +540,11 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
     });
 
     expect(result.encounterId).toBe(ENCOUNTER_ID);
-    expect(sceneRepo.save).toHaveBeenCalled();
-    const savedArg = (sceneRepo.save as jest.Mock).mock.calls[0][0];
-    expect(savedArg.sessionId).toBe(SESSION_ID);
-    expect(savedArg.isActive).toBe(true);
-    expect(savedArg.title).toBe("Combate em câmara");
+    expect(sceneService.create).toHaveBeenCalled();
+    const stubCall = (sceneService.create as jest.Mock).mock.calls[0];
+    expect(stubCall[0]).toBe(SESSION_ID);
+    expect(stubCall[1].title).toBe("Combate em câmara");
+    expect(stubCall[1].reason).toBe("auto_combat_stub");
   });
 
   it("targets vazios → chama agno extract-combat-targets e usa npcIds devolvidos", async () => {

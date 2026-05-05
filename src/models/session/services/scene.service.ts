@@ -60,7 +60,7 @@ export class SceneService {
     // Deactivate current active scene + invalidate cache pra cena saindo.
     const previousActive = await this.sceneRepo.findOne({
       where: { sessionId, isActive: true },
-      select: ["id"],
+      select: ["id", "locationId"],
     });
     if (previousActive) this.contextCache.invalidate(previousActive.id);
     await this.sceneRepo.update(
@@ -80,10 +80,24 @@ export class SceneService {
       arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber, sessionId);
     }
 
+    const resolvedLocationId =
+      dto.locationId ??
+      previousActive?.locationId ??
+      campaign?.startingLocationId ??
+      null;
+
+    if (!resolvedLocationId) {
+      this.logger.warn("scene.created.without_location", {
+        "session.id": sessionId,
+        "scene.number": nextNumber,
+        "campaign.id": campaign?.id ?? "(none)",
+      });
+    }
+
     const scene = this.sceneRepo.create({
       sessionId,
       sceneNumber: nextNumber,
-      locationId: dto.locationId,
+      locationId: resolvedLocationId ?? undefined,
       title: dto.title,
       description: dto.description,
       mood: dto.mood,
@@ -105,7 +119,7 @@ export class SceneService {
       fromSceneId: previousActive?.id ?? null,
       toSceneId: saved.id,
       sceneNumber: nextNumber,
-      locationId: dto.locationId ?? null,
+      locationId: resolvedLocationId,
       arcBeat: arcBeat ?? null,
       reason: dto.reason ?? null,
     });

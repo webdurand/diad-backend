@@ -4,6 +4,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Req,
@@ -13,6 +14,7 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { LocationEntity } from "src/entities/location.entity";
+import { SceneEntity } from "src/entities/scene.entity";
 import { AuthGuard } from "src/models/auth/auth.guard";
 import { CampaignIdPipe } from "src/models/world/pipes/campaign-id.pipe";
 import {
@@ -44,6 +46,7 @@ function extractTraceId(traceparent?: string): string | undefined {
 
 interface PreviewBody {
   sessionId: string;
+  sceneId?: string;
   locationId?: string;
   partyAvgLevel: number;
   partySize: number;
@@ -70,12 +73,40 @@ const ELIGIBLE_TYPES: ReadonlyArray<LocationType> = [
 @Controller("campaigns")
 @UseGuards(AuthGuard)
 export class RandomEncounterController {
+  private readonly logger = new Logger(RandomEncounterController.name);
+
   constructor(
     @InjectRepository(LocationEntity)
     private readonly locationRepo: Repository<LocationEntity>,
+    @InjectRepository(SceneEntity)
+    private readonly sceneRepo: Repository<SceneEntity>,
     private readonly selector: MonsterSelectorService,
     private readonly materializer: RandomEncounterMaterializerService,
   ) {}
+
+  private async resolveLocation(
+    campaignId: string,
+    sceneId?: string,
+    locationId?: string,
+  ): Promise<LocationEntity | null> {
+    if (locationId) {
+      return this.locationRepo.findOne({
+        where: { id: locationId, campaignId },
+      });
+    }
+    if (sceneId) {
+      const scene = await this.sceneRepo.findOne({
+        where: { id: sceneId },
+        select: ["id", "locationId"],
+      });
+      if (scene?.locationId) {
+        return this.locationRepo.findOne({
+          where: { id: scene.locationId, campaignId },
+        });
+      }
+    }
+    return null;
+  }
 
   @Post(":id/random-encounter/preview")
   @HttpCode(HttpStatus.OK)
@@ -83,21 +114,31 @@ export class RandomEncounterController {
     @Param("id", CampaignIdPipe) campaignId: string,
     @Body() body: PreviewBody,
   ) {
-    let location: LocationEntity | null = null;
+    this.logger.log(
+      `🎲 PREVIEW received campaignId=${campaignId} sessionId=${body.sessionId} ` +
+        `sceneId=${body.sceneId ?? "n/a"} locationId=${body.locationId ?? "n/a"} ` +
+        `partyAvgLevel=${body.partyAvgLevel} partySize=${body.partySize} ` +
+        `targetDifficulty=${body.targetDifficulty}`,
+    );
+
+    const location = await this.resolveLocation(
+      campaignId,
+      body.sceneId,
+      body.locationId,
+    );
+
     let locationType: LocationType = "wilderness";
     let biomeTags: string[] | undefined;
 
-    if (body.locationId) {
-      location = await this.locationRepo.findOne({
-        where: { id: body.locationId, campaignId },
-      });
-      if (!location) {
-        throw new DomainException(
-          ErrorCode.LOCATION_NOT_FOUND,
-          `Location ${body.locationId} não encontrada na campanha.`,
-        );
-      }
+    if (location) {
+      this.logger.log(
+        `🎲 PREVIEW location resolved: id=${location.id} name="${location.name}" ` +
+          `type=${location.type} tags=${JSON.stringify(location.tags ?? [])}`,
+      );
       if (!ELIGIBLE_TYPES.includes(location.type as LocationType)) {
+        this.logger.warn(
+          `🎲 PREVIEW INVALID location type=${location.type} (precisa wilderness/dungeon/dungeon_room)`,
+        );
         throw new DomainException(
           ErrorCode.RANDOM_ENCOUNTER_INVALID_LOCATION,
           `Tipo '${location.type}' não suporta random encounter.`,
@@ -105,6 +146,10 @@ export class RandomEncounterController {
       }
       locationType = location.type as LocationType;
       biomeTags = Array.isArray(location.tags) ? location.tags : undefined;
+    } else {
+      this.logger.warn(
+        `🎲 PREVIEW location NOT RESOLVED — defaulting type=wilderness sem biome filter`,
+      );
     }
 
     const composition = await this.selector.selectComposition({
@@ -117,6 +162,10 @@ export class RandomEncounterController {
     });
 
     if (!composition) {
+      this.logger.warn(
+        `🎲 PREVIEW POOL EMPTY locationType=${locationType} biomeTags=${JSON.stringify(biomeTags ?? [])} ` +
+          `partyAvgLevel=${body.partyAvgLevel} difficulty=${body.targetDifficulty}`,
+      );
       throw new DomainException(
         ErrorCode.RANDOM_ENCOUNTER_POOL_EMPTY,
         "Nenhum monstro elegível encontrado pro encontro aleatório.",
@@ -130,6 +179,11 @@ export class RandomEncounterController {
         },
       );
     }
+
+    this.logger.log(
+      `🎲 PREVIEW composition: anchor=${composition.anchor} mode=${composition.mode} ` +
+        `slugs=${JSON.stringify(composition.monsterSlugs)} adjustedXp=${composition.adjustedXp}`,
+    );
 
     return {
       monsterSlugs: composition.monsterSlugs,
@@ -155,7 +209,12 @@ export class RandomEncounterController {
     const ownerUserId = getUserId(req);
     const traceId = extractTraceId(traceparent);
 
-    return this.materializer.materialize({
+    this.logger.log(
+      `🎲 MATERIALIZE received campaignId=${campaignId} sessionId=${body.sessionId} ` +
+        `slugs=${JSON.stringify(body.monsterSlugs)} difficulty=${body.difficulty}`,
+    );
+
+    const result = await this.materializer.materialize({
       campaignId,
       sessionId: body.sessionId,
       sceneId: body.sceneId,
@@ -167,5 +226,12 @@ export class RandomEncounterController {
       reasonChain: body.reasonChain,
       traceId,
     });
+
+    this.logger.log(
+      `🎲 MATERIALIZE encounterId=${result.encounterId} npcIds=${JSON.stringify(result.npcIds)} ` +
+        `participants=${result.participantIds.length}`,
+    );
+
+    return result;
   }
 }

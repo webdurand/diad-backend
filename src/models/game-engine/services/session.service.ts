@@ -6,7 +6,21 @@ import { CampaignEntity } from "src/entities/campaign.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { CharacterEntity } from "src/entities/character.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
+import { LocationEntity } from "src/entities/location.entity";
+import { SceneService } from "src/models/session/services/scene.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
+
+const STARTING_LOCATION_TYPE_PRIORITY: Record<string, number> = {
+  city: 1,
+  region: 2,
+  wilderness: 3,
+  building: 4,
+  continent: 5,
+  dungeon: 6,
+  district: 7,
+  room: 8,
+  dungeon_room: 9,
+};
 
 export interface CreateSessionDto {
   name: string;
@@ -41,6 +55,9 @@ export class SessionService {
     private readonly characterRepo: Repository<CharacterEntity>,
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
+    @InjectRepository(LocationEntity)
+    private readonly locationRepo: Repository<LocationEntity>,
+    private readonly sceneService: SceneService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(SessionService.name);
@@ -50,12 +67,10 @@ export class SessionService {
     ownerId: string,
     dto: CreateSessionDto,
   ): Promise<GameSessionEntity> {
-    // Valida campaignId antes do insert — erro amigável vs FK violation 500
-    // (mundo deletado, querystring stale, etc).
+    let campaign: CampaignEntity | null = null;
     if (dto.campaignId) {
-      const campaign = await this.campaignRepo.findOne({
+      campaign = await this.campaignRepo.findOne({
         where: { id: dto.campaignId },
-        select: { id: true },
       });
       if (!campaign) {
         throw new NotFoundException({
@@ -76,7 +91,59 @@ export class SessionService {
       scene: {},
       config: dto.config ?? {},
     });
-    return this.sessionRepo.save(session);
+    const saved = await this.sessionRepo.save(session);
+
+    if (campaign) {
+      await this.bootstrapInitialScene(saved.id, campaign);
+    }
+
+    return saved;
+  }
+
+  private async bootstrapInitialScene(
+    sessionId: string,
+    campaign: CampaignEntity,
+  ): Promise<void> {
+    try {
+      if (!campaign.startingLocationId) {
+        const inferred = await this.inferStartingLocation(campaign.id);
+        if (inferred) {
+          campaign.startingLocationId = inferred;
+          await this.campaignRepo.save(campaign);
+        }
+      }
+
+      await this.sceneService.create(sessionId, {
+        title: campaign.name,
+        reason: "session_bootstrap",
+      });
+    } catch (err) {
+      this.logger.warn("session.bootstrap_initial_scene.failed", {
+        "session.id": sessionId,
+        "campaign.id": campaign.id,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private async inferStartingLocation(
+    campaignId: string,
+  ): Promise<string | null> {
+    const locations = await this.locationRepo.find({
+      where: { campaignId },
+      select: ["id", "type", "sortOrder", "createdAt"],
+    });
+    if (locations.length === 0) return null;
+
+    const ranked = [...locations].sort((a, b) => {
+      const pa = STARTING_LOCATION_TYPE_PRIORITY[a.type] ?? 99;
+      const pb = STARTING_LOCATION_TYPE_PRIORITY[b.type] ?? 99;
+      if (pa !== pb) return pa - pb;
+      const so = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      if (so !== 0) return so;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+    return ranked[0].id;
   }
 
   async getById(sessionId: string): Promise<GameSessionEntity> {

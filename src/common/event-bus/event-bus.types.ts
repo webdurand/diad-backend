@@ -86,8 +86,11 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "bond_formed",
     "bond_broken",
     "item_lost",
+    "item_awarded",
     "currency_changed",
     "loot_rolled",
+    "healing_received",
+    "hp_lost_narrative",
     // Spec 027 (M2, AC2.5)
     "reputation_tag_added",
     "crime_committed",

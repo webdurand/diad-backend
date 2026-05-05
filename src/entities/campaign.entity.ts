@@ -137,6 +137,9 @@ export class CampaignEntity {
   })
   currentCounts: CampaignContentCounts;
 
+  @Column({ name: "starting_location_id", type: "uuid", nullable: true })
+  startingLocationId?: string | null;
+
   @Column({ name: "dm_personality", type: "jsonb", default: {} })
   dmPersonality: CampaignDmPersonality;
 

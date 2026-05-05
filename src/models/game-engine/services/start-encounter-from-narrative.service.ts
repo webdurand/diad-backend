@@ -32,6 +32,7 @@ import { CombatService } from "./combat.service";
 import { DiceService } from "./dice.service";
 import { NpcService } from "src/models/world/services/npc.service";
 import { SceneContextService } from "src/models/session/services/scene-context.service";
+import { SceneService } from "src/models/session/services/scene.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
@@ -108,6 +109,7 @@ export class StartEncounterFromNarrativeService {
     private readonly diceService: DiceService,
     private readonly npcService: NpcService,
     private readonly sceneContextService: SceneContextService,
+    private readonly sceneService: SceneService,
     private readonly eventBus: EventBusService,
     private readonly factory: EventEnvelopeFactory,
     private readonly aiProxy: AiProxyService,
@@ -370,23 +372,13 @@ export class StartEncounterFromNarrativeService {
     });
     if (active) return active;
 
-    const nextNumber =
-      ((
-        await this.sceneRepo.count({
-          where: { sessionId: input.sessionId },
-        })
-      ) ?? 0) + 1;
-
-    const stub = this.sceneRepo.create({
-      sessionId: input.sessionId,
-      sceneNumber: nextNumber,
+    const saved = await this.sceneService.create(input.sessionId, {
       title: input.narrativeTrigger ?? "Combate iminente",
       description: "Cena criada automaticamente para hospedar combate.",
-      isActive: true,
+      reason: "auto_combat_stub",
     });
-    const saved = await this.sceneRepo.save(stub);
     this.logger.log(
-      `auto_scene_stub_created session=${input.sessionId} scene=${saved.id}`,
+      `auto_scene_stub_created session=${input.sessionId} scene=${saved.id} location=${saved.locationId ?? "(none)"}`,
     );
     return saved;
   }

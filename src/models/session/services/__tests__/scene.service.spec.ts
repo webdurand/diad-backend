@@ -63,6 +63,7 @@ describe("SceneService.create — scene_changed emission", () => {
     const logger = {
       setContext: jest.fn(),
       error: jest.fn(),
+      warn: jest.fn(),
     };
 
     const service = new SceneService(
