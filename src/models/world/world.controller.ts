@@ -196,6 +196,16 @@ export class WorldController {
     return this.campaignService.update(id, dto);
   }
 
+  @Delete(":id")
+  async deleteCampaign(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    await this.campaignService.delete(id);
+    return { ok: true };
+  }
+
   // ==================== Spec NNN: Mundo + Aventura ====================
 
   /**

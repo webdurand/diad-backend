@@ -322,6 +322,11 @@ export class CampaignService {
     return this.campaignRepo.save(campaign);
   }
 
+  async delete(campaignId: string): Promise<void> {
+    const campaign = await this.getById(campaignId);
+    await this.campaignRepo.delete(campaign.id);
+  }
+
   async addPlayer(
     campaignId: string,
     userId: string,
