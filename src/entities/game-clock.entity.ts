@@ -16,7 +16,7 @@ import { CampaignEntity } from "./campaign.entity";
  * `currentInGameDateTime` armazena ano fictício do mundo (ex: 1492 DR
  * Forgotten Realms). Sunrise/sunset configuráveis por campanha em formato
  * HH:mm (default 06:00 / 18:00). `daysPassed` é contador desde início pra
- * vow deadlines (Ironsworn) e exhaustion ticks.
+ * exhaustion ticks e deadlines narrativas.
  *
  * `timeOfDay` é DERIVADO via pure function `computeTimeOfDay()` —
  * NÃO persistido (evita drift entre fields).

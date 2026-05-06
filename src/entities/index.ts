@@ -83,7 +83,6 @@ import { SessionMessageEntity } from "./session-message.entity";
 import { CampaignChronicleEntity } from "./campaign-chronicle.entity";
 import { PartyKnowledgeEntity } from "./party-knowledge.entity";
 import { ClockEntity } from "./clock.entity";
-import { VowEntity } from "./vow.entity";
 import { NarrativeDecisionEntity } from "./narrative-decision.entity";
 import { LoreEntryEntity } from "./lore-entry.entity";
 import { EndingSlideEntity } from "./ending-slide.entity";
@@ -193,7 +192,6 @@ export {
   CampaignChronicleEntity,
   PartyKnowledgeEntity,
   ClockEntity,
-  VowEntity,
   NarrativeDecisionEntity,
   LoreEntryEntity,
   EndingSlideEntity,
@@ -300,7 +298,6 @@ export const ENTITIES = [
   CampaignChronicleEntity,
   PartyKnowledgeEntity,
   ClockEntity,
-  VowEntity,
   NarrativeDecisionEntity,
   LoreEntryEntity,
   EndingSlideEntity,

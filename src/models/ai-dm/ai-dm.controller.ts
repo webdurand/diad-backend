@@ -17,8 +17,6 @@ import { SessionService } from "../game-engine/services/session.service";
 import type { ArcBeat } from "src/entities/campaign.entity";
 import { ClockService } from "./services/clock.service";
 import type { AdvanceClockDto, CreateClockDto } from "./services/clock.service";
-import { VowService } from "./services/vow.service";
-import type { CreateVowDto } from "./services/vow.service";
 import { NarrativeDecisionService } from "./services/narrative-decision.service";
 import type { CreateNarrativeDecisionDto } from "./services/narrative-decision.service";
 import { LoreEntryService } from "./services/lore-entry.service";
@@ -45,7 +43,6 @@ export class AiDmController {
     private readonly sceneService: SceneService,
     private readonly sessionService: SessionService,
     private readonly clockService: ClockService,
-    private readonly vowService: VowService,
     private readonly decisionService: NarrativeDecisionService,
     private readonly loreService: LoreEntryService,
     private readonly voiceService: VoiceProfileService,
@@ -105,49 +102,6 @@ export class AiDmController {
       getUserId(req),
     );
     return this.clockService.advance(clockId, dto);
-  }
-
-  // ============= VOWS (session-scoped) =============
-
-  @Post("sessions/:sessionId/vows")
-  async createVow(
-    @Req() req: AuthRequest,
-    @Param("sessionId") sessionId: string,
-    @Body() dto: CreateVowDto,
-  ) {
-    const session = await this.sessionService.ensureAccess(
-      sessionId,
-      getUserId(req),
-    );
-    if (session.campaignId) {
-      await this.campaignService.ensureDmOwnership(
-        session.campaignId,
-        getUserId(req),
-      );
-    }
-    return this.vowService.create(sessionId, dto);
-  }
-
-  @Get("sessions/:sessionId/vows")
-  async listVows(
-    @Req() req: AuthRequest,
-    @Param("sessionId") sessionId: string,
-  ) {
-    await this.sessionService.ensureAccess(sessionId, getUserId(req));
-    return this.vowService.listBySession(sessionId);
-  }
-
-  @Post("vows/:vowId/fulfill")
-  async fulfillVow(@Req() req: AuthRequest, @Param("vowId") vowId: string) {
-    const vow = await this.vowService.getById(vowId);
-    const session = await this.sessionService.getById(vow.gameSessionId);
-    if (session.campaignId) {
-      await this.campaignService.ensureDmOwnership(
-        session.campaignId,
-        getUserId(req),
-      );
-    }
-    return this.vowService.fulfill(vowId);
   }
 
   // ============= NARRATIVE DECISIONS (session-scoped) =============

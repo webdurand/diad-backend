@@ -43,9 +43,6 @@ describe("SceneService.create — scene_changed emission", () => {
       findOne: jest.fn().mockResolvedValue(opts.campaign ?? null),
       save: jest.fn(async (c: any) => c),
     };
-    const vowRepo = {
-      findOne: jest.fn().mockResolvedValue(null),
-    };
     const campaignService = {
       incrementCount: jest.fn().mockResolvedValue(undefined),
     };
@@ -71,7 +68,6 @@ describe("SceneService.create — scene_changed emission", () => {
       sceneNpcRepo,
       sessionRepo as any,
       campaignRepo as any,
-      vowRepo as any,
       campaignService as any,
       contextCache as any,
       eventBus as any,

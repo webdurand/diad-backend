@@ -73,7 +73,7 @@ export class WorldSynthController {
    * Haiku 4.5 — gera seed bruto a partir de descrição livre.
    * Não persiste — frontend chama, edita e depois cria campaign + items.
    * Timeout 100s — Haiku com 4k tokens cap pode levar 60-80s no pior caso.
-   * Estrutura narrativa (story arc/vow/clocks/quests) fica pra synthesize-complete
+   * Estrutura narrativa (story arc/clocks/quests) fica pra synthesize-complete
    * no [Salvar mundo].
    */
   @Post("synthesize-bootstrap")
@@ -179,7 +179,7 @@ export class WorldSynthController {
   /**
    * Completion + narrative scaffold pass.
    * Recebe context (snapshot do mundo em construção) e retorna additions + rationale.
-   * Timeout 120s — gera N items + scaffold narrativo (story arc + vow + clocks + quests).
+   * Timeout 120s — gera N items + scaffold narrativo (story arc + clocks + quests).
    */
   @Post(":id/synthesize-complete")
   async complete(

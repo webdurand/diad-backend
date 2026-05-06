@@ -27,6 +27,10 @@ export interface CreateQuestDto {
     description: string;
     pathGroup?: string;
     isOptional?: boolean;
+    kind?: "talk_to_npc" | "travel_to" | "defeat_monster" | "gain_reputation";
+    targetName?: string;
+    targetCity?: string | null;
+    amount?: number | null;
   }>;
   isMainQuest?: boolean;
   triggerNpcName?: string;
@@ -137,16 +141,26 @@ export class QuestService {
     const saved = await this.questRepo.save(quest);
 
     if (dto.objectives?.length) {
-      const objectives = dto.objectives.map((o, i) =>
-        this.objectiveRepo.create({
+      const objectives = dto.objectives.map((o, i) => {
+        const completionConditions: Record<string, any> = {};
+        if (o.kind) completionConditions.kind = o.kind;
+        if (o.targetName) completionConditions.targetName = o.targetName;
+        if (o.targetCity !== undefined && o.targetCity !== null) {
+          completionConditions.targetCity = o.targetCity;
+        }
+        if (o.amount !== undefined && o.amount !== null) {
+          completionConditions.amount = o.amount;
+        }
+        return this.objectiveRepo.create({
           questId: saved.id,
           description: o.description,
           pathGroup: o.pathGroup,
           isOptional: o.isOptional ?? false,
           sortOrder: i,
           status: i === 0 ? "active" : "locked",
-        }),
-      );
+          completionConditions,
+        });
+      });
       await this.objectiveRepo.save(objectives);
     }
 

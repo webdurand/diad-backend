@@ -37,7 +37,6 @@ export interface EndingSlideCondition {
     | "entity_status_equals"
     | "decision_tag_present"
     | "decision_impact_gte"
-    | "vow_status_equals"
     | "clock_full"
     | "question_answered"
     | "arc_beat_reached";

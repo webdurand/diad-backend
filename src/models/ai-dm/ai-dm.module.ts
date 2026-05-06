@@ -2,7 +2,6 @@ import { forwardRef, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   ClockEntity,
-  VowEntity,
   NarrativeDecisionEntity,
   LoreEntryEntity,
   EndingSlideEntity,
@@ -16,7 +15,6 @@ import { SessionModule } from "../session/session.module";
 import { GameEngineModule } from "../game-engine/game-engine.module";
 import { AiDmController } from "./ai-dm.controller";
 import { ClockService } from "./services/clock.service";
-import { VowService } from "./services/vow.service";
 import { NarrativeDecisionService } from "./services/narrative-decision.service";
 import { LoreEntryService } from "./services/lore-entry.service";
 import { VoiceProfileService } from "./services/voice-profile.service";
@@ -26,7 +24,6 @@ import { AiUsageService } from "./services/ai-usage.service";
   imports: [
     TypeOrmModule.forFeature([
       ClockEntity,
-      VowEntity,
       NarrativeDecisionEntity,
       LoreEntryEntity,
       EndingSlideEntity,
@@ -42,7 +39,6 @@ import { AiUsageService } from "./services/ai-usage.service";
   controllers: [AiDmController],
   providers: [
     ClockService,
-    VowService,
     NarrativeDecisionService,
     LoreEntryService,
     VoiceProfileService,
@@ -50,7 +46,6 @@ import { AiUsageService } from "./services/ai-usage.service";
   ],
   exports: [
     ClockService,
-    VowService,
     NarrativeDecisionService,
     LoreEntryService,
     VoiceProfileService,

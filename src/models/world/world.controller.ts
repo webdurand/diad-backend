@@ -554,5 +554,26 @@ export class WorldController {
     return this.factionService.update(facId, dto);
   }
 
-  // Quests migraram pra SessionScopedWorldController (POST/GET/PATCH /sessions/:sessionId/quests).
+  // Quests session-scoped vivem em SessionScopedWorldController (POST/GET/PATCH /sessions/:sessionId/quests).
+  // Aqui guardamos só o TEMPLATE de quests gerado pela síntese de mundo — materializa
+  // em quests session-scoped quando uma session inicia.
+
+  @Post(":id/quest-templates")
+  async setQuestsTemplate(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Body() body: { quests: unknown[] },
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.campaignService.setQuestsTemplate(id, body.quests ?? []);
+  }
+
+  @Get(":id/quest-templates")
+  async getQuestsTemplate(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
+    await this.campaignService.ensureMembership(id, getUserId(req));
+    return this.campaignService.getQuestsTemplate(id);
+  }
 }

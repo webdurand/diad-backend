@@ -8,6 +8,8 @@ import { CharacterEntity } from "src/entities/character.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { LocationEntity } from "src/entities/location.entity";
 import { SceneService } from "src/models/session/services/scene.service";
+import { QuestService } from "src/models/world/services/quest.service";
+import type { CreateQuestDto } from "src/models/world/services/quest.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 const STARTING_LOCATION_TYPE_PRIORITY: Record<string, number> = {
@@ -58,6 +60,7 @@ export class SessionService {
     @InjectRepository(LocationEntity)
     private readonly locationRepo: Repository<LocationEntity>,
     private readonly sceneService: SceneService,
+    private readonly questService: QuestService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(SessionService.name);
@@ -95,6 +98,7 @@ export class SessionService {
 
     if (campaign) {
       await this.bootstrapInitialScene(saved.id, campaign);
+      await this.materializeQuestsFromTemplate(saved.id, campaign);
     }
 
     return saved;
@@ -123,6 +127,76 @@ export class SessionService {
         "session.id": sessionId,
         "campaign.id": campaign.id,
         "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private async materializeQuestsFromTemplate(
+    sessionId: string,
+    campaign: CampaignEntity,
+  ): Promise<void> {
+    const seed = (campaign.generationSeed ?? {}) as Record<string, unknown>;
+    const template = seed.questsTemplate;
+    if (!Array.isArray(template) || template.length === 0) return;
+
+    let created = 0;
+    for (const raw of template) {
+      if (!raw || typeof raw !== "object") continue;
+      const q = raw as Record<string, unknown>;
+      const name = typeof q.name === "string" ? q.name : null;
+      if (!name) continue;
+
+      const objectivesRaw = Array.isArray(q.objectives) ? q.objectives : [];
+      const objectives: NonNullable<CreateQuestDto["objectives"]> = [];
+      for (const o of objectivesRaw) {
+        if (!o || typeof o !== "object") continue;
+        const obj = o as Record<string, unknown>;
+        const desc = typeof obj.description === "string" ? obj.description : null;
+        if (!desc) continue;
+        objectives.push({
+          description: desc,
+          kind: typeof obj.kind === "string" ? (obj.kind as any) : undefined,
+          targetName:
+            typeof obj.targetName === "string" ? obj.targetName : undefined,
+          targetCity:
+            typeof obj.targetCity === "string" ? obj.targetCity : null,
+          amount:
+            typeof obj.amount === "number" ? obj.amount : null,
+        });
+      }
+
+      const dto: CreateQuestDto = {
+        name,
+        description: typeof q.description === "string" ? q.description : undefined,
+        isMainQuest: q.isMainQuest === true,
+        objectives,
+      };
+
+      try {
+        const quest = await this.questService.create(sessionId, dto);
+        if (dto.isMainQuest) {
+          await this.questService.revealQuest(
+            sessionId,
+            quest.slug,
+            "Main quest revelada no início da aventura.",
+          );
+        }
+        created += 1;
+      } catch (err) {
+        this.logger.warn("session.materialize_quest.failed", {
+          "session.id": sessionId,
+          "campaign.id": campaign.id,
+          "quest.name": name,
+          "error.message": err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    if (created > 0) {
+      this.logger.info("session.materialize_quests.done", {
+        "session.id": sessionId,
+        "campaign.id": campaign.id,
+        "quests.created": created,
       });
     }
   }

@@ -15,7 +15,6 @@ import {
   NpcEntity,
   NpcRelationshipEntity,
   QuestEntity,
-  VowEntity,
   SessionNpcStateEntity,
   SessionStoryArcStateEntity,
 } from "src/entities";
@@ -49,7 +48,6 @@ import { SessionResumeService } from "./services/session-resume.service";
       NpcEntity,
       NpcRelationshipEntity,
       QuestEntity,
-      VowEntity,
       SessionNpcStateEntity,
       SessionStoryArcStateEntity,
     ]),

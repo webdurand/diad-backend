@@ -24,7 +24,6 @@ export interface CreateCampaignDto {
   theme?: string;
   difficulty?: string;
   worldLore?: string;
-  // ─── Spec NNN: mundo IA vs campanha humana ───
   dmMode?: "ai" | "human";
   scope?: "solo" | "party";
   isDraft?: boolean;
@@ -66,7 +65,6 @@ export interface SoloWorldListItem {
   worldLore: string | null;
   updatedAt: Date;
   createdAt: Date;
-  /** Contagens reais das tabelas filhas (não usa campaign.currentCounts que é só pra cenas/budget). */
   counts: {
     npcs: number;
     locations: number;
@@ -154,11 +152,7 @@ export class CampaignService {
     return players.map((p) => p.campaign).filter(Boolean);
   }
 
-  /**
-   * Spec NNN — lista paginada de mundos solo do user (dm_mode='ai').
-   * Filtra por isDraft (default: só publicados; passar isDraft=true pra rascunhos).
-   * Usado em /jogar/preparar mode='pick_world'.
-   */
+  
   async listSoloWorlds(
     userId: string,
     query: ListSoloWorldsQuery = {},
@@ -189,8 +183,6 @@ export class CampaignService {
       .take(pageSize)
       .getManyAndCount();
 
-    // Counts reais via subquery agregada — campaign.currentCounts só rastreia cenas
-    // pra budget de gameplay, não os items criados no wizard.
     const items: SoloWorldListItem[] = await Promise.all(
       campaigns.map(async (c) => {
         const counts = await this.fetchCountsForCampaign(c.id);
@@ -217,12 +209,9 @@ export class CampaignService {
     return { items, total, page, pageSize };
   }
 
-  /** Conta items reais nas tabelas filhas pra um campaign — usado em listSoloWorlds. */
   private async fetchCountsForCampaign(
     campaignId: string,
   ): Promise<SoloWorldListItem["counts"]> {
-    // NPCs canônicos = game_session_id IS NULL; quests vivem por session, então
-    // count de "quests do mundo" agrega através de game_sessions.campaign_id.
     const result = (await this.campaignRepo.query(
       `SELECT
          (SELECT COUNT(*) FROM npcs WHERE campaign_id = $1 AND game_session_id IS NULL) AS npcs,
@@ -244,19 +233,12 @@ export class CampaignService {
     };
   }
 
-  /**
-   * Spec NNN — publica mundo (transição draft → published).
-   * Usado no submit final do wizard.
-   */
   async publishWorld(campaignId: string): Promise<CampaignEntity> {
     const campaign = await this.getById(campaignId);
     campaign.isDraft = false;
     return this.campaignRepo.save(campaign);
   }
 
-  /**
-   * Spec NNN — atualiza generation_seed (snapshot final do dict do wizard).
-   */
   async setGenerationSeed(
     campaignId: string,
     seed: Record<string, unknown>,
@@ -266,21 +248,30 @@ export class CampaignService {
     return this.campaignRepo.save(campaign);
   }
 
-  /**
-   * UUID v4-ish detection — campaigns usam `gen_random_uuid()` (Postgres)
-   * que produz strings 8-4-4-4-12 hex. Slug é varchar non-UUID (ex:
-   * `misterio-aldeia-campaign`). Regex simples diferencia.
-   */
+  async setQuestsTemplate(
+    campaignId: string,
+    quests: unknown[],
+  ): Promise<{ questsTemplate: unknown[] }> {
+    const campaign = await this.getById(campaignId);
+    const seed = (campaign.generationSeed ?? {}) as Record<string, unknown>;
+    seed.questsTemplate = quests;
+    campaign.generationSeed = seed;
+    await this.campaignRepo.save(campaign);
+    return { questsTemplate: quests };
+  }
+
+  async getQuestsTemplate(campaignId: string): Promise<{ questsTemplate: unknown[] }> {
+    const campaign = await this.getById(campaignId);
+    const seed = (campaign.generationSeed ?? {}) as Record<string, unknown>;
+    const tpl = seed.questsTemplate;
+    return { questsTemplate: Array.isArray(tpl) ? tpl : [] };
+  }
+
+  
   private static readonly UUID_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  /**
-   * Spec 027 (M2, AC2.10 / bug D3) — resolve `slugOrId` para o UUID canônico
-   * da campanha. Aceita ambos como input pra fechar 500s em endpoints que
-   * recebiam slug (ex: `/campaigns/misterio-aldeia-campaign/ambiance`).
-   *
-   * Retorna o UUID. NotFoundException se não achar nem por id nem por slug.
-   */
+
   async resolveId(slugOrId: string): Promise<string> {
     const candidate = (slugOrId || "").trim();
     if (!candidate) {
@@ -303,11 +294,7 @@ export class CampaignService {
     return bySlug.id;
   }
 
-  /**
-   * Tolerante a slug-ou-UUID (Spec 027 D3). Quando recebe UUID, faz lookup
-   * direto; quando recebe slug, resolve via `slug` column. Mantém o contrato
-   * histórico de retornar a entidade completa.
-   */
+ 
   async getById(campaignId: string): Promise<CampaignEntity> {
     const candidate = (campaignId || "").trim();
     const where = CampaignService.UUID_REGEX.test(candidate)
@@ -415,7 +402,6 @@ export class CampaignService {
     return `${base}-${suffix}`;
   }
 
-  // ===== Spec 014 M1: Bounded World + Closure =====
 
   async initializeWithBudget(
     campaignId: string,
@@ -471,13 +457,7 @@ export class CampaignService {
     return this.campaignRepo.save(campaign);
   }
 
-  /**
-   * Atomic increment do counter `kind`, rejeitando se budget.max<kind> já foi atingido.
-   * Race-safe: uma única query UPDATE ... WHERE (count<max) RETURNING
-   * garante que concorrência não consiga passar do budget.
-   *
-   * Throws ConflictException({code:'BUDGET_EXCEEDED', kind}) quando estourar.
-   */
+  
   async incrementCount(
     campaignId: string,
     kind: BoundedCountKind,
@@ -505,8 +485,6 @@ export class CampaignService {
       [campaignId, key, maxKey],
     );
 
-    // TypeORM repo.query pode retornar `rows[]`, `[rows, affected]`, ou
-    // `QueryResult{rows, rowCount}` dependendo do driver/versão. Normaliza.
     const rows = this.normalizeQueryRows(raw);
 
     if (rows.length === 0) {
@@ -538,8 +516,6 @@ export class CampaignService {
   private normalizeQueryRows(raw: unknown): Array<Record<string, any>> {
     if (!raw) return [];
     if (Array.isArray(raw)) {
-      // Caso A: rows[] direto -> objetos com chaves
-      // Caso B: [rows, affected] tuple (raro no 0.3.x)
       if (raw.length === 0) return [];
       const first = raw[0];
       if (first && typeof first === "object" && !Array.isArray(first)) {
