@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { MonsterEntity } from "src/entities/monster.entity";
@@ -116,7 +116,6 @@ function isLegendaryUnique(monster: MonsterEntity): boolean {
 @Injectable()
 export class MonsterSelectorService {
   rng: () => number = Math.random;
-  private readonly logger = new Logger(MonsterSelectorService.name);
 
   constructor(
     @InjectRepository(MonsterEntity)
@@ -149,10 +148,6 @@ export class MonsterSelectorService {
         !isLegendaryUnique(m) &&
         !recentAnchors.includes(m.slug),
     );
-    this.logger.log(
-      `🎲 [SELECTOR] base pool: total=${all.length} → eligible=${baseEligible.length} ` +
-        `(crCap=${crCap}, blacklist=${JSON.stringify(blacklistedTypes)}, hint=${hint ?? "none"})`,
-    );
 
     let pool = baseEligible;
     let biomeRelaxed = false;
@@ -164,16 +159,8 @@ export class MonsterSelectorService {
       });
       if (matched.length > 0) {
         pool = matched;
-        this.logger.log(
-          `🎲 [SELECTOR] biomeTags filter: ${baseEligible.length} → ${pool.length} ` +
-            `(biomeTags=${JSON.stringify(input.biomeTags)})`,
-        );
       } else {
         biomeRelaxed = true;
-        this.logger.warn(
-          `🎲 [SELECTOR] biomeTags RELAXED (zero match) ` +
-            `biomeTags=${JSON.stringify(input.biomeTags)}`,
-        );
       }
     }
 
@@ -182,14 +169,8 @@ export class MonsterSelectorService {
       const byType = pool.filter((m) => m.type.toLowerCase() === hint);
       if (byType.length > 0) {
         pool = byType;
-        this.logger.log(
-          `🎲 [SELECTOR] creatureTypeHint filter: → ${pool.length} (hint=${hint})`,
-        );
       } else {
         typeHintRelaxed = true;
-        this.logger.warn(
-          `🎲 [SELECTOR] creatureTypeHint RELAXED (zero match for type=${hint})`,
-        );
       }
     }
 
@@ -202,23 +183,11 @@ export class MonsterSelectorService {
       });
       if (byTags.length > 0) {
         pool = byTags;
-        this.logger.log(
-          `🎲 [SELECTOR] narrativeTags filter: → ${pool.length} ` +
-            `(tags=${JSON.stringify(narrativeTags)})`,
-        );
       } else {
         narrativeTagsRelaxed = true;
-        this.logger.warn(
-          `🎲 [SELECTOR] narrativeTags RELAXED (zero match) tags=${JSON.stringify(narrativeTags)}`,
-        );
       }
     }
 
-    this.logger.log(
-      `🎲 [SELECTOR] FINAL pool=${pool.length} ` +
-        `(biomeRelaxed=${biomeRelaxed}, typeHintRelaxed=${typeHintRelaxed}, ` +
-        `narrativeTagsRelaxed=${narrativeTagsRelaxed})`,
-    );
     if (pool.length === 0) return null;
 
     const anchorPool = pool.filter((m) => m.xp <= budget * ANCHOR_XP_CAP_RATIO);
