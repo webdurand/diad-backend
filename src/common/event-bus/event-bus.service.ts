@@ -144,7 +144,9 @@ export class EventBusService {
             audiences: envelope.audiences,
             traceId: envelope.source.traceId,
             spanId: envelope.source.spanId ?? null,
-            narrativeDescriptor: envelope.narrativeDescriptor ?? null,
+            narrativeDescriptor: envelope.narrativeDescriptor
+              ? envelope.narrativeDescriptor.slice(0, 120)
+              : null,
             metadata: (envelope.metadata as Record<string, unknown>) ?? {},
             version: envelope.version,
             aggregateId: envelope.aggregateId,
