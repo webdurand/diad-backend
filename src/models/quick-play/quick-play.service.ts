@@ -5,6 +5,7 @@ import { CampaignEntity } from "src/entities/campaign.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { EncounterService } from "src/models/game-engine/services/encounter.service";
 
 export interface CreateQuickPlayEncounterDto {
@@ -32,6 +33,8 @@ export class QuickPlayService {
     private readonly campaignPlayerRepo: Repository<CampaignPlayerEntity>,
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
+    @InjectRepository(EncounterParticipantEntity)
+    private readonly participantRepo: Repository<EncounterParticipantEntity>,
     private readonly encounterService: EncounterService,
   ) {}
 
@@ -125,6 +128,11 @@ export class QuickPlayService {
         count: m.count,
       });
     }
+
+    await this.participantRepo.update(
+      { encounterId: encounter.id, type: "monster" },
+      { controlledBy: "ai" },
+    );
 
     const gridSize = dto.gridSize && dto.gridSize > 0 ? Math.floor(dto.gridSize) : 20;
     await this.encounterRepo.update(encounter.id, {

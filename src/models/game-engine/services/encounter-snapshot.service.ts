@@ -145,6 +145,25 @@ export class EncounterSnapshotService {
                   intelligence: p.monster.intelligence ?? 10,
                   wisdom: p.monster.wisdom ?? 10,
                   speed: parseMonsterSpeedFt(p.monster.speed),
+                  multiattack: p.monster.multiattack ?? null,
+                  spellcasting: buildSpellcastingSnapshot(
+                    p.monster.spellcasting ?? null,
+                    (p.spellSlotsUsed ?? {}) as {
+                      byLevel?: Record<number, number>;
+                      innateUses?: Record<string, number>;
+                    },
+                  ),
+                  bonusActions: extractBonusActions(p.monster.actions),
+                  reactions: extractReactions(p.monster.reactions),
+                  legendaryActions: buildLegendaryActions(
+                    p.monster.legendary_actions,
+                    p.monster.legendary_action_cost_map ?? null,
+                  ),
+                  legendaryActionPointsRemaining:
+                    p.legendaryPointsAvailable ?? undefined,
+                  legendaryActionPointsMax:
+                    p.legendaryPointsMax ?? undefined,
+                  lairActions: p.monster.lair_actions ?? [],
                 }
               : undefined,
           availableActions,
@@ -348,4 +367,135 @@ function parseMonsterSpeedFt(
     return match ? parseInt(match[1], 10) : 30;
   }
   return 30;
+}
+
+function buildSpellcastingSnapshot(
+  sc: unknown,
+  used: { byLevel?: Record<number, number>; innateUses?: Record<string, number> },
+): SnapshotParticipant["statblockRef"] extends infer T
+  ? T extends { spellcasting?: infer S }
+    ? S
+    : never
+  : never {
+  if (!sc || typeof sc !== "object") return null as never;
+  const cast = sc as {
+    type?: string;
+    ability?: string;
+    saveDc?: number;
+    attackBonus?: number;
+    knownSpells?: Array<{ slug: string; level: number; name?: string }>;
+    slotsByLevel?: Record<string, number>;
+    dailyUses?: Record<string, string>;
+  };
+  const slotsByLevel: Array<{ level: number; total: number; remaining: number }> = [];
+  if (cast.slotsByLevel) {
+    for (const [lvl, total] of Object.entries(cast.slotsByLevel)) {
+      const level = parseInt(lvl, 10);
+      if (!Number.isFinite(level) || typeof total !== "number") continue;
+      const usedAtLevel = used.byLevel?.[level] ?? 0;
+      slotsByLevel.push({
+        level,
+        total,
+        remaining: Math.max(0, total - usedAtLevel),
+      });
+    }
+  }
+  const dailyUses: Array<{ name: string; usesRemaining: number; usesMax: number }> = [];
+  if (cast.dailyUses) {
+    for (const [name, usage] of Object.entries(cast.dailyUses)) {
+      if (usage === "at-will") {
+        dailyUses.push({ name, usesRemaining: 99, usesMax: 99 });
+        continue;
+      }
+      const match = String(usage).match(/^(\d+)\/day$/);
+      const max = match ? parseInt(match[1], 10) : 0;
+      const usedCount = used.innateUses?.[name] ?? 0;
+      dailyUses.push({
+        name,
+        usesRemaining: Math.max(0, max - usedCount),
+        usesMax: max,
+      });
+    }
+  }
+  return {
+    type: cast.type,
+    ability: cast.ability,
+    saveDc: cast.saveDc,
+    attackBonus: cast.attackBonus,
+    knownSpells: cast.knownSpells ?? [],
+    slotsByLevel,
+    dailyUses,
+  } as never;
+}
+
+function extractBonusActions(
+  actions: unknown,
+): Array<{ name: string; description?: string }> {
+  const list: Array<{ name: string; description?: string }> = [];
+  const candidates = Array.isArray(actions)
+    ? actions
+    : actions && typeof actions === "object"
+      ? Object.values(actions as Record<string, unknown>)
+      : [];
+  for (const a of candidates) {
+    if (!a || typeof a !== "object") continue;
+    const obj = a as { name?: string; desc?: string; description?: string };
+    if (!obj.name) continue;
+    const text = `${obj.name} ${obj.desc ?? obj.description ?? ""}`;
+    if (/bonus action/i.test(text)) {
+      list.push({ name: obj.name, description: obj.desc ?? obj.description });
+    }
+  }
+  return list;
+}
+
+function extractReactions(
+  reactions: unknown,
+): Array<{ name: string; description?: string; trigger?: string }> {
+  const list: Array<{ name: string; description?: string; trigger?: string }> = [];
+  const candidates = Array.isArray(reactions)
+    ? reactions
+    : reactions && typeof reactions === "object"
+      ? Object.values(reactions as Record<string, unknown>)
+      : [];
+  for (const a of candidates) {
+    if (!a || typeof a !== "object") continue;
+    const obj = a as {
+      name?: string;
+      desc?: string;
+      description?: string;
+      trigger?: string;
+    };
+    if (!obj.name) continue;
+    list.push({
+      name: obj.name,
+      description: obj.desc ?? obj.description,
+      trigger: obj.trigger,
+    });
+  }
+  return list;
+}
+
+function buildLegendaryActions(
+  legendaryActions: unknown,
+  costMap: Record<string, 1 | 2 | 3> | null,
+): Array<{ name: string; cost: 1 | 2 | 3; description?: string }> {
+  const result: Array<{ name: string; cost: 1 | 2 | 3; description?: string }> = [];
+  if (!legendaryActions) return result;
+  const list = Array.isArray(legendaryActions)
+    ? legendaryActions
+    : ((legendaryActions as { actions?: unknown[] }).actions ?? []);
+  if (!Array.isArray(list)) return result;
+  for (const a of list) {
+    if (!a || typeof a !== "object") continue;
+    const obj = a as { name?: string; desc?: string; description?: string };
+    if (!obj.name) continue;
+    const cost = costMap?.[obj.name] ?? 1;
+    result.push({
+      name: obj.name,
+      cost,
+      description: obj.desc ?? obj.description,
+    });
+  }
+  return result;
 }

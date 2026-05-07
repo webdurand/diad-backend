@@ -3,6 +3,7 @@ import { CampaignEntity } from "src/entities/campaign.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { EncounterService } from "src/models/game-engine/services/encounter.service";
 import { QuickPlayService } from "../quick-play.service";
 
@@ -107,6 +108,16 @@ function makeEncounterRepo(): FakeRepo<EncounterEntity> {
   };
 }
 
+function makeParticipantRepo(): FakeRepo<EncounterParticipantEntity> {
+  return {
+    rows: [],
+    findOne: jest.fn(),
+    save: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(async () => ({ affected: 1 })),
+  };
+}
+
 function makeEncounterService() {
   return {
     create: jest.fn(async (sessionId: string, dto: any) => ({
@@ -139,6 +150,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -146,6 +158,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -194,6 +207,7 @@ describe("QuickPlayService", () => {
       ]);
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -201,6 +215,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -224,6 +239,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -231,6 +247,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -248,6 +265,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -255,6 +273,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -296,6 +315,10 @@ describe("QuickPlayService", () => {
       expect(sessionRepo.update).toHaveBeenCalledWith(SESSION_ID, {
         activeEncounterId: ENCOUNTER_ID,
       });
+      expect(participantRepo.update).toHaveBeenCalledWith(
+        { encounterId: ENCOUNTER_ID, type: "monster" },
+        { controlledBy: "ai" },
+      );
     });
 
     it("defaults gridSize to 20 when not provided", async () => {
@@ -303,6 +326,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -310,6 +334,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -331,6 +356,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -338,6 +364,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -354,6 +381,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -361,6 +389,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -377,6 +406,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -384,6 +414,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 
@@ -400,6 +431,7 @@ describe("QuickPlayService", () => {
       const sessionRepo = makeSessionRepo();
       const playerRepo = makePlayerRepo();
       const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
       const encounterService = makeEncounterService();
 
       const service = new QuickPlayService(
@@ -407,6 +439,7 @@ describe("QuickPlayService", () => {
         sessionRepo as unknown as Repository<GameSessionEntity>,
         playerRepo as unknown as Repository<CampaignPlayerEntity>,
         encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
         encounterService,
       );
 

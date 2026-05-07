@@ -160,6 +160,47 @@ describe("InventoryService", () => {
         service.addItem("user-1", "char-1", { equipmentId: "nonexistent" }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it("should resolve equipment by slug when equipmentId is not a UUID", async () => {
+      setupOwnership();
+      const eq = makeEquipment("torch");
+      repos.equipment.findOneBy!.mockResolvedValue(eq);
+      repos.charEquip.findOne!.mockResolvedValue(null);
+      repos.charEquip.create!.mockReturnValue({ id: "new-item", equipment: eq });
+      repos.charEquip.save!.mockResolvedValue({ id: "new-item", equipment: eq });
+      repos.charEquip.findOneOrFail!.mockResolvedValue({
+        id: "new-item",
+        equipment: eq,
+        quantity: 1,
+        equipped: false,
+        source: EquipmentSourceEnum.Bought,
+      });
+
+      await service.addItem("user-1", "char-1", { equipmentId: "torch" });
+
+      expect(repos.equipment.findOneBy).toHaveBeenCalledWith({ slug: "torch" });
+    });
+
+    it("should resolve equipment by id when equipmentId is a UUID", async () => {
+      setupOwnership();
+      const uuid = "11111111-2222-3333-4444-555555555555";
+      const eq = makeEquipment("longsword", { id: uuid });
+      repos.equipment.findOneBy!.mockResolvedValue(eq);
+      repos.charEquip.findOne!.mockResolvedValue(null);
+      repos.charEquip.create!.mockReturnValue({ id: "new-item", equipment: eq });
+      repos.charEquip.save!.mockResolvedValue({ id: "new-item", equipment: eq });
+      repos.charEquip.findOneOrFail!.mockResolvedValue({
+        id: "new-item",
+        equipment: eq,
+        quantity: 1,
+        equipped: false,
+        source: EquipmentSourceEnum.Bought,
+      });
+
+      await service.addItem("user-1", "char-1", { equipmentId: uuid });
+
+      expect(repos.equipment.findOneBy).toHaveBeenCalledWith({ id: uuid });
+    });
   });
 
   describe("updateItemQuantity", () => {

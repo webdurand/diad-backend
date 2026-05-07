@@ -88,6 +88,26 @@ export interface SnapshotParticipant {
     /** Spec 027 (M2 follow-up) — walk speed em pés (default 30). agno usa
      * pra movement planner saber até onde mover pra entrar em range. */
     speed?: number;
+    multiattack?: {
+      sequence: Array<{ actionName: string; count: number }>;
+      description?: string;
+      recharge?: string;
+    } | null;
+    spellcasting?: {
+      type?: string;
+      ability?: string;
+      saveDc?: number;
+      attackBonus?: number;
+      knownSpells?: Array<{ slug: string; level: number; name?: string }>;
+      slotsByLevel?: Array<{ level: number; total: number; remaining: number }>;
+      dailyUses?: Array<{ name: string; usesRemaining: number; usesMax: number }>;
+    } | null;
+    bonusActions?: Array<{ name: string; description?: string }>;
+    reactions?: Array<{ name: string; description?: string; trigger?: string }>;
+    legendaryActions?: Array<{ name: string; cost: 1 | 2 | 3; description?: string }>;
+    legendaryActionPointsRemaining?: number;
+    legendaryActionPointsMax?: number;
+    lairActions?: Array<{ name: string; description?: string }>;
   };
   availableActions: TurnActionBlock[];
   /** id → distância em pés (tiles × 5ft). */

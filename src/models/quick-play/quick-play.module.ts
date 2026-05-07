@@ -4,6 +4,7 @@ import {
   CampaignEntity,
   CampaignPlayerEntity,
   EncounterEntity,
+  EncounterParticipantEntity,
   GameSessionEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
@@ -18,6 +19,7 @@ import { QuickPlayService } from "./quick-play.service";
       GameSessionEntity,
       CampaignPlayerEntity,
       EncounterEntity,
+      EncounterParticipantEntity,
     ]),
     AuthModule,
     GameEngineModule,

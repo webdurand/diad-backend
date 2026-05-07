@@ -234,13 +234,23 @@ export class AiTurnService {
       steps: planRes.value.steps,
     });
     const executedSteps: ActionStep[] = [];
+    const totalAttackSteps = planRes.value.steps.filter(
+      (s) => s.kind === "attack",
+    ).length;
+    const isMultiattackPlan = totalAttackSteps > 1;
+    let attackStepIndex = 0;
     for (const step of planRes.value.steps) {
+      const isSubAttack =
+        step.kind === "attack" &&
+        (isMultiattackPlan || attackStepIndex > 0);
       const executed = await this.applyStep(
         encounter,
         participantId,
         step,
         authUserId,
+        isSubAttack,
       );
+      if (step.kind === "attack") attackStepIndex++;
       executedSteps.push(executed);
       this.logger.info("ai.turn.step_executed", {
         "step.kind": step.kind,
@@ -257,6 +267,16 @@ export class AiTurnService {
           "step.summary": executed.result.summary,
         });
         break;
+      }
+    }
+
+    if (isMultiattackPlan) {
+      const ended = await this.participantRepo.findOne({
+        where: { id: participantId },
+      });
+      if (ended && !ended.actionUsed) {
+        ended.actionUsed = true;
+        await this.participantRepo.save(ended);
       }
     }
 
@@ -314,6 +334,7 @@ export class AiTurnService {
     participantId: string,
     step: PlannedActionStep,
     authUserId: string,
+    isSubAttack: boolean = false,
   ): Promise<ActionStep> {
     const ts = new Date().toISOString();
     try {
@@ -352,6 +373,7 @@ export class AiTurnService {
             targetParticipantId: target,
             actionName: step.actionName,
             ownerUserId: authUserId,
+            ...(isSubAttack ? { _isSubAttack: true } : {}),
           } as Parameters<typeof this.combatService.resolveAttack>[1]);
           // Spec 027 (M2 follow-up) — propaga AttackResult no events array.
           // Antes events ficava `[]` e o frontend não tinha como animar
