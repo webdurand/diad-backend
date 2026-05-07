@@ -52,6 +52,7 @@ import { LegendaryActionService } from "./services/legendary-action.service";
 import { LairActionService } from "./services/lair-action.service";
 import { LairActionsCoordinator } from "./services/lair-actions-coordinator.service";
 import { LegendaryActionsCoordinator } from "./services/legendary-actions-coordinator.service";
+import { MonsterReactionService } from "./services/monster-reaction.service";
 import { PersistentAreaService } from "./services/persistent-area.service";
 import { GrappleEscapeService } from "./services/grapple-escape.service";
 import { StartTurnOrchestratorService } from "./services/start-turn-orchestrator.service";
@@ -219,6 +220,7 @@ import { TravelTickService } from "./services/travel-tick.service";
     LegendaryActionsCoordinator,
     LairActionService,
     LairActionsCoordinator,
+    MonsterReactionService,
     PersistentAreaService,
     GrappleEscapeService,
     StartTurnOrchestratorService,

@@ -225,6 +225,7 @@ function createHarness() {
     { tryAutoEnd: async () => null, detectOutcome: async () => null } as any,
     { processRoundStart: async () => [] } as any,
     { processAfterPcTurn: async () => [] } as any,
+    { tryParryAfterAttackRoll: async () => null } as any,
   );
 
   return { combat, participants, encounter, hpByChar, diceService };

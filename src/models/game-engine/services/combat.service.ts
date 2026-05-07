@@ -15,6 +15,7 @@ import { EncounterService } from "./encounter.service";
 import { EncounterEndDetectorService } from "./encounter-end-detector.service";
 import { LairActionsCoordinator } from "./lair-actions-coordinator.service";
 import { LegendaryActionsCoordinator } from "./legendary-actions-coordinator.service";
+import { MonsterReactionService } from "./monster-reaction.service";
 import { MovementService } from "./movement.service";
 import { SessionService } from "./session.service";
 import {
@@ -169,6 +170,7 @@ export class CombatService {
     private readonly encounterEndDetector: EncounterEndDetectorService,
     private readonly lairActionsCoordinator: LairActionsCoordinator,
     private readonly legendaryActionsCoordinator: LegendaryActionsCoordinator,
+    private readonly monsterReactions: MonsterReactionService,
   ) {}
 
   /**
@@ -2434,6 +2436,24 @@ export class CombatService {
     //  - attacker: self_advantage_next_attack (Steady Aim)
     //  - target: grant_advantage_to_attackers / grant_disadvantage_to_attackers (Guiding Bolt etc)
     await this.consumeOneShotEffects(attacker, target);
+
+    // A6 — Parry: monstro alvo com Parry pode +N AC contra ataque corpo-a-corpo
+    // que iria acertar. Não dispara em crit. Consome reaction se aplicar.
+    if (hit && !isCritical) {
+      const parryRes = await this.monsterReactions.tryParryAfterAttackRoll(
+        target,
+        totalAttack,
+        isMeleeAttack,
+        targetAc,
+      );
+      if (parryRes) {
+        events.push(...parryRes.events);
+        if (!parryRes.hitAfter) {
+          hit = false;
+          targetAc = parryRes.newAc;
+        }
+      }
+    }
 
     let damageRollResult;
     let targetHpAfter: number | undefined;
