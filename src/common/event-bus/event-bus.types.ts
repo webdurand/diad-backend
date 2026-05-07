@@ -52,6 +52,9 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "terrain_modified",
     "audience_map_changed",
     "event_bus_listener_failed",
+    "quest_revealed",
+    "quest_advanced",
+    "quest_completed",
   ]),
   NarrativeEvent: new Set([
     "dialog_chosen",
