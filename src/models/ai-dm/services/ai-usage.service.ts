@@ -54,6 +54,10 @@ export interface LogAiUsageDto {
   cacheCreationTokens?: number;
   cacheReadTokens?: number;
   tookMs?: number;
+  featureName?: string;
+  characterId?: string;
+  sceneType?: string;
+  turnNumber?: number;
 }
 
 export interface CostBucket {
@@ -118,6 +122,10 @@ export class AiUsageService {
       cacheReadTokens: dto.cacheReadTokens ?? 0,
       costUsd: String(costUsd),
       tookMs: dto.tookMs,
+      featureName: dto.featureName,
+      characterId: dto.characterId,
+      sceneType: dto.sceneType,
+      turnNumber: dto.turnNumber,
     });
     return this.repo.save(entity);
   }

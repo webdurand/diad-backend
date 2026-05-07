@@ -70,6 +70,18 @@ export class AiUsageLogEntity {
   @Column({ name: "took_ms", type: "int", nullable: true })
   tookMs?: number;
 
+  @Column({ name: "feature_name", type: "varchar", length: 64, nullable: true })
+  featureName?: string;
+
+  @Column({ name: "character_id", type: "uuid", nullable: true })
+  characterId?: string;
+
+  @Column({ name: "scene_type", type: "varchar", length: 32, nullable: true })
+  sceneType?: string;
+
+  @Column({ name: "turn_number", type: "int", nullable: true })
+  turnNumber?: number;
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 }

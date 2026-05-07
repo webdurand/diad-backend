@@ -19,6 +19,9 @@ export const DOMAIN_KEYS = [
   "turn.id",
   "encounter.id",
   "scene.id",
+  "feature.name",
+  "scene.type",
+  "turn.number",
 ] as const;
 
 export type DomainKey = (typeof DOMAIN_KEYS)[number];

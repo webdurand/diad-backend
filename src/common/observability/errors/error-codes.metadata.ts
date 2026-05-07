@@ -529,6 +529,34 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Use /ai/narrative/:sessionId/turn — endpoints /solo/* foram removidos na spec 027.",
     domain: "system",
   },
+
+  [ErrorCode.ADMIN_METRICS_PERIOD_INVALID]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid metrics period",
+    defaultHint:
+      "Use period entre 1d e 365d, ou intervalo from/to ISO-8601 válido.",
+    domain: "admin",
+  },
+  [ErrorCode.ADMIN_METRICS_FILTER_INVALID]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid metrics filter",
+    defaultHint:
+      "Filtros aceitos: model, agentRole, featureName, userId. Verifique formato.",
+    domain: "admin",
+  },
+  [ErrorCode.ADMIN_METRICS_USER_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "User not found for metrics filter",
+    defaultHint: "O userId informado não existe no sistema.",
+    domain: "admin",
+  },
+  [ErrorCode.ADMIN_METRICS_EXPORT_LIMIT_EXCEEDED]: {
+    httpStatus: 422,
+    defaultTitle: "Export row limit exceeded",
+    defaultHint:
+      "Export máximo é 10.000 linhas — restrinja período/filtros e tente de novo.",
+    domain: "admin",
+  },
 };
 
 export function getMetadata(code: ErrorCode): ErrorCodeMetadata {

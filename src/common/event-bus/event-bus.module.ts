@@ -18,6 +18,7 @@ import { WitnessPropagationListener } from "./listeners/witness-propagation.list
 import { ReputationListener } from "./listeners/reputation.listener";
 import { GuardDispatchListener } from "./listeners/guard-dispatch.listener";
 import { GuardArrivalListener } from "./listeners/guard-arrival.listener";
+import { AdminMetricsListener } from "./listeners/admin-metrics.listener";
 
 /**
  * Spec 017 — EventBus Foundation Module (Global).
@@ -56,6 +57,7 @@ import { GuardArrivalListener } from "./listeners/guard-arrival.listener";
     ReputationListener,
     GuardDispatchListener,
     GuardArrivalListener,
+    AdminMetricsListener,
   ],
   exports: [
     EventBusService,
@@ -72,6 +74,7 @@ export class EventBusModule implements OnModuleInit {
     private readonly reputationListener: ReputationListener,
     private readonly guardDispatchListener: GuardDispatchListener,
     private readonly guardArrivalListener: GuardArrivalListener,
+    private readonly adminMetricsListener: AdminMetricsListener,
   ) {}
 
   onModuleInit(): void {
@@ -80,5 +83,6 @@ export class EventBusModule implements OnModuleInit {
     this.eventBus.registerListener(this.reputationListener);
     this.eventBus.registerListener(this.guardDispatchListener);
     this.eventBus.registerListener(this.guardArrivalListener);
+    this.eventBus.registerListener(this.adminMetricsListener);
   }
 }
