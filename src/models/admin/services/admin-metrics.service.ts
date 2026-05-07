@@ -63,7 +63,7 @@ interface DailySparklinePoint {
   calls: number;
 }
 
-interface OverviewResponse {
+export interface OverviewResponse {
   period: { from: string; to: string; days: number };
   totals: CostsTotals;
   totalsPrevious: CostsTotals;
@@ -81,7 +81,7 @@ interface OverviewResponse {
   };
 }
 
-interface CostsResponse {
+export interface CostsResponse {
   period: { from: string; to: string; days: number };
   filters: {
     model?: string;
@@ -117,7 +117,7 @@ interface FeatureCountRow {
   sessionsCount: number;
 }
 
-interface UsageResponse {
+export interface UsageResponse {
   period: { from: string; to: string; days: number };
   dau: number;
   wau: number;
@@ -152,7 +152,7 @@ interface LogRow {
   payload: Record<string, unknown>;
 }
 
-interface LogsResponse {
+export interface LogsResponse {
   rows: LogRow[];
   nextCursor: string | null;
   hasMore: boolean;

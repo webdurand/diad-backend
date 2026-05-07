@@ -103,6 +103,9 @@ export class CampaignEntity {
   @Column({ name: "is_draft", type: "boolean", default: false })
   isDraft: boolean;
 
+  @Column({ name: "is_sandbox", type: "boolean", default: false })
+  isSandbox: boolean;
+
   // Snapshot do dict usado pra criar a campaign (replay/audit).
   @Column({ name: "generation_seed", type: "jsonb", nullable: true })
   generationSeed?: Record<string, unknown>;

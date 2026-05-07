@@ -149,7 +149,9 @@ export class CampaignService {
       where: { userId, isActive: true },
       relations: ["campaign"],
     });
-    return players.map((p) => p.campaign).filter(Boolean);
+    return players
+      .map((p) => p.campaign)
+      .filter((c): c is CampaignEntity => Boolean(c) && !c.isSandbox);
   }
 
   

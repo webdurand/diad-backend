@@ -9,6 +9,7 @@ import { LibraryModule } from "./models/library/library.module";
 import { AuthModule } from "./models/auth/auth.module";
 import { CharactersModule } from "./models/characters/characters.module";
 import { GameEngineModule } from "./models/game-engine/game-engine.module";
+import { QuickPlayModule } from "./models/quick-play/quick-play.module";
 import { WorldModule } from "./models/world/world.module";
 import { SessionModule } from "./models/session/session.module";
 import { AiProxyModule } from "./models/ai-proxy/ai-proxy.module";
@@ -30,6 +31,7 @@ import { EventBusHttpModule } from "./models/event-bus/event-bus.module";
     AuthModule,
     CharactersModule,
     GameEngineModule,
+    QuickPlayModule,
     WorldModule,
     SessionModule,
     AiProxyModule,

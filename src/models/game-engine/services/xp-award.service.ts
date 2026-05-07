@@ -68,6 +68,22 @@ export class XpAwardService {
       return failure("Amount de XP deve ser positivo.", "INVALID_ACTION");
     }
 
+    if (request.campaignId && (await this.isSandbox(request.campaignId))) {
+      const xpResult = await this.characterStateService.updateXp(
+        request.ownerUserId,
+        request.characterId,
+        { amount: 0 },
+      );
+      return success({
+        awardedXp: 0,
+        totalXp: xpResult.xp,
+        nextLevelXp: xpResult.nextLevelXp,
+        levelUpReady: xpResult.levelUpAvailable,
+        eventId: "sandbox-skip",
+        modeApplied: "rules",
+      });
+    }
+
     const mode = await this.resolveXpMode(request.campaignId);
     const adjusted = this.adjustForMode(request.amount, request.source, mode);
 
@@ -125,6 +141,14 @@ export class XpAwardService {
       eventId: evt.id,
       modeApplied: mode,
     });
+  }
+
+  private async isSandbox(campaignId: string): Promise<boolean> {
+    const campaign = await this.campaignRepo.findOne({
+      where: { id: campaignId },
+      select: ["id", "isSandbox"],
+    });
+    return campaign?.isSandbox === true;
   }
 
   private async resolveXpMode(

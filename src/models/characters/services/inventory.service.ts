@@ -18,6 +18,9 @@ import { EquipmentSourceEnum } from "src/entities/enums";
 import { CharacterStateService } from "./character-state.service";
 import { ensureCharacterOwnership } from "src/shared/character-guard";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ---- DTOs ----
 
 export interface AddItemDto {
@@ -265,9 +268,11 @@ export class InventoryService {
   ): Promise<InventoryItemResponse> {
     await this.ensureOwnership(userId, characterId);
 
-    const equipment = await this.equipmentRepo.findOneBy({
-      id: dto.equipmentId,
-    });
+    const equipment = await this.equipmentRepo.findOneBy(
+      UUID_RE.test(dto.equipmentId)
+        ? { id: dto.equipmentId }
+        : { slug: dto.equipmentId },
+    );
     if (!equipment) {
       throw new NotFoundException("Equipamento nao encontrado na biblioteca.");
     }
@@ -275,7 +280,7 @@ export class InventoryService {
     const existing = await this.charEquipRepo.findOne({
       where: {
         character_id: characterId,
-        equipment_id: dto.equipmentId,
+        equipment_id: equipment.id,
       },
     });
 
@@ -287,7 +292,7 @@ export class InventoryService {
 
     const entry = this.charEquipRepo.create({
       character_id: characterId,
-      equipment_id: dto.equipmentId,
+      equipment_id: equipment.id,
       quantity: dto.quantity ?? 1,
       equipped: false,
       source: dto.source ?? EquipmentSourceEnum.Bought,
