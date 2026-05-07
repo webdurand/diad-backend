@@ -12,6 +12,7 @@ export interface CreateQuickPlayEncounterDto {
   characterId: string;
   monsters: Array<{ monsterId: string; count: number }>;
   gridSize?: number;
+  inLair?: boolean;
 }
 
 export interface QuickPlayEncounterResult {
@@ -143,6 +144,7 @@ export class QuickPlayService {
         gridRows: gridSize,
         gridVisible: true,
       },
+      inLair: dto.inLair === true,
     });
 
     await this.sessionRepo.update(sessionId, { activeEncounterId: encounter.id });

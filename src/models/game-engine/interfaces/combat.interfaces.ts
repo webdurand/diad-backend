@@ -244,11 +244,11 @@ export type PlannedActionStep =
       targetParticipantIds?: string[];
       point?: { x: number; y: number };
     }
-  | { kind: "dodge" }
-  | { kind: "dash" }
-  | { kind: "disengage" }
+  | { kind: "dodge"; asBonusAction?: boolean }
+  | { kind: "dash"; asBonusAction?: boolean }
+  | { kind: "disengage"; asBonusAction?: boolean }
   | { kind: "help"; allyParticipantId: string; targetParticipantId: string }
-  | { kind: "hide" }
+  | { kind: "hide"; asBonusAction?: boolean }
   | { kind: "ready"; trigger: ReadyTrigger; readiedAction: PlannedActionStep }
   | { kind: "search"; ability: "perception" | "investigation" }
   | {

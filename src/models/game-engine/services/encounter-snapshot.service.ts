@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { CharacterEntity } from "src/entities/character.entity";
@@ -41,6 +41,7 @@ export class EncounterSnapshotService {
     private readonly areaRepo: Repository<PersistentAreaEffectEntity>,
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @Inject(forwardRef(() => CombatService))
     private readonly combatService: CombatService,
     private readonly persistentArea: PersistentAreaService,
     private readonly sheetService: CharacterSheetService,
@@ -153,7 +154,10 @@ export class EncounterSnapshotService {
                       innateUses?: Record<string, number>;
                     },
                   ),
-                  bonusActions: extractBonusActions(p.monster.actions),
+                  bonusActions: extractBonusActions(
+                    p.monster.actions,
+                    p.monster.special_abilities,
+                  ),
                   reactions: extractReactions(p.monster.reactions),
                   legendaryActions: buildLegendaryActions(
                     p.monster.legendary_actions,
@@ -430,20 +434,24 @@ function buildSpellcastingSnapshot(
 
 function extractBonusActions(
   actions: unknown,
+  specialAbilities?: unknown,
 ): Array<{ name: string; description?: string }> {
   const list: Array<{ name: string; description?: string }> = [];
-  const candidates = Array.isArray(actions)
-    ? actions
-    : actions && typeof actions === "object"
-      ? Object.values(actions as Record<string, unknown>)
-      : [];
-  for (const a of candidates) {
-    if (!a || typeof a !== "object") continue;
-    const obj = a as { name?: string; desc?: string; description?: string };
-    if (!obj.name) continue;
-    const text = `${obj.name} ${obj.desc ?? obj.description ?? ""}`;
-    if (/bonus action/i.test(text)) {
-      list.push({ name: obj.name, description: obj.desc ?? obj.description });
+  const buckets: unknown[] = [actions, specialAbilities];
+  for (const bucket of buckets) {
+    const candidates = Array.isArray(bucket)
+      ? bucket
+      : bucket && typeof bucket === "object"
+        ? Object.values(bucket as Record<string, unknown>)
+        : [];
+    for (const a of candidates) {
+      if (!a || typeof a !== "object") continue;
+      const obj = a as { name?: string; desc?: string; description?: string };
+      if (!obj.name) continue;
+      const text = `${obj.name} ${obj.desc ?? obj.description ?? ""}`;
+      if (/bonus action/i.test(text)) {
+        list.push({ name: obj.name, description: obj.desc ?? obj.description });
+      }
     }
   }
   return list;

@@ -13,6 +13,8 @@ import { ConditionEffectsService } from "./condition-effects.service";
 import { EventService } from "./event.service";
 import { EncounterService } from "./encounter.service";
 import { EncounterEndDetectorService } from "./encounter-end-detector.service";
+import { LairActionsCoordinator } from "./lair-actions-coordinator.service";
+import { LegendaryActionsCoordinator } from "./legendary-actions-coordinator.service";
 import { MovementService } from "./movement.service";
 import { SessionService } from "./session.service";
 import {
@@ -165,6 +167,8 @@ export class CombatService {
     // Spec 027 (M2 follow-up) — single auto-end hook em endTurn (lifecycle).
     // Detector é gateado por solo (no-op em multiplayer DM-led).
     private readonly encounterEndDetector: EncounterEndDetectorService,
+    private readonly lairActionsCoordinator: LairActionsCoordinator,
+    private readonly legendaryActionsCoordinator: LegendaryActionsCoordinator,
   ) {}
 
   /**
@@ -1448,6 +1452,21 @@ export class CombatService {
       }
     }
 
+    // RAW MM: monstro lendário pode gastar pontos no fim de qualquer turno
+    // que não seja o dele próprio. Disparamos só após turno de PC.
+    if (currentParticipant && currentParticipant.type === "pc") {
+      try {
+        const legendaryEvents =
+          await this.legendaryActionsCoordinator.processAfterPcTurn(
+            encounter,
+            currentParticipant.id,
+          );
+        events.push(...legendaryEvents);
+      } catch {
+        // legendary é best-effort; falha não aborta endTurn
+      }
+    }
+
     let nextIndex = encounter.currentTurnIndex + 1;
     let newRound = encounter.currentRound;
 
@@ -1456,6 +1475,14 @@ export class CombatService {
       newRound += 1;
       events.push({ event_type: "round_start", data: { round: newRound } });
       await this.pruneDeadFromTurnOrder(encounter);
+      try {
+        const lairEvents = await this.lairActionsCoordinator.processRoundStart(
+          encounter,
+        );
+        events.push(...lairEvents);
+      } catch (err) {
+        // lair actions são best-effort; falha não aborta o round
+      }
     }
 
     const turnOrderLen = encounter.turnOrder.length;

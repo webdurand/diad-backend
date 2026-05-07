@@ -330,6 +330,68 @@ export class AiProxyService {
     );
   }
 
+  async decideLair(payload: {
+    snapshot: unknown;
+    monsterParticipantId: string;
+  }): Promise<{
+    actionIndex: number | null;
+    rationale?: string;
+    tookMs: number;
+    decisionMode: string;
+  }> {
+    const serviceKey =
+      this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev";
+    const timeoutMs = Number(
+      this.configService.get<string>("AI_TURN_TIMEOUT_MS") ?? "30000",
+    );
+    return this.outbound.request(
+      `${this.agentBaseUrl}/monsters/decide-lair`,
+      {
+        method: "POST",
+        upstreamService: "diad-agents",
+        timeoutMs,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Service-Key": serviceKey,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  async decideLegendary(payload: {
+    snapshot: unknown;
+    monsterParticipantId: string;
+    triggerEvent: string;
+  }): Promise<{
+    spend: boolean;
+    actionName?: string;
+    targetIds?: string[];
+    cost?: 1 | 2 | 3;
+    rationale?: string;
+    tookMs: number;
+    decisionMode: string;
+  }> {
+    const serviceKey =
+      this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev";
+    const timeoutMs = Number(
+      this.configService.get<string>("AI_TURN_TIMEOUT_MS") ?? "30000",
+    );
+    return this.outbound.request(
+      `${this.agentBaseUrl}/monsters/decide-legendary`,
+      {
+        method: "POST",
+        upstreamService: "diad-agents",
+        timeoutMs,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Service-Key": serviceKey,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
   private buildOutboundTraceparent(): string {
     const traceId = this.readClsString("traceId") ?? generateTraceId();
     return generateTraceparent(traceId, generateSpanId());

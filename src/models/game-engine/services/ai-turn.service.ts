@@ -578,12 +578,19 @@ function toGenericActionDto(
   participantId: string,
   step: PlannedActionStep,
 ): GenericActionDto {
+  const asBonus =
+    (step as PlannedActionStep & { asBonusAction?: boolean }).asBonusAction ===
+    true;
   switch (step.kind) {
     case "dodge":
     case "dash":
     case "disengage":
     case "hide":
-      return { kind: step.kind, participantId } as GenericActionDto;
+      return {
+        kind: step.kind,
+        participantId,
+        asBonusAction: asBonus,
+      } as GenericActionDto;
     case "help":
       return {
         kind: "help",

@@ -165,11 +165,18 @@ export class SessionService {
         });
       }
 
+      const rewardsRaw = q.rewards;
+      const rewards =
+        rewardsRaw && typeof rewardsRaw === "object" && !Array.isArray(rewardsRaw)
+          ? (rewardsRaw as CreateQuestDto["rewards"])
+          : undefined;
+
       const dto: CreateQuestDto = {
         name,
         description: typeof q.description === "string" ? q.description : undefined,
         isMainQuest: q.isMainQuest === true,
         objectives,
+        rewards,
       };
 
       try {

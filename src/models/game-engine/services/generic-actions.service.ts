@@ -74,22 +74,27 @@ export class GenericActionsService {
       return failure(GameErrorCode.CONDITION_PREVENTS_ACTION);
     }
 
-    // Ação já usada?
-    if (participant.actionUsed) {
+    // Ação já usada? Bonus actions seguem economia separada (bonusActionUsed).
+    const asBonus = dto.asBonusAction === true;
+    if (asBonus) {
+      if (participant.bonusActionUsed) {
+        return failure(GameErrorCode.NO_ACTION_AVAILABLE);
+      }
+    } else if (participant.actionUsed) {
       return failure(GameErrorCode.NO_ACTION_AVAILABLE);
     }
 
     switch (dto.kind) {
       case "dodge":
-        return this.handleDodge(participant);
+        return this.handleDodge(participant, asBonus);
       case "dash":
-        return this.handleDash(participant);
+        return this.handleDash(participant, asBonus);
       case "disengage":
-        return this.handleDisengage(participant);
+        return this.handleDisengage(participant, asBonus);
       case "help":
         return this.handleHelp(participant, dto);
       case "hide":
-        return this.handleHide(participant);
+        return this.handleHide(participant, asBonus);
       case "ready":
         return this.handleReady(participant, dto, encounter.currentRound);
       case "search":
@@ -101,13 +106,25 @@ export class GenericActionsService {
     }
   }
 
+  private consumeAction(
+    p: EncounterParticipantEntity,
+    asBonus: boolean,
+  ): void {
+    if (asBonus) {
+      p.bonusActionUsed = true;
+    } else {
+      p.actionUsed = true;
+    }
+  }
+
   // --- Handlers ---
 
   private async handleDodge(
     p: EncounterParticipantEntity,
+    asBonus: boolean = false,
   ): Promise<GameResult<ExecuteResult>> {
     p.dodgingUntilTurnOfParticipantId = p.id;
-    p.actionUsed = true;
+    this.consumeAction(p, asBonus);
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
@@ -134,12 +151,13 @@ export class GenericActionsService {
 
   private async handleDash(
     p: EncounterParticipantEntity,
+    asBonus: boolean = false,
   ): Promise<GameResult<ExecuteResult>> {
     if (p.hasDashed) {
       return failure(GameErrorCode.NO_ACTION_AVAILABLE);
     }
     p.hasDashed = true;
-    p.actionUsed = true;
+    this.consumeAction(p, asBonus);
     // Dobra o movimento restante — a speed base vem de MovementService
     // no caller de turn-actions; aqui só marcamos a flag e o combat.service
     // consulta hasDashed ao calcular remainingMovement.
@@ -165,12 +183,13 @@ export class GenericActionsService {
 
   private async handleDisengage(
     p: EncounterParticipantEntity,
+    asBonus: boolean = false,
   ): Promise<GameResult<ExecuteResult>> {
     if (p.hasDisengaged) {
       return failure(GameErrorCode.NO_ACTION_AVAILABLE);
     }
     p.hasDisengaged = true;
-    p.actionUsed = true;
+    this.consumeAction(p, asBonus);
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
@@ -244,6 +263,7 @@ export class GenericActionsService {
 
   private async handleHide(
     p: EncounterParticipantEntity,
+    asBonus: boolean = false,
   ): Promise<GameResult<ExecuteResult>> {
     // Stealth do ator (DEX + proficiência — aqui usamos modificador simples da entity;
     // cálculo RAW completo com proficiências de skill fica em 004).
@@ -280,7 +300,7 @@ export class GenericActionsService {
       summary = `${p.displayName} tentou esconder-se (Stealth ${stealthTotal} vs Passive Perception ${passivePerception}): falhou`;
     }
 
-    p.actionUsed = true;
+    this.consumeAction(p, asBonus);
     await this.participantRepo.save(p);
 
     const step: ActionStep = {

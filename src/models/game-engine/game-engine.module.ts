@@ -50,6 +50,8 @@ import { DamageResistanceService } from "./services/damage-resistance.service";
 import { ExhaustionService } from "./services/exhaustion.service";
 import { LegendaryActionService } from "./services/legendary-action.service";
 import { LairActionService } from "./services/lair-action.service";
+import { LairActionsCoordinator } from "./services/lair-actions-coordinator.service";
+import { LegendaryActionsCoordinator } from "./services/legendary-actions-coordinator.service";
 import { PersistentAreaService } from "./services/persistent-area.service";
 import { GrappleEscapeService } from "./services/grapple-escape.service";
 import { StartTurnOrchestratorService } from "./services/start-turn-orchestrator.service";
@@ -214,7 +216,9 @@ import { TravelTickService } from "./services/travel-tick.service";
     DamageResistanceService,
     ExhaustionService,
     LegendaryActionService,
+    LegendaryActionsCoordinator,
     LairActionService,
+    LairActionsCoordinator,
     PersistentAreaService,
     GrappleEscapeService,
     StartTurnOrchestratorService,
@@ -297,7 +301,9 @@ import { TravelTickService } from "./services/travel-tick.service";
     DamageResistanceService,
     ExhaustionService,
     LegendaryActionService,
+    LegendaryActionsCoordinator,
     LairActionService,
+    LairActionsCoordinator,
     PersistentAreaService,
     GrappleEscapeService,
     StartTurnOrchestratorService,

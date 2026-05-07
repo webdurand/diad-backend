@@ -55,6 +55,7 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "quest_revealed",
     "quest_advanced",
     "quest_completed",
+    "quest_failed",
   ]),
   NarrativeEvent: new Set([
     "dialog_chosen",

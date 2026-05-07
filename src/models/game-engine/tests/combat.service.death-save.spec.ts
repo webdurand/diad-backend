@@ -332,6 +332,8 @@ function createHarness() {
     { shouldOfferShield: async () => null } as any,
     // Spec 027 (M2 follow-up) — EncounterEndDetectorService stub
     { tryAutoEnd: async () => null, detectOutcome: async () => null } as any,
+    { processRoundStart: async () => [] } as any,
+    { processAfterPcTurn: async () => [] } as any,
   );
 
   return {

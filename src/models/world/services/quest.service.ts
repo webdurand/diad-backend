@@ -82,7 +82,11 @@ export class QuestService {
   ) {}
 
   private async publishQuestEvent(
-    eventType: "quest_revealed" | "quest_advanced" | "quest_completed",
+    eventType:
+      | "quest_revealed"
+      | "quest_advanced"
+      | "quest_completed"
+      | "quest_failed",
     gameSessionId: string,
     payload: Record<string, unknown>,
     narrativeDescriptor?: string,
@@ -272,7 +276,23 @@ export class QuestService {
       await this.cascadeUnlock(quest);
       questAutoCompleted = true;
     } else if (anyRequiredFailed && quest.status === "active") {
-      // failure de objetivo NÃO falha quest automaticamente
+      const failedRequired = refreshed.filter(
+        (o) => !o.isOptional && o.status === "failed",
+      );
+      const hasViableAlternative = failedRequired.every((failed) => {
+        if (!failed.pathGroup) return false;
+        return refreshed.some(
+          (o) =>
+            o.id !== failed.id &&
+            o.pathGroup === failed.pathGroup &&
+            o.status !== "failed",
+        );
+      });
+      if (!hasViableAlternative) {
+        quest.status = "failed";
+        await this.questRepo.save(quest);
+        questAutoFailed = true;
+      }
     }
 
     await this.publishQuestEvent(
@@ -300,6 +320,21 @@ export class QuestService {
           isMainQuest: quest.isMainQuest,
         },
         `Quest concluída: ${quest.name}`,
+      );
+    } else if (questAutoFailed) {
+      await this.publishQuestEvent(
+        "quest_failed",
+        gameSessionId,
+        {
+          questId: quest.id,
+          questSlug: quest.slug,
+          questName: quest.name,
+          isMainQuest: quest.isMainQuest,
+          failedObjectiveId: target.id,
+          failedObjectiveDescription: target.description,
+          evidence: evidence ?? null,
+        },
+        evidence ?? `Quest falhada: ${quest.name}`,
       );
     }
 

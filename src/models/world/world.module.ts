@@ -1,4 +1,4 @@
-import { forwardRef, Module } from "@nestjs/common";
+import { forwardRef, Module, OnModuleInit } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   CampaignEntity,
@@ -17,6 +17,9 @@ import {
   LootTableEntity,
   LootTableItemEntity,
   EncounterTemplateEntity,
+  EncounterEntity,
+  EncounterParticipantEntity,
+  EventListenerProcessedEntity,
   UserEntity,
   CharacterEntity,
   CharacterStateEntity,
@@ -35,6 +38,10 @@ import {
   SessionFactionStateEntity,
   SessionStoryArcStateEntity,
 } from "src/entities";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { QuestDefeatListener } from "src/common/event-bus/listeners/quest-defeat.listener";
+import { GainReputationListener } from "src/common/event-bus/listeners/gain-reputation.listener";
+import { QuestRewardListener } from "src/common/event-bus/listeners/quest-reward.listener";
 import { AuthModule } from "../auth/auth.module";
 import { AiProxyModule } from "../ai-proxy/ai-proxy.module";
 import { WorldController } from "./world.controller";
@@ -95,6 +102,9 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       SessionNpcStateEntity,
       SessionFactionStateEntity,
       SessionStoryArcStateEntity,
+      EncounterEntity,
+      EncounterParticipantEntity,
+      EventListenerProcessedEntity,
     ]),
     AuthModule,
     forwardRef(() => AiProxyModule),
@@ -126,6 +136,9 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     NpcWealthService,
     // Spec 027 D3 — slug→UUID pipe pra `/campaigns/:id/*`
     CampaignIdPipe,
+    QuestDefeatListener,
+    GainReputationListener,
+    QuestRewardListener,
   ],
   exports: [
     CampaignService,
@@ -147,4 +160,17 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     NpcWealthService,
   ],
 })
-export class WorldModule {}
+export class WorldModule implements OnModuleInit {
+  constructor(
+    private readonly eventBus: EventBusService,
+    private readonly questDefeatListener: QuestDefeatListener,
+    private readonly gainReputationListener: GainReputationListener,
+    private readonly questRewardListener: QuestRewardListener,
+  ) {}
+
+  onModuleInit(): void {
+    this.eventBus.registerListener(this.questDefeatListener);
+    this.eventBus.registerListener(this.gainReputationListener);
+    this.eventBus.registerListener(this.questRewardListener);
+  }
+}

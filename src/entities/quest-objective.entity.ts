@@ -38,6 +38,9 @@ export class QuestObjectiveEntity {
   @Column({ name: "completion_conditions", type: "jsonb", default: {} })
   completionConditions: Record<string, any>;
 
+  @Column({ name: "progress_count", type: "int", default: 0 })
+  progressCount: number;
+
   @Column({ name: "advance_evidence", type: "text", nullable: true })
   advanceEvidence?: string;
 }

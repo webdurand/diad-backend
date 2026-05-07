@@ -131,6 +131,11 @@ export class GenericActionDto {
   @IsUUID()
   ownerUserId?: string;
 
+  // Quando true, consome bonusActionUsed em vez de actionUsed.
+  // Usado por features tipo Cunning Action (Rogue) e Nimble Escape (Goblin).
+  @IsOptional()
+  asBonusAction?: boolean;
+
   // Opcional: hack pra silenciar lint de "unused property" em variantes que
   // não usam — os decorators acima fazem a validação condicional real.
   @IsOptional()
