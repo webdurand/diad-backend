@@ -148,6 +148,7 @@ export class SceneContextService {
   }
 
   private async assembleContextUncached(sceneId: string): Promise<SceneContext> {
+    // Onda A — sequencial, early return se cena some.
     const scene = await this.sceneRepo.findOne({
       where: { id: sceneId },
       relations: ["location", "session"],
@@ -156,29 +157,83 @@ export class SceneContextService {
       return this.emptyContext();
     }
 
-    const session = await this.sessionRepo.findOne({
-      where: { id: scene.sessionId },
-    });
-
-    // We need the campaignId — for now get it from session config or location
-    // In V1 sessions aren't tied to campaigns yet. Return what we can.
+    const sessionId = scene.sessionId;
+    const locationId = scene.locationId;
     const campaignId = scene.location?.campaignId;
 
-    // Tier 1: Scene + NPCs
-    const sceneNpcs = await this.sceneNpcRepo.find({
-      where: { sceneId },
-      relations: ["npc"],
-    });
+    // Onda B — paralelo, todos independentes uns dos outros (apenas dependem de scene/sessionId/campaignId/locationId).
+    const [
+      session,
+      sceneNpcs,
+      events,
+      campaign,
+      chroniclesRaw,
+      arc,
+      connections,
+      locationChain,
+    ] = await Promise.all([
+      this.sessionRepo.findOne({ where: { id: sessionId } }),
+      this.sceneNpcRepo.find({
+        where: { sceneId },
+        relations: ["npc"],
+      }),
+      this.eventLogService.getRecentEvents(sessionId, 25),
+      campaignId
+        ? this.campaignRepo.findOne({ where: { id: campaignId } })
+        : Promise.resolve(null),
+      campaignId
+        ? this.chronicleService.getChronicles(campaignId, 5, 3)
+        : Promise.resolve([]),
+      campaignId
+        ? this.arcRepo.findOne({
+            where: { campaignId, isActive: true, isMainArc: true },
+          })
+        : Promise.resolve(null),
+      locationId
+        ? this.connectionRepo.find({
+            where: { fromLocationId: locationId, isHidden: false },
+            relations: ["toLocation"],
+          })
+        : Promise.resolve([]),
+      this.getLocationChain(locationId),
+    ]);
 
     const presentNpcIds = sceneNpcs
       .filter((sn) => sn.npc)
       .map((sn) => sn.npc.id);
-    const npcStates =
+    const allSceneNpcIds = sceneNpcs.map((sn) => sn.npcId);
+    const characterIds = session?.characterIds ?? [];
+
+    // Onda C — depende dos outputs B (npcIds, arc.id, characterIds).
+    const [
+      npcStates,
+      partyKnowledgeRaw,
+      arcState,
+      playerCharacter,
+    ] = await Promise.all([
       presentNpcIds.length > 0
-        ? await this.npcStateRepo.find({
-            where: { gameSessionId: scene.sessionId, npcId: In(presentNpcIds) },
+        ? this.npcStateRepo.find({
+            where: { gameSessionId: sessionId, npcId: In(presentNpcIds) },
           })
-        : [];
+        : Promise.resolve([]),
+      campaignId
+        ? this.chronicleService.getRelevantKnowledge(campaignId, {
+            locationId,
+            npcIds: allSceneNpcIds,
+          })
+        : Promise.resolve([]),
+      arc
+        ? this.arcStateRepo.findOne({
+            where: { gameSessionId: sessionId, storyArcId: arc.id },
+          })
+        : Promise.resolve(null),
+      characterIds.length === 1
+        ? this.pcPersonaService
+            .assemblePersona(characterIds[0], null)
+            .catch(() => null as PCPersona | null)
+        : Promise.resolve<PCPersona | null>(null),
+    ]);
+
     const dispositionByNpc = new Map(
       npcStates.map((s) => [s.npcId, s.disposition]),
     );
@@ -197,82 +252,41 @@ export class SceneContextService {
         dialogueStyle: sn.npc.dialogueStyle,
       }));
 
-    // Tier 2: Recent events
-    const events = await this.eventLogService.getRecentEvents(
-      scene.sessionId,
-      25,
-    );
     const recentEvents = events.reverse().map((e) => ({
       eventType: e.eventType,
       summary: e.summary,
       sequence: e.sequence,
     }));
 
-    // Tier 3: Party knowledge
-    let partyKnowledge: SceneContext["partyKnowledge"] = [];
-    if (campaignId) {
-      const npcIds = sceneNpcs.map((sn) => sn.npcId);
-      const knowledge = await this.chronicleService.getRelevantKnowledge(
-        campaignId,
-        { locationId: scene.locationId, npcIds },
-      );
-      partyKnowledge = knowledge.map((k) => ({
+    const partyKnowledge: SceneContext["partyKnowledge"] = partyKnowledgeRaw.map(
+      (k) => ({
         entityType: k.entityType,
         knowledgeKey: k.knowledgeKey,
         knowledgeValue: k.knowledgeValue,
-      }));
-    }
+      }),
+    );
 
-    // Tier 4: Location chain + world lore
-    const locationChain = await this.getLocationChain(scene.locationId);
-    let worldLore: string | undefined;
-    if (campaignId) {
-      const campaign = await this.campaignRepo.findOne({
-        where: { id: campaignId },
-      });
-      worldLore = campaign?.worldLore ?? undefined;
-    }
+    const worldLore: string | undefined = campaign?.worldLore ?? undefined;
 
-    // Tier 5: Chronicles
-    let recentChronicles: SceneContext["recentChronicles"] = [];
-    if (campaignId) {
-      const chronicles = await this.chronicleService.getChronicles(
-        campaignId,
-        5,
-        3,
-      );
-      recentChronicles = chronicles.map((c) => ({
+    const recentChronicles: SceneContext["recentChronicles"] = chroniclesRaw.map(
+      (c) => ({
         title: c.title,
         content: c.content,
         significance: c.significance,
-      }));
-    }
+      }),
+    );
 
-    // Story arc — template no Campaign, progresso na ponte session_story_arc_state.
     let storyArc: SceneContext["storyArc"];
-    if (campaignId) {
-      const arc = await this.arcRepo.findOne({
-        where: { campaignId, isActive: true, isMainArc: true },
-      });
-      if (arc) {
-        const arcState = await this.arcStateRepo.findOne({
-          where: { gameSessionId: scene.sessionId, storyArcId: arc.id },
-        });
-        storyArc = {
-          name: arc.name,
-          currentPhase: arcState?.currentPhase ?? "hook",
-          phaseNotes: arcState?.phaseNotes ?? {},
-        };
-      }
+    if (arc) {
+      storyArc = {
+        name: arc.name,
+        currentPhase: arcState?.currentPhase ?? "hook",
+        phaseNotes: arcState?.phaseNotes ?? {},
+      };
     }
 
-    let availableLocations: SceneContext["availableLocations"] = [];
-    if (scene.locationId) {
-      const connections = await this.connectionRepo.find({
-        where: { fromLocationId: scene.locationId, isHidden: false },
-        relations: ["toLocation"],
-      });
-      availableLocations = connections.map((c) => ({
+    const availableLocations: SceneContext["availableLocations"] = connections.map(
+      (c) => ({
         connectionId: c.id,
         toLocationId: c.toLocationId,
         toLocationName: c.toLocation?.name ?? "(?)",
@@ -280,27 +294,10 @@ export class SceneContextService {
         travelTime: c.travelTime ?? null,
         description: c.description ?? null,
         isLocked: c.isLocked,
-      }));
-    }
+      }),
+    );
 
     const travelState = session?.travelState ?? null;
-
-    // Spec 018 — bloco PC. Solo flow: 1 PC por session em characterIds[0].
-    // Multi-PC ou sem PC → playerCharacter: null (DM prompt cobre o caso).
-    let playerCharacter: PCPersona | null = null;
-    const characterIds = session?.characterIds ?? [];
-    if (characterIds.length === 1) {
-      try {
-        playerCharacter = await this.pcPersonaService.assemblePersona(
-          characterIds[0],
-          null, // contexto interno — auth já passou no SessionController guard.
-        );
-      } catch {
-        // Persona indisponível → seguir sem ela. Spec 018 §Riscos: backwards
-        // compat — clients V1 ignoram playerCharacter (additive).
-        playerCharacter = null;
-      }
-    }
 
     return {
       scene: {

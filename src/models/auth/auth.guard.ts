@@ -41,15 +41,22 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    // Normal cookie-based auth
+    // Normal cookie-based auth (web) with Bearer fallback (mobile)
     const cookieName = this.authService.getCookieName();
-    const token = request.cookies?.[cookieName];
+    const cookieToken = request.cookies?.[cookieName];
+    const authHeader = request.headers.authorization;
+    const bearerToken =
+      typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+        ? authHeader.slice(7).trim()
+        : undefined;
+    const token = cookieToken || bearerToken;
 
     this.logger.debug("auth.guard.check", {
       "http.request.method": request.method,
       "url.path": request.url,
       "request.origin": request.headers.origin ?? null,
-      "auth.cookie_present": !!token,
+      "auth.cookie_present": !!cookieToken,
+      "auth.bearer_present": !!bearerToken,
     });
 
     if (!token) {

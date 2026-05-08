@@ -50,6 +50,7 @@ export class AuthController {
       name: user.name,
       username: user.username,
       role: user.role,
+      accessToken: token,
     };
   }
 
@@ -74,6 +75,7 @@ export class AuthController {
       name: user.name,
       username: user.username,
       role: user.role,
+      accessToken: token,
     };
   }
 

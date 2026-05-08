@@ -19,13 +19,13 @@ async function bootstrap() {
     "http://127.0.0.1:9002",
     "https://diad-frontend.vercel.app",
   ];
+  const isDev = process.env.NODE_ENV !== "production";
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, false);
-      }
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (isDev) return callback(null, true);
+      return callback(null, false);
     },
     credentials: true,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",

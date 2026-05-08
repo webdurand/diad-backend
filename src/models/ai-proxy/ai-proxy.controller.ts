@@ -491,6 +491,12 @@ export class AiProxyController {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
+    const tStart = performance.now();
+    let tAgentsCallStart = 0;
+    let tPostPersistStart = 0;
+    let tPostPersistEnd = 0;
+    let earlyReturnReason: string | null = null;
+
     // Spec 027 (M1, AC1.12) — guard in-flight contra duplo-POST do mesmo
     // turn (jogador clicando rápido). Chave inclui lastMessageId pra que
     // turns sequenciais legítimos não colidam.
@@ -662,6 +668,7 @@ export class AiProxyController {
           this.emitNarrationPersisted(res, persisted.serverId, body.clientId);
         }
       });
+      tAgentsCallStart = performance.now();
       await this.aiProxyService.pipeStream(
         "/narrative/turn",
         {
@@ -686,6 +693,7 @@ export class AiProxyController {
         res,
         (chunk) => collector.feed(chunk),
         async () => {
+          tPostPersistStart = performance.now();
           const persisted = await this.persistNarration(
             sessionId,
             req.user!.id,
@@ -706,6 +714,7 @@ export class AiProxyController {
             collector.getDiceRolls(),
           );
           await this.emitSessionSync(sessionId, res);
+          tPostPersistEnd = performance.now();
         },
         {
           "X-Service-Key": this.aiProxyService.getServiceKey(),
@@ -713,11 +722,31 @@ export class AiProxyController {
         },
       );
     } catch (err: any) {
+      earlyReturnReason = `error:${err?.name ?? "unknown"}`;
       this.logger.error(`Narrative turn error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       res.end();
     } finally {
       releaseIdempotency(idempotencyKey);
+      const tEnd = performance.now();
+      const prePersistMs = tAgentsCallStart > 0 ? Math.round(tAgentsCallStart - tStart) : null;
+      const agentsCallMs =
+        tAgentsCallStart > 0 && tPostPersistStart > 0
+          ? Math.round(tPostPersistStart - tAgentsCallStart)
+          : null;
+      const postPersistMs =
+        tPostPersistStart > 0 && tPostPersistEnd > 0
+          ? Math.round(tPostPersistEnd - tPostPersistStart)
+          : null;
+      const totalMs = Math.round(tEnd - tStart);
+      this.logger.log(
+        `ai.narrative_turn.streamtrace session=${sessionId} ` +
+          `total_ms=${totalMs} ` +
+          `pre_persist_ms=${prePersistMs ?? "null"} ` +
+          `agents_call_ms=${agentsCallMs ?? "null"} ` +
+          `post_persist_ms=${postPersistMs ?? "null"}` +
+          (earlyReturnReason ? ` early_return=${earlyReturnReason}` : ""),
+      );
     }
   }
 
