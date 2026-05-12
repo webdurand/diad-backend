@@ -29,6 +29,9 @@ export interface CreateQuestDto {
     isOptional?: boolean;
     kind?: "talk_to_npc" | "travel_to" | "defeat_monster" | "gain_reputation";
     targetName?: string;
+    targetNpcId?: string;
+    targetLocationId?: string;
+    targetFactionId?: string;
     targetCity?: string | null;
     amount?: number | null;
   }>;
@@ -149,6 +152,13 @@ export class QuestService {
         const completionConditions: Record<string, any> = {};
         if (o.kind) completionConditions.kind = o.kind;
         if (o.targetName) completionConditions.targetName = o.targetName;
+        if (o.targetNpcId) completionConditions.targetNpcId = o.targetNpcId;
+        if (o.targetLocationId) {
+          completionConditions.targetLocationId = o.targetLocationId;
+        }
+        if (o.targetFactionId) {
+          completionConditions.targetFactionId = o.targetFactionId;
+        }
         if (o.targetCity !== undefined && o.targetCity !== null) {
           completionConditions.targetCity = o.targetCity;
         }

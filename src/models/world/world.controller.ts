@@ -48,7 +48,11 @@ import {
   type CreateLocationPoiDto,
   type UpdateLocationPoiDto,
 } from "./services/location-poi.service";
-import type { CreateNpcDto } from "./services/npc.service";
+import type {
+  CreateCanonicalExpansionDto,
+  CreateNpcDto,
+  CreateNpcStoryHookDto,
+} from "./services/npc.service";
 import { isDmOmniscient } from "./services/npc-projection";
 import type { CreateFactionDto } from "./services/faction.service";
 // Spec 027 (M2, AC2.10 / bug D3) — resolve slug-ou-UUID em `:id`.
@@ -556,6 +560,28 @@ export class WorldController {
     return this.npcService.create(id, dto);
   }
 
+  @Get(":id/npc-roster")
+  async getNpcRoster(
+    @Req() req: AuthRequest,
+    @Headers() headers: Record<string, string>,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
+    await this.campaignService.ensureMembership(id, getUserId(req));
+    return this.npcService.listCanonicalRoster(id, {
+      dmOmniscient: isDmOmniscient(headers),
+    });
+  }
+
+  @Post(":id/npcs/expand-canonical")
+  async expandCanonicalNpc(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Body() dto: CreateCanonicalExpansionDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.npcService.expandCanonicalNpc(id, dto);
+  }
+
   @Get(":id/npcs")
   async listNpcs(
     @Req() req: AuthRequest,
@@ -602,6 +628,26 @@ export class WorldController {
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
     return this.npcService.remove(npcId);
+  }
+
+  @Post(":id/npcs/:npcId/story-hooks")
+  async createNpcStoryHook(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Param("npcId") npcId: string,
+    @Body() dto: CreateNpcStoryHookDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.npcService.createStoryHook(id, npcId, dto);
+  }
+
+  @Get(":id/npc-story-hooks")
+  async listNpcStoryHooks(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
+    await this.campaignService.ensureMembership(id, getUserId(req));
+    return this.npcService.listStoryHooksByCampaign(id);
   }
 
   // ==================== FACTIONS ====================

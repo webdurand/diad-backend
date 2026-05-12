@@ -6,9 +6,15 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, IsNull, Repository } from "typeorm";
-import { NpcEntity } from "src/entities/npc.entity";
+import { CampaignEntity } from "src/entities/campaign.entity";
+import { NpcEntity, type NpcProfileDepth } from "src/entities/npc.entity";
 import { NpcArchetypeTemplateEntity } from "src/entities/npc-archetype-template.entity";
 import { NpcRelationshipEntity } from "src/entities/npc-relationship.entity";
+import {
+  NpcStoryHookEntity,
+  type NpcStoryHookRelatedEntityType,
+  type NpcStoryHookType,
+} from "src/entities/npc-story-hook.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { SceneEntity } from "src/entities/scene.entity";
@@ -38,8 +44,28 @@ export interface CreateNpcDto {
   dialogueStyle?: string;
   voiceNotes?: string;
   tags?: string[];
+  profileDepth?: NpcProfileDepth;
+  homeLocationId?: string | null;
+  homePoiId?: string | null;
+  storyHooks?: CreateNpcStoryHookDto[];
   gameSessionId?: string;
   initialDisposition?: "friendly" | "neutral" | "hostile" | "indifferent";
+}
+
+export interface CreateCanonicalExpansionDto extends CreateNpcDto {
+  expansionReason: string;
+}
+
+export interface CreateNpcStoryHookDto {
+  hookType: NpcStoryHookType;
+  title?: string;
+  description?: string;
+  relatedEntityType?: NpcStoryHookRelatedEntityType;
+  relatedEntityId?: string;
+  relatedEntityName?: string;
+  isKnownToParty?: boolean;
+  priority?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AddRelationshipDto {
@@ -62,6 +88,14 @@ export type NpcWithSessionState = NpcEntity & {
   currentLocationId?: string;
 };
 
+export interface CanonicalNpcRosterItem extends ProjectedNpc {
+  profileDepth: NpcProfileDepth;
+  homeLocationId?: string;
+  homePoiId?: string;
+  relationships: NpcRelationshipEntity[];
+  storyHooks: NpcStoryHookEntity[];
+}
+
 @Injectable()
 export class NpcService {
   private readonly logger = new Logger(NpcService.name);
@@ -70,8 +104,12 @@ export class NpcService {
   constructor(
     @InjectRepository(NpcEntity)
     private readonly npcRepo: Repository<NpcEntity>,
+    @InjectRepository(CampaignEntity)
+    private readonly campaignRepo: Repository<CampaignEntity>,
     @InjectRepository(NpcRelationshipEntity)
     private readonly relationRepo: Repository<NpcRelationshipEntity>,
+    @InjectRepository(NpcStoryHookEntity)
+    private readonly storyHookRepo: Repository<NpcStoryHookEntity>,
     @InjectRepository(NpcArchetypeTemplateEntity)
     private readonly archetypeRepo: Repository<NpcArchetypeTemplateEntity>,
     @InjectRepository(GameSessionEntity)
@@ -106,6 +144,15 @@ export class NpcService {
    * inicializado. Caminho da narrativa (create_npc_from_narrative tool).
    */
   async create(campaignId: string, dto: CreateNpcDto): Promise<NpcEntity> {
+    const campaign = await this.campaignRepo.findOne({
+      where: { id: campaignId },
+      select: {
+        id: true,
+        npcRosterPolicy: true,
+      },
+    });
+    if (!campaign) throw new NotFoundException("Campanha nao encontrada.");
+
     let monsterId = dto.monsterId;
     if (!monsterId && dto.archetypeSlug) {
       const template = await this.resolveArchetype(dto.archetypeSlug);
@@ -114,6 +161,19 @@ export class NpcService {
 
     const slug = this.generateSlug(dto.name);
     const sessionScoped = !!dto.gameSessionId;
+    if (
+      sessionScoped &&
+      campaign.npcRosterPolicy === "canonical_v1" &&
+      !this.isAllowedEphemeralSessionNpc(dto, monsterId)
+    ) {
+      throw new BadRequestException({
+        ok: false,
+        code: "NPC_CANONICAL_REQUIRED",
+        error:
+          "Mundos canonical_v1 nao permitem criar pessoa nomeada so na sessao. Crie/expanda um NPC canonico antes da cena.",
+      });
+    }
+
     const npc = this.npcRepo.create({
       campaignId,
       gameSessionId: dto.gameSessionId,
@@ -131,9 +191,18 @@ export class NpcService {
       knowledgeScope: dto.knowledgeScope ?? [],
       dialogueStyle: dto.dialogueStyle,
       voiceNotes: dto.voiceNotes,
+      profileDepth:
+        dto.profileDepth ??
+        (dto.provenance === "director-planned" ? "expanded" : "core"),
+      homeLocationId: dto.homeLocationId ?? undefined,
+      homePoiId: dto.homePoiId ?? undefined,
       tags: dto.tags ?? [],
     });
     const saved = await this.npcRepo.save(npc);
+
+    if (!sessionScoped && dto.storyHooks?.length) {
+      await this.createStoryHooks(campaignId, saved.id, dto.storyHooks);
+    }
 
     if (sessionScoped) {
       await this.attachToSessionContext(
@@ -144,6 +213,175 @@ export class NpcService {
     }
 
     return saved;
+  }
+
+  async expandCanonicalNpc(
+    campaignId: string,
+    dto: CreateCanonicalExpansionDto,
+  ): Promise<NpcEntity> {
+    if (!dto.expansionReason?.trim()) {
+      throw new BadRequestException({
+        ok: false,
+        code: "NPC_EXPANSION_REASON_REQUIRED",
+        error: "Expansao canonica precisa de expansionReason.",
+      });
+    }
+
+    const raw = await this.campaignRepo.query(
+      `UPDATE campaigns
+         SET npc_expansion_budget_used = npc_expansion_budget_used + 1,
+             updated_at = now()
+       WHERE id = $1
+         AND npc_roster_policy = 'canonical_v1'
+         AND npc_expansion_budget_used < npc_expansion_budget_total
+       RETURNING id`,
+      [campaignId],
+    );
+    const rows = Array.isArray(raw) ? raw : [];
+    if (rows.length === 0) {
+      const campaign = await this.campaignRepo.findOne({
+        where: { id: campaignId },
+        select: {
+          id: true,
+          npcRosterPolicy: true,
+          npcExpansionBudgetTotal: true,
+          npcExpansionBudgetUsed: true,
+        },
+      });
+      if (!campaign) throw new NotFoundException("Campanha nao encontrada.");
+      if (campaign.npcRosterPolicy !== "canonical_v1") {
+        throw new BadRequestException({
+          ok: false,
+          code: "NPC_EXPANSION_POLICY_DISABLED",
+          error: "Expansao canonica so existe em mundos canonical_v1.",
+        });
+      }
+      throw new BadRequestException({
+        ok: false,
+        code: "NPC_EXPANSION_BUDGET_EXHAUSTED",
+        error: "Orcamento de expansao de NPCs canonicos esgotado.",
+        current: campaign.npcExpansionBudgetUsed,
+        max: campaign.npcExpansionBudgetTotal,
+      });
+    }
+
+    try {
+      return await this.create(campaignId, {
+        ...dto,
+        gameSessionId: undefined,
+        provenance: "director-planned",
+        profileDepth: dto.profileDepth ?? "expanded",
+        storyHooks: [
+          ...(dto.storyHooks ?? []),
+          {
+            hookType: "clue_holder",
+            title: "Motivo da expansao",
+            description: dto.expansionReason,
+            priority: 6,
+            metadata: { expansionReason: dto.expansionReason },
+          },
+        ],
+      });
+    } catch (err) {
+      await this.campaignRepo.query(
+        `UPDATE campaigns
+            SET npc_expansion_budget_used = GREATEST(npc_expansion_budget_used - 1, 0)
+          WHERE id = $1`,
+        [campaignId],
+      );
+      throw err;
+    }
+  }
+
+  async createStoryHook(
+    campaignId: string,
+    npcId: string,
+    dto: CreateNpcStoryHookDto,
+  ): Promise<NpcStoryHookEntity> {
+    return (
+      await this.createStoryHooks(campaignId, npcId, [dto])
+    )[0];
+  }
+
+  async createStoryHooks(
+    campaignId: string,
+    npcId: string,
+    hooks: CreateNpcStoryHookDto[],
+  ): Promise<NpcStoryHookEntity[]> {
+    const npc = await this.npcRepo.findOne({
+      where: { id: npcId, campaignId },
+      select: { id: true },
+    });
+    if (!npc) throw new NotFoundException("NPC nao encontrado.");
+
+    const entities = hooks
+      .filter((h) => h?.hookType)
+      .map((h) =>
+        this.storyHookRepo.create({
+          campaignId,
+          npcId,
+          hookType: h.hookType,
+          title: h.title,
+          description: h.description,
+          relatedEntityType: h.relatedEntityType,
+          relatedEntityId: h.relatedEntityId,
+          relatedEntityName: h.relatedEntityName,
+          isKnownToParty: h.isKnownToParty ?? false,
+          priority: h.priority ?? 5,
+          metadata: h.metadata ?? {},
+        }),
+      );
+    if (entities.length === 0) return [];
+    return this.storyHookRepo.save(entities);
+  }
+
+  async listStoryHooksByCampaign(
+    campaignId: string,
+  ): Promise<NpcStoryHookEntity[]> {
+    return this.storyHookRepo.find({
+      where: { campaignId },
+      order: { priority: "DESC", createdAt: "ASC" },
+    });
+  }
+
+  async listCanonicalRoster(
+    campaignId: string,
+    options: NpcProjectionOptions = {},
+  ): Promise<CanonicalNpcRosterItem[]> {
+    const [npcs, relationships, hooks] = await Promise.all([
+      this.listCanonical(campaignId),
+      this.relationRepo
+        .createQueryBuilder("r")
+        .innerJoin("npcs", "src", "src.id = r.source_npc_id")
+        .leftJoinAndSelect("r.targetNpc", "targetNpc")
+        .leftJoinAndSelect("r.targetFaction", "targetFaction")
+        .where("src.campaign_id = :campaignId", { campaignId })
+        .getMany(),
+      this.listStoryHooksByCampaign(campaignId),
+    ]);
+    const relsByNpc = new Map<string, NpcRelationshipEntity[]>();
+    for (const rel of relationships) {
+      if (!options.dmOmniscient && !rel.isKnownToParty) continue;
+      const current = relsByNpc.get(rel.sourceNpcId) ?? [];
+      current.push(rel);
+      relsByNpc.set(rel.sourceNpcId, current);
+    }
+    const hooksByNpc = new Map<string, NpcStoryHookEntity[]>();
+    for (const hook of hooks) {
+      const current = hooksByNpc.get(hook.npcId) ?? [];
+      current.push(hook);
+      hooksByNpc.set(hook.npcId, current);
+    }
+    return npcs.map((npc) => ({
+      ...projectNpc(npc, options),
+      profileDepth: npc.profileDepth,
+      homeLocationId: npc.homeLocationId,
+      homePoiId: npc.homePoiId,
+      relationships: relsByNpc.get(npc.id) ?? [],
+      storyHooks: (hooksByNpc.get(npc.id) ?? []).filter(
+        (hook) => options.dmOmniscient || hook.isKnownToParty,
+      ),
+    }));
   }
 
   /**
@@ -367,6 +605,18 @@ export class NpcService {
         "Não é possível materializar NPC: sessão sem campaignId.",
       );
     }
+    const campaign = await this.campaignRepo.findOne({
+      where: { id: session.campaignId },
+      select: { id: true, npcRosterPolicy: true },
+    });
+    if (campaign?.npcRosterPolicy === "canonical_v1") {
+      throw new BadRequestException({
+        ok: false,
+        code: "NPC_CANONICAL_REQUIRED",
+        error:
+          "Mundos canonical_v1 nao materializam pessoa nomeada da prosa. Use NPC canonico ou encontro anonimo/monstro.",
+      });
+    }
 
     const archetypeSlug = pickArchetypeFromDescriptor(descriptor || name);
     let monsterId: string | undefined;
@@ -460,8 +710,24 @@ export class NpcService {
     return Object.assign({}, npc, {
       status: state?.status ?? "alive",
       disposition: state?.disposition ?? "neutral",
-      currentLocationId: state?.currentLocationId,
+      currentLocationId: state?.currentLocationId ?? npc.homeLocationId,
     }) as NpcWithSessionState;
+  }
+
+  private isAllowedEphemeralSessionNpc(
+    dto: CreateNpcDto,
+    monsterId?: string,
+  ): boolean {
+    const tags = new Set((dto.tags ?? []).map((t) => t.toLowerCase()));
+    if (tags.has("random-encounter")) return true;
+    if (tags.has("encounter-ephemeral")) return true;
+    if (tags.has("anonymous-mob")) return true;
+    if (!monsterId) return false;
+    const words = (dto.name || "").trim().split(/\s+/).filter(Boolean);
+    const looksLikeProperPersonName =
+      words.length >= 2 &&
+      words.every((w) => /^[A-ZÁÂÃÀÉÊÍÓÔÕÚÇ][\p{L}'-]+$/u.test(w));
+    return !looksLikeProperPersonName;
   }
 
   private generateSlug(name: string): string {

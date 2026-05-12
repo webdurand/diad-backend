@@ -9,7 +9,10 @@ describe("NpcService.create — gameSessionId auto-attach", () => {
   const LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 
   function build(
-    opts: { activeScene?: { id: string; locationId?: string } | null } = {},
+    opts: {
+      activeScene?: { id: string; locationId?: string } | null;
+      npcRosterPolicy?: "legacy" | "canonical_v1";
+    } = {},
   ) {
     const activeScene =
       "activeScene" in opts
@@ -18,6 +21,13 @@ describe("NpcService.create — gameSessionId auto-attach", () => {
     const npcRepo = {
       create: jest.fn((data) => ({ ...data })),
       save: jest.fn(async (npc) => ({ ...npc, id: NPC_ID })),
+    };
+    const campaignRepo = {
+      findOne: jest.fn(async () => ({
+        id: CAMPAIGN_ID,
+        npcRosterPolicy: opts.npcRosterPolicy ?? "legacy",
+      })),
+      query: jest.fn(),
     };
     const sceneRepo = {
       findOne: jest.fn(async () => activeScene),
@@ -40,6 +50,8 @@ describe("NpcService.create — gameSessionId auto-attach", () => {
 
     const svc = new NpcService(
       npcRepo as never,
+      campaignRepo as never,
+      {} as never,
       {} as never,
       archetypeRepo as never,
       {} as never,
@@ -49,7 +61,7 @@ describe("NpcService.create — gameSessionId auto-attach", () => {
       stateService as never,
     );
 
-    return { svc, npcRepo, sceneRepo, sceneNpcRepo, stateService };
+    return { svc, npcRepo, campaignRepo, sceneRepo, sceneNpcRepo, stateService };
   }
 
   it("sem gameSessionId: cria NPC canônico, NÃO toca scene_npcs nem state", async () => {
@@ -108,6 +120,31 @@ describe("NpcService.create — gameSessionId auto-attach", () => {
     const saved = (npcRepo.save as jest.Mock).mock.calls[0][0];
     expect(saved.provenance).toBe("auto-materialized");
     expect(saved.gameSessionId).toBe(SESSION_ID);
+  });
+
+  it("canonical_v1 bloqueia pessoa nomeada session-scoped", async () => {
+    const { svc } = build({ npcRosterPolicy: "canonical_v1" });
+    await expect(
+      svc.create(CAMPAIGN_ID, {
+        name: "Eda Oweland",
+        archetypeSlug: "commoner",
+        gameSessionId: SESSION_ID,
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "NPC_CANONICAL_REQUIRED" }),
+    });
+  });
+
+  it("canonical_v1 permite mob anonimo de encontro session-scoped", async () => {
+    const { svc, npcRepo } = build({ npcRosterPolicy: "canonical_v1" });
+    await svc.create(CAMPAIGN_ID, {
+      name: "Capanga com cicatriz",
+      archetypeSlug: "thug",
+      gameSessionId: SESSION_ID,
+      tags: ["encounter-ephemeral"],
+    });
+    const saved = (npcRepo.save as jest.Mock).mock.calls[0][0];
+    expect(saved.tags).toContain("encounter-ephemeral");
   });
 
   it("idempotente: scene_npcs já existe → não duplica save", async () => {

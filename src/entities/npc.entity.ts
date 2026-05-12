@@ -12,6 +12,10 @@ import {
 import { CampaignEntity } from "./campaign.entity";
 import { GameSessionEntity } from "./game-session.entity";
 import { MonsterEntity } from "./monster.entity";
+import { LocationEntity } from "./location.entity";
+import { LocationPoiEntity } from "./location-poi.entity";
+
+export type NpcProfileDepth = "core" | "supporting" | "expanded";
 
 @Entity("npcs")
 @Unique(["campaignId", "slug"])
@@ -78,6 +82,23 @@ export class NpcEntity {
 
   @Column({ name: "voice_notes", type: "text", nullable: true })
   voiceNotes?: string;
+
+  @Column({ name: "profile_depth", type: "varchar", length: 24, default: "core" })
+  profileDepth: NpcProfileDepth;
+
+  @Column({ name: "home_location_id", type: "uuid", nullable: true })
+  homeLocationId?: string;
+
+  @ManyToOne(() => LocationEntity, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "home_location_id" })
+  homeLocation?: LocationEntity;
+
+  @Column({ name: "home_poi_id", type: "uuid", nullable: true })
+  homePoiId?: string;
+
+  @ManyToOne(() => LocationPoiEntity, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "home_poi_id" })
+  homePoi?: LocationPoiEntity;
 
   @Column({ type: "jsonb", default: [] })
   tags: string[];

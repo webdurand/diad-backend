@@ -17,6 +17,7 @@ import {
   CampaignEntity,
   CampaignPlayerEntity,
   CampaignPartyMemberEntity,
+  FactionEntity,
   UserEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
@@ -163,6 +164,7 @@ import { TravelTickService } from "./services/travel-tick.service";
       CampaignEntity,
       CampaignPlayerEntity,
       CampaignPartyMemberEntity,
+      FactionEntity,
       UserEntity,
       // Spec 016 — Play Shell Foundation
       RestSessionEntity,

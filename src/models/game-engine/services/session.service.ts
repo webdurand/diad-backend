@@ -1,12 +1,15 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { IsNull, Repository } from "typeorm";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignEntity } from "src/entities/campaign.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { CharacterEntity } from "src/entities/character.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { LocationEntity } from "src/entities/location.entity";
+import { NpcEntity } from "src/entities/npc.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
+import { FactionEntity } from "src/entities/faction.entity";
 import { SceneService } from "src/models/session/services/scene.service";
 import { QuestService } from "src/models/world/services/quest.service";
 import type { CreateQuestDto } from "src/models/world/services/quest.service";
@@ -59,6 +62,12 @@ export class SessionService {
     private readonly encounterRepo: Repository<EncounterEntity>,
     @InjectRepository(LocationEntity)
     private readonly locationRepo: Repository<LocationEntity>,
+    @InjectRepository(NpcEntity)
+    private readonly npcRepo: Repository<NpcEntity>,
+    @InjectRepository(SessionNpcStateEntity)
+    private readonly npcStateRepo: Repository<SessionNpcStateEntity>,
+    @InjectRepository(FactionEntity)
+    private readonly factionRepo: Repository<FactionEntity>,
     private readonly sceneService: SceneService,
     private readonly questService: QuestService,
     private readonly logger: DiadLogger,
@@ -98,10 +107,49 @@ export class SessionService {
 
     if (campaign) {
       await this.bootstrapInitialScene(saved.id, campaign);
+      await this.initializeCanonicalNpcStates(saved.id, campaign.id);
       await this.materializeQuestsFromTemplate(saved.id, campaign);
     }
 
     return saved;
+  }
+
+  private async initializeCanonicalNpcStates(
+    sessionId: string,
+    campaignId: string,
+  ): Promise<void> {
+    try {
+      const npcs = await this.npcRepo.find({
+        where: { campaignId, gameSessionId: IsNull() },
+        select: ["id", "homeLocationId", "homePoiId"],
+      });
+      if (npcs.length === 0) return;
+
+      const existing = await this.npcStateRepo.find({
+        where: { gameSessionId: sessionId },
+        select: ["npcId"],
+      });
+      const existingIds = new Set(existing.map((s) => s.npcId));
+      const states = npcs
+        .filter((npc) => !existingIds.has(npc.id))
+        .map((npc) =>
+          this.npcStateRepo.create({
+            gameSessionId: sessionId,
+            npcId: npc.id,
+            status: "alive",
+            disposition: "neutral",
+            currentLocationId: npc.homeLocationId,
+            currentPoiId: npc.homePoiId,
+          }),
+        );
+      if (states.length > 0) await this.npcStateRepo.save(states);
+    } catch (err) {
+      this.logger.warn("session.initialize_canonical_npc_states.failed", {
+        "session.id": sessionId,
+        "campaign.id": campaignId,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private async bootstrapInitialScene(
@@ -139,6 +187,28 @@ export class SessionService {
     const template = seed.questsTemplate;
     if (!Array.isArray(template) || template.length === 0) return;
 
+    const [canonicalNpcs, locations, factions] = await Promise.all([
+      this.npcRepo.find({
+        where: { campaignId: campaign.id, gameSessionId: IsNull() },
+        select: ["id", "name"],
+      }),
+      this.locationRepo.find({
+        where: { campaignId: campaign.id },
+        select: ["id", "name"],
+      }),
+      this.factionRepo.find({
+        where: { campaignId: campaign.id },
+        select: ["id", "name", "slug"],
+      }),
+    ]);
+    const npcByName = this.mapByLowerName(canonicalNpcs);
+    const locationByName = this.mapByLowerName(locations);
+    const factionByName = new Map<string, FactionEntity>();
+    for (const faction of factions) {
+      factionByName.set(faction.name.toLowerCase(), faction);
+      if (faction.slug) factionByName.set(faction.slug.toLowerCase(), faction);
+    }
+
     let created = 0;
     for (const raw of template) {
       if (!raw || typeof raw !== "object") continue;
@@ -159,6 +229,18 @@ export class SessionService {
           kind: typeof obj.kind === "string" ? (obj.kind as any) : undefined,
           targetName:
             typeof obj.targetName === "string" ? obj.targetName : undefined,
+          targetNpcId:
+            typeof obj.targetName === "string"
+              ? npcByName.get(obj.targetName.toLowerCase())?.id
+              : undefined,
+          targetLocationId:
+            typeof obj.targetName === "string"
+              ? locationByName.get(obj.targetName.toLowerCase())?.id
+              : undefined,
+          targetFactionId:
+            typeof obj.targetName === "string"
+              ? factionByName.get(obj.targetName.toLowerCase())?.id
+              : undefined,
           targetCity:
             typeof obj.targetCity === "string" ? obj.targetCity : null,
           amount: typeof obj.amount === "number" ? obj.amount : null,
@@ -178,6 +260,7 @@ export class SessionService {
         description:
           typeof q.description === "string" ? q.description : undefined,
         isMainQuest: q.isMainQuest === true,
+        giverNpcId: this.resolveQuestGiverId(q, npcByName),
         objectives,
         rewards,
       };
@@ -209,6 +292,31 @@ export class SessionService {
         "quests.created": created,
       });
     }
+  }
+
+  private resolveQuestGiverId(
+    q: Record<string, unknown>,
+    npcByName: Map<string, Pick<NpcEntity, "id" | "name">>,
+  ): string | undefined {
+    const candidates = [
+      q.giverNpcName,
+      q.triggerNpcName,
+      Array.isArray(q.objectives)
+        ? (q.objectives as Array<Record<string, unknown>>).find(
+            (o) => o?.kind === "talk_to_npc" && typeof o.targetName === "string",
+          )?.targetName
+        : undefined,
+    ];
+    for (const candidate of candidates) {
+      if (typeof candidate !== "string") continue;
+      const npc = npcByName.get(candidate.toLowerCase());
+      if (npc) return npc.id;
+    }
+    return undefined;
+  }
+
+  private mapByLowerName<T extends { name: string }>(items: T[]): Map<string, T> {
+    return new Map(items.map((item) => [item.name.toLowerCase(), item]));
   }
 
   private async inferStartingLocation(

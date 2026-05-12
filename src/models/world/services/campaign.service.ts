@@ -11,6 +11,7 @@ import {
   CampaignContentCounts,
   CampaignDmPersonality,
   CampaignTonalAnchor,
+  type NpcRosterPolicy,
 } from "src/entities/campaign.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { randomBytes } from "crypto";
@@ -28,6 +29,7 @@ export interface CreateCampaignDto {
   scope?: "solo" | "party";
   isDraft?: boolean;
   generationSeed?: Record<string, unknown>;
+  npcRosterPolicy?: NpcRosterPolicy;
 }
 
 export interface UpdateCampaignDto {
@@ -41,6 +43,7 @@ export interface UpdateCampaignDto {
   isDraft?: boolean;
   generationSeed?: Record<string, unknown>;
   startingLocationId?: string | null;
+  npcRosterPolicy?: NpcRosterPolicy;
 }
 
 export interface ListSoloWorldsQuery {
@@ -129,6 +132,17 @@ export class CampaignService {
       scope: dto.scope ?? "solo",
       isDraft: dto.isDraft ?? false,
       generationSeed: dto.generationSeed,
+      npcRosterPolicy:
+        dto.npcRosterPolicy ??
+        (dto.dmMode !== "human" && (dto.scope ?? "solo") === "solo"
+          ? "canonical_v1"
+          : "legacy"),
+      npcExpansionBudgetTotal: 10,
+      npcExpansionBudgetUsed: 0,
+      contentBudget:
+        dto.dmMode !== "human" && (dto.scope ?? "solo") === "solo"
+          ? { maxScenes: 12, maxNpcs: 30, maxLocations: 6 }
+          : undefined,
     });
 
     const saved = await this.campaignRepo.save(campaign);

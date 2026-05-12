@@ -58,6 +58,8 @@ export interface CampaignArcState {
   }>;
 }
 
+export type NpcRosterPolicy = "legacy" | "canonical_v1";
+
 @Entity("campaigns")
 export class CampaignEntity {
   @PrimaryGeneratedColumn("uuid")
@@ -142,6 +144,15 @@ export class CampaignEntity {
 
   @Column({ name: "starting_location_id", type: "uuid", nullable: true })
   startingLocationId?: string | null;
+
+  @Column({ name: "npc_roster_policy", type: "varchar", default: "legacy" })
+  npcRosterPolicy: NpcRosterPolicy;
+
+  @Column({ name: "npc_expansion_budget_total", type: "smallint", default: 10 })
+  npcExpansionBudgetTotal: number;
+
+  @Column({ name: "npc_expansion_budget_used", type: "smallint", default: 0 })
+  npcExpansionBudgetUsed: number;
 
   @Column({ name: "dm_personality", type: "jsonb", default: {} })
   dmPersonality: CampaignDmPersonality;
