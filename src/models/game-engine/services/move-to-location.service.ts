@@ -10,6 +10,7 @@ import { LocationEntity } from "src/entities/location.entity";
 import { LocationService } from "src/models/world/services/location.service";
 import { SceneService } from "src/models/session/services/scene.service";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
+import { MovementLockService } from "src/models/session/services/movement-lock.service";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
@@ -147,6 +148,7 @@ export class MoveToLocationService {
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly contextCache: SceneContextCacheService,
+    private readonly movementLockService: MovementLockService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(MoveToLocationService.name);
@@ -173,6 +175,23 @@ export class MoveToLocationService {
       throw new DomainException(
         ErrorCode.LOCATION_NOT_FOUND,
         "Sessão sem campanha vinculada — movimento não disponível.",
+      );
+    }
+
+    const activeLock = await this.movementLockService.getActiveForSession(
+      input.sessionId,
+    );
+    if (activeLock) {
+      throw new DomainException(
+        ErrorCode.VALIDATION_INVALID_PAYLOAD,
+        this.movementLockService.buildBlockedMessage(activeLock.movementLock),
+        {
+          context: {
+            sessionId: session.id,
+            sceneId: activeLock.sceneId,
+            reason: "movement_lock",
+          },
+        },
       );
     }
 
@@ -277,7 +296,9 @@ export class MoveToLocationService {
     }));
   }
 
-  async resolveTravel(input: MoveToLocationInput): Promise<TravelResolveResult> {
+  async resolveTravel(
+    input: MoveToLocationInput,
+  ): Promise<TravelResolveResult> {
     const session = await this.sessionRepo.findOne({
       where: { id: input.sessionId },
     });
@@ -307,6 +328,20 @@ export class MoveToLocationService {
         },
         reason: "travel_already_active",
         message: `Já existe uma viagem em andamento para ${session.travelState.toLocationName}.`,
+      };
+    }
+
+    const activeLock = await this.movementLockService.getActiveForSession(
+      input.sessionId,
+    );
+    if (activeLock) {
+      return {
+        status: "blocked",
+        fromLocationId: activeLock.locationId,
+        reason: "movement_lock",
+        message: this.movementLockService.buildBlockedMessage(
+          activeLock.movementLock,
+        ),
       };
     }
 
@@ -357,10 +392,7 @@ export class MoveToLocationService {
       relations: ["toLocation"],
     });
     if (directConnection) {
-      const directTravel = this.toAvailableTravel(
-        directConnection,
-        target,
-      );
+      const directTravel = this.toAvailableTravel(directConnection, target);
       if (directConnection.isLocked) {
         return {
           status: "blocked",
@@ -390,7 +422,11 @@ export class MoveToLocationService {
       };
     }
 
-    const route = await this.findKnownRoute(fromLocationId, target.id, locations);
+    const route = await this.findKnownRoute(
+      fromLocationId,
+      target.id,
+      locations,
+    );
     if (route.length >= 2) {
       const nextHopLocationId = route[1];
       const nextHopLocation = locations.find((l) => l.id === nextHopLocationId);
@@ -607,9 +643,10 @@ export class MoveToLocationService {
     const tokens = needle.split(" ").filter((t) => t.length >= 4);
     if (
       tokens.length > 0 &&
-      tokens.every((token) =>
-        terms.some((term) => term.includes(token)) ||
-        description.includes(token),
+      tokens.every(
+        (token) =>
+          terms.some((term) => term.includes(token)) ||
+          description.includes(token),
       )
     ) {
       return 45;

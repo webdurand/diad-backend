@@ -31,6 +31,7 @@ import { SceneContextCacheService } from "./services/scene-context-cache.service
 import { SessionMessageService } from "./services/session-message.service";
 import { SessionRecapService } from "./services/session-recap.service";
 import { SessionResumeService } from "./services/session-resume.service";
+import { MovementLockService } from "./services/movement-lock.service";
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { SessionResumeService } from "./services/session-resume.service";
     SessionMessageService,
     SessionRecapService,
     SessionResumeService,
+    MovementLockService,
   ],
   exports: [
     SceneService,
@@ -77,6 +79,7 @@ import { SessionResumeService } from "./services/session-resume.service";
     SessionMessageService,
     SessionRecapService,
     SessionResumeService,
+    MovementLockService,
   ],
 })
 export class SessionModule {}

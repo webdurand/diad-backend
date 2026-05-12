@@ -125,6 +125,10 @@ import {
   VALID_EVENT_TYPES,
 } from "./dto/get-events-query.dto";
 import { ResolveEncounterDto } from "./dto/resolve-encounter.dto";
+import {
+  MovementLockService,
+  type MovementLockSource,
+} from "../session/services/movement-lock.service";
 
 interface AuthRequest extends Request {
   user?: { id: string; email: string; name?: string; username?: string };
@@ -198,6 +202,7 @@ export class GameEngineController {
     private readonly moveToLocationService: MoveToLocationService,
     private readonly moveToPoiService: MoveToPoiService,
     private readonly travelTickService: TravelTickService,
+    private readonly movementLockService: MovementLockService,
     // Spec 027 (M2 follow-up) — WS realtime para invalidar cache do frontend
     // após mutações de turno/encontro. Sala: encounter:<id>.
     private readonly realtime: RealtimeService,
@@ -423,6 +428,25 @@ export class GameEngineController {
   async availablePois(@Param("sessionId") sessionId: string) {
     const pois = await this.moveToPoiService.listAvailablePois(sessionId);
     return { ok: true as const, value: pois };
+  }
+
+  @Patch("sessions/:sessionId/movement-lock")
+  async setMovementLock(
+    @Param("sessionId") sessionId: string,
+    @Body()
+    dto: {
+      active?: boolean;
+      reason?: string;
+      exitActionLabel?: string;
+      interlocutorNpcId?: string | null;
+      source?: MovementLockSource;
+    },
+  ) {
+    const movementLock = await this.movementLockService.setForActiveScene(
+      sessionId,
+      dto,
+    );
+    return { ok: true as const, value: { movementLock } };
   }
 
   @Post("sessions/:sessionId/travel/tick")
@@ -1150,10 +1174,7 @@ export class GameEngineController {
   }
 
   @Post("encounters/:id/end-turn")
-  async endTurn(
-    @Req() req: AuthRequest,
-    @Param("id") id: string,
-  ) {
+  async endTurn(@Req() req: AuthRequest, @Param("id") id: string) {
     // Spec 027 (M2 follow-up) — gate de dono do current turn participant.
     // Antes qualquer user autenticado podia bater em /end-turn e avançar o
     // turno do NPC pra fazer o NPC ficar idle (efetivamente "skip" do
@@ -2954,9 +2975,9 @@ export class GameEngineController {
     if (!result.ok) return result;
 
     // (a) Aplica stateChanges no character_state.
-    let applied:
-      | Awaited<ReturnType<typeof this.fateLadderService.applyResolution>>
-      | null = null;
+    let applied: Awaited<
+      ReturnType<typeof this.fateLadderService.applyResolution>
+    > | null = null;
     try {
       applied = await this.fateLadderService.applyResolution(
         characterId,

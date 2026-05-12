@@ -16,10 +16,12 @@ import { MonsterEntity } from "src/entities/monster.entity";
 import { CharacterEntity } from "src/entities/character.entity";
 import { EquipmentEntity } from "src/entities/equipment.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
 import { InventoryService } from "src/models/characters/services/inventory.service";
 import { SessionMessageService } from "src/models/session/services/session-message.service";
+import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
 import { DiceService } from "./dice.service";
 import { EventService } from "./event.service";
 import { SessionService } from "./session.service";
@@ -97,6 +99,8 @@ export class EncounterService {
     private readonly monsterRepo: Repository<MonsterEntity>,
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(SessionNpcStateEntity)
+    private readonly npcStateRepo: Repository<SessionNpcStateEntity>,
     private readonly diceService: DiceService,
     private readonly eventService: EventService,
     private readonly sessionService: SessionService,
@@ -109,6 +113,7 @@ export class EncounterService {
     private readonly xpAwardService: XpAwardService,
     private readonly gameClockService: GameClockService,
     private readonly sessionMessageService: SessionMessageService,
+    private readonly sceneContextCache: SceneContextCacheService,
   ) {}
 
   async create(
@@ -1344,6 +1349,12 @@ export class EncounterService {
       goldApplied,
       itemsApplied,
     );
+    try {
+      await this.syncDefeatedNpcStates(encounter);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "unknown error";
+      warnings.push(`NPC state sync: ${msg}`);
+    }
 
     // Emit events
     const events = [
@@ -1476,6 +1487,69 @@ export class EncounterService {
     return character.userId;
   }
 
+  private async syncDefeatedNpcStates(
+    encounter: EncounterEntity,
+  ): Promise<number> {
+    const participants = await this.participantRepo.find({
+      where: { encounterId: encounter.id },
+    });
+    const defeatedNpcParticipants = participants.filter(
+      (p) => p.type === "npc" && (p.isDefeated || (p.currentHp ?? 0) <= 0),
+    );
+    if (defeatedNpcParticipants.length === 0) return 0;
+
+    const npcStates = await this.npcStateRepo.find({
+      where: { gameSessionId: encounter.sessionId },
+      relations: ["npc"],
+    });
+    const statesByName = new Map<string, SessionNpcStateEntity[]>();
+    for (const state of npcStates) {
+      if (!state.npc?.name) continue;
+      const key = this.normalizeNpcName(state.npc.name);
+      const bucket = statesByName.get(key) ?? [];
+      bucket.push(state);
+      statesByName.set(key, bucket);
+    }
+
+    const updated = new Map<string, SessionNpcStateEntity>();
+    for (const participant of defeatedNpcParticipants) {
+      const key = this.normalizeNpcName(participant.displayName);
+      const matches = statesByName.get(key) ?? [];
+      if (matches.length === 0) {
+        this.logger.warn(
+          `defeated NPC state not found encounter=${encounter.id} displayName="${participant.displayName}"`,
+        );
+        continue;
+      }
+      if (matches.length > 1) {
+        this.logger.warn(
+          `defeated NPC state ambiguous encounter=${encounter.id} displayName="${participant.displayName}" matches=${matches.length}`,
+        );
+        continue;
+      }
+
+      const state = matches[0];
+      if (state.status === "dead") continue;
+      state.status = "dead";
+      updated.set(state.id, state);
+    }
+
+    const statesToSave = Array.from(updated.values());
+    if (statesToSave.length === 0) return 0;
+    await this.npcStateRepo.save(statesToSave);
+    this.sceneContextCache.invalidateAll();
+    return statesToSave.length;
+  }
+
+  private normalizeNpcName(name: string): string {
+    return name
+      .trim()
+      .toLocaleLowerCase("pt-BR")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ");
+  }
+
   /**
    * Spec 027 (M2 follow-up) — payload estruturado pra post-combat narrative.
    *
@@ -1513,15 +1587,13 @@ export class EncounterService {
     xpAwarded: number;
     gold: { cp: number; sp: number; gp: number; pp: number };
     items: Array<{ name: string; quantity: number }>;
-    pcFinalHp:
-      | {
-          characterId: string;
-          name: string;
-          current: number;
-          max: number;
-          percent: number;
-        }
-      | null;
+    pcFinalHp: {
+      characterId: string;
+      name: string;
+      current: number;
+      max: number;
+      percent: number;
+    } | null;
     summary: string;
   }> {
     const participants = await this.participantRepo.find({
@@ -1560,15 +1632,13 @@ export class EncounterService {
     const pcParticipant = participants.find(
       (p) => p.type === "pc" && p.characterId,
     );
-    let pcFinalHp:
-      | {
-          characterId: string;
-          name: string;
-          current: number;
-          max: number;
-          percent: number;
-        }
-      | null = null;
+    let pcFinalHp: {
+      characterId: string;
+      name: string;
+      current: number;
+      max: number;
+      percent: number;
+    } | null = null;
     if (pcParticipant?.characterId) {
       const current = pcParticipant.currentHp ?? 0;
       const max = pcParticipant.maxHp ?? 0;
@@ -1627,8 +1697,7 @@ export class EncounterService {
       const remaining = allParticipants
         .filter(
           (p) =>
-            p.faction === "enemy" &&
-            !(p.isDefeated || (p.currentHp ?? 0) <= 0),
+            p.faction === "enemy" && !(p.isDefeated || (p.currentHp ?? 0) <= 0),
         )
         .map((p) => p.displayName)
         .slice(0, 3)

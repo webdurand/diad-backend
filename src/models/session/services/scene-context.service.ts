@@ -21,6 +21,10 @@ import { In } from "typeorm";
 import { EventLogService } from "./event-log.service";
 import { ChronicleService } from "./chronicle.service";
 import { SceneContextCacheService } from "./scene-context-cache.service";
+import {
+  MovementLockService,
+  type MovementLockState,
+} from "./movement-lock.service";
 import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
 import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 
@@ -61,6 +65,7 @@ export interface SceneContext {
     name: string;
     title?: string;
     race?: string;
+    status: "alive" | "dead" | "missing" | "unknown";
     disposition: string;
     presenceRole?: "present" | "interlocutor" | "companion";
     currentPoiId?: string | null;
@@ -159,6 +164,7 @@ export interface SceneContext {
       title?: string;
       disposition: string;
     } | null;
+    movementLock?: MovementLockState | null;
     mentionedEntities: Array<{
       name: string;
       type?: string;
@@ -203,6 +209,7 @@ export class SceneContextService {
     private readonly chronicleService: ChronicleService,
     private readonly pcPersonaService: PcPersonaService,
     private readonly cache: SceneContextCacheService,
+    private readonly movementLockService: MovementLockService,
   ) {}
 
   async assembleContext(sceneId: string): Promise<SceneContext> {
@@ -213,7 +220,9 @@ export class SceneContextService {
     return ctx;
   }
 
-  private async assembleContextUncached(sceneId: string): Promise<SceneContext> {
+  private async assembleContextUncached(
+    sceneId: string,
+  ): Promise<SceneContext> {
     // Onda A — sequencial, early return se cena some.
     const scene = await this.sceneRepo.findOne({
       where: { id: sceneId },
@@ -285,50 +294,49 @@ export class SceneContextService {
     const characterIds = session?.characterIds ?? [];
 
     // Onda C — depende dos outputs B (npcIds, arc.id, characterIds).
-    const [
-      npcStates,
-      partyKnowledgeRaw,
-      arcState,
-      playerCharacter,
-    ] = await Promise.all([
-      presentNpcIds.length > 0
-        ? this.npcStateRepo.find({
-            where: { gameSessionId: sessionId, npcId: In(presentNpcIds) },
-            relations: ["currentPoi"],
-          })
-        : Promise.resolve([]),
-      campaignId
-        ? this.chronicleService.getRelevantKnowledge(campaignId, {
-            locationId,
-            npcIds: allSceneNpcIds,
-          })
-        : Promise.resolve([]),
-      arc
-        ? this.arcStateRepo.findOne({
-            where: { gameSessionId: sessionId, storyArcId: arc.id },
-          })
-        : Promise.resolve(null),
-      characterIds.length === 1
-        ? this.pcPersonaService
-            .assemblePersona(characterIds[0], null)
-            .catch(() => null as PCPersona | null)
-        : Promise.resolve<PCPersona | null>(null),
-    ]);
+    const [npcStates, partyKnowledgeRaw, arcState, playerCharacter] =
+      await Promise.all([
+        presentNpcIds.length > 0
+          ? this.npcStateRepo.find({
+              where: { gameSessionId: sessionId, npcId: In(presentNpcIds) },
+              relations: ["currentPoi"],
+            })
+          : Promise.resolve([]),
+        campaignId
+          ? this.chronicleService.getRelevantKnowledge(campaignId, {
+              locationId,
+              npcIds: allSceneNpcIds,
+            })
+          : Promise.resolve([]),
+        arc
+          ? this.arcStateRepo.findOne({
+              where: { gameSessionId: sessionId, storyArcId: arc.id },
+            })
+          : Promise.resolve(null),
+        characterIds.length === 1
+          ? this.pcPersonaService
+              .assemblePersona(characterIds[0], null)
+              .catch(() => null as PCPersona | null)
+          : Promise.resolve<PCPersona | null>(null),
+      ]);
 
     const dispositionByNpc = new Map(
       npcStates.map((s) => [s.npcId, s.disposition]),
     );
+    const statusByNpc = new Map(npcStates.map((s) => [s.npcId, s.status]));
     const currentPoiByNpc = new Map(
       npcStates.map((s) => [s.npcId, s.currentPoiId ?? null]),
     );
 
     const npcsPresent = sceneNpcs
       .filter((sn) => sn.npc)
+      .filter((sn) => (statusByNpc.get(sn.npc.id) ?? "alive") !== "dead")
       .map((sn) => ({
         id: sn.npc.id,
         name: sn.npc.name,
         title: sn.npc.title,
         race: sn.npc.race,
+        status: statusByNpc.get(sn.npc.id) ?? "alive",
         disposition: dispositionByNpc.get(sn.npc.id) ?? "neutral",
         presenceRole: sn.presenceRole,
         currentPoiId: currentPoiByNpc.get(sn.npc.id) ?? scene.poiId ?? null,
@@ -344,23 +352,21 @@ export class SceneContextService {
       sequence: e.sequence,
     }));
 
-    const partyKnowledge: SceneContext["partyKnowledge"] = partyKnowledgeRaw.map(
-      (k) => ({
+    const partyKnowledge: SceneContext["partyKnowledge"] =
+      partyKnowledgeRaw.map((k) => ({
         entityType: k.entityType,
         knowledgeKey: k.knowledgeKey,
         knowledgeValue: k.knowledgeValue,
-      }),
-    );
+      }));
 
     const worldLore: string | undefined = campaign?.worldLore ?? undefined;
 
-    const recentChronicles: SceneContext["recentChronicles"] = chroniclesRaw.map(
-      (c) => ({
+    const recentChronicles: SceneContext["recentChronicles"] =
+      chroniclesRaw.map((c) => ({
         title: c.title,
         content: c.content,
         significance: c.significance,
-      }),
-    );
+      }));
 
     let storyArc: SceneContext["storyArc"];
     if (arc) {
@@ -371,8 +377,8 @@ export class SceneContextService {
       };
     }
 
-    const availableLocations: SceneContext["availableLocations"] = connections.map(
-      (c) => ({
+    const availableLocations: SceneContext["availableLocations"] =
+      connections.map((c) => ({
         connectionId: c.id,
         toLocationId: c.toLocationId,
         toLocationName: c.toLocation?.name ?? "(?)",
@@ -380,8 +386,7 @@ export class SceneContextService {
         travelTime: c.travelTime ?? null,
         description: c.description ?? null,
         isLocked: c.isLocked,
-      }),
-    );
+      }));
 
     const availablePois: SceneContext["availablePois"] = availablePoisRaw
       .filter((poi) => poi.isKnownToParty)
@@ -398,8 +403,12 @@ export class SceneContextService {
       }));
 
     const currentInterlocutorNpc =
-      scene.currentInterlocutorNpc ??
-      sceneNpcs.find((sn) => sn.presenceRole === "interlocutor")?.npc ??
+      [
+        scene.currentInterlocutorNpc,
+        ...sceneNpcs
+          .filter((sn) => sn.presenceRole === "interlocutor")
+          .map((sn) => sn.npc),
+      ].find((npc) => npc && (statusByNpc.get(npc.id) ?? "alive") !== "dead") ??
       null;
     const currentInterlocutor = currentInterlocutorNpc
       ? {
@@ -412,20 +421,19 @@ export class SceneContextService {
       : null;
 
     const presentNpcSet = new Set(presentNpcIds);
-    const nearbyNpcs: SceneContext["stage"]["nearbyNpcs"] =
-      nearbyNpcStatesRaw
-        .filter((state) => state.npc)
-        .filter((state) => !presentNpcSet.has(state.npcId))
-        .filter((state) => state.status !== "dead")
-        .map((state) => ({
-          id: state.npc.id,
-          name: state.npc.name,
-          title: state.npc.title,
-          disposition: state.disposition,
-          status: state.status,
-          currentPoiId: state.currentPoiId ?? null,
-          currentPoiName: state.currentPoi?.name ?? null,
-        }));
+    const nearbyNpcs: SceneContext["stage"]["nearbyNpcs"] = nearbyNpcStatesRaw
+      .filter((state) => state.npc)
+      .filter((state) => !presentNpcSet.has(state.npcId))
+      .filter((state) => state.status !== "dead")
+      .map((state) => ({
+        id: state.npc.id,
+        name: state.npc.name,
+        title: state.npc.title,
+        disposition: state.disposition,
+        status: state.status,
+        currentPoiId: state.currentPoiId ?? null,
+        currentPoiName: state.currentPoi?.name ?? null,
+      }));
 
     const stage: SceneContext["stage"] = {
       location: scene.location
@@ -450,6 +458,9 @@ export class SceneContextService {
       npcsPresent,
       nearbyNpcs,
       currentInterlocutor,
+      movementLock: this.movementLockService.normalize(
+        scene.contextSnapshot?.movementLock,
+      ),
       mentionedEntities: [],
     };
 
@@ -543,6 +554,7 @@ export class SceneContextService {
         npcsPresent: [],
         nearbyNpcs: [],
         currentInterlocutor: null,
+        movementLock: null,
         mentionedEntities: [],
       },
       travelState: null,

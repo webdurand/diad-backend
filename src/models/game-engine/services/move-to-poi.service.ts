@@ -7,6 +7,10 @@ import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationPoiService } from "src/models/world/services/location-poi.service";
 import { SceneService } from "src/models/session/services/scene.service";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
+import {
+  MovementLockService,
+  type MovementLockState,
+} from "src/models/session/services/movement-lock.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
@@ -77,6 +81,7 @@ export interface AvailablePoi {
 export interface AvailablePoisEnvelope {
   location: { id: string; name: string; type: string } | null;
   currentPoi: AvailablePoi | null;
+  movementLock: MovementLockState | null;
   npcsPresent: Array<{
     id: string;
     name: string;
@@ -98,6 +103,7 @@ export class MoveToPoiService {
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly contextCache: SceneContextCacheService,
+    private readonly movementLockService: MovementLockService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(MoveToPoiService.name);
@@ -122,6 +128,19 @@ export class MoveToPoiService {
       };
     }
 
+    const activeLock = await this.movementLockService.getActiveForSession(
+      input.sessionId,
+    );
+    if (activeLock) {
+      return {
+        status: "blocked",
+        reason: "movement_lock",
+        message: this.movementLockService.buildBlockedMessage(
+          activeLock.movementLock,
+        ),
+      };
+    }
+
     const currentScene = await this.sceneService.getActive(input.sessionId);
     if (!currentScene?.locationId) {
       return {
@@ -142,7 +161,9 @@ export class MoveToPoiService {
       return {
         status: "not_found",
         targetPoiName: input.targetPoiName?.trim(),
-        suggestions: resolved.suggestions.map((poi) => this.toAvailablePoi(poi)),
+        suggestions: resolved.suggestions.map((poi) =>
+          this.toAvailablePoi(poi),
+        ),
         message: input.targetPoiName
           ? `Não encontrei "${input.targetPoiName}" como ponto local conhecido aqui.`
           : "Preciso de um ponto local mais específico.",
@@ -169,7 +190,9 @@ export class MoveToPoiService {
       return {
         status: "blocked",
         reason: "poi_locked",
-        currentPoi: currentScene.poi ? this.toAvailablePoi(currentScene.poi) : null,
+        currentPoi: currentScene.poi
+          ? this.toAvailablePoi(currentScene.poi)
+          : null,
         targetPoi: this.toAvailablePoi(targetPoi),
         message: `${targetPoi.name} está bloqueado por enquanto.`,
       };
@@ -234,7 +257,13 @@ export class MoveToPoiService {
   async listAvailablePois(sessionId: string): Promise<AvailablePoisEnvelope> {
     const currentScene = await this.sceneService.getActive(sessionId);
     if (!currentScene?.locationId) {
-      return { location: null, currentPoi: null, npcsPresent: [], pois: [] };
+      return {
+        location: null,
+        currentPoi: null,
+        movementLock: null,
+        npcsPresent: [],
+        pois: [],
+      };
     }
     const [pois, sceneNpcs] = await Promise.all([
       this.poiService.listKnownByLocation(currentScene.locationId),
@@ -251,7 +280,12 @@ export class MoveToPoiService {
             type: currentScene.location.type,
           }
         : null,
-      currentPoi: currentScene.poi ? this.toAvailablePoi(currentScene.poi) : null,
+      currentPoi: currentScene.poi
+        ? this.toAvailablePoi(currentScene.poi)
+        : null,
+      movementLock: this.movementLockService.normalize(
+        currentScene.contextSnapshot?.movementLock,
+      ),
       npcsPresent: sceneNpcs
         .filter((sceneNpc) => sceneNpc.npc)
         .map((sceneNpc) => ({

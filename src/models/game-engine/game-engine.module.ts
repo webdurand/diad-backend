@@ -137,6 +137,7 @@ import { MagicItemEntity } from "src/entities/magic-item.entity";
 import { LocationEntity } from "src/entities/location.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { MoveToLocationService } from "./services/move-to-location.service";
 import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
@@ -175,6 +176,7 @@ import { TravelTickService } from "./services/travel-tick.service";
       LocationEntity,
       LocationPoiEntity,
       LocationConnectionEntity,
+      SessionNpcStateEntity,
     ]),
     AuthModule,
     CharactersModule,

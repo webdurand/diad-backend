@@ -3,6 +3,7 @@ import {
   SceneEntity,
   SceneNpcEntity,
   LocationEntity,
+  LocationPoiEntity,
   LocationConnectionEntity,
   CampaignEntity,
   GameSessionEntity,
@@ -26,6 +27,8 @@ const CHARACTER_ID = "55555555-5555-4555-8555-555555555555";
 function buildService(opts: {
   scene?: SceneEntity | null;
   session?: GameSessionEntity | null;
+  sceneNpcs?: SceneNpcEntity[];
+  npcStates?: SessionNpcStateEntity[];
   personaThrows?: boolean;
 }): {
   service: SceneContextService;
@@ -34,8 +37,11 @@ function buildService(opts: {
   const sceneRepo = {
     findOne: jest.fn().mockResolvedValue(opts.scene ?? null),
   };
-  const sceneNpcRepo = { find: jest.fn().mockResolvedValue([]) };
+  const sceneNpcRepo = {
+    find: jest.fn().mockResolvedValue(opts.sceneNpcs ?? []),
+  };
   const locationRepo = { findOne: jest.fn().mockResolvedValue(null) };
+  const poiRepo = { find: jest.fn().mockResolvedValue([]) };
   const connectionRepo = { find: jest.fn().mockResolvedValue([]) };
   const campaignRepo = { findOne: jest.fn().mockResolvedValue(null) };
   const sessionRepo = {
@@ -46,7 +52,7 @@ function buildService(opts: {
   const relRepo = {} as unknown as Repository<NpcRelationshipEntity>;
   const questRepo = {} as unknown as Repository<QuestEntity>;
   const npcStateRepo = {
-    find: jest.fn().mockResolvedValue([]),
+    find: jest.fn().mockResolvedValue(opts.npcStates ?? []),
   } as unknown as Repository<SessionNpcStateEntity>;
   const arcStateRepo = {
     findOne: jest.fn().mockResolvedValue(null),
@@ -85,10 +91,14 @@ function buildService(opts: {
   } as unknown as PcPersonaService;
 
   const cache = new SceneContextCacheService();
+  const movementLockService = {
+    normalize: jest.fn((value: unknown) => value ?? null),
+  };
   const service = new SceneContextService(
     sceneRepo as unknown as Repository<SceneEntity>,
     sceneNpcRepo as unknown as Repository<SceneNpcEntity>,
     locationRepo as unknown as Repository<LocationEntity>,
+    poiRepo as unknown as Repository<LocationPoiEntity>,
     connectionRepo as unknown as Repository<LocationConnectionEntity>,
     campaignRepo as unknown as Repository<CampaignEntity>,
     sessionRepo as unknown as Repository<GameSessionEntity>,
@@ -102,6 +112,7 @@ function buildService(opts: {
     chronicle,
     persona,
     cache,
+    movementLockService as any,
   );
 
   return { service, personaMock };
@@ -124,6 +135,43 @@ function makeSession(characterIds: string[]): GameSessionEntity {
     id: SESSION_ID,
     characterIds,
   } as unknown as GameSessionEntity;
+}
+
+function makeNpc(id: string, name: string): NpcEntity {
+  return {
+    id,
+    name,
+    title: undefined,
+    race: "Humano",
+    personalityBig5: {},
+    knowledgeScope: [],
+  } as unknown as NpcEntity;
+}
+
+function makeSceneNpc(
+  npc: NpcEntity,
+  presenceRole: "present" | "interlocutor" | "companion" = "present",
+): SceneNpcEntity {
+  return {
+    sceneId: SCENE_ID,
+    npcId: npc.id,
+    npc,
+    presenceRole,
+  } as unknown as SceneNpcEntity;
+}
+
+function makeNpcState(
+  npc: NpcEntity,
+  status: "alive" | "dead" | "missing" | "unknown",
+): SessionNpcStateEntity {
+  return {
+    gameSessionId: SESSION_ID,
+    npcId: npc.id,
+    npc,
+    status,
+    disposition: "neutral",
+    currentPoiId: undefined,
+  } as unknown as SessionNpcStateEntity;
 }
 
 describe("SceneContextService — playerCharacter injection (Spec 018)", () => {
@@ -178,5 +226,32 @@ describe("SceneContextService — playerCharacter injection (Spec 018)", () => {
     const { service } = buildService({ scene: null });
     const ctx = await service.assembleContext(SCENE_ID);
     expect(ctx.playerCharacter).toBeNull();
+  });
+
+  it("não injeta NPC morto como presente ou interlocutor", async () => {
+    const deadNpc = makeNpc("npc-dead", "Vitorino");
+    const aliveNpc = makeNpc("npc-alive", "Gaudério");
+    const scene = {
+      ...makeScene(),
+      currentInterlocutorNpc: deadNpc,
+    } as unknown as SceneEntity;
+    const { service } = buildService({
+      scene,
+      session: makeSession([CHARACTER_ID]),
+      sceneNpcs: [
+        makeSceneNpc(deadNpc, "interlocutor"),
+        makeSceneNpc(aliveNpc, "present"),
+      ],
+      npcStates: [
+        makeNpcState(deadNpc, "dead"),
+        makeNpcState(aliveNpc, "alive"),
+      ],
+    });
+
+    const ctx = await service.assembleContext(SCENE_ID);
+
+    expect(ctx.npcsPresent.map((npc) => npc.name)).toEqual(["Gaudério"]);
+    expect(ctx.stage.npcsPresent.map((npc) => npc.name)).toEqual(["Gaudério"]);
+    expect(ctx.stage.currentInterlocutor).toBeNull();
   });
 });
