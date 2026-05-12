@@ -26,6 +26,7 @@ describe("CharacterSheetService", () => {
     resetIdCounter();
     repos = {
       character: createMockRepository(),
+      partyMember: createMockRepository(),
       charClass: createMockRepository(),
       charAbility: createMockRepository(),
       charSkill: createMockRepository(),
@@ -46,6 +47,7 @@ describe("CharacterSheetService", () => {
 
     service = new CharacterSheetService(
       repos.character as any,
+      repos.partyMember as any,
       repos.charClass as any,
       repos.charAbility as any,
       repos.charSkill as any,

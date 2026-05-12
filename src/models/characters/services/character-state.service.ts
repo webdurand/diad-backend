@@ -11,11 +11,12 @@ import {
   CharacterClassEntity,
   CharacterAbilityScoreEntity,
   CharacterLevelUpEntity,
+  CampaignPartyMemberEntity,
 } from "src/entities";
 import { XP_THRESHOLDS, normalizeClassSlug } from "src/shared/srd-constants";
 import { getAbilityModifier } from "src/shared/srd-utils";
 import {
-  ensureCharacterOwnership,
+  ensureCharacterWriteAccess,
   getCharacterState,
 } from "src/shared/character-guard";
 
@@ -101,13 +102,20 @@ export class CharacterStateService {
     private readonly charAbilityRepo: Repository<CharacterAbilityScoreEntity>,
     @InjectRepository(CharacterLevelUpEntity)
     private readonly charLevelUpRepo: Repository<CharacterLevelUpEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
   ) {}
 
   private async ensureOwnership(
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
+    return ensureCharacterWriteAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {

@@ -554,10 +554,18 @@ export class StartEncounterFromNarrativeService {
 
     // Resolver ref (npcId | characterId) → participantId.
     const npcIdToParticipantId = new Map<string, string>();
+    const participantsByMonsterId = new Map<string, EncounterParticipantEntity[]>();
+    for (const p of participants) {
+      if (p.type === "npc" && p.monsterId) {
+        const list = participantsByMonsterId.get(p.monsterId) ?? [];
+        list.push(p);
+        participantsByMonsterId.set(p.monsterId, list);
+      }
+    }
     for (const np of npcs) {
-      const part = participants.find(
-        (p) => p.type === "npc" && p.monsterId === np.monsterId,
-      );
+      const part = np.monsterId
+        ? participantsByMonsterId.get(np.monsterId)?.shift()
+        : undefined;
       if (part) npcIdToParticipantId.set(np.id, part.id);
     }
     const charIdToParticipantId = new Map<string, string>();

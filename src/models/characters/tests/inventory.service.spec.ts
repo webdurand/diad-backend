@@ -23,6 +23,7 @@ describe("InventoryService", () => {
     resetIdCounter();
     repos = {
       character: createMockRepository(),
+      partyMember: createMockRepository(),
       charEquip: createMockRepository(),
       charMagicItem: createMockRepository(),
       charState: createMockRepository(),
@@ -37,6 +38,7 @@ describe("InventoryService", () => {
 
     service = new InventoryService(
       repos.character as any,
+      repos.partyMember as any,
       repos.charEquip as any,
       repos.charMagicItem as any,
       repos.charState as any,

@@ -17,6 +17,7 @@ describe("CharacterStateService", () => {
   let charClassRepo: ReturnType<typeof createMockRepository>;
   let charAbilityRepo: ReturnType<typeof createMockRepository>;
   let charLevelUpRepo: ReturnType<typeof createMockRepository>;
+  let partyMemberRepo: ReturnType<typeof createMockRepository>;
 
   beforeEach(() => {
     resetIdCounter();
@@ -25,6 +26,7 @@ describe("CharacterStateService", () => {
     charClassRepo = createMockRepository();
     charAbilityRepo = createMockRepository();
     charLevelUpRepo = createMockRepository();
+    partyMemberRepo = createMockRepository();
 
     service = new CharacterStateService(
       characterRepo as any,
@@ -32,6 +34,7 @@ describe("CharacterStateService", () => {
       charClassRepo as any,
       charAbilityRepo as any,
       charLevelUpRepo as any,
+      partyMemberRepo as any,
     );
   });
 

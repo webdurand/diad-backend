@@ -23,6 +23,7 @@ describe("ActionsService", () => {
     resetIdCounter();
     repos = {
       character: createMockRepository(),
+      partyMember: createMockRepository(),
       charClass: createMockRepository(),
       charAbility: createMockRepository(),
       charProf: createMockRepository(),
@@ -36,6 +37,7 @@ describe("ActionsService", () => {
 
     service = new ActionsService(
       repos.character as any,
+      repos.partyMember as any,
       repos.charClass as any,
       repos.charAbility as any,
       repos.charProf as any,

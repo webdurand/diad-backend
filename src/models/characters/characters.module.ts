@@ -39,6 +39,7 @@ import {
   EncounterEntity,
   RestEventTemplateEntity,
   GameClockEntity,
+  CampaignPartyMemberEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { CombatActionsModule } from "../combat-actions/combat-actions.module";
@@ -96,6 +97,7 @@ import { PcPersonaService } from "./services/pc-persona.service";
       EncounterEntity,
       RestEventTemplateEntity,
       GameClockEntity,
+      CampaignPartyMemberEntity,
     ]),
     AuthModule,
     CombatActionsModule,

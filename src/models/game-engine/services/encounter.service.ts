@@ -9,13 +9,14 @@ import {
   forwardRef,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { MonsterEntity } from "src/entities/monster.entity";
 import { CharacterEntity } from "src/entities/character.entity";
 import { EquipmentEntity } from "src/entities/equipment.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
+import { CampaignPartyMemberEntity } from "src/entities/campaign-party-member.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
@@ -99,6 +100,8 @@ export class EncounterService {
     private readonly monsterRepo: Repository<MonsterEntity>,
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
     @InjectRepository(SessionNpcStateEntity)
     private readonly npcStateRepo: Repository<SessionNpcStateEntity>,
     private readonly diceService: DiceService,
@@ -151,6 +154,11 @@ export class EncounterService {
         } catch {}
       }
 
+      await this.addActiveCompanionsToEncounterRoster(
+        session.campaignId ?? undefined,
+        charIds,
+      );
+
       // Add all unique characters with their respective owner IDs.
       // Iterate in deterministic order for snapshot stability.
       // Uses the internal helper to bypass auth/status guards — we already
@@ -175,6 +183,27 @@ export class EncounterService {
     }
 
     return this.getById(saved.id);
+  }
+
+  private async addActiveCompanionsToEncounterRoster(
+    campaignId: string | undefined,
+    characterIds: Set<string>,
+  ): Promise<void> {
+    if (!campaignId || characterIds.size === 0) return;
+    const ownerCharacterIds = Array.from(characterIds);
+    const activeMembers = await this.partyMemberRepo.find({
+      where: {
+        campaignId,
+        ownerCharacterId: In(ownerCharacterIds),
+        state: "active",
+      },
+      select: ["companionCharacterId"],
+    });
+    for (const member of activeMembers) {
+      if (member.companionCharacterId) {
+        characterIds.add(member.companionCharacterId);
+      }
+    }
   }
 
   /**
@@ -231,12 +260,20 @@ export class EncounterService {
     const charIds = pcParticipants.map((p) => p.characterId!);
     const characters = await this.characterRepo
       .createQueryBuilder("c")
-      .select(["c.id", "c.userId"])
+      .select(["c.id", "c.userId", "c.ownerType", "c.companionTemplateId"])
       .where("c.id IN (:...ids)", { ids: charIds })
       .getMany();
     const ownerMap = new Map<string, string>();
+    const companionMeta = new Map<
+      string,
+      { isCompanion: boolean; companionTemplateId: string | null }
+    >();
     for (const c of characters) {
       if (c.userId) ownerMap.set(c.id, c.userId);
+      companionMeta.set(c.id, {
+        isCompanion: c.ownerType === "companion",
+        companionTemplateId: c.companionTemplateId ?? null,
+      });
     }
 
     // Se tem campanha, complementar com CampaignPlayer
@@ -297,6 +334,9 @@ export class EncounterService {
           // Spec 012: expor spellSlots do sheet pro harness e pra UI validar
           // slot-consumed invariants sem precisar GET /sheet em paralelo.
           (p as any).spellSlots = sheet.spellSlots ?? [];
+          const meta = companionMeta.get(p.characterId!);
+          (p as any).isCompanion = meta?.isCompanion === true;
+          (p as any).companionTemplateId = meta?.companionTemplateId ?? null;
           // Spec 012 — Heroic Inspiration (persistente na ficha).
           (p as any).hasInspiration = await this.stateService
             .getInspiration(p.characterId!)
@@ -533,6 +573,7 @@ export class EncounterService {
       conditions: [],
       isDefeated: false,
       faction: "ally",
+      controlledBy: "pc",
     });
     return this.participantRepo.save(participant);
   }

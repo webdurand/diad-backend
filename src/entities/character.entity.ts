@@ -23,6 +23,9 @@ import { CharacterLevelUpEntity } from "./character-level-up.entity";
 import { CharacterFeatureEntity } from "./character-feature.entity";
 import { CharacterOriginEntity } from "./character-origin.entity";
 import { CompSourceEntity } from "./comp-source.entity";
+import { CompanionTemplateEntity } from "./companion-template.entity";
+
+export type CharacterOwnerType = "pc" | "companion";
 
 @Entity("characters")
 export class CharacterEntity {
@@ -45,6 +48,21 @@ export class CharacterEntity {
   @Index()
   @Column({ name: "user_id", type: "uuid" })
   userId: string;
+
+  @Index()
+  @Column({ name: "owner_type", type: "varchar", length: 16, default: "pc" })
+  ownerType: CharacterOwnerType;
+
+  @ManyToOne(() => CompanionTemplateEntity, {
+    nullable: true,
+    onDelete: "RESTRICT",
+  })
+  @JoinColumn({ name: "companion_template_id" })
+  companionTemplate?: CompanionTemplateEntity | null;
+
+  @Index()
+  @Column({ name: "companion_template_id", type: "uuid", nullable: true })
+  companionTemplateId?: string | null;
 
   @ManyToOne(() => CompSourceEntity, { nullable: true, eager: true })
   @JoinColumn({ name: "source_id" })

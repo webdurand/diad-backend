@@ -61,6 +61,7 @@ interface MaterializeBody {
   sceneId?: string;
   monsterSlugs: string[];
   partyAvgLevel: number;
+  partySize?: number;
   difficulty: Difficulty;
   biome?: string;
   reasonChain?: string[];
@@ -225,6 +226,7 @@ export class RandomEncounterController {
       monsterSlugs: body.monsterSlugs,
       ownerUserId,
       partyAvgLevel: body.partyAvgLevel,
+      partySize: body.partySize,
       difficulty: body.difficulty,
       biome: body.biome,
       reasonChain: body.reasonChain,

@@ -69,6 +69,7 @@ export class EncounterSnapshotService {
     // Espelha encounter.service.ts:enrichPcParticipants() — se mexer aqui,
     // mexer lá também (até extrair pra um helper compartilhado).
     const pcOverlay = await this.buildPcSheetOverlay(participants);
+    const companionMeta = await this.buildPcCompanionMeta(participants);
 
     const currentTurnParticipantId =
       encounter.turnOrder[encounter.currentTurnIndex] ?? "";
@@ -98,6 +99,8 @@ export class EncounterSnapshotService {
         return {
           id: p.id,
           type: p.type,
+          isCompanion: companionMeta.get(p.id)?.isCompanion,
+          companionTemplateId: companionMeta.get(p.id)?.companionTemplateId,
           faction: p.faction,
           displayName: p.displayName,
           controlledBy: p.controlledBy ?? "pc",
@@ -319,6 +322,34 @@ export class EncounterSnapshotService {
       }),
     );
     return overlay;
+  }
+
+  private async buildPcCompanionMeta(
+    participants: EncounterParticipantEntity[],
+  ): Promise<
+    Map<string, { isCompanion: boolean; companionTemplateId: string | null }>
+  > {
+    const meta = new Map<
+      string,
+      { isCompanion: boolean; companionTemplateId: string | null }
+    >();
+    const pcs = participants.filter((p) => p.type === "pc" && p.characterId);
+    if (pcs.length === 0) return meta;
+    const charIds = pcs.map((p) => p.characterId!);
+    const characters = await this.characterRepo
+      .createQueryBuilder("c")
+      .select(["c.id", "c.ownerType", "c.companionTemplateId"])
+      .where("c.id IN (:...ids)", { ids: charIds })
+      .getMany();
+    const byId = new Map(characters.map((c) => [c.id, c]));
+    for (const p of pcs) {
+      const character = byId.get(p.characterId!);
+      meta.set(p.id, {
+        isCompanion: character?.ownerType === "companion",
+        companionTemplateId: character?.companionTemplateId ?? null,
+      });
+    }
+    return meta;
   }
 }
 

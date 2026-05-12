@@ -38,6 +38,7 @@ import {
   SessionNpcStateEntity,
   SessionFactionStateEntity,
   SessionStoryArcStateEntity,
+  CompanionTemplateEntity,
 } from "src/entities";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { QuestDefeatListener } from "src/common/event-bus/listeners/quest-defeat.listener";
@@ -67,6 +68,8 @@ import { SessionFactionStateService } from "./services/session-faction-state.ser
 import { SessionStoryArcStateService } from "./services/session-story-arc-state.service";
 import { NpcWealthService } from "./services/npc-wealth.service";
 import { NpcWealthController } from "./npc-wealth.controller";
+import { CompanionTemplatesController } from "./companion-templates.controller";
+import { CompanionTemplateService } from "./services/companion-template.service";
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 
 @Module({
@@ -108,6 +111,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       EncounterEntity,
       EncounterParticipantEntity,
       EventListenerProcessedEntity,
+      CompanionTemplateEntity,
     ]),
     AuthModule,
     forwardRef(() => AiProxyModule),
@@ -118,6 +122,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     WorldSynthController,
     SessionScopedWorldController,
     NpcWealthController,
+    CompanionTemplatesController,
   ],
   providers: [
     CampaignService,
@@ -138,6 +143,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionFactionStateService,
     SessionStoryArcStateService,
     NpcWealthService,
+    CompanionTemplateService,
     // Spec 027 D3 — slug→UUID pipe pra `/campaigns/:id/*`
     CampaignIdPipe,
     QuestDefeatListener,
@@ -163,6 +169,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionFactionStateService,
     SessionStoryArcStateService,
     NpcWealthService,
+    CompanionTemplateService,
   ],
 })
 export class WorldModule implements OnModuleInit {

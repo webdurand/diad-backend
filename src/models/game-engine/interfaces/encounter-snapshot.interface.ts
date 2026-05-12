@@ -52,6 +52,8 @@ export interface TileEffectSnapshot {
 export interface SnapshotParticipant {
   id: string;
   type: "pc" | "monster" | "npc";
+  isCompanion?: boolean;
+  companionTemplateId?: string | null;
   faction: "ally" | "enemy" | "neutral";
   displayName: string;
   controlledBy: "pc" | "ai" | "dm";

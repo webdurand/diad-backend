@@ -14,6 +14,8 @@ import { WorldModule } from "./models/world/world.module";
 import { SessionModule } from "./models/session/session.module";
 import { AiProxyModule } from "./models/ai-proxy/ai-proxy.module";
 import { AiDmModule } from "./models/ai-dm/ai-dm.module";
+import { PartiesModule } from "./models/parties/parties.module";
+import { CompanionsModule } from "./models/companions/companions.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { EventBusHttpModule } from "./models/event-bus/event-bus.module";
 
@@ -36,6 +38,8 @@ import { EventBusHttpModule } from "./models/event-bus/event-bus.module";
     SessionModule,
     AiProxyModule,
     AiDmModule,
+    PartiesModule,
+    CompanionsModule,
     RealtimeModule,
     EventBusHttpModule,
   ],

@@ -38,6 +38,7 @@ describe("CharactersService", () => {
       classStartingEquip: createMockRepository(),
       level: createMockRepository(),
       compSource: createMockRepository(),
+      partyMember: createMockRepository(),
     };
 
     mockManager = {
@@ -76,24 +77,40 @@ describe("CharactersService", () => {
       repos.classStartingEquip as any,
       repos.level as any,
       repos.compSource as any,
+      repos.partyMember as any,
     );
   });
 
   describe("listByUser", () => {
-    it("should return characters ordered by createdAt DESC", async () => {
+    it("should return only player characters ordered by createdAt DESC", async () => {
       const chars = [
         makeCharacter({ name: "A" }),
         makeCharacter({ id: "char-2", name: "B" }),
       ];
-      repos.character.find!.mockResolvedValue(chars);
-      const result = await service.listByUser("user-1");
-      expect(result).toHaveLength(2);
-      expect(repos.character.find).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { userId: "user-1" },
-          order: { createdAt: "DESC" },
-        }),
+      const queryBuilder = {
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(chars),
+      };
+      repos.character.createQueryBuilder!.mockReturnValueOnce(
+        queryBuilder as any,
       );
+
+      const result = await service.listByUser("user-1");
+
+      expect(result).toHaveLength(2);
+      expect(queryBuilder.where).toHaveBeenCalledWith("c.userId = :userId", {
+        userId: "user-1",
+      });
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        "c.ownerType = :ownerType",
+        { ownerType: "pc" },
+      );
+      expect(queryBuilder.orderBy).toHaveBeenCalledWith("c.createdAt", "DESC");
     });
   });
 

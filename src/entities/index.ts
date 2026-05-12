@@ -53,6 +53,8 @@ import { WeaponMasteryPropertyEntity } from "./weapon-mastery-property.entity";
 import { WeaponPropertyEntity } from "./weapon-property.entity";
 import { UserEntity } from "./user.entity";
 import { CharacterEntity } from "./character.entity";
+import { CompanionTemplateEntity } from "./companion-template.entity";
+import { CampaignPartyMemberEntity } from "./campaign-party-member.entity";
 import { GameSessionEntity } from "./game-session.entity";
 import { EncounterEntity } from "./encounter.entity";
 import { EncounterParticipantEntity } from "./encounter-participant.entity";
@@ -166,6 +168,8 @@ export {
   WeaponPropertyEntity,
   UserEntity,
   CharacterEntity,
+  CompanionTemplateEntity,
+  CampaignPartyMemberEntity,
   GameSessionEntity,
   EncounterEntity,
   EncounterParticipantEntity,
@@ -275,6 +279,8 @@ export const ENTITIES = [
   WeaponPropertyEntity,
   UserEntity,
   CharacterEntity,
+  CompanionTemplateEntity,
+  CampaignPartyMemberEntity,
   GameSessionEntity,
   EncounterEntity,
   EncounterParticipantEntity,

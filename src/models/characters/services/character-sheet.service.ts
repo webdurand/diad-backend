@@ -14,6 +14,7 @@ import {
   CharacterLevelUpEntity,
   CharacterFeatureEntity,
   CharacterOriginEntity,
+  CampaignPartyMemberEntity,
   LevelEntity,
   ClassSavingThrowEntity,
   ClassProficiencyEntity,
@@ -37,6 +38,7 @@ import {
 } from "src/shared/srd-utils";
 import type { EquipmentArmorClass } from "src/shared/equipment-types";
 import { classifyFeatureForActions } from "./feature-classification";
+import { ensureCharacterReadAccess } from "src/shared/character-guard";
 import {
   renderFeatureDescription,
   extractNarrativeDescriptor,
@@ -519,6 +521,8 @@ export class CharacterSheetService {
   constructor(
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
     @InjectRepository(CharacterClassEntity)
     private readonly charClassRepo: Repository<CharacterClassEntity>,
     @InjectRepository(CharacterAbilityScoreEntity)
@@ -557,12 +561,12 @@ export class CharacterSheetService {
     userId: string,
     characterId: string,
   ): Promise<CharacterSheet> {
-    const character = await this.characterRepo.findOne({
-      where: { id: characterId, userId },
-    });
-    if (!character) {
-      throw new NotFoundException("Personagem nao encontrado.");
-    }
+    const character = await ensureCharacterReadAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
 
     // Load all related data in parallel
     const [

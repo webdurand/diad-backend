@@ -5,11 +5,13 @@ import {
   CharacterEntity,
   CharacterClassEntity,
   CharacterStateEntity,
+  CampaignPartyMemberEntity,
   ReactionDefaultEntity,
 } from "src/entities";
 import type { ReactionState } from "src/entities/reaction-default.entity";
 import {
-  ensureCharacterOwnership,
+  ensureCharacterReadAccess,
+  ensureCharacterWriteAccess,
   getCharacterState,
 } from "src/shared/character-guard";
 
@@ -34,6 +36,8 @@ export class ReactionPrefsService {
   constructor(
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
     @InjectRepository(CharacterClassEntity)
     private readonly charClassRepo: Repository<CharacterClassEntity>,
     @InjectRepository(CharacterStateEntity)
@@ -46,7 +50,12 @@ export class ReactionPrefsService {
     userId: string,
     characterId: string,
   ): Promise<ReactionPrefEntry[]> {
-    await ensureCharacterOwnership(this.characterRepo, userId, characterId);
+    await ensureCharacterReadAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
     const state = await getCharacterState(this.stateRepo, characterId);
     const overrides = (state.reaction_prefs ?? {}) as Record<
       string,
@@ -105,7 +114,12 @@ export class ReactionPrefsService {
         `Estado de reaction inválido: "${state}". Use auto|ask|off.`,
       );
     }
-    await ensureCharacterOwnership(this.characterRepo, userId, characterId);
+    await ensureCharacterWriteAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
     const stateRow = await getCharacterState(this.stateRepo, characterId);
     const prefs = (stateRow.reaction_prefs ?? {}) as Record<
       string,

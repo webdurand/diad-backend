@@ -11,12 +11,16 @@ import {
   CharacterMagicItemEntity,
   CharacterStateEntity,
   CharacterAbilityScoreEntity,
+  CampaignPartyMemberEntity,
   EquipmentEntity,
   MagicItemEntity,
 } from "src/entities";
 import { EquipmentSourceEnum } from "src/entities/enums";
 import { CharacterStateService } from "./character-state.service";
-import { ensureCharacterOwnership } from "src/shared/character-guard";
+import {
+  ensureCharacterReadAccess,
+  ensureCharacterWriteAccess,
+} from "src/shared/character-guard";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -150,6 +154,8 @@ export class InventoryService {
   constructor(
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
     @InjectRepository(CharacterEquipmentEntity)
     private readonly charEquipRepo: Repository<CharacterEquipmentEntity>,
     @InjectRepository(CharacterMagicItemEntity)
@@ -167,11 +173,28 @@ export class InventoryService {
 
   // ---- Helpers ----
 
-  private async ensureOwnership(
+  private async ensureReadAccess(
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
+    return ensureCharacterReadAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
+  }
+
+  private async ensureWriteAccess(
+    userId: string,
+    characterId: string,
+  ): Promise<CharacterEntity> {
+    return ensureCharacterWriteAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
   }
 
   private async getStrScore(characterId: string): Promise<number> {
@@ -230,7 +253,7 @@ export class InventoryService {
     userId: string,
     characterId: string,
   ): Promise<InventoryResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureReadAccess(userId, characterId);
 
     const [items, magicItems, state, strScore] = await Promise.all([
       this.charEquipRepo.find({ where: { character_id: characterId } }),
@@ -266,7 +289,7 @@ export class InventoryService {
     characterId: string,
     dto: AddItemDto,
   ): Promise<InventoryItemResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const equipment = await this.equipmentRepo.findOneBy(
       UUID_RE.test(dto.equipmentId)
@@ -311,7 +334,7 @@ export class InventoryService {
     itemId: string,
     dto: UpdateItemDto,
   ): Promise<InventoryItemResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const item = await this.charEquipRepo.findOne({
       where: { id: itemId, character_id: characterId },
@@ -338,7 +361,7 @@ export class InventoryService {
     characterId: string,
     itemId: string,
   ): Promise<void> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const item = await this.charEquipRepo.findOne({
       where: { id: itemId, character_id: characterId },
@@ -357,7 +380,7 @@ export class InventoryService {
     characterId: string,
     dto: GoldUpdateDto,
   ): Promise<GoldResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const state = await this.charStateRepo.findOne({
       where: { character_id: characterId },
@@ -388,7 +411,7 @@ export class InventoryService {
     itemId: string,
     dto: EquipToggleDto,
   ): Promise<InventoryItemResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const item = await this.charEquipRepo.findOne({
       where: { id: itemId, character_id: characterId },
@@ -490,7 +513,7 @@ export class InventoryService {
     itemId: string,
     dto: SetHandDto,
   ): Promise<InventoryItemResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const item = await this.charEquipRepo.findOne({
       where: { id: itemId, character_id: characterId },
@@ -618,7 +641,7 @@ export class InventoryService {
     characterId: string,
     dto: AddMagicItemDto,
   ): Promise<MagicItemInventoryResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const magicItem = await this.magicItemRepo.findOneBy({
       id: dto.magicItemId,
@@ -645,7 +668,7 @@ export class InventoryService {
     characterId: string,
     itemId: string,
   ): Promise<void> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const item = await this.charMagicItemRepo.findOne({
       where: { id: itemId, character_id: characterId },
@@ -663,7 +686,7 @@ export class InventoryService {
     itemId: string,
     dto: AttuneToggleDto,
   ): Promise<MagicItemInventoryResponse> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const item = await this.charMagicItemRepo.findOne({
       where: { id: itemId, character_id: characterId },
@@ -709,7 +732,7 @@ export class InventoryService {
     characterId: string,
     itemId: string,
   ): Promise<UseItemResult> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const item = await this.charEquipRepo.findOne({
       where: { id: itemId, character_id: characterId },

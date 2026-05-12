@@ -19,6 +19,7 @@ export interface MaterializeRandomEncounterInput {
   monsterSlugs: string[];
   ownerUserId: string;
   partyAvgLevel: number;
+  partySize?: number;
   difficulty: "low" | "moderate" | "high";
   biome?: string;
   reasonChain?: string[];
@@ -115,6 +116,7 @@ export class RandomEncounterMaterializerService {
           npcIds,
           biome: input.biome ?? null,
           difficulty: input.difficulty,
+          partySize: input.partySize ?? 1,
           reasonChain: input.reasonChain ?? [],
         },
         narrativeDescriptor: this.buildTrigger(input),

@@ -36,6 +36,7 @@ describe("LevelUpService", () => {
     resetIdCounter();
     repos = {
       character: createMockRepository(),
+      partyMember: createMockRepository(),
       charClass: createMockRepository(),
       charAbility: createMockRepository(),
       state: createMockRepository(),
@@ -68,6 +69,7 @@ describe("LevelUpService", () => {
     service = new LevelUpService(
       dataSource as any,
       repos.character as any,
+      repos.partyMember as any,
       repos.charClass as any,
       repos.charAbility as any,
       repos.state as any,

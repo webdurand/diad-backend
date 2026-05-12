@@ -21,6 +21,7 @@ describe("SpellService", () => {
     resetIdCounter();
     repos = {
       character: createMockRepository(),
+      partyMember: createMockRepository(),
       charClass: createMockRepository(),
       charAbility: createMockRepository(),
       charSpell: createMockRepository(),
@@ -33,6 +34,7 @@ describe("SpellService", () => {
 
     service = new SpellService(
       repos.character as any,
+      repos.partyMember as any,
       repos.charClass as any,
       repos.charAbility as any,
       repos.charSpell as any,

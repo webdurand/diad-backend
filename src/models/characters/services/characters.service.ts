@@ -29,6 +29,8 @@ import {
   AlignmentEntity,
   LevelEntity,
   CompSourceEntity,
+  CampaignPartyMemberEntity,
+  CompanionTemplateEntity,
 } from "src/entities";
 import {
   CharacterProficiencySourceEnum,
@@ -37,6 +39,10 @@ import {
   SpellStatusEnum,
 } from "src/entities/enums";
 import { getAbilityModifier } from "src/shared/srd-utils";
+import {
+  ensureCharacterReadAccess,
+  ensureCharacterWriteAccess,
+} from "src/shared/character-guard";
 
 interface CharacterChoicesData {
   sourceCode?: string;
@@ -86,6 +92,8 @@ interface CreateCharacterInput {
   name: string;
   data: Record<string, unknown>;
   choices?: Record<string, unknown>;
+  ownerType?: "pc" | "companion";
+  companionTemplateId?: string | null;
 }
 
 interface UpdateCharacterInput {
@@ -471,6 +479,8 @@ export class CharactersService {
     private readonly levelRepository: Repository<LevelEntity>,
     @InjectRepository(CompSourceEntity)
     private readonly compSourceRepository: Repository<CompSourceEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepository: Repository<CampaignPartyMemberEntity>,
   ) {}
 
   async listByUser(userId: string): Promise<CharacterEntity[]> {
@@ -489,6 +499,7 @@ export class CharactersService {
       .leftJoin("c.character_skills", "cs")
       .leftJoin("cs.skill", "skill")
       .where("c.userId = :userId", { userId })
+      .andWhere("c.ownerType = :ownerType", { ownerType: "pc" })
       .orderBy("c.createdAt", "DESC")
       .addOrderBy("cc.order", "ASC")
       .select([
@@ -534,13 +545,12 @@ export class CharactersService {
   }
 
   async getById(userId: string, id: string): Promise<CharacterEntity> {
-    const character = await this.characterRepository.findOne({
-      where: { id, userId },
-    });
-    if (!character) {
-      throw new NotFoundException("Personagem nao encontrado.");
-    }
-    return character;
+    return ensureCharacterReadAccess(
+      this.characterRepository,
+      userId,
+      id,
+      this.partyMemberRepository,
+    );
   }
 
   async create(input: CreateCharacterInput): Promise<CharacterEntity> {
@@ -723,6 +733,8 @@ export class CharactersService {
         userId: input.userId,
         name: input.name.trim(),
         data: input.data,
+        ownerType: input.ownerType ?? "pc",
+        companionTemplateId: input.companionTemplateId ?? null,
         sourceId: sourceEntity?.id ?? undefined,
       });
       const saved = await manager.save(CharacterEntity, character);
@@ -1003,12 +1015,39 @@ export class CharactersService {
     });
   }
 
+  async createCompanion(
+    template: CompanionTemplateEntity,
+    build: Record<string, unknown>,
+    ownerCharacter: CharacterEntity,
+  ): Promise<CharacterEntity> {
+    const data = this.readRecord(build.data) ?? build;
+    const choices = this.readRecord(build.choices);
+    const name =
+      typeof build.name === "string" && build.name.trim()
+        ? build.name.trim()
+        : template.name;
+
+    return this.create({
+      userId: ownerCharacter.userId,
+      name,
+      data,
+      ...(choices ? { choices } : {}),
+      ownerType: "companion",
+      companionTemplateId: template.id,
+    });
+  }
+
   async update(
     userId: string,
     id: string,
     input: UpdateCharacterInput,
   ): Promise<CharacterEntity> {
-    const character = await this.getById(userId, id);
+    const character = await ensureCharacterWriteAccess(
+      this.characterRepository,
+      userId,
+      id,
+      this.partyMemberRepository,
+    );
     if (input.name !== undefined) {
       character.name = input.name.trim();
     }
@@ -1016,8 +1055,19 @@ export class CharactersService {
   }
 
   async remove(userId: string, id: string): Promise<void> {
-    const character = await this.getById(userId, id);
+    const character = await ensureCharacterWriteAccess(
+      this.characterRepository,
+      userId,
+      id,
+      this.partyMemberRepository,
+    );
     await this.characterRepository.remove(character);
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
   }
 
   /**

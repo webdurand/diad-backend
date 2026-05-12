@@ -12,6 +12,7 @@ import {
   CharacterSpellEntity,
   CharacterStateEntity,
   CharacterLevelUpEntity,
+  CampaignPartyMemberEntity,
   RestEventTemplateEntity,
   SpellEntity,
   SpellClassEntity,
@@ -33,7 +34,8 @@ import {
 } from "src/shared/srd-constants";
 import { getAbilityModifier } from "src/shared/srd-utils";
 import {
-  ensureCharacterOwnership,
+  ensureCharacterReadAccess,
+  ensureCharacterWriteAccess,
   getCharacterState,
 } from "src/shared/character-guard";
 import {
@@ -152,6 +154,8 @@ export class SpellService {
   constructor(
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
     @InjectRepository(CharacterClassEntity)
     private readonly charClassRepo: Repository<CharacterClassEntity>,
     @InjectRepository(CharacterAbilityScoreEntity)
@@ -228,11 +232,28 @@ export class SpellService {
 
   // ---- Helpers ----
 
-  private async ensureOwnership(
+  private async ensureReadAccess(
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-    return ensureCharacterOwnership(this.characterRepo, userId, characterId);
+    return ensureCharacterReadAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
+  }
+
+  private async ensureWriteAccess(
+    userId: string,
+    characterId: string,
+  ): Promise<CharacterEntity> {
+    return ensureCharacterWriteAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+    );
   }
 
   private async getState(characterId: string): Promise<CharacterStateEntity> {
@@ -374,7 +395,7 @@ export class SpellService {
     characterId: string,
     dto: PreparedSpellsDto,
   ): Promise<PreparedSpellsResult> {
-    const character = await this.ensureOwnership(userId, characterId);
+    const character = await this.ensureWriteAccess(userId, characterId);
 
     const [charClasses, charAbilities, charSpells] = await Promise.all([
       this.charClassRepo.find({
@@ -593,7 +614,7 @@ export class SpellService {
     userId: string,
     characterId: string,
   ): Promise<AvailableSpellsResult[]> {
-    const character = await this.ensureOwnership(userId, characterId);
+    const character = await this.ensureReadAccess(userId, characterId);
 
     const [charClasses, charAbilities, charSpells] = await Promise.all([
       this.charClassRepo.find({
@@ -747,7 +768,7 @@ export class SpellService {
     userId: string,
     characterId: string,
   ): Promise<ManageableSpellsResult[]> {
-    const character = await this.ensureOwnership(userId, characterId);
+    const character = await this.ensureReadAccess(userId, characterId);
 
     const [charClasses, charAbilities, charSpells] = await Promise.all([
       this.charClassRepo.find({
@@ -846,7 +867,7 @@ export class SpellService {
     characterId: string,
     dto: LearnSpellDto,
   ): Promise<LearnSpellResult> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const spell = await this.spellRepo.findOne({
       where: { slug: dto.spellSlug },
@@ -929,7 +950,7 @@ export class SpellService {
     characterId: string,
     spellSlug: string,
   ): Promise<UnlearnSpellResult> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const charSpells = await this.charSpellRepo.find({
       where: { character_id: characterId },
@@ -963,7 +984,7 @@ export class SpellService {
     characterId: string,
     dto: SpellSlotUpdateDto,
   ): Promise<SpellSlotUpdateResult> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const [charClasses, state] = await Promise.all([
       this.charClassRepo.find({
@@ -1045,7 +1066,7 @@ export class SpellService {
     characterId: string,
     dto: RestDto,
   ): Promise<RestResult> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
 
     const [charClasses, charAbilities, state] = await Promise.all([
       this.charClassRepo.find({

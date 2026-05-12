@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
@@ -10,6 +10,7 @@ import {
   CharacterEquipmentEntity,
   CharacterFeatureEntity,
   CharacterStateEntity,
+  CampaignPartyMemberEntity,
   EquipmentCategoryItemEntity,
   ClassProficiencyEntity,
 } from "src/entities";
@@ -25,6 +26,7 @@ import {
   DRACONIC_ANCESTRY_MAP,
 } from "src/shared/srd-utils";
 import { classifyFeatureForActions } from "./feature-classification";
+import { ensureCharacterReadAccess } from "src/shared/character-guard";
 
 // ---- Types ----
 
@@ -110,6 +112,8 @@ export class ActionsService {
   constructor(
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
     @InjectRepository(CharacterClassEntity)
     private readonly charClassRepo: Repository<CharacterClassEntity>,
     @InjectRepository(CharacterAbilityScoreEntity)
@@ -134,13 +138,13 @@ export class ActionsService {
     userId: string,
     characterId: string,
   ): Promise<ActionsResponse> {
-    const character = await this.characterRepo.findOne({
-      where: { id: characterId, userId },
-      relations: ["character_origin"],
-    });
-    if (!character) {
-      throw new NotFoundException("Personagem nao encontrado.");
-    }
+    const character = await ensureCharacterReadAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+      ["character_origin"],
+    );
 
     const [
       charClasses,

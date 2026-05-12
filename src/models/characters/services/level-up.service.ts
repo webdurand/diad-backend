@@ -22,6 +22,7 @@ import {
   SpellClassEntity,
   ProficiencyEntity,
   FeatureEntity,
+  CampaignPartyMemberEntity,
 } from "src/entities";
 import {
   HpMethodEnum,
@@ -39,7 +40,8 @@ import {
 } from "src/shared/srd-constants";
 import { getAbilityModifier } from "src/shared/srd-utils";
 import {
-  ensureCharacterOwnership,
+  ensureCharacterReadAccess,
+  ensureCharacterWriteAccess,
   getCharacterState,
 } from "src/shared/character-guard";
 import {
@@ -156,6 +158,8 @@ export class LevelUpService {
     private readonly dataSource: DataSource,
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
+    @InjectRepository(CampaignPartyMemberEntity)
+    private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
     @InjectRepository(CharacterClassEntity)
     private readonly charClassRepo: Repository<CharacterClassEntity>,
     @InjectRepository(CharacterAbilityScoreEntity)
@@ -190,7 +194,7 @@ export class LevelUpService {
     userId: string,
     characterId: string,
   ): Promise<LevelUpOptionsResult> {
-    const character = await this.ensureOwnership(userId, characterId);
+    const character = await this.ensureReadAccess(userId, characterId);
     const state = await this.getState(characterId);
     const [charClasses, charAbilities, charSpells] = await Promise.all([
       this.charClassRepo.find({
@@ -404,7 +408,7 @@ export class LevelUpService {
     characterId: string,
     dto: LevelUpDto,
   ): Promise<LevelUpResult> {
-    await this.ensureOwnership(userId, characterId);
+    await this.ensureWriteAccess(userId, characterId);
     const state = await this.getState(characterId);
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },
@@ -593,7 +597,7 @@ export class LevelUpService {
       await manager.save(CharacterStateEntity, state);
 
       // Spec 005 — load features with PHB→XPHB fallback (tracks source used)
-      const character = await this.ensureOwnership(userId, characterId);
+      const character = await this.ensureReadAccess(userId, characterId);
       const { levelData, fallbackSource } = await this.resolveLevelData(
         classEntity,
         newClassLevel,
@@ -1057,15 +1061,32 @@ export class LevelUpService {
     }
   }
 
-  private async ensureOwnership(
+  private async ensureReadAccess(
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
     // Spec 005: load source to resolve EditionRules (subclass level,
     // prepared formula, feature fallback) per the character's edition.
-    return ensureCharacterOwnership(this.characterRepo, userId, characterId, [
-      "source",
-    ]);
+    return ensureCharacterReadAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+      ["source"],
+    );
+  }
+
+  private async ensureWriteAccess(
+    userId: string,
+    characterId: string,
+  ): Promise<CharacterEntity> {
+    return ensureCharacterWriteAccess(
+      this.characterRepo,
+      userId,
+      characterId,
+      this.partyMemberRepo,
+      ["source"],
+    );
   }
 
   /**
