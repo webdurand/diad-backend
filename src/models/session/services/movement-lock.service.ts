@@ -5,14 +5,24 @@ import { SceneEntity } from "src/entities/scene.entity";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { SceneContextCacheService } from "./scene-context-cache.service";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 
 export type MovementLockSource = "director" | "system";
+
+export interface MovementLockAnchor {
+  sceneId: string;
+  locationId: string | null;
+  poiId: string | null;
+  interlocutorNpcId?: string | null;
+}
 
 export interface MovementLockState {
   active: true;
   reason: string;
   exitActionLabel: string;
   interlocutorNpcId?: string | null;
+  anchor?: MovementLockAnchor;
   source: MovementLockSource;
   createdAt: string;
 }
@@ -22,6 +32,7 @@ export interface MovementLockUpdate {
   reason?: string;
   exitActionLabel?: string;
   interlocutorNpcId?: string | null;
+  anchor?: Partial<MovementLockAnchor> | null;
   source?: MovementLockSource;
 }
 
@@ -47,6 +58,8 @@ export class MovementLockService {
     @InjectRepository(SceneEntity)
     private readonly sceneRepo: Repository<SceneEntity>,
     private readonly contextCache: SceneContextCacheService,
+    private readonly eventBus: EventBusService,
+    private readonly envelopeFactory: EventEnvelopeFactory,
   ) {}
 
   normalize(value: unknown): MovementLockState | null {
@@ -69,6 +82,7 @@ export class MovementLockService {
           : raw.interlocutorNpcId === null
             ? null
             : undefined,
+      anchor: this.normalizeAnchor(raw.anchor),
       source,
       createdAt:
         typeof raw.createdAt === "string" && raw.createdAt.trim()
@@ -97,12 +111,17 @@ export class MovementLockService {
     update: MovementLockUpdate,
   ): Promise<MovementLockState | null> {
     const scene = await this.getActiveSceneOrThrow(sessionId);
+    const current = this.normalize(scene.contextSnapshot?.movementLock);
     if (update.active === false) {
       await this.write(scene, null);
+      await this.publishMovementLockChanged(scene, current, null);
       return null;
     }
 
-    const current = this.normalize(scene.contextSnapshot?.movementLock);
+    const interlocutorNpcId =
+      update.interlocutorNpcId === undefined
+        ? current?.interlocutorNpcId
+        : update.interlocutorNpcId;
     const movementLock: MovementLockState = {
       active: true,
       reason: update.reason?.trim() || current?.reason || DEFAULT_REASON,
@@ -110,20 +129,63 @@ export class MovementLockService {
         update.exitActionLabel?.trim() ||
         current?.exitActionLabel ||
         DEFAULT_EXIT_ACTION,
-      interlocutorNpcId:
-        update.interlocutorNpcId === undefined
-          ? current?.interlocutorNpcId
-          : update.interlocutorNpcId,
+      interlocutorNpcId,
+      anchor: this.buildAnchor(scene, update.anchor, current?.anchor, interlocutorNpcId),
       source: update.source === "system" ? "system" : "director",
       createdAt: current?.createdAt ?? new Date().toISOString(),
     };
 
     await this.write(scene, movementLock);
+    await this.publishMovementLockChanged(scene, current, movementLock);
     return movementLock;
   }
 
   buildBlockedMessage(lock: MovementLockState): string {
     return `Você está preso nesta conversa; ${lock.reason} Use "${lock.exitActionLabel}" antes de se deslocar.`;
+  }
+
+  private normalizeAnchor(value: unknown): MovementLockAnchor | undefined {
+    const raw = asRecord(value);
+    if (!raw || typeof raw.sceneId !== "string") return undefined;
+    return {
+      sceneId: raw.sceneId,
+      locationId:
+        typeof raw.locationId === "string"
+          ? raw.locationId
+          : raw.locationId === null
+            ? null
+            : null,
+      poiId:
+        typeof raw.poiId === "string"
+          ? raw.poiId
+          : raw.poiId === null
+            ? null
+            : null,
+      interlocutorNpcId:
+        typeof raw.interlocutorNpcId === "string"
+          ? raw.interlocutorNpcId
+          : raw.interlocutorNpcId === null
+            ? null
+            : undefined,
+    };
+  }
+
+  private buildAnchor(
+    scene: Pick<SceneEntity, "id" | "locationId" | "poiId">,
+    updateAnchor: Partial<MovementLockAnchor> | null | undefined,
+    currentAnchor: MovementLockAnchor | undefined,
+    interlocutorNpcId: string | null | undefined,
+  ): MovementLockAnchor {
+    return {
+      sceneId: updateAnchor?.sceneId ?? currentAnchor?.sceneId ?? scene.id,
+      locationId:
+        updateAnchor?.locationId ?? currentAnchor?.locationId ?? scene.locationId ?? null,
+      poiId: updateAnchor?.poiId ?? currentAnchor?.poiId ?? scene.poiId ?? null,
+      interlocutorNpcId:
+        updateAnchor?.interlocutorNpcId ??
+        currentAnchor?.interlocutorNpcId ??
+        interlocutorNpcId,
+    };
   }
 
   private async getActiveScene(sessionId: string): Promise<SceneEntity | null> {
@@ -159,5 +221,44 @@ export class MovementLockService {
     }
     await this.sceneRepo.update(scene.id, { contextSnapshot: snapshot });
     this.contextCache.invalidate(scene.id);
+  }
+
+  private async publishMovementLockChanged(
+    scene: Pick<SceneEntity, "id" | "sessionId" | "locationId" | "poiId">,
+    before: MovementLockState | null,
+    after: MovementLockState | null,
+  ): Promise<void> {
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "movement_lock_changed",
+        source: {
+          service: "diad-backend",
+          module: "MovementLockService.setForActiveScene",
+        },
+        scope: {
+          campaignId: "",
+          sessionId: scene.sessionId,
+          sceneId: scene.id,
+        },
+        audiences: ["HUD"],
+        narrativeDescriptor: after
+          ? `Trava de diálogo ativada: ${after.reason}`
+          : "Trava de diálogo encerrada.",
+        payload: {
+          sessionId: scene.sessionId,
+          sceneId: scene.id,
+          locationId: scene.locationId ?? null,
+          poiId: scene.poiId ?? null,
+          activeBefore: Boolean(before?.active),
+          activeAfter: Boolean(after?.active),
+          lockBefore: before,
+          lockAfter: after,
+        },
+      });
+      await this.eventBus.publish(envelope);
+    } catch {
+      /* best-effort HUD sync; lock state itself is already persisted */
+    }
   }
 }

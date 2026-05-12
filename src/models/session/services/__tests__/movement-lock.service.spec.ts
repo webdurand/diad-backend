@@ -1,7 +1,15 @@
 import { MovementLockService } from "../movement-lock.service";
 
 describe("MovementLockService", () => {
-  const makeService = (scene: any = { id: "scene-1", contextSnapshot: {} }) => {
+  const makeService = (
+    scene: any = {
+      id: "scene-1",
+      sessionId: "sess-1",
+      locationId: "loc-1",
+      poiId: "poi-1",
+      contextSnapshot: {},
+    },
+  ) => {
     const sceneRepo = {
       findOne: jest.fn().mockResolvedValue(scene),
       update: jest.fn().mockResolvedValue(undefined),
@@ -9,11 +17,29 @@ describe("MovementLockService", () => {
     const contextCache = {
       invalidate: jest.fn(),
     };
+    const eventBus = {
+      publish: jest.fn().mockResolvedValue(undefined),
+    };
+    const envelopeFactory = {
+      build: jest.fn((payload) => ({
+        eventId: "evt-1",
+        version: 1,
+        aggregateId: payload.scope.sessionId,
+        timestamp: "2026-05-12T00:00:00.000Z",
+        ...payload,
+        source: {
+          traceId: "trace-1",
+          ...payload.source,
+        },
+      })),
+    };
     const service = new MovementLockService(
       sceneRepo as any,
       contextCache as any,
+      eventBus as any,
+      envelopeFactory as any,
     );
-    return { service, sceneRepo, contextCache };
+    return { service, sceneRepo, contextCache, eventBus, envelopeFactory };
   };
 
   it("normalizes active movement locks with defaults", () => {
@@ -30,6 +56,9 @@ describe("MovementLockService", () => {
   it("writes movement lock into active scene snapshot and invalidates cache", async () => {
     const { service, sceneRepo, contextCache } = makeService({
       id: "scene-1",
+      sessionId: "sess-1",
+      locationId: "loc-1",
+      poiId: "poi-1",
       contextSnapshot: { foo: "bar" },
     });
 
@@ -53,6 +82,12 @@ describe("MovementLockService", () => {
         foo: "bar",
         movementLock: expect.objectContaining({
           reason: "O capitão exige resposta.",
+          anchor: {
+            sceneId: "scene-1",
+            locationId: "loc-1",
+            poiId: "poi-1",
+            interlocutorNpcId: "npc-1",
+          },
         }),
       }),
     });
@@ -60,8 +95,11 @@ describe("MovementLockService", () => {
   });
 
   it("clears movement lock from active scene snapshot", async () => {
-    const { service, sceneRepo, contextCache } = makeService({
+    const { service, sceneRepo, contextCache, eventBus } = makeService({
       id: "scene-1",
+      sessionId: "sess-1",
+      locationId: "loc-1",
+      poiId: "poi-1",
       contextSnapshot: {
         foo: "bar",
         movementLock: { active: true, reason: "X" },
@@ -75,5 +113,19 @@ describe("MovementLockService", () => {
       contextSnapshot: { foo: "bar" },
     });
     expect(contextCache.invalidate).toHaveBeenCalledWith("scene-1");
+    expect(eventBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventCategory: "NarrativeEvent",
+        eventType: "movement_lock_changed",
+        audiences: ["HUD"],
+        payload: expect.objectContaining({
+          activeBefore: true,
+          activeAfter: false,
+          sceneId: "scene-1",
+          locationId: "loc-1",
+          poiId: "poi-1",
+        }),
+      }),
+    );
   });
 });

@@ -143,6 +143,7 @@ import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { MoveToLocationService } from "./services/move-to-location.service";
 import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
+import { DialogueActionService } from "./services/dialogue-action.service";
 
 @Module({
   imports: [
@@ -290,6 +291,7 @@ import { TravelTickService } from "./services/travel-tick.service";
     MoveToLocationService,
     MoveToPoiService,
     TravelTickService,
+    DialogueActionService,
   ],
   exports: [
     DiceService,

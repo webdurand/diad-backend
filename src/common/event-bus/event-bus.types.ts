@@ -71,6 +71,7 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "event_bus_listener_registered",
     "session_resumed",
     "scene_changed",
+    "movement_lock_changed",
     "clock_progressed",
     "clock_filled",
     "clock_resolved",

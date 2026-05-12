@@ -105,6 +105,7 @@ import { StartEncounterFromNarrativeService } from "./services/start-encounter-f
 import { MoveToLocationService } from "./services/move-to-location.service";
 import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
+import { DialogueActionService } from "./services/dialogue-action.service";
 // Spec 027 (M2 follow-up) — WS realtime substitui polling no frontend.
 import { RealtimeService } from "src/realtime/realtime.service";
 import { StartEncounterFromNarrativeDto } from "./dto/start-encounter-from-narrative.dto";
@@ -202,6 +203,7 @@ export class GameEngineController {
     private readonly moveToLocationService: MoveToLocationService,
     private readonly moveToPoiService: MoveToPoiService,
     private readonly travelTickService: TravelTickService,
+    private readonly dialogueActionService: DialogueActionService,
     private readonly movementLockService: MovementLockService,
     // Spec 027 (M2 follow-up) — WS realtime para invalidar cache do frontend
     // após mutações de turno/encontro. Sala: encounter:<id>.
@@ -447,6 +449,25 @@ export class GameEngineController {
       dto,
     );
     return { ok: true as const, value: { movementLock } };
+  }
+
+  @Post("sessions/:sessionId/dialogue/start")
+  async startDialogue(
+    @Param("sessionId") sessionId: string,
+    @Body()
+    dto: {
+      npcId: string;
+      reason?: string;
+    },
+  ) {
+    const result = await this.dialogueActionService.start(sessionId, dto);
+    return { ok: true as const, value: result };
+  }
+
+  @Post("sessions/:sessionId/dialogue/exit")
+  async exitDialogue(@Param("sessionId") sessionId: string) {
+    const result = await this.dialogueActionService.exit(sessionId);
+    return { ok: true as const, value: result };
   }
 
   @Post("sessions/:sessionId/travel/tick")
