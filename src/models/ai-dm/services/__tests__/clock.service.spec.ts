@@ -15,6 +15,8 @@ function makeClock(overrides: Partial<ClockEntity> = {}): ClockEntity {
     id: CLOCK_ID,
     campaignId: CAMPAIGN_ID,
     campaign: undefined as unknown as never,
+    gameSessionId: null,
+    gameSession: undefined,
     name: "Ameaça na floresta",
     segments: 4,
     filled: 1,
@@ -37,6 +39,7 @@ function makeRow(overrides: Partial<ClockEntity> = {}): Record<string, unknown> 
   return {
     id: clock.id,
     campaign_id: clock.campaignId,
+    game_session_id: clock.gameSessionId ?? null,
     name: clock.name,
     segments: clock.segments,
     filled: clock.filled,
@@ -54,20 +57,27 @@ function makeRow(overrides: Partial<ClockEntity> = {}): Record<string, unknown> 
 function makeService(options: {
   before?: Partial<ClockEntity>;
   row?: Partial<ClockEntity>;
+  find?: ClockEntity[];
+  session?: Partial<GameSessionEntity> | null;
 }) {
   const clockRepo = {
     findOne: jest.fn(async () => makeClock(options.before)),
     query: jest.fn(async () => [makeRow(options.row)]),
     create: jest.fn((input: Partial<ClockEntity>) => input),
     save: jest.fn(async (input: ClockEntity) => input),
-    find: jest.fn(async () => []),
+    find: jest.fn(async () => options.find ?? []),
   } as unknown as Repository<ClockEntity>;
 
   const sessionRepo = {
-    findOne: jest.fn(async () => ({
-      id: SESSION_ID,
-      campaignId: CAMPAIGN_ID,
-    })),
+    findOne: jest.fn(async () =>
+      options.session === null
+        ? null
+        : ({
+            id: SESSION_ID,
+            campaignId: CAMPAIGN_ID,
+            ...options.session,
+          } as GameSessionEntity),
+    ),
   } as unknown as Repository<GameSessionEntity>;
 
   const eventLog = {
@@ -88,13 +98,59 @@ function makeService(options: {
 
   return {
     service,
-    clockRepo: clockRepo as unknown as { query: jest.Mock },
     eventLog: eventLog as unknown as { logEvent: jest.Mock },
     eventBus: eventBus as unknown as { publish: jest.Mock },
+    sessionRepo: sessionRepo as unknown as { findOne: jest.Mock },
+    clockRepo: clockRepo as unknown as {
+      query: jest.Mock;
+      find: jest.Mock;
+      findOne: jest.Mock;
+    },
   };
 }
 
 describe("ClockService", () => {
+  it("lista só templates quando consulta por campanha", async () => {
+    const template = makeClock({ gameSessionId: null, filled: 0 });
+    const { service, clockRepo } = makeService({ find: [template] });
+
+    const result = await service.listByCampaign(CAMPAIGN_ID);
+
+    expect(result).toEqual([template]);
+    expect(clockRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ campaignId: CAMPAIGN_ID }),
+      }),
+    );
+  });
+
+  it("materializa clocks limpos por sessão a partir dos templates", async () => {
+    const sessionClock = makeClock({
+      id: "44444444-4444-4444-8444-444444444444",
+      gameSessionId: SESSION_ID,
+      filled: 0,
+      status: "active",
+    });
+    const { service, clockRepo } = makeService({ find: [sessionClock] });
+
+    const result = await service.listBySession(SESSION_ID);
+
+    expect(clockRepo.query).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO clocks"),
+      [CAMPAIGN_ID, SESSION_ID],
+    );
+    expect(clockRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          campaignId: CAMPAIGN_ID,
+          gameSessionId: SESSION_ID,
+        }),
+      }),
+    );
+    expect(result[0].filled).toBe(0);
+    expect(result[0].gameSessionId).toBe(SESSION_ID);
+  });
+
   it("advance clampa e publica clock_progressed", async () => {
     const { service, eventBus } = makeService({
       before: { filled: 1, segments: 4, status: "active" },
@@ -116,6 +172,19 @@ describe("ClockService", () => {
     expect(envelope.eventType).toBe("clock_progressed");
     expect(envelope.payload.clockId).toBe(CLOCK_ID);
     expect(envelope.payload.delta).toBe(1);
+  });
+
+  it("publica evento no sessionId do clock de aventura mesmo sem dto.sessionId", async () => {
+    const { service, eventBus } = makeService({
+      before: { gameSessionId: SESSION_ID, filled: 1, segments: 4 },
+      row: { gameSessionId: SESSION_ID, filled: 2, segments: 4 },
+    });
+
+    await service.advance(CLOCK_ID, { amount: 1 });
+
+    const envelope = eventBus.publish.mock.calls[0][0];
+    expect(envelope.scope.sessionId).toBe(SESSION_ID);
+    expect(envelope.payload.sessionId).toBe(SESSION_ID);
   });
 
   it("publica clock_filled uma vez quando cruza o máximo", async () => {

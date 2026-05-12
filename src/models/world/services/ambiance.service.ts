@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { IsNull, Repository } from "typeorm";
 import { CampaignEntity } from "src/entities/campaign.entity";
 import { ClockEntity } from "src/entities/clock.entity";
 import { SceneEntity } from "src/entities/scene.entity";
@@ -141,8 +141,15 @@ export class AmbianceService {
       ? this.weatherService.toDto(weather)
       : FALLBACK_WEATHER_DTO(campaignId);
 
+    if (sessionId) {
+      await this.materializeSessionClocks(campaignId, sessionId);
+    }
     const visibleClocks = await this.clockRepo.find({
-      where: { campaignId, visibleToPlayer: true },
+      where: {
+        campaignId,
+        gameSessionId: sessionId ?? IsNull(),
+        visibleToPlayer: true,
+      },
       order: { type: "ASC" },
     });
 
@@ -204,5 +211,53 @@ export class AmbianceService {
       narrativeSummary,
       travelInProgress,
     };
+  }
+
+  private async materializeSessionClocks(
+    campaignId: string,
+    sessionId: string,
+  ): Promise<void> {
+    await this.clockRepo.query(
+      `INSERT INTO clocks (
+          campaign_id,
+          game_session_id,
+          name,
+          segments,
+          filled,
+          status,
+          type,
+          visible_to_player,
+          on_full_action,
+          advance_rules,
+          expires_at,
+          created_at,
+          updated_at
+        )
+        SELECT
+          c.campaign_id,
+          $2::uuid,
+          c.name,
+          c.segments,
+          0,
+          'active',
+          c.type,
+          c.visible_to_player,
+          c.on_full_action,
+          c.advance_rules,
+          c.expires_at,
+          now(),
+          now()
+        FROM clocks c
+        WHERE c.campaign_id = $1::uuid
+          AND c.game_session_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+              FROM clocks existing
+             WHERE existing.game_session_id = $2::uuid
+               AND existing.name = c.name
+               AND existing.type = c.type
+          )`,
+      [campaignId, sessionId],
+    );
   }
 }

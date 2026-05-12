@@ -264,8 +264,11 @@ export class CharactersController {
   }
 
   /**
-   * Spec 016 M4 — bloqueia operações se o char tem participant em encounter
-   * ativo E é o turno dele agora. Throws 409 com code LEVEL_UP_BLOCKED_IN_COMBAT.
+   * Spec 016 M4 — bloqueia operações se o char tem participant no encounter
+   * ativo da sessão E é o turno dele agora.
+   *
+   * Encounters órfãos/stale podem ficar com status "active" depois que a sessão
+   * já limpou activeEncounterId; eles não devem bloquear level-up pós-combate.
    */
   private async ensureNotPcOwnTurn(characterId: string): Promise<void> {
     const participants = await this.participantRepo.find({
@@ -276,8 +279,10 @@ export class CharactersController {
     const encounterIds = participants.map((p) => p.encounterId);
     const activeEncounters = await this.encounterRepo
       .createQueryBuilder("e")
+      .innerJoin("e.session", "s")
       .where("e.id IN (:...ids)", { ids: encounterIds })
       .andWhere("e.status = :status", { status: "active" })
+      .andWhere("s.active_encounter_id = e.id")
       .getMany();
 
     for (const enc of activeEncounters) {

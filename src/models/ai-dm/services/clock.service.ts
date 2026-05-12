@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { IsNull, Repository } from "typeorm";
 import {
   ClockAdvanceRules,
   ClockEntity,
@@ -64,6 +64,7 @@ export class ClockService {
     }
     const clock = this.clockRepo.create({
       campaignId,
+      gameSessionId: null,
       name: dto.name,
       segments: dto.segments,
       filled: 0,
@@ -79,7 +80,29 @@ export class ClockService {
 
   async listByCampaign(campaignId: string): Promise<ClockEntity[]> {
     return this.clockRepo.find({
-      where: { campaignId },
+      where: { campaignId, gameSessionId: IsNull() },
+      order: { createdAt: "ASC" },
+    });
+  }
+
+  async listBySession(sessionId: string): Promise<ClockEntity[]> {
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+      select: ["id", "campaignId"],
+    });
+    if (!session) {
+      throw new NotFoundException({
+        ok: false,
+        error: "Sessão não encontrada.",
+        code: "SESSION_NOT_FOUND",
+      });
+    }
+    if (!session.campaignId) return [];
+
+    await this.materializeSessionClocks(session.campaignId, session.id);
+
+    return this.clockRepo.find({
+      where: { campaignId: session.campaignId, gameSessionId: session.id },
       order: { createdAt: "ASC" },
     });
   }
@@ -158,6 +181,8 @@ export class ClockService {
       id: row.id,
       campaignId: row.campaign_id,
       campaign: undefined as unknown as never,
+      gameSessionId: row.game_session_id ?? null,
+      gameSession: undefined,
       name: row.name,
       segments: row.segments,
       filled: row.filled,
@@ -257,6 +282,8 @@ export class ClockService {
       id: row.id,
       campaignId: row.campaign_id,
       campaign: undefined as unknown as never,
+      gameSessionId: row.game_session_id ?? null,
+      gameSession: undefined,
       name: row.name,
       segments: row.segments,
       filled: row.filled,
@@ -343,12 +370,61 @@ export class ClockService {
     clock: ClockEntity,
     provided?: string,
   ): Promise<string | undefined> {
+    if (clock.gameSessionId) return clock.gameSessionId;
     if (provided) return provided;
     const latest = await this.sessionRepo.findOne({
       where: { campaignId: clock.campaignId },
       order: { updatedAt: "DESC" },
     });
     return latest?.id;
+  }
+
+  private async materializeSessionClocks(
+    campaignId: string,
+    sessionId: string,
+  ): Promise<void> {
+    await this.clockRepo.query(
+      `INSERT INTO clocks (
+          campaign_id,
+          game_session_id,
+          name,
+          segments,
+          filled,
+          status,
+          type,
+          visible_to_player,
+          on_full_action,
+          advance_rules,
+          expires_at,
+          created_at,
+          updated_at
+        )
+        SELECT
+          c.campaign_id,
+          $2::uuid,
+          c.name,
+          c.segments,
+          0,
+          'active',
+          c.type,
+          c.visible_to_player,
+          c.on_full_action,
+          c.advance_rules,
+          c.expires_at,
+          now(),
+          now()
+        FROM clocks c
+        WHERE c.campaign_id = $1::uuid
+          AND c.game_session_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+              FROM clocks existing
+             WHERE existing.game_session_id = $2::uuid
+               AND existing.name = c.name
+               AND existing.type = c.type
+          )`,
+      [campaignId, sessionId],
+    );
   }
 
   private async emitOnFullEvent(

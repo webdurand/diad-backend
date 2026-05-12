@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { CampaignEntity } from "./campaign.entity";
+import { GameSessionEntity } from "./game-session.entity";
 
 export type ClockType = "main" | "threat" | "opportunity";
 export type ClockStatus = "active" | "filled" | "resolved" | "expired";
@@ -37,6 +38,14 @@ export class ClockEntity {
   @ManyToOne(() => CampaignEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "campaign_id" })
   campaign: CampaignEntity;
+
+  @Index()
+  @Column({ name: "game_session_id", type: "uuid", nullable: true })
+  gameSessionId?: string | null;
+
+  @ManyToOne(() => GameSessionEntity, { onDelete: "CASCADE", nullable: true })
+  @JoinColumn({ name: "game_session_id" })
+  gameSession?: GameSessionEntity | null;
 
   @Column({ type: "varchar" })
   name: string;

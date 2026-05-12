@@ -97,6 +97,21 @@ export class AiDmController {
     return isDm ? clocks : clocks.filter((c) => c.visibleToPlayer);
   }
 
+  @Get("sessions/:sessionId/clocks")
+  async listSessionClocks(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+  ) {
+    const userId = getUserId(req);
+    const session = await this.sessionService.ensureAccess(sessionId, userId);
+    const clocks = await this.clockService.listBySession(sessionId);
+    if (!session.campaignId) return clocks.filter((c) => c.visibleToPlayer);
+
+    const campaign = await this.campaignService.getById(session.campaignId);
+    const isDm = campaign.dmUserId === userId;
+    return isDm ? clocks : clocks.filter((c) => c.visibleToPlayer);
+  }
+
   @Post("clocks/:clockId/advance")
   async advanceClock(
     @Req() req: AuthRequest,
