@@ -71,8 +71,7 @@ export class PublishEventDto {
 
   @IsString()
   @Matches(EVENT_TYPE_REGEX, {
-    message:
-      "eventType precisa ser snake_case en (^[a-z][a-z0-9_]+$).",
+    message: "eventType precisa ser snake_case en (^[a-z][a-z0-9_]+$).",
   })
   eventType: string;
 

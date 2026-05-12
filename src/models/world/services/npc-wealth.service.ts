@@ -120,9 +120,7 @@ export class NpcWealthService {
         where: { id: ref.id },
       });
       if (!npcState) {
-        throw new NotFoundException(
-          `SessionNpcState ${ref.id} não encontrado`,
-        );
+        throw new NotFoundException(`SessionNpcState ${ref.id} não encontrado`);
       }
       return { ...npcState.currency };
     }
@@ -197,7 +195,11 @@ export class NpcWealthService {
         throw new BadRequestException({
           code: "INSUFFICIENT_FUNDS",
           message: `${op.from.kind}=${op.from.id} não tem ${amount[denom]}${denom} (tem ${fromBalance[denom]}${denom}).`,
-          context: { denom, requested: amount[denom], available: fromBalance[denom] },
+          context: {
+            denom,
+            requested: amount[denom],
+            available: fromBalance[denom],
+          },
         });
       }
     }

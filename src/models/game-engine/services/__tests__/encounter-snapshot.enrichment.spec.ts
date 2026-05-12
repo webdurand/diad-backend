@@ -31,7 +31,10 @@ function makeService(
   };
   const combatService = {
     getAvailableActions: jest.fn(async () => ({ ok: true, value: [] })),
-    getCurrentTurnInfo: jest.fn(async () => ({ ok: true, value: { participantId: MONSTER_PART_ID } })),
+    getCurrentTurnInfo: jest.fn(async () => ({
+      ok: true,
+      value: { participantId: MONSTER_PART_ID },
+    })),
   } as unknown as CombatService;
   const persistentArea = {
     cellInArea: jest.fn(() => false),
@@ -106,7 +109,10 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
     const svc = makeService(baseEncounter, [
       baseMonsterParticipant({
         multiattack: {
-          sequence: [{ actionName: "Bite", count: 1 }, { actionName: "Claw", count: 2 }],
+          sequence: [
+            { actionName: "Bite", count: 1 },
+            { actionName: "Claw", count: 2 },
+          ],
           description: "1 bite + 2 claws",
         },
       }),
@@ -116,7 +122,10 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
     if (!result.ok) return;
     const sb = result.value.participants[0]?.statblockRef;
     expect(sb?.multiattack).toEqual({
-      sequence: [{ actionName: "Bite", count: 1 }, { actionName: "Claw", count: 2 }],
+      sequence: [
+        { actionName: "Bite", count: 1 },
+        { actionName: "Claw", count: 2 },
+      ],
       description: "1 bite + 2 claws",
     });
   });
@@ -189,7 +198,10 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
       baseMonsterParticipant({
         actions: [
           { name: "Scimitar", attack_bonus: 4, desc: "Melee weapon attack." },
-          { name: "Nimble Escape", desc: "The goblin can take Disengage as a bonus action." },
+          {
+            name: "Nimble Escape",
+            desc: "The goblin can take Disengage as a bonus action.",
+          },
         ],
       }),
     ]);
@@ -205,7 +217,10 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
     const svc = makeService(baseEncounter, [
       baseMonsterParticipant({
         reactions: [
-          { name: "Parry", description: "Add +3 to AC against one melee attack." },
+          {
+            name: "Parry",
+            description: "Add +3 to AC against one melee attack.",
+          },
         ],
       }),
     ]);
@@ -214,7 +229,11 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
     if (!result.ok) return;
     const sb = result.value.participants[0]?.statblockRef;
     expect(sb?.reactions).toEqual([
-      { name: "Parry", description: "Add +3 to AC against one melee attack.", trigger: undefined },
+      {
+        name: "Parry",
+        description: "Add +3 to AC against one melee attack.",
+        trigger: undefined,
+      },
     ]);
   });
 

@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddCampaignStartingLocationId1783000000000
-  implements MigrationInterface
-{
+export class AddCampaignStartingLocationId1783000000000 implements MigrationInterface {
   name = "AddCampaignStartingLocationId1783000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

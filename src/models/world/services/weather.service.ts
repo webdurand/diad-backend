@@ -20,7 +20,10 @@ export type Biome = "forest" | "plains" | "mountain" | "swamp" | "desert";
  * Probabilidades por biome em pontos percentuais (somam 100).
  * Calibrado per spec 019 §7.4 — ajustar pós-playtest.
  */
-const WEATHER_PROBABILITIES: Record<Biome, Record<WeatherPrecipitation, number>> = {
+const WEATHER_PROBABILITIES: Record<
+  Biome,
+  Record<WeatherPrecipitation, number>
+> = {
   forest: { clear: 40, rain: 30, storm: 10, snow: 5, fog: 13, magical: 2 },
   plains: { clear: 50, rain: 25, storm: 15, snow: 5, fog: 4, magical: 1 },
   mountain: { clear: 25, rain: 15, storm: 15, snow: 35, fog: 8, magical: 2 },
@@ -64,16 +67,16 @@ function pickByProbabilities(
 ): WeatherPrecipitation {
   const total = Object.values(table).reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
-  for (const [k, p] of Object.entries(table) as Array<[WeatherPrecipitation, number]>) {
+  for (const [k, p] of Object.entries(table) as Array<
+    [WeatherPrecipitation, number]
+  >) {
     r -= p;
     if (r <= 0) return k;
   }
   return "clear";
 }
 
-function deriveVisibility(
-  precip: WeatherPrecipitation,
-): WeatherVisibility {
+function deriveVisibility(precip: WeatherPrecipitation): WeatherVisibility {
   if (precip === "fog") return "obscured";
   if (precip === "storm") return "dim";
   if (precip === "snow") return "dim";
@@ -97,10 +100,7 @@ function deriveWind(precip: WeatherPrecipitation): WeatherWindStrength {
 
 const NARRATIVE_SEEDS: Record<WeatherPrecipitation, string[]> = {
   clear: ["Céu limpo, ar quieto.", "O sol cobre o cenário."],
-  rain: [
-    "Chuva fina cai sem pressa.",
-    "Gotas batem em telhas e folhas.",
-  ],
+  rain: ["Chuva fina cai sem pressa.", "Gotas batem em telhas e folhas."],
   storm: [
     "Trovões rasgam o horizonte.",
     "Vento forte arranca galhos; chuva fustiga o rosto.",

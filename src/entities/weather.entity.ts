@@ -22,12 +22,7 @@ export type WeatherPrecipitation =
 
 export type WeatherVisibility = "normal" | "dim" | "dark" | "obscured";
 
-export type WeatherTemperature =
-  | "frigid"
-  | "cold"
-  | "mild"
-  | "hot"
-  | "extreme";
+export type WeatherTemperature = "frigid" | "cold" | "mild" | "hot" | "extreme";
 
 export type WeatherWindStrength = "calm" | "breeze" | "strong" | "gale";
 

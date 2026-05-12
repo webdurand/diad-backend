@@ -1284,9 +1284,8 @@ export class SpellService {
     let restEvent: { kind: RestEventTriggered } | null = null;
     if (dto.type === "long") {
       try {
-        const decay = await this.reputationDecayService.applyOnLongRest(
-          characterId,
-        );
+        const decay =
+          await this.reputationDecayService.applyOnLongRest(characterId);
         if (decay.npcsDecayed > 0) {
           summary.push(
             `Reputação esfriou: ${decay.npcsDecayed} NPC(s) suavizaram seus ânimos.`,

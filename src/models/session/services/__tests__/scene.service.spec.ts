@@ -17,11 +17,13 @@ describe("SceneService.create — scene_changed emission", () => {
   const PREV_SCENE_ID = "prev-scene-uuid";
   const NEW_SCENE_ID = "new-scene-uuid";
 
-  function buildService(opts: {
-    previousActive?: { id: string } | null;
-    campaign?: Partial<CampaignEntity> | null;
-    publishThrows?: Error;
-  } = {}) {
+  function buildService(
+    opts: {
+      previousActive?: { id: string } | null;
+      campaign?: Partial<CampaignEntity> | null;
+      publishThrows?: Error;
+    } = {},
+  ) {
     const sceneRepo = {
       findOne: jest.fn().mockResolvedValue(opts.previousActive ?? null),
       update: jest.fn().mockResolvedValue(undefined),
@@ -35,9 +37,13 @@ describe("SceneService.create — scene_changed emission", () => {
     };
     const sceneNpcRepo = {} as any;
     const sessionRepo = {
-      findOne: jest.fn().mockResolvedValue(
-        opts.campaign ? { id: SESSION_ID, campaignId: opts.campaign.id } : { id: SESSION_ID, campaignId: null },
-      ),
+      findOne: jest
+        .fn()
+        .mockResolvedValue(
+          opts.campaign
+            ? { id: SESSION_ID, campaignId: opts.campaign.id }
+            : { id: SESSION_ID, campaignId: null },
+        ),
     };
     const campaignRepo = {
       findOne: jest.fn().mockResolvedValue(opts.campaign ?? null),
@@ -74,6 +80,7 @@ describe("SceneService.create — scene_changed emission", () => {
       envelopeFactory as any,
       logger as any,
       { upsert: jest.fn().mockResolvedValue(undefined) } as any,
+      { suggestPois: jest.fn() } as any,
     );
 
     return {

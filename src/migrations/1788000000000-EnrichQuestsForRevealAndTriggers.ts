@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * E em quest_objectives:
  *   - advance_evidence: string com a evidência da última transição de status
  */
-export class EnrichQuestsForRevealAndTriggers1788000000000
-  implements MigrationInterface
-{
+export class EnrichQuestsForRevealAndTriggers1788000000000 implements MigrationInterface {
   name = "EnrichQuestsForRevealAndTriggers1788000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {

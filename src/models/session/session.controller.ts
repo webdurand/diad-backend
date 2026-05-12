@@ -17,7 +17,10 @@ import { EventLogService } from "./services/event-log.service";
 import { ChronicleService } from "./services/chronicle.service";
 import { SceneContextService } from "./services/scene-context.service";
 import { SessionMessageService } from "./services/session-message.service";
-import type { CreateSceneDto, ScenePresenceRole } from "./services/scene.service";
+import type {
+  CreateSceneDto,
+  ScenePresenceRole,
+} from "./services/scene.service";
 import type { LogEventDto } from "./services/event-log.service";
 import type { AppendMessageDto } from "./services/session-message.service";
 import type { SessionMessageKind } from "src/entities/session-message.entity";

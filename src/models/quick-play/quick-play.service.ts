@@ -110,12 +110,12 @@ export class QuickPlayService {
       }
     }
 
-    const { campaignId, sessionId } = await this.getOrCreateSandbox(ownerUserId);
+    const { campaignId, sessionId } =
+      await this.getOrCreateSandbox(ownerUserId);
 
-    const encounter = await this.encounterService.create(
-      sessionId,
-      { name: `Quick Play ${new Date().toISOString()}` },
-    );
+    const encounter = await this.encounterService.create(sessionId, {
+      name: `Quick Play ${new Date().toISOString()}`,
+    });
 
     await this.encounterService.addCharacter(
       encounter.id,
@@ -135,7 +135,8 @@ export class QuickPlayService {
       { controlledBy: "ai" },
     );
 
-    const gridSize = dto.gridSize && dto.gridSize > 0 ? Math.floor(dto.gridSize) : 20;
+    const gridSize =
+      dto.gridSize && dto.gridSize > 0 ? Math.floor(dto.gridSize) : 20;
     await this.encounterRepo.update(encounter.id, {
       mapData: {
         ...(encounter.mapData ?? {}),
@@ -147,7 +148,9 @@ export class QuickPlayService {
       inLair: dto.inLair === true,
     });
 
-    await this.sessionRepo.update(sessionId, { activeEncounterId: encounter.id });
+    await this.sessionRepo.update(sessionId, {
+      activeEncounterId: encounter.id,
+    });
 
     return { encounterId: encounter.id, sessionId, campaignId };
   }

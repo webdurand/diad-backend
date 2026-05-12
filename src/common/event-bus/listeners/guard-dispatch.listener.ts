@@ -9,10 +9,7 @@ import { DiadLogger } from "../../observability/logger/diad-logger.service";
 import { EventListener } from "../event-bus.types";
 import { EventBusService } from "../event-bus.service";
 import { EventEnvelopeFactory } from "../event-envelope.factory";
-import {
-  EventCategory,
-  EventEnvelope,
-} from "../event-envelope.types";
+import { EventCategory, EventEnvelope } from "../event-envelope.types";
 
 const GUARD_DISPATCH_CONFIG = {
   // Quantos guards spawnam por nível de severity (1=witness leve, 3=morte/lethal).
@@ -253,9 +250,8 @@ export class GuardDispatchListener implements EventListener {
           "campaign.id": campaignId,
           "session.id": sessionId,
           "location.id": locationId,
-          "name": fullName,
-          "error.message":
-            err instanceof Error ? err.message : String(err),
+          name: fullName,
+          "error.message": err instanceof Error ? err.message : String(err),
         });
       }
     }

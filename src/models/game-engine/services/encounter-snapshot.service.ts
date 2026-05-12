@@ -165,8 +165,7 @@ export class EncounterSnapshotService {
                   ),
                   legendaryActionPointsRemaining:
                     p.legendaryPointsAvailable ?? undefined,
-                  legendaryActionPointsMax:
-                    p.legendaryPointsMax ?? undefined,
+                  legendaryActionPointsMax: p.legendaryPointsMax ?? undefined,
                   lairActions: p.monster.lair_actions ?? [],
                 }
               : undefined,
@@ -264,9 +263,7 @@ export class EncounterSnapshotService {
       string,
       { currentHp: number; maxHp: number; tempHp: number }
     >();
-    const pcs = participants.filter(
-      (p) => p.type === "pc" && p.characterId,
-    );
+    const pcs = participants.filter((p) => p.type === "pc" && p.characterId);
     if (pcs.length === 0) return overlay;
 
     const charIds = pcs.map((p) => p.characterId!);
@@ -375,7 +372,10 @@ function parseMonsterSpeedFt(
 
 function buildSpellcastingSnapshot(
   sc: unknown,
-  used: { byLevel?: Record<number, number>; innateUses?: Record<string, number> },
+  used: {
+    byLevel?: Record<number, number>;
+    innateUses?: Record<string, number>;
+  },
 ): SnapshotParticipant["statblockRef"] extends infer T
   ? T extends { spellcasting?: infer S }
     ? S
@@ -391,7 +391,11 @@ function buildSpellcastingSnapshot(
     slotsByLevel?: Record<string, number>;
     dailyUses?: Record<string, string>;
   };
-  const slotsByLevel: Array<{ level: number; total: number; remaining: number }> = [];
+  const slotsByLevel: Array<{
+    level: number;
+    total: number;
+    remaining: number;
+  }> = [];
   if (cast.slotsByLevel) {
     for (const [lvl, total] of Object.entries(cast.slotsByLevel)) {
       const level = parseInt(lvl, 10);
@@ -404,7 +408,11 @@ function buildSpellcastingSnapshot(
       });
     }
   }
-  const dailyUses: Array<{ name: string; usesRemaining: number; usesMax: number }> = [];
+  const dailyUses: Array<{
+    name: string;
+    usesRemaining: number;
+    usesMax: number;
+  }> = [];
   if (cast.dailyUses) {
     for (const [name, usage] of Object.entries(cast.dailyUses)) {
       if (usage === "at-will") {
@@ -460,7 +468,8 @@ function extractBonusActions(
 function extractReactions(
   reactions: unknown,
 ): Array<{ name: string; description?: string; trigger?: string }> {
-  const list: Array<{ name: string; description?: string; trigger?: string }> = [];
+  const list: Array<{ name: string; description?: string; trigger?: string }> =
+    [];
   const candidates = Array.isArray(reactions)
     ? reactions
     : reactions && typeof reactions === "object"
@@ -488,7 +497,8 @@ function buildLegendaryActions(
   legendaryActions: unknown,
   costMap: Record<string, 1 | 2 | 3> | null,
 ): Array<{ name: string; cost: 1 | 2 | 3; description?: string }> {
-  const result: Array<{ name: string; cost: 1 | 2 | 3; description?: string }> = [];
+  const result: Array<{ name: string; cost: 1 | 2 | 3; description?: string }> =
+    [];
   if (!legendaryActions) return result;
   const list = Array.isArray(legendaryActions)
     ? legendaryActions

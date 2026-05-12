@@ -1,9 +1,5 @@
 import { NpcEntity } from "src/entities/npc.entity";
-import {
-  isDmOmniscient,
-  projectNpc,
-  projectNpcs,
-} from "../npc-projection";
+import { isDmOmniscient, projectNpc, projectNpcs } from "../npc-projection";
 
 function makeNpc(overrides: Partial<NpcEntity> = {}): NpcEntity {
   return {

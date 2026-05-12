@@ -145,9 +145,7 @@ export class QuestDefeatListener implements EventListener {
     await this.markProcessed(envelope.eventId);
   }
 
-  private async resolveSessionId(
-    encounterId: string,
-  ): Promise<string | null> {
+  private async resolveSessionId(encounterId: string): Promise<string | null> {
     if (!encounterId) return null;
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },

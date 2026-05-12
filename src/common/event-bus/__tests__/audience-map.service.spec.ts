@@ -96,7 +96,13 @@ describe("AudienceMapService", () => {
     routingRepo.findOne.mockResolvedValue({
       eventCategory: "EncounterEvent",
       eventType: "participant_died",
-      defaultAudiences: ["CombatAgent", "Narrator", "Director", "HUD", "CompanionAI"],
+      defaultAudiences: [
+        "CombatAgent",
+        "Narrator",
+        "Director",
+        "HUD",
+        "CompanionAI",
+      ],
       overrideable: false,
     });
 
@@ -212,7 +218,13 @@ describe("AudienceMapService", () => {
       {
         eventCategory: "EncounterEvent",
         eventType: "participant_died",
-        defaultAudiences: ["CombatAgent", "Narrator", "Director", "HUD", "CompanionAI"],
+        defaultAudiences: [
+          "CombatAgent",
+          "Narrator",
+          "Director",
+          "HUD",
+          "CompanionAI",
+        ],
         overrideable: false,
         subChannel: "toast",
       },

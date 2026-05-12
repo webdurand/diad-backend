@@ -74,7 +74,11 @@ export class SessionEventEntity {
     | "SocialEvent"
     | null;
 
-  @Column({ name: "event_payload", type: "jsonb", default: () => "'{}'::jsonb" })
+  @Column({
+    name: "event_payload",
+    type: "jsonb",
+    default: () => "'{}'::jsonb",
+  })
   eventPayload: Record<string, unknown>;
 
   @Column({

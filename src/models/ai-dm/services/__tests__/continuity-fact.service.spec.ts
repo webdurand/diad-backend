@@ -5,6 +5,13 @@ describe("ContinuityFactService", () => {
   const NPC_ID = "22222222-2222-4222-8222-222222222222";
 
   function makeService() {
+    type FactMockRepo = {
+      create: jest.Mock<unknown, [unknown]>;
+      save: jest.Mock<Promise<unknown>, [object]>;
+      findOne: jest.Mock<Promise<unknown>, [unknown?]>;
+      find: jest.Mock<Promise<unknown[]>, [unknown?]>;
+    };
+
     const factRepo = {
       create: jest.fn((entity: unknown) => entity),
       save: jest.fn((entity: object) =>
@@ -16,7 +23,7 @@ describe("ContinuityFactService", () => {
       ),
       findOne: jest.fn(() => Promise.resolve(null)),
       find: jest.fn(() => Promise.resolve([])),
-    };
+    } as FactMockRepo;
     const sessionRepo = {
       findOne: jest.fn(() => Promise.resolve({ id: SESSION_ID })),
     };

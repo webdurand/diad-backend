@@ -152,11 +152,19 @@ function buildService(opts: {
   return new PcPersonaService(
     repoOf(opts.character ?? null) as unknown as Repository<CharacterEntity>,
     repoOf(opts.classes ?? []) as unknown as Repository<CharacterClassEntity>,
-    repoOf(opts.abilities ?? []) as unknown as Repository<CharacterAbilityScoreEntity>,
+    repoOf(
+      opts.abilities ?? [],
+    ) as unknown as Repository<CharacterAbilityScoreEntity>,
     repoOf(opts.state ?? null) as unknown as Repository<CharacterStateEntity>,
-    repoOf(opts.levelUps ?? []) as unknown as Repository<CharacterLevelUpEntity>,
-    repoOf(opts.equipment ?? []) as unknown as Repository<CharacterEquipmentEntity>,
-    repoOf(opts.magicItems ?? []) as unknown as Repository<CharacterMagicItemEntity>,
+    repoOf(
+      opts.levelUps ?? [],
+    ) as unknown as Repository<CharacterLevelUpEntity>,
+    repoOf(
+      opts.equipment ?? [],
+    ) as unknown as Repository<CharacterEquipmentEntity>,
+    repoOf(
+      opts.magicItems ?? [],
+    ) as unknown as Repository<CharacterMagicItemEntity>,
     repoOf(opts.origin ?? null) as unknown as Repository<CharacterOriginEntity>,
   );
 }
@@ -338,7 +346,9 @@ describe("PcPersonaService", () => {
       const service = new PcPersonaService(
         characterRepoMock as unknown as Repository<CharacterEntity>,
         repoOf([makeClass()]) as unknown as Repository<CharacterClassEntity>,
-        repoOf(makeAbilities(14)) as unknown as Repository<CharacterAbilityScoreEntity>,
+        repoOf(
+          makeAbilities(14),
+        ) as unknown as Repository<CharacterAbilityScoreEntity>,
         repoOf(makeState()) as unknown as Repository<CharacterStateEntity>,
         repoOf(makeLevelUps()) as unknown as Repository<CharacterLevelUpEntity>,
         repoOf([]) as unknown as Repository<CharacterEquipmentEntity>,
@@ -368,7 +378,9 @@ describe("PcPersonaService", () => {
       const service = new PcPersonaService(
         repoOf(makeCharacter()) as unknown as Repository<CharacterEntity>,
         repoOf([makeClass()]) as unknown as Repository<CharacterClassEntity>,
-        repoOf(makeAbilities(14)) as unknown as Repository<CharacterAbilityScoreEntity>,
+        repoOf(
+          makeAbilities(14),
+        ) as unknown as Repository<CharacterAbilityScoreEntity>,
         repoOf(makeState()) as unknown as Repository<CharacterStateEntity>,
         repoOf(makeLevelUps()) as unknown as Repository<CharacterLevelUpEntity>,
         repoOf([]) as unknown as Repository<CharacterEquipmentEntity>,
@@ -391,7 +403,9 @@ describe("PcPersonaService", () => {
       const service = new PcPersonaService(
         characterRepoMock as unknown as Repository<CharacterEntity>,
         repoOf([makeClass()]) as unknown as Repository<CharacterClassEntity>,
-        repoOf(makeAbilities(14)) as unknown as Repository<CharacterAbilityScoreEntity>,
+        repoOf(
+          makeAbilities(14),
+        ) as unknown as Repository<CharacterAbilityScoreEntity>,
         repoOf(makeState()) as unknown as Repository<CharacterStateEntity>,
         repoOf(makeLevelUps()) as unknown as Repository<CharacterLevelUpEntity>,
         repoOf([]) as unknown as Repository<CharacterEquipmentEntity>,

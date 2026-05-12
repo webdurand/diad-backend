@@ -38,10 +38,7 @@ export class RequestBodyLogInterceptor implements NestInterceptor {
     this.logger.setContext(RequestBodyLogInterceptor.name);
   }
 
-  intercept(
-    ctx: ExecutionContext,
-    next: CallHandler,
-  ): Observable<unknown> {
+  intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (ctx.getType() !== "http") return next.handle();
 
     const httpCtx = ctx.switchToHttp();
@@ -64,8 +61,7 @@ export class RequestBodyLogInterceptor implements NestInterceptor {
   ): void {
     const method = req.method ?? "";
     const status = res.statusCode;
-    const debugLevel =
-      (process.env.LOG_LEVEL ?? "").toLowerCase() === "debug";
+    const debugLevel = (process.env.LOG_LEVEL ?? "").toLowerCase() === "debug";
 
     const isMutation = MUTATION_METHODS.has(method);
     if (!isMutation && !debugLevel) return;
@@ -113,7 +109,7 @@ export function pickBodyOrSummary(body: unknown): unknown {
   if (body === undefined || body === null) return undefined;
   if (typeof body !== "object") return body;
   if (Array.isArray(body) && body.length === 0) return undefined;
-  if (!Array.isArray(body) && Object.keys(body as object).length === 0) {
+  if (!Array.isArray(body) && Object.keys(body).length === 0) {
     return undefined;
   }
 
@@ -129,9 +125,7 @@ export function pickBodyOrSummary(body: unknown): unknown {
     return {
       "body.size_bytes": serialized.length,
       "body.array_length": body.length,
-      "body.first_items_types": body
-        .slice(0, 5)
-        .map((v) => describeType(v)),
+      "body.first_items_types": body.slice(0, 5).map((v) => describeType(v)),
     };
   }
 
@@ -144,9 +138,7 @@ export function pickBodyOrSummary(body: unknown): unknown {
   return {
     "body.size_bytes": serialized.length,
     "body.keys": keyTypes,
-    ...(keys.length > 30
-      ? { "body.keys_truncated": keys.length - 30 }
-      : {}),
+    ...(keys.length > 30 ? { "body.keys_truncated": keys.length - 30 } : {}),
   };
 }
 
@@ -154,8 +146,7 @@ function describeType(v: unknown): string {
   if (v === null) return "null";
   if (Array.isArray(v)) return `array[${v.length}]`;
   if (typeof v === "string") return `string[${v.length}]`;
-  if (typeof v === "object")
-    return `object[${Object.keys(v as object).length}]`;
+  if (typeof v === "object") return `object[${Object.keys(v).length}]`;
   return typeof v;
 }
 

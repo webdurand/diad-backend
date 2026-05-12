@@ -42,7 +42,9 @@ describe("SpellService", () => {
       repos.spellClass as any,
       repos.restEventTpl as any,
       { query: async () => [] } as any,
-      { applyOnLongRest: async () => ({ campaignsAffected: 0, npcsDecayed: 0 }) } as any,
+      {
+        applyOnLongRest: async () => ({ campaignsAffected: 0, npcsDecayed: 0 }),
+      } as any,
       { advanceTime: async () => undefined } as any,
     );
   });

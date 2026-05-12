@@ -20,7 +20,10 @@ describe("EventEnvelopeFactory", () => {
   const baseInput = {
     eventCategory: "EncounterEvent" as const,
     eventType: "damage_applied",
-    source: { service: "diad-backend" as const, module: "CombatService.applyDamage" },
+    source: {
+      service: "diad-backend" as const,
+      module: "CombatService.applyDamage",
+    },
     scope: { campaignId: "11111111-1111-1111-1111-111111111111" },
     payload: { participantId: "x", hpBefore: 30, hpAfter: 12, amount: 18 },
     aggregateId: "33333333-3333-3333-3333-333333333333",
@@ -57,7 +60,9 @@ describe("EventEnvelopeFactory", () => {
 
   it("respeita traceId provido em source quando válido", () => {
     const traceId = "b".repeat(32);
-    const factory = new EventEnvelopeFactory(makeCls({ traceId: "cccccccccccccccccccccccccccccccc" }));
+    const factory = new EventEnvelopeFactory(
+      makeCls({ traceId: "cccccccccccccccccccccccccccccccc" }),
+    );
     const env = factory.build({
       ...baseInput,
       source: { ...baseInput.source, traceId },
@@ -67,7 +72,9 @@ describe("EventEnvelopeFactory", () => {
 
   it("descarta traceId malformado e cai pra CLS/regen", () => {
     const traceId = "z".repeat(32); // invalid (not hex)
-    const factory = new EventEnvelopeFactory(makeCls({ traceId: "d".repeat(32) }));
+    const factory = new EventEnvelopeFactory(
+      makeCls({ traceId: "d".repeat(32) }),
+    );
     const env = factory.build({
       ...baseInput,
       source: { ...baseInput.source, traceId },
@@ -84,26 +91,34 @@ describe("EventEnvelopeFactory", () => {
   });
 
   it("version default = 1; aggregateId é mandatory carry-through", () => {
-    const factory = new EventEnvelopeFactory(makeCls({ traceId: "e".repeat(32) }));
+    const factory = new EventEnvelopeFactory(
+      makeCls({ traceId: "e".repeat(32) }),
+    );
     const env = factory.build(baseInput);
     expect(env.version).toBe(1);
     expect(env.aggregateId).toBe(baseInput.aggregateId);
   });
 
   it("version respeitada quando provida", () => {
-    const factory = new EventEnvelopeFactory(makeCls({ traceId: "f".repeat(32) }));
+    const factory = new EventEnvelopeFactory(
+      makeCls({ traceId: "f".repeat(32) }),
+    );
     const env = factory.build({ ...baseInput, version: 3 });
     expect(env.version).toBe(3);
   });
 
   it("audiences default vazio quando não provido (Bus resolve depois)", () => {
-    const factory = new EventEnvelopeFactory(makeCls({ traceId: "1".repeat(32) }));
+    const factory = new EventEnvelopeFactory(
+      makeCls({ traceId: "1".repeat(32) }),
+    );
     const env = factory.build(baseInput);
     expect(env.audiences).toEqual([]);
   });
 
   it("propaga narrativeDescriptor + metadata quando fornecidos", () => {
-    const factory = new EventEnvelopeFactory(makeCls({ traceId: "2".repeat(32) }));
+    const factory = new EventEnvelopeFactory(
+      makeCls({ traceId: "2".repeat(32) }),
+    );
     const env = factory.build({
       ...baseInput,
       narrativeDescriptor: "Aelar foi atingido criticamente",

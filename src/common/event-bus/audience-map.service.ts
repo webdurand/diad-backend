@@ -116,7 +116,7 @@ export class AudienceMapService {
           ? overrideAudiences
           : (row.defaultAudiences as EventAudience[]);
       return {
-        eventCategory: row.eventCategory as EventCategory,
+        eventCategory: row.eventCategory,
         eventType: row.eventType,
         defaultAudiences: row.defaultAudiences as EventAudience[],
         audiences: finalAudiences,

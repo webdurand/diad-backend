@@ -8,9 +8,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  *
  * Aqui só recria a FK com ON DELETE CASCADE (alinhado com a entity).
  */
-export class FixNarrativeDecisionsSessionFkCascade1789200000000
-  implements MigrationInterface
-{
+export class FixNarrativeDecisionsSessionFkCascade1789200000000 implements MigrationInterface {
   name = "FixNarrativeDecisionsSessionFkCascade1789200000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
@@ -133,10 +137,7 @@ export class NarrativeDecisionService {
     });
   }
 
-  async top(
-    sessionId: string,
-    limit = 5,
-  ): Promise<NarrativeDecisionEntity[]> {
+  async top(sessionId: string, limit = 5): Promise<NarrativeDecisionEntity[]> {
     return this.repo.find({
       where: { sessionId },
       order: { impactWeight: "DESC", createdAt: "DESC" },

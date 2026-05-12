@@ -102,7 +102,9 @@ export class LocationPoiService {
     poiId: string,
     dto: UpdateLocationPoiDto,
   ): Promise<LocationPoiEntity> {
-    const poi = await this.poiRepo.findOne({ where: { id: poiId, campaignId } });
+    const poi = await this.poiRepo.findOne({
+      where: { id: poiId, campaignId },
+    });
     if (!poi) throw new NotFoundException("POI nao encontrado.");
 
     if (dto.isDefault === true) {
@@ -119,11 +121,17 @@ export class LocationPoiService {
 
     if (dto.name !== undefined && dto.name !== poi.name) {
       poi.name = dto.name;
-      poi.slug = await this.generateUniqueSlug(poi.locationId, dto.name, poi.id);
+      poi.slug = await this.generateUniqueSlug(
+        poi.locationId,
+        dto.name,
+        poi.id,
+      );
     }
     if (dto.type !== undefined) poi.type = dto.type;
-    if (dto.description !== undefined) poi.description = dto.description ?? undefined;
-    if (dto.atmosphere !== undefined) poi.atmosphere = dto.atmosphere ?? undefined;
+    if (dto.description !== undefined)
+      poi.description = dto.description ?? undefined;
+    if (dto.atmosphere !== undefined)
+      poi.atmosphere = dto.atmosphere ?? undefined;
     if (dto.aliases !== undefined) poi.aliases = dto.aliases;
     if (dto.tags !== undefined) poi.tags = dto.tags;
     if (dto.isSecret !== undefined) poi.isSecret = dto.isSecret;
@@ -217,16 +225,30 @@ export class LocationPoiService {
       order: { sortOrder: "ASC", name: "ASC" },
     });
     if (input.targetPoiId) {
-      const poi = allPois.find((candidate) => candidate.id === input.targetPoiId);
-      if (!poi) return { status: "not_found", suggestions: this.suggestPois("", allPois) };
+      const poi = allPois.find(
+        (candidate) => candidate.id === input.targetPoiId,
+      );
+      if (!poi)
+        return {
+          status: "not_found",
+          suggestions: this.suggestPois("", allPois),
+        };
       if (!poi.isKnownToParty) return { status: "hidden", poi };
       return { status: "found", poi };
     }
 
     const rawName = input.targetPoiName?.trim();
-    if (!rawName) return { status: "not_found", suggestions: this.suggestPois("", allPois) };
+    if (!rawName)
+      return {
+        status: "not_found",
+        suggestions: this.suggestPois("", allPois),
+      };
     const needle = normalizePoiText(rawName);
-    if (!needle) return { status: "not_found", suggestions: this.suggestPois("", allPois) };
+    if (!needle)
+      return {
+        status: "not_found",
+        suggestions: this.suggestPois("", allPois),
+      };
 
     const scored = allPois
       .map((poi) => ({ poi, score: this.scorePoiMatch(poi, needle) }))
@@ -234,7 +256,10 @@ export class LocationPoiService {
       .sort((a, b) => b.score - a.score);
     const best = scored[0];
     if (!best || best.score < 45) {
-      return { status: "not_found", suggestions: this.suggestPois(rawName, allPois) };
+      return {
+        status: "not_found",
+        suggestions: this.suggestPois(rawName, allPois),
+      };
     }
     const tied = scored.filter((match) => match.score === best.score);
     if (tied.length > 1 && best.score >= 80) {
@@ -350,12 +375,7 @@ export class LocationPoiService {
 
   private poiSearchTerms(poi: LocationPoiEntity): string[] {
     const props = (poi.properties ?? {}) as Record<string, unknown>;
-    const aliases = [
-      props.aliases,
-      props.alias,
-      props.knownAs,
-      poi.aliases,
-    ]
+    const aliases = [props.aliases, props.alias, props.knownAs, poi.aliases]
       .flat()
       .filter((value): value is string => typeof value === "string");
     return [

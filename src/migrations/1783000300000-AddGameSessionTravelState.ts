@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddGameSessionTravelState1783000300000
-  implements MigrationInterface
-{
+export class AddGameSessionTravelState1783000300000 implements MigrationInterface {
   name = "AddGameSessionTravelState1783000300000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

@@ -158,7 +158,11 @@ export class SessionRecapService {
     const start = Date.now();
     let response: InternalSummarizeResponse;
     try {
-      response = await this.callSummarize(sessionId, session.campaignId, messages);
+      response = await this.callSummarize(
+        sessionId,
+        session.campaignId,
+        messages,
+      );
     } catch (err) {
       return this.handleSummarizeError(err, sessionId);
     }
@@ -272,7 +276,8 @@ export class SessionRecapService {
 
   private mapRole(kind: string): "user" | "assistant" | "system" {
     if (kind === "player_action") return "user";
-    if (kind === "narration" || kind === "combat_resolution") return "assistant";
+    if (kind === "narration" || kind === "combat_resolution")
+      return "assistant";
     return "system";
   }
 

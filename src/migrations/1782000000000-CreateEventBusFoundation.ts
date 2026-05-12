@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * Migration semi-aditiva — colunas novas em session_events são NULL/default-friendly,
  * não force backfill em rows antigas. Down() simétrico (drop colunas + tabelas).
  */
-export class CreateEventBusFoundation1782000000000
-  implements MigrationInterface
-{
+export class CreateEventBusFoundation1782000000000 implements MigrationInterface {
   name = "CreateEventBusFoundation1782000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
@@ -183,9 +181,7 @@ export class CreateEventBusFoundation1782000000000
     await queryRunner.query(
       `DROP INDEX IF EXISTS idx_campaign_audience_overrides_campaign`,
     );
-    await queryRunner.query(
-      `DROP TABLE IF EXISTS campaign_audience_overrides`,
-    );
+    await queryRunner.query(`DROP TABLE IF EXISTS campaign_audience_overrides`);
     await queryRunner.query(`DROP TABLE IF EXISTS audience_routing`);
 
     await queryRunner.query(

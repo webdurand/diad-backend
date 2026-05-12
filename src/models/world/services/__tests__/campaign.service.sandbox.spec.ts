@@ -28,8 +28,18 @@ describe("CampaignService.listByUser — sandbox exclusion", () => {
     } as CampaignEntity;
 
     const svc = makeService([
-      { campaignId: REGULAR_ID, userId: USER_ID, isActive: true, campaign: regular },
-      { campaignId: SANDBOX_ID, userId: USER_ID, isActive: true, campaign: sandbox },
+      {
+        campaignId: REGULAR_ID,
+        userId: USER_ID,
+        isActive: true,
+        campaign: regular,
+      },
+      {
+        campaignId: SANDBOX_ID,
+        userId: USER_ID,
+        isActive: true,
+        campaign: sandbox,
+      },
     ]);
 
     const result = await svc.listByUser(USER_ID);
@@ -45,7 +55,12 @@ describe("CampaignService.listByUser — sandbox exclusion", () => {
     } as CampaignEntity;
 
     const svc = makeService([
-      { campaignId: SANDBOX_ID, userId: USER_ID, isActive: true, campaign: sandbox },
+      {
+        campaignId: SANDBOX_ID,
+        userId: USER_ID,
+        isActive: true,
+        campaign: sandbox,
+      },
     ]);
 
     const result = await svc.listByUser(USER_ID);
@@ -54,7 +69,12 @@ describe("CampaignService.listByUser — sandbox exclusion", () => {
 
   it("filtra entries sem campaign relacional carregada (boundary)", async () => {
     const svc = makeService([
-      { campaignId: REGULAR_ID, userId: USER_ID, isActive: true, campaign: undefined },
+      {
+        campaignId: REGULAR_ID,
+        userId: USER_ID,
+        isActive: true,
+        campaign: undefined,
+      },
     ]);
 
     const result = await svc.listByUser(USER_ID);

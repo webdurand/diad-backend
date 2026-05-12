@@ -148,7 +148,6 @@ export class AiProxyController {
     }
   }
 
-  
   private async persistPlayerAction(
     sessionId: string,
     userId: string,
@@ -270,7 +269,9 @@ export class AiProxyController {
           kind: "turn_outcome",
           content: JSON.stringify(outcome),
           clientId: `srv-outcome-${createHash("sha256")
-            .update(`${sessionId}:${outcome.createdAt}:${outcome.outcomeType}:${outcome.title}:${index}`)
+            .update(
+              `${sessionId}:${outcome.createdAt}:${outcome.outcomeType}:${outcome.title}:${index}`,
+            )
             .digest("hex")
             .slice(0, 32)}`,
         });
@@ -296,9 +297,7 @@ export class AiProxyController {
         })}\n\n`,
       );
     } catch (err: any) {
-      this.logger.warn(
-        `narration_persisted emit failed: ${err?.message}`,
-      );
+      this.logger.warn(`narration_persisted emit failed: ${err?.message}`);
     }
   }
 
@@ -333,8 +332,9 @@ export class AiProxyController {
     guardCount: number;
     dispatchReason?: string | null;
   } | null> {
-    const currentMaxSeq =
-      await this.sessionMessageService.getMaxSequenceNumber(args.sessionId);
+    const currentMaxSeq = await this.sessionMessageService.getMaxSequenceNumber(
+      args.sessionId,
+    );
 
     const pending = await this.pendingGuardRepo
       .createQueryBuilder("p")
@@ -561,13 +561,10 @@ export class AiProxyController {
         ctx.hotRecapTriggered
           ? "pending"
           : ctx.previousSessionSummary
-          ? "cached"
-          : "none",
+            ? "cached"
+            : "none",
       );
-      res.setHeader(
-        "X-Session-Is-Resumed",
-        ctx.isResumed ? "true" : "false",
-      );
+      res.setHeader("X-Session-Is-Resumed", ctx.isResumed ? "true" : "false");
 
       if (ctx.lastMessageMismatch) {
         // Cliente ficou para trás (stream truncado, aba inativa durante a
@@ -676,7 +673,11 @@ export class AiProxyController {
           postCombatClientId,
         );
         if (existing) {
-          this.emitNarrationPersisted(res, existing.clientId ?? postCombatClientId, body.clientId);
+          this.emitNarrationPersisted(
+            res,
+            existing.clientId ?? postCombatClientId,
+            body.clientId,
+          );
           await this.emitSessionSync(sessionId, res);
           res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
           res.end();
@@ -685,7 +686,8 @@ export class AiProxyController {
       }
 
       const collector = new SseNarrationCollector();
-      const narrationClientId = postCombatClientId ?? `srv-narr-${randomUUID()}`;
+      const narrationClientId =
+        postCombatClientId ?? `srv-narr-${randomUUID()}`;
       let earlyPersistFired = false;
       collector.onNarratorDone(async (narration) => {
         if (earlyPersistFired) return;
@@ -766,7 +768,8 @@ export class AiProxyController {
     } finally {
       releaseIdempotency(idempotencyKey);
       const tEnd = performance.now();
-      const prePersistMs = tAgentsCallStart > 0 ? Math.round(tAgentsCallStart - tStart) : null;
+      const prePersistMs =
+        tAgentsCallStart > 0 ? Math.round(tAgentsCallStart - tStart) : null;
       const agentsCallMs =
         tAgentsCallStart > 0 && tPostPersistStart > 0
           ? Math.round(tPostPersistStart - tAgentsCallStart)

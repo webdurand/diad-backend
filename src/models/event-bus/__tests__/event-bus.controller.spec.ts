@@ -166,9 +166,7 @@ describe("EventBusController", () => {
         "11111111-1111-1111-1111-111111111111",
       );
 
-      expect(result.campaignId).toBe(
-        "11111111-1111-1111-1111-111111111111",
-      );
+      expect(result.campaignId).toBe("11111111-1111-1111-1111-111111111111");
       expect(result.entries).toHaveLength(1);
       expect(result.entries[0].audiences).toEqual(["HUD"]);
       expect(audienceMap.getCampaignMap).toHaveBeenCalledWith(

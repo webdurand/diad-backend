@@ -3,7 +3,9 @@ import { AdminMetricsService } from "../admin-metrics.service";
 import { ValidationException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
-function makeDs(handler: (sql: string, params: unknown[]) => unknown): DataSource {
+function makeDs(
+  handler: (sql: string, params: unknown[]) => unknown,
+): DataSource {
   return {
     query: jest.fn(handler),
   } as unknown as DataSource;
@@ -190,7 +192,10 @@ describe("AdminMetricsService — getCosts", () => {
 describe("AdminMetricsService — cursor pagination", () => {
   it("encode/decode cursor roundtrip", () => {
     const service = new AdminMetricsService(makeDs(() => []));
-    const cursor = (service as any).encodeCursor("2026-05-01T00:00:00Z", "uuid-x");
+    const cursor = (service as any).encodeCursor(
+      "2026-05-01T00:00:00Z",
+      "uuid-x",
+    );
     const decoded = (service as any).parseCursor(cursor);
     expect(decoded).toEqual({
       createdAt: "2026-05-01T00:00:00Z",
@@ -200,8 +205,9 @@ describe("AdminMetricsService — cursor pagination", () => {
 
   it("rejeita cursor malformado", () => {
     const service = new AdminMetricsService(makeDs(() => []));
-    expect(() => (service as any).parseCursor("not-base64-format"))
-      .toThrow(ValidationException);
+    expect(() => (service as any).parseCursor("not-base64-format")).toThrow(
+      ValidationException,
+    );
   });
 
   it("aceita undefined", () => {

@@ -25,16 +25,15 @@ export interface MaterializeRandomEncounterInput {
   traceId?: string;
 }
 
-export type MaterializeRandomEncounterResult = StartEncounterFromNarrativeResult & {
-  monsterSlugs: string[];
-  npcIds: string[];
-};
+export type MaterializeRandomEncounterResult =
+  StartEncounterFromNarrativeResult & {
+    monsterSlugs: string[];
+    npcIds: string[];
+  };
 
 @Injectable()
 export class RandomEncounterMaterializerService {
-  private readonly logger = new Logger(
-    RandomEncounterMaterializerService.name,
-  );
+  private readonly logger = new Logger(RandomEncounterMaterializerService.name);
 
   constructor(
     @InjectRepository(MonsterEntity)

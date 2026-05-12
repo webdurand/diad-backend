@@ -213,7 +213,8 @@ export class SseNarrationCollector {
           id,
           label,
           icon: typeof c.icon === "string" ? c.icon : undefined,
-          intentHint: typeof c.intentHint === "string" ? c.intentHint : undefined,
+          intentHint:
+            typeof c.intentHint === "string" ? c.intentHint : undefined,
         });
       }
       // Última lista emitida ganha (turn pode emitir sentinel + final).
@@ -226,16 +227,19 @@ export class SseNarrationCollector {
       typeof ev.content === "string"
         ? ev.content
         : typeof ev.token === "string"
-        ? ev.token
-        : typeof ev.text === "string"
-        ? ev.text
-        : "";
+          ? ev.token
+          : typeof ev.text === "string"
+            ? ev.text
+            : "";
     if (piece) this.narration += piece;
   }
 
   private handleTurnOutcome(ev: Record<string, unknown>): void {
     const outcomeTypeRaw =
-      ev.outcomeType ?? ev.kind ?? ev.code ?? (ev.type === "turn_blocked" ? "turn_blocked" : null);
+      ev.outcomeType ??
+      ev.kind ??
+      ev.code ??
+      (ev.type === "turn_blocked" ? "turn_blocked" : null);
     const outcomeType =
       typeof outcomeTypeRaw === "string" && outcomeTypeRaw.trim()
         ? outcomeTypeRaw.trim()
@@ -299,7 +303,9 @@ export class SseNarrationCollector {
 
     const modifiers = Array.isArray(ev.modifiers)
       ? (ev.modifiers as unknown[])
-          .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
+          .filter(
+            (m): m is Record<string, unknown> => !!m && typeof m === "object",
+          )
           .map((m) => ({
             label: typeof m.label === "string" ? m.label : "",
             value: typeof m.value === "number" ? m.value : 0,

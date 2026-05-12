@@ -104,10 +104,9 @@ export class AiTurnService {
       participant.lastAiTurnRound === encounter.currentRound &&
       participant.lastAiTurnResult
     ) {
-      const cachedSteps = (
+      const cachedSteps =
         (participant.lastAiTurnResult as { steps?: Array<{ kind?: string }> })
-          .steps ?? []
-      );
+          .steps ?? [];
       const hasUsefulStep = cachedSteps.some(
         (s) =>
           s.kind === "attack" ||
@@ -185,8 +184,7 @@ export class AiTurnService {
       "monster.hp_current": monsterPart?.hp?.current ?? null,
       "monster.hp_max": monsterPart?.hp?.max ?? null,
       "monster.faction": monsterPart?.faction ?? null,
-      "monster.actions_count":
-        monsterPart?.statblockRef?.actions?.length ?? 0,
+      "monster.actions_count": monsterPart?.statblockRef?.actions?.length ?? 0,
       "snapshot.enemies_alive": enemiesAlive.length,
     });
     // Breakdown dos participantes — útil pra entender encontros stuck.
@@ -241,8 +239,7 @@ export class AiTurnService {
     let attackStepIndex = 0;
     for (const step of planRes.value.steps) {
       const isSubAttack =
-        step.kind === "attack" &&
-        (isMultiattackPlan || attackStepIndex > 0);
+        step.kind === "attack" && (isMultiattackPlan || attackStepIndex > 0);
       const executed = await this.applyStep(
         encounter,
         participantId,

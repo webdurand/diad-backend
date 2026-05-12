@@ -10,6 +10,14 @@ const fakeCtx = (title: string): SceneContext => ({
   recentChronicles: [],
   playerCharacter: null,
   availableLocations: [],
+  availablePois: [],
+  stage: {
+    availablePois: [],
+    npcsPresent: [],
+    nearbyNpcs: [],
+    currentInterlocutor: null,
+    mentionedEntities: [],
+  },
   travelState: null,
 });
 

@@ -29,7 +29,11 @@ function makeRepo(): {
     return e;
   });
   return {
-    repo: { findOne, create, save: saveSpy } as unknown as Repository<WeatherEntity>,
+    repo: {
+      findOne,
+      create,
+      save: saveSpy,
+    } as unknown as Repository<WeatherEntity>,
     saveSpy,
   };
 }

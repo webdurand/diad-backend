@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class CreateAdminMetricsMatviews1783000020000
-  implements MigrationInterface
-{
+export class CreateAdminMetricsMatviews1783000020000 implements MigrationInterface {
   name = "CreateAdminMetricsMatviews1783000020000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

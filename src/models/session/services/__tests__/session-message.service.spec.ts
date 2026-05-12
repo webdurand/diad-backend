@@ -83,10 +83,14 @@ describe("SessionMessageService.listBySession", () => {
 
   function buildService(messages: SessionMessageEntity[]) {
     const qb = {} as MessageQueryBuilderMock;
-    qb.where = jest.fn(() => qb);
-    qb.orderBy = jest.fn(() => qb);
-    qb.take = jest.fn(() => qb);
-    qb.andWhere = jest.fn(() => qb);
+    qb.where = jest.fn(
+      (_clause: string, _params?: Record<string, unknown>) => qb,
+    );
+    qb.orderBy = jest.fn((_field: string, _order: "ASC" | "DESC") => qb);
+    qb.take = jest.fn((_limit: number) => qb);
+    qb.andWhere = jest.fn(
+      (_clause: string, _params: Record<string, unknown>) => qb,
+    );
     qb.getMany = jest.fn().mockResolvedValue(messages);
 
     const messageRepo = {

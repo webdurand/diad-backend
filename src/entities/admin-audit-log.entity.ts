@@ -26,7 +26,12 @@ export class AdminAuditLogEntity {
   @Column({ type: "varchar", length: 64 })
   action: string;
 
-  @Column({ name: "target_entity", type: "varchar", length: 64, nullable: true })
+  @Column({
+    name: "target_entity",
+    type: "varchar",
+    length: 64,
+    nullable: true,
+  })
   targetEntity?: string;
 
   @Column({ name: "target_id", type: "varchar", length: 128, nullable: true })

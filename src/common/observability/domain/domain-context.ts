@@ -68,4 +68,3 @@ export function serializeDomainHeader(ctx: DomainContext): string {
   }
   return pairs.join(";");
 }
-

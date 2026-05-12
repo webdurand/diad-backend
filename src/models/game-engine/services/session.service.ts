@@ -135,7 +135,7 @@ export class SessionService {
     sessionId: string,
     campaign: CampaignEntity,
   ): Promise<void> {
-    const seed = (campaign.generationSeed ?? {}) as Record<string, unknown>;
+    const seed = campaign.generationSeed ?? {};
     const template = seed.questsTemplate;
     if (!Array.isArray(template) || template.length === 0) return;
 
@@ -151,7 +151,8 @@ export class SessionService {
       for (const o of objectivesRaw) {
         if (!o || typeof o !== "object") continue;
         const obj = o as Record<string, unknown>;
-        const desc = typeof obj.description === "string" ? obj.description : null;
+        const desc =
+          typeof obj.description === "string" ? obj.description : null;
         if (!desc) continue;
         objectives.push({
           description: desc,
@@ -160,20 +161,22 @@ export class SessionService {
             typeof obj.targetName === "string" ? obj.targetName : undefined,
           targetCity:
             typeof obj.targetCity === "string" ? obj.targetCity : null,
-          amount:
-            typeof obj.amount === "number" ? obj.amount : null,
+          amount: typeof obj.amount === "number" ? obj.amount : null,
         });
       }
 
       const rewardsRaw = q.rewards;
       const rewards =
-        rewardsRaw && typeof rewardsRaw === "object" && !Array.isArray(rewardsRaw)
+        rewardsRaw &&
+        typeof rewardsRaw === "object" &&
+        !Array.isArray(rewardsRaw)
           ? (rewardsRaw as CreateQuestDto["rewards"])
           : undefined;
 
       const dto: CreateQuestDto = {
         name,
-        description: typeof q.description === "string" ? q.description : undefined,
+        description:
+          typeof q.description === "string" ? q.description : undefined,
         isMainQuest: q.isMainQuest === true,
         objectives,
         rewards,

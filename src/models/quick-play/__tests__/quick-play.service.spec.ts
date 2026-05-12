@@ -23,8 +23,12 @@ interface FakeRepo<T> {
   update: jest.Mock;
 }
 
-function makeCampaignRepo(initial: Partial<CampaignEntity>[] = []): FakeRepo<CampaignEntity> {
-  const rows: CampaignEntity[] = initial.map((r) => ({ ...r } as CampaignEntity));
+function makeCampaignRepo(
+  initial: Partial<CampaignEntity>[] = [],
+): FakeRepo<CampaignEntity> {
+  const rows: CampaignEntity[] = initial.map(
+    (r) => ({ ...r }) as CampaignEntity,
+  );
   return {
     rows,
     findOne: jest.fn(async (opts: any) => {
@@ -33,7 +37,8 @@ function makeCampaignRepo(initial: Partial<CampaignEntity>[] = []): FakeRepo<Cam
         rows.find(
           (r) =>
             (where.dmUserId === undefined || r.dmUserId === where.dmUserId) &&
-            (where.isSandbox === undefined || (r as any).isSandbox === where.isSandbox),
+            (where.isSandbox === undefined ||
+              (r as any).isSandbox === where.isSandbox),
         ) ?? null
       );
     }),
@@ -49,8 +54,12 @@ function makeCampaignRepo(initial: Partial<CampaignEntity>[] = []): FakeRepo<Cam
   };
 }
 
-function makeSessionRepo(initial: Partial<GameSessionEntity>[] = []): FakeRepo<GameSessionEntity> {
-  const rows: GameSessionEntity[] = initial.map((r) => ({ ...r } as GameSessionEntity));
+function makeSessionRepo(
+  initial: Partial<GameSessionEntity>[] = [],
+): FakeRepo<GameSessionEntity> {
+  const rows: GameSessionEntity[] = initial.map(
+    (r) => ({ ...r }) as GameSessionEntity,
+  );
   return {
     rows,
     findOne: jest.fn(async (opts: any) => {
@@ -58,7 +67,8 @@ function makeSessionRepo(initial: Partial<GameSessionEntity>[] = []): FakeRepo<G
       return (
         rows.find(
           (r) =>
-            (where.campaignId === undefined || r.campaignId === where.campaignId) &&
+            (where.campaignId === undefined ||
+              r.campaignId === where.campaignId) &&
             (where.ownerId === undefined || r.ownerId === where.ownerId),
         ) ?? null
       );
@@ -83,8 +93,7 @@ function makePlayerRepo(): FakeRepo<CampaignPlayerEntity> {
       const where = opts?.where ?? {};
       return (
         rows.find(
-          (r) =>
-            r.campaignId === where.campaignId && r.userId === where.userId,
+          (r) => r.campaignId === where.campaignId && r.userId === where.userId,
         ) ?? null
       );
     }),
@@ -290,7 +299,9 @@ describe("QuickPlayService", () => {
       });
       expect(encounterService.create).toHaveBeenCalledWith(
         SESSION_ID,
-        expect.objectContaining({ name: expect.stringContaining("Quick Play") }),
+        expect.objectContaining({
+          name: expect.stringContaining("Quick Play"),
+        }),
       );
       expect(encounterService.addCharacter).toHaveBeenCalledWith(
         ENCOUNTER_ID,
@@ -452,14 +463,22 @@ describe("QuickPlayService", () => {
       });
 
       expect(encounterService.addMonster).toHaveBeenCalledTimes(2);
-      expect(encounterService.addMonster).toHaveBeenNthCalledWith(1, ENCOUNTER_ID, {
-        monsterId: "m1",
-        count: 2,
-      });
-      expect(encounterService.addMonster).toHaveBeenNthCalledWith(2, ENCOUNTER_ID, {
-        monsterId: "m2",
-        count: 1,
-      });
+      expect(encounterService.addMonster).toHaveBeenNthCalledWith(
+        1,
+        ENCOUNTER_ID,
+        {
+          monsterId: "m1",
+          count: 2,
+        },
+      );
+      expect(encounterService.addMonster).toHaveBeenNthCalledWith(
+        2,
+        ENCOUNTER_ID,
+        {
+          monsterId: "m2",
+          count: 1,
+        },
+      );
     });
   });
 });

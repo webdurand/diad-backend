@@ -19,7 +19,7 @@ const TIER_LOOT_RARITY: Record<PartyTier, MagicItemRarity[]> = {
 };
 
 const RARITY_BASE_WEIGHT: Record<MagicItemRarity, number> = {
-  Common: 0.50,
+  Common: 0.5,
   Uncommon: 0.35,
   Rare: 0.12,
   "Very Rare": 0.025,

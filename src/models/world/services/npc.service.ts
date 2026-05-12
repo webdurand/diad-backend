@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, IsNull, Repository } from "typeorm";
 import { NpcEntity } from "src/entities/npc.entity";
@@ -119,7 +124,8 @@ export class NpcService {
       description: dto.description,
       descriptionHidden: dto.descriptionHidden,
       monsterId,
-      provenance: dto.provenance ?? (sessionScoped ? "auto-materialized" : "manual"),
+      provenance:
+        dto.provenance ?? (sessionScoped ? "auto-materialized" : "manual"),
       personalityBig5: dto.personalityBig5 ?? {},
       motivation: dto.motivation,
       knowledgeScope: dto.knowledgeScope ?? [],
@@ -261,7 +267,13 @@ export class NpcService {
   async listForSessionProjected(
     gameSessionId: string,
     options: NpcProjectionOptions = {},
-  ): Promise<(ProjectedNpc & { status: string; disposition: string; currentLocationId?: string })[]> {
+  ): Promise<
+    (ProjectedNpc & {
+      status: string;
+      disposition: string;
+      currentLocationId?: string;
+    })[]
+  > {
     const merged = await this.listForSession(gameSessionId);
     return merged.map((m) => ({
       ...projectNpc(m, options),

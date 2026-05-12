@@ -38,9 +38,7 @@ export class AiProxyService {
    * quando o agents endpoint exige auth service-to-service.
    */
   getServiceKey(): string {
-    return (
-      this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev"
-    );
+    return this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev";
   }
 
   /**
@@ -348,19 +346,16 @@ export class AiProxyService {
     const timeoutMs = Number(
       this.configService.get<string>("AI_TURN_TIMEOUT_MS") ?? "30000",
     );
-    return this.outbound.request(
-      `${this.agentBaseUrl}/monsters/decide-lair`,
-      {
-        method: "POST",
-        upstreamService: "diad-agents",
-        timeoutMs,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Service-Key": serviceKey,
-        },
-        body: JSON.stringify(payload),
+    return this.outbound.request(`${this.agentBaseUrl}/monsters/decide-lair`, {
+      method: "POST",
+      upstreamService: "diad-agents",
+      timeoutMs,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Service-Key": serviceKey,
       },
-    );
+      body: JSON.stringify(payload),
+    });
   }
 
   async decideLegendary(payload: {

@@ -41,9 +41,7 @@ export class ReputationDecayService {
    * está em sessão ativa/pausada. Best-effort — falhas logam warn e
    * retornam zeros.
    */
-  async applyOnLongRest(
-    characterId: string,
-  ): Promise<ReputationDecayResult> {
+  async applyOnLongRest(characterId: string): Promise<ReputationDecayResult> {
     try {
       const result = await this.dataSource.query(
         `

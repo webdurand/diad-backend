@@ -17,9 +17,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  *
  * Down() simétrico (drop coluna + tabela).
  */
-export class CreateNpcArchetypeTemplates1784000000000
-  implements MigrationInterface
-{
+export class CreateNpcArchetypeTemplates1784000000000 implements MigrationInterface {
   name = "CreateNpcArchetypeTemplates1784000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
@@ -52,20 +50,104 @@ export class CreateNpcArchetypeTemplates1784000000000
       hostility: "volatile" | "low" | "high" | "neutral";
       page: number | null;
     }> = [
-      { slug: "commoner",       monsterSlug: "commoner",       labelPt: "Plebeu",                   hostility: "low",      page: 359 },
-      { slug: "acolyte",        monsterSlug: "acolyte",        labelPt: "Acólito",                  hostility: "low",      page: 343 },
-      { slug: "guard",          monsterSlug: "guard",          labelPt: "Guarda",                   hostility: "neutral",  page: 347 },
-      { slug: "noble",          monsterSlug: "noble",          labelPt: "Nobre",                    hostility: "low",      page: 348 },
-      { slug: "thug",           monsterSlug: "thug",           labelPt: "Capanga",                  hostility: "volatile", page: 350 },
-      { slug: "bandit",         monsterSlug: "bandit",         labelPt: "Bandido",                  hostility: "volatile", page: 343 },
-      { slug: "cultist",        monsterSlug: "cultist",        labelPt: "Cultista",                 hostility: "volatile", page: 345 },
-      { slug: "bandit_captain", monsterSlug: "bandit-captain", labelPt: "Capitão de Bandidos",      hostility: "high",     page: 344 },
-      { slug: "cult_fanatic",   monsterSlug: "cult-fanatic",   labelPt: "Fanático Cultista",        hostility: "high",     page: 346 },
-      { slug: "spy",            monsterSlug: "spy",            labelPt: "Espião",                   hostility: "neutral",  page: 349 },
-      { slug: "priest",         monsterSlug: "priest",         labelPt: "Sacerdote",                hostility: "neutral",  page: 348 },
-      { slug: "veteran",        monsterSlug: "veteran",        labelPt: "Veterano",                 hostility: "neutral",  page: 350 },
-      { slug: "mage",           monsterSlug: "mage",           labelPt: "Mago",                     hostility: "neutral",  page: 347 },
-      { slug: "assassin",       monsterSlug: "assassin",       labelPt: "Assassino",                hostility: "high",     page: 343 },
+      {
+        slug: "commoner",
+        monsterSlug: "commoner",
+        labelPt: "Plebeu",
+        hostility: "low",
+        page: 359,
+      },
+      {
+        slug: "acolyte",
+        monsterSlug: "acolyte",
+        labelPt: "Acólito",
+        hostility: "low",
+        page: 343,
+      },
+      {
+        slug: "guard",
+        monsterSlug: "guard",
+        labelPt: "Guarda",
+        hostility: "neutral",
+        page: 347,
+      },
+      {
+        slug: "noble",
+        monsterSlug: "noble",
+        labelPt: "Nobre",
+        hostility: "low",
+        page: 348,
+      },
+      {
+        slug: "thug",
+        monsterSlug: "thug",
+        labelPt: "Capanga",
+        hostility: "volatile",
+        page: 350,
+      },
+      {
+        slug: "bandit",
+        monsterSlug: "bandit",
+        labelPt: "Bandido",
+        hostility: "volatile",
+        page: 343,
+      },
+      {
+        slug: "cultist",
+        monsterSlug: "cultist",
+        labelPt: "Cultista",
+        hostility: "volatile",
+        page: 345,
+      },
+      {
+        slug: "bandit_captain",
+        monsterSlug: "bandit-captain",
+        labelPt: "Capitão de Bandidos",
+        hostility: "high",
+        page: 344,
+      },
+      {
+        slug: "cult_fanatic",
+        monsterSlug: "cult-fanatic",
+        labelPt: "Fanático Cultista",
+        hostility: "high",
+        page: 346,
+      },
+      {
+        slug: "spy",
+        monsterSlug: "spy",
+        labelPt: "Espião",
+        hostility: "neutral",
+        page: 349,
+      },
+      {
+        slug: "priest",
+        monsterSlug: "priest",
+        labelPt: "Sacerdote",
+        hostility: "neutral",
+        page: 348,
+      },
+      {
+        slug: "veteran",
+        monsterSlug: "veteran",
+        labelPt: "Veterano",
+        hostility: "neutral",
+        page: 350,
+      },
+      {
+        slug: "mage",
+        monsterSlug: "mage",
+        labelPt: "Mago",
+        hostility: "neutral",
+        page: 347,
+      },
+      {
+        slug: "assassin",
+        monsterSlug: "assassin",
+        labelPt: "Assassino",
+        hostility: "high",
+        page: 343,
+      },
     ];
 
     for (const row of seed) {
@@ -122,10 +204,10 @@ export class CreateNpcArchetypeTemplates1784000000000
     await queryRunner.query(
       `ALTER TABLE npcs DROP CONSTRAINT IF EXISTS npcs_provenance_check`,
     );
-    await queryRunner.query(`ALTER TABLE npcs DROP COLUMN IF EXISTS provenance`);
     await queryRunner.query(
-      `DROP INDEX IF EXISTS idx_npc_archetype_monster`,
+      `ALTER TABLE npcs DROP COLUMN IF EXISTS provenance`,
     );
+    await queryRunner.query(`DROP INDEX IF EXISTS idx_npc_archetype_monster`);
     await queryRunner.query(`DROP TABLE IF EXISTS npc_archetype_templates`);
   }
 }

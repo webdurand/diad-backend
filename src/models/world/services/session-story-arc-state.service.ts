@@ -35,7 +35,8 @@ export class SessionStoryArcStateService {
     patch: UpsertStoryArcStateDto,
   ): Promise<SessionStoryArcStateEntity> {
     const state = await this.getOrCreate(gameSessionId, storyArcId);
-    if (patch.currentPhase !== undefined) state.currentPhase = patch.currentPhase;
+    if (patch.currentPhase !== undefined)
+      state.currentPhase = patch.currentPhase;
     if (patch.phaseNotes !== undefined) state.phaseNotes = patch.phaseNotes;
     return this.repo.save(state);
   }

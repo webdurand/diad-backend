@@ -131,7 +131,11 @@ export class StartEncounterFromNarrativeService {
       input.campaignId ?? null,
     );
 
-    let cachedPcSnapshot: { level: number; hpPercent: number; klass: string } | null = null;
+    let cachedPcSnapshot: {
+      level: number;
+      hpPercent: number;
+      klass: string;
+    } | null = null;
 
     // 2.5. Fallback do botão "Iniciar combate": resolve hostis a partir da
     // cena ativa. Hostis primeiro; figurantes neutros materializados pelo
@@ -159,11 +163,7 @@ export class StartEncounterFromNarrativeService {
     // do PC (level/HP/classe) — o Haiku identifica alvos com CR adequado ao
     // tier, materializa via NpcService.create (auto-attach scene_npcs), e
     // devolve os IDs prontos pra encounter.
-    if (
-      resolvedIds.length === 0 &&
-      input.sessionId &&
-      input.campaignId
-    ) {
+    if (resolvedIds.length === 0 && input.sessionId && input.campaignId) {
       const recentProse = await this.collectRecentNarratorProse(
         input.sessionId,
       );
@@ -262,7 +262,11 @@ export class StartEncounterFromNarrativeService {
     }
 
     // 6. Roll initiative + start combat
-    await this.rollInitiative(allParticipants, input.surpriseRound === true, npcParticipants);
+    await this.rollInitiative(
+      allParticipants,
+      input.surpriseRound === true,
+      npcParticipants,
+    );
     encounter = await this.encounterService.startCombat(encounter.id);
 
     // 7. Aplica `surprised` em NPCs (best-effort)
@@ -406,9 +410,7 @@ export class StartEncounterFromNarrativeService {
       }
 
       if (!sessionId) {
-        this.logger.warn(
-          `target name '${candidate}' sem sessionId; pulando.`,
-        );
+        this.logger.warn(`target name '${candidate}' sem sessionId; pulando.`);
         continue;
       }
 
@@ -422,9 +424,7 @@ export class StartEncounterFromNarrativeService {
         resolved.push(stub.id);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(
-          `auto-materialize falhou pra '${candidate}': ${msg}`,
-        );
+        this.logger.warn(`auto-materialize falhou pra '${candidate}': ${msg}`);
       }
     }
     return resolved;
@@ -484,7 +484,9 @@ export class StartEncounterFromNarrativeService {
       let hp = monster.hit_points;
       if (monster.hit_points_roll) {
         try {
-          const rolled = this.diceService.rollExpression(monster.hit_points_roll);
+          const rolled = this.diceService.rollExpression(
+            monster.hit_points_roll,
+          );
           hp = Math.max(1, rolled.total);
         } catch {
           /* fallback to monster.hit_points */
@@ -529,7 +531,9 @@ export class StartEncounterFromNarrativeService {
   private async placeTokens(
     encounterId: string,
     participants: EncounterParticipantEntity[],
-    encounter: { mapData?: { gridColumns?: number; gridRows?: number; gridSize?: number } },
+    encounter: {
+      mapData?: { gridColumns?: number; gridRows?: number; gridSize?: number };
+    },
     layout: TokenLayoutEntry[] | undefined,
     npcs: NpcEntity[],
   ): Promise<void> {
@@ -545,7 +549,8 @@ export class StartEncounterFromNarrativeService {
       }
     }
 
-    const positions: Array<{ participantId: string; x: number; y: number }> = [];
+    const positions: Array<{ participantId: string; x: number; y: number }> =
+      [];
 
     // Resolver ref (npcId | characterId) → participantId.
     const npcIdToParticipantId = new Map<string, string>();
@@ -701,9 +706,7 @@ export class StartEncounterFromNarrativeService {
       if (p.initiativeTotal != null) continue; // já rolada
       const mod = p.initiativeModifier ?? 0;
       const disadvantage = surpriseRound && surprisedIds.has(p.id);
-      const roll = disadvantage
-        ? Math.min(this.d20(), this.d20())
-        : this.d20();
+      const roll = disadvantage ? Math.min(this.d20(), this.d20()) : this.d20();
       const total = roll + mod;
       await this.encounterService.setManualInitiative(p.id, total);
     }
@@ -790,9 +793,7 @@ export class StartEncounterFromNarrativeService {
       return ids;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `lazy_extract falhou session=${args.sessionId}: ${msg}`,
-      );
+      this.logger.warn(`lazy_extract falhou session=${args.sessionId}: ${msg}`);
       return [];
     }
   }

@@ -4,10 +4,7 @@ import { Repository } from "typeorm";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { SceneService } from "./scene.service";
-import {
-  SceneContext,
-  SceneContextService,
-} from "./scene-context.service";
+import { SceneContext, SceneContextService } from "./scene-context.service";
 import { SessionRecapService } from "./session-recap.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
@@ -113,7 +110,7 @@ export class SessionResumeService {
         })
       : null;
 
-    let previousSessionSummary: string | null =
+    const previousSessionSummary: string | null =
       previousSession?.summaryText ?? null;
 
     let hotRecapTriggered = false;
@@ -124,13 +121,11 @@ export class SessionResumeService {
     ) {
       hotRecapTriggered = true;
       // Fire-and-forget — não bloqueia primeiro turn (spec 024 §C3).
-      void this.recapService
-        .ensureRecap(previousSessionId)
-        .catch((err) =>
-          this.logger.error("session.recap.fire_and_forget_failed", err, {
-            "session.id": previousSessionId,
-          }),
-        );
+      void this.recapService.ensureRecap(previousSessionId).catch((err) =>
+        this.logger.error("session.recap.fire_and_forget_failed", err, {
+          "session.id": previousSessionId,
+        }),
+      );
     }
 
     const sceneContext = await this.assembleSceneContext(sessionId);
@@ -183,10 +178,7 @@ export class SessionResumeService {
       .andWhere("s.status IN (:...statuses)", {
         statuses: ["completed", "paused"],
       })
-      .orderBy(
-        "COALESCE(s.ended_at, s.updated_at)",
-        "DESC",
-      )
+      .orderBy("COALESCE(s.ended_at, s.updated_at)", "DESC")
       .limit(1)
       .getOne();
     return previous?.id ?? null;
@@ -228,7 +220,8 @@ export class SessionResumeService {
 
   private mapRole(kind: string): "user" | "assistant" | "system" {
     if (kind === "player_action") return "user";
-    if (kind === "narration" || kind === "combat_resolution") return "assistant";
+    if (kind === "narration" || kind === "combat_resolution")
+      return "assistant";
     return "system";
   }
 

@@ -97,8 +97,8 @@ export class PcPersonaService {
         ? { id: characterIdOrName, userId }
         : { name: characterIdOrName, userId }
       : isUuid
-      ? { id: characterIdOrName }
-      : { name: characterIdOrName };
+        ? { id: characterIdOrName }
+        : { name: characterIdOrName };
     const character = await this.characterRepo.findOne({ where });
     if (!character) {
       throw new NotFoundException("Personagem nao encontrado.");
@@ -168,7 +168,8 @@ export class PcPersonaService {
       name: character.name,
       race: charOrigin.race?.name ?? charOrigin.race?.slug ?? "Unknown",
       subrace: charOrigin.subrace?.name ?? null,
-      class: primaryClass?.class?.name ?? primaryClass?.class?.slug ?? "Unknown",
+      class:
+        primaryClass?.class?.name ?? primaryClass?.class?.slug ?? "Unknown",
       subclass: primaryClass?.subclass?.name ?? null,
       level: totalLevel,
       background:
@@ -177,16 +178,14 @@ export class PcPersonaService {
       personality,
       currentHpPercent,
       conditionsActive: Array.isArray(charState?.conditions)
-        ? [...(charState!.conditions as string[])]
+        ? [...charState.conditions]
         : [],
       keyEquipmentSummary: pickKeyEquipment(charEquip, charMagicItems),
     };
   }
 }
 
-function computeConModifier(
-  abilities: CharacterAbilityScoreEntity[],
-): number {
+function computeConModifier(abilities: CharacterAbilityScoreEntity[]): number {
   const con = abilities.find((a) => a.ability_score?.slug === "con");
   if (!con) return 0;
   return getAbilityModifier(con.base_score + (con.bonus ?? 0));
@@ -250,7 +249,12 @@ function resolveAlignment(slug: string | undefined): PCPersonaAlignment {
 
 interface EquipRow {
   equipped: boolean;
-  equipment?: { slug: string; name: string; armor_class?: unknown; weapon_category?: string | null };
+  equipment?: {
+    slug: string;
+    name: string;
+    armor_class?: unknown;
+    weapon_category?: string | null;
+  };
 }
 
 function pickKeyEquipment(

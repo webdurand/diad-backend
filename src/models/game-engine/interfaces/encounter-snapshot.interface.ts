@@ -100,11 +100,19 @@ export interface SnapshotParticipant {
       attackBonus?: number;
       knownSpells?: Array<{ slug: string; level: number; name?: string }>;
       slotsByLevel?: Array<{ level: number; total: number; remaining: number }>;
-      dailyUses?: Array<{ name: string; usesRemaining: number; usesMax: number }>;
+      dailyUses?: Array<{
+        name: string;
+        usesRemaining: number;
+        usesMax: number;
+      }>;
     } | null;
     bonusActions?: Array<{ name: string; description?: string }>;
     reactions?: Array<{ name: string; description?: string; trigger?: string }>;
-    legendaryActions?: Array<{ name: string; cost: 1 | 2 | 3; description?: string }>;
+    legendaryActions?: Array<{
+      name: string;
+      cost: 1 | 2 | 3;
+      description?: string;
+    }>;
     legendaryActionPointsRemaining?: number;
     legendaryActionPointsMax?: number;
     lairActions?: Array<{ name: string; description?: string }>;

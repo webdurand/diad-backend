@@ -134,11 +134,10 @@ export class WorldController {
     @Headers("traceparent") traceparent?: string,
   ) {
     const traceId = extractTraceId(traceparent);
-    const row = await this.weatherService.rollWeather(
-      campaignId,
-      body.biome,
-      { sceneId: body.sceneId ?? null, traceId },
-    );
+    const row = await this.weatherService.rollWeather(campaignId, body.biome, {
+      sceneId: body.sceneId ?? null,
+      traceId,
+    });
     return this.weatherService.toDto(row);
   }
 
@@ -187,7 +186,10 @@ export class WorldController {
   }
 
   @Get(":id")
-  async getCampaign(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
+  async getCampaign(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.campaignService.getById(id);
   }
@@ -365,7 +367,10 @@ export class WorldController {
   }
 
   @Get(":id/budget")
-  async getBudget(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
+  async getBudget(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.campaignService.getBudget(id);
   }
@@ -381,7 +386,10 @@ export class WorldController {
   }
 
   @Get(":id/players")
-  async getPlayers(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
+  async getPlayers(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.campaignService.getPlayers(id);
   }
@@ -429,7 +437,10 @@ export class WorldController {
   }
 
   @Get(":id/locations")
-  async getLocationTree(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
+  async getLocationTree(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.locationService.getTree(id);
   }
@@ -511,7 +522,10 @@ export class WorldController {
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     const poi = await this.locationPoiService.revealExisting(id, { poiId });
-    return { ok: true as const, value: poi ? this.locationPoiService.toDto(poi) : null };
+    return {
+      ok: true as const,
+      value: poi ? this.locationPoiService.toDto(poi) : null,
+    };
   }
 
   @Get(":id/locations/:locId/connections")
@@ -603,7 +617,10 @@ export class WorldController {
   }
 
   @Get(":id/factions")
-  async listFactions(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) id: string) {
+  async listFactions(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+  ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.factionService.listByCampaign(id);
   }

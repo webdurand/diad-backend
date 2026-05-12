@@ -99,4 +99,3 @@ export class ValidationException extends DiadException {
     super(code, message, options);
   }
 }
-

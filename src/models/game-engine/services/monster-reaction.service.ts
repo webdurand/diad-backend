@@ -53,7 +53,7 @@ export class MonsterReactionService {
     const list = Array.isArray(reactions)
       ? reactions
       : reactions && typeof reactions === "object"
-        ? (Object.values(reactions as Record<string, unknown>) as Array<unknown>)
+        ? Object.values(reactions)
         : [];
 
     let parryBonus = 0;
@@ -62,7 +62,9 @@ export class MonsterReactionService {
       const rec = r as { name?: string; desc?: string; description?: string };
       if (!rec.name || !/parry/i.test(rec.name)) continue;
       const text = rec.desc ?? rec.description ?? "";
-      const match = text.match(/adds?\s+(\d+)\s+to\s+(?:its|her|his|the)?\s*AC/i);
+      const match = text.match(
+        /adds?\s+(\d+)\s+to\s+(?:its|her|his|the)?\s*AC/i,
+      );
       if (match) {
         parryBonus = parseInt(match[1], 10);
         break;

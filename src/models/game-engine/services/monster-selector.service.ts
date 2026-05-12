@@ -28,7 +28,10 @@ export interface MonsterComposition {
   reasonChain: string[];
 }
 
-const ENCOUNTER_BUDGET_PER_CHARACTER: Record<number, Record<Difficulty, number>> = {
+const ENCOUNTER_BUDGET_PER_CHARACTER: Record<
+  number,
+  Record<Difficulty, number>
+> = {
   1: { low: 50, moderate: 75, high: 100 },
   2: { low: 100, moderate: 150, high: 200 },
   3: { low: 150, moderate: 225, high: 400 },
@@ -129,15 +132,17 @@ export class MonsterSelectorService {
     const crCap = CR_CAP_PER_TIER[tier];
     const baseBlacklist = TYPE_BLACKLIST_PER_LOCATION[input.locationType] ?? [];
     const hint = input.creatureTypeHint?.toLowerCase() || null;
-    const narrativeTags = (input.narrativeTags ?? []).map((t) => t.toLowerCase());
+    const narrativeTags = (input.narrativeTags ?? []).map((t) =>
+      t.toLowerCase(),
+    );
     const blacklistedTypes = hint
       ? baseBlacklist.filter((t) => t !== hint)
       : baseBlacklist;
     const recentAnchors = input.recentAnchors ?? [];
     const budget =
-      (ENCOUNTER_BUDGET_PER_CHARACTER[Math.max(1, Math.min(20, input.partyAvgLevel))][
-        input.targetDifficulty
-      ] ?? 0) * Math.max(1, input.partySize);
+      (ENCOUNTER_BUDGET_PER_CHARACTER[
+        Math.max(1, Math.min(20, input.partyAvgLevel))
+      ][input.targetDifficulty] ?? 0) * Math.max(1, input.partySize);
 
     const all = await this.repo.find();
 
@@ -205,11 +210,15 @@ export class MonsterSelectorService {
 
     const modeRoll = this.rng();
     let mode: CompositionMode;
-    if (modeRoll < 0.80) mode = "pack";
+    if (modeRoll < 0.8) mode = "pack";
     else if (modeRoll < 0.95) mode = "mixed";
     else mode = "solo";
 
-    let result: { slugs: string[]; mode: CompositionMode; adjustedXp: number } | null;
+    let result: {
+      slugs: string[];
+      mode: CompositionMode;
+      adjustedXp: number;
+    } | null;
     if (mode === "solo") {
       result = this.composeSolo(pool, budget);
     } else if (mode === "mixed" && family.length > 0) {
@@ -286,7 +295,9 @@ export class MonsterSelectorService {
       }
     }
     if (bestCount === 0) return null;
-    const adjustedXp = Math.floor(anchor.xp * bestCount * multiplier(bestCount));
+    const adjustedXp = Math.floor(
+      anchor.xp * bestCount * multiplier(bestCount),
+    );
     return {
       slugs: Array(bestCount).fill(anchor.slug),
       mode: "pack",
@@ -325,7 +336,11 @@ export class MonsterSelectorService {
       }
     }
     if (bestSlugs.length === 0) return null;
-    return { slugs: bestSlugs, mode: "mixed", adjustedXp: Math.floor(bestAdjusted) };
+    return {
+      slugs: bestSlugs,
+      mode: "mixed",
+      adjustedXp: Math.floor(bestAdjusted),
+    };
   }
 
   private composeSolo(

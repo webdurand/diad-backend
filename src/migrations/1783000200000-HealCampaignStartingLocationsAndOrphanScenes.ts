@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  *
  * Idempotente — `WHERE starting_location_id IS NULL` e `NOT EXISTS scenes`.
  */
-export class HealCampaignStartingLocationsAndOrphanScenes1783000200000
-  implements MigrationInterface
-{
+export class HealCampaignStartingLocationsAndOrphanScenes1783000200000 implements MigrationInterface {
   name = "HealCampaignStartingLocationsAndOrphanScenes1783000200000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

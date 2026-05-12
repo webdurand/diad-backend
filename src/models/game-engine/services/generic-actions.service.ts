@@ -106,10 +106,7 @@ export class GenericActionsService {
     }
   }
 
-  private consumeAction(
-    p: EncounterParticipantEntity,
-    asBonus: boolean,
-  ): void {
+  private consumeAction(p: EncounterParticipantEntity, asBonus: boolean): void {
     if (asBonus) {
       p.bonusActionUsed = true;
     } else {

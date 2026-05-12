@@ -59,9 +59,7 @@ function serializeRequestSlim(req: IncomingMessage): Record<string, unknown> {
 /**
  * Serializer minimalista para `res`. Sem headers. Status fica.
  */
-function serializeResponseSlim(
-  res: ServerResponse,
-): Record<string, unknown> {
+function serializeResponseSlim(res: ServerResponse): Record<string, unknown> {
   return { statusCode: res.statusCode };
 }
 

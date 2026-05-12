@@ -18,9 +18,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  *
  * Ambos statements são idempotentes (filtros exigem main_hand=false E off_hand=false).
  */
-export class BackfillWeaponHandAndShieldEquip1786000000000
-  implements MigrationInterface
-{
+export class BackfillWeaponHandAndShieldEquip1786000000000 implements MigrationInterface {
   name = "BackfillWeaponHandAndShieldEquip1786000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

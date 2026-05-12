@@ -33,7 +33,10 @@ export type SessionMessageKind =
  */
 @Entity("session_messages")
 @Index(["sessionId", "sequenceNumber"], { unique: true })
-@Index(["sessionId", "clientId"], { unique: true, where: "client_id IS NOT NULL" })
+@Index(["sessionId", "clientId"], {
+  unique: true,
+  where: "client_id IS NOT NULL",
+})
 export class SessionMessageEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;

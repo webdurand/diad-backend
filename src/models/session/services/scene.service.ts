@@ -116,7 +116,6 @@ export class SceneService {
     });
     const saved = await this.sceneRepo.save(scene);
 
-    
     await this.publishSceneChanged({
       sessionId,
       campaignId: campaign?.id ?? null,
@@ -231,7 +230,6 @@ export class SceneService {
     return BEAT_ORDER[idx + 1];
   }
 
-
   async forceArcTransition(
     campaignId: string,
     newBeat: ArcBeat,
@@ -264,7 +262,6 @@ export class SceneService {
     return this.campaignRepo.save(campaign);
   }
 
- 
   async finalizeSession(
     sessionId: string,
     payload: {
@@ -450,7 +447,10 @@ export class SceneService {
     if (!params.locationId || !params.campaignId) return null;
     if (params.requestedPoiId) {
       const poi = await this.poiService.getById(params.requestedPoiId);
-      if (poi.campaignId !== params.campaignId || poi.locationId !== params.locationId) {
+      if (
+        poi.campaignId !== params.campaignId ||
+        poi.locationId !== params.locationId
+      ) {
         throw new NotFoundException("POI nao pertence a location da cena.");
       }
       return poi.id;

@@ -1,13 +1,8 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { ClsService } from "nestjs-cls";
 import { PinoLogger, InjectPinoLogger } from "nestjs-pino";
-import {
-  DOMAIN_CLS_KEY,
-} from "../domain/domain-context.middleware";
-import {
-  DOMAIN_KEYS,
-  type DomainContext,
-} from "../domain/domain-context";
+import { DOMAIN_CLS_KEY } from "../domain/domain-context.middleware";
+import { DOMAIN_KEYS, type DomainContext } from "../domain/domain-context";
 
 /**
  * Wrapper sobre PinoLogger que injeta trace.id/span.id E contexto de domínio

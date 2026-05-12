@@ -117,20 +117,38 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
 
     const seed: Array<{ slug: string; metadata: Meta }> = [
       // ───── Cantrips (level 0) ─────
-      { slug: "fire-bolt",       metadata: damaging("Fire Bolt", "creature") },
-      { slug: "eldritch-blast",  metadata: damaging("Eldritch Blast", "creature") },
-      { slug: "ray-of-frost",    metadata: damaging("Ray of Frost", "creature") },
-      { slug: "sacred-flame",    metadata: damaging("Sacred Flame", "creature", "DEX") },
-      { slug: "vicious-mockery", metadata: damaging("Vicious Mockery", "creature", "WIS") },
-      { slug: "poison-spray",    metadata: damaging("Poison Spray", "creature", "CON") },
-      { slug: "shocking-grasp",  metadata: damaging("Shocking Grasp", "creature") },
-      { slug: "produce-flame",   metadata: damaging("Produce Flame", "creature") },
-      { slug: "guidance",        metadata: buff("Guidance") },
-      { slug: "light",           metadata: buff("Light", "object") },
-      { slug: "mage-hand",       metadata: buff("Mage Hand", "space") },
+      { slug: "fire-bolt", metadata: damaging("Fire Bolt", "creature") },
+      {
+        slug: "eldritch-blast",
+        metadata: damaging("Eldritch Blast", "creature"),
+      },
+      { slug: "ray-of-frost", metadata: damaging("Ray of Frost", "creature") },
+      {
+        slug: "sacred-flame",
+        metadata: damaging("Sacred Flame", "creature", "DEX"),
+      },
+      {
+        slug: "vicious-mockery",
+        metadata: damaging("Vicious Mockery", "creature", "WIS"),
+      },
+      {
+        slug: "poison-spray",
+        metadata: damaging("Poison Spray", "creature", "CON"),
+      },
+      {
+        slug: "shocking-grasp",
+        metadata: damaging("Shocking Grasp", "creature"),
+      },
+      {
+        slug: "produce-flame",
+        metadata: damaging("Produce Flame", "creature"),
+      },
+      { slug: "guidance", metadata: buff("Guidance") },
+      { slug: "light", metadata: buff("Light", "object") },
+      { slug: "mage-hand", metadata: buff("Mage Hand", "space") },
       { slug: "spare-the-dying", metadata: heal("Spare the Dying") },
-      { slug: "resistance",      metadata: buff("Resistance") },
-      { slug: "true-strike",     metadata: buff("True Strike", "self") },
+      { slug: "resistance", metadata: buff("Resistance") },
+      { slug: "true-strike", metadata: buff("True Strike", "self") },
       {
         slug: "friends",
         metadata: {
@@ -147,22 +165,40 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
           },
         },
       },
-      { slug: "minor-illusion",  metadata: buff("Minor Illusion", "space") },
+      { slug: "minor-illusion", metadata: buff("Minor Illusion", "space") },
 
       // ───── Level 1 ─────
-      { slug: "magic-missile",   metadata: damaging("Magic Missile", "creature") },
-      { slug: "burning-hands",   metadata: damaging("Burning Hands", "space", "DEX", true) },
-      { slug: "chromatic-orb",   metadata: damaging("Chromatic Orb", "creature") },
-      { slug: "thunderwave",     metadata: damaging("Thunderwave", "space", "CON", true) },
-      { slug: "inflict-wounds",  metadata: damaging("Inflict Wounds", "creature") },
-      { slug: "cure-wounds",     metadata: heal("Cure Wounds") },
-      { slug: "healing-word",    metadata: heal("Healing Word") },
-      { slug: "bless",           metadata: buff("Bless") },
+      {
+        slug: "magic-missile",
+        metadata: damaging("Magic Missile", "creature"),
+      },
+      {
+        slug: "burning-hands",
+        metadata: damaging("Burning Hands", "space", "DEX", true),
+      },
+      {
+        slug: "chromatic-orb",
+        metadata: damaging("Chromatic Orb", "creature"),
+      },
+      {
+        slug: "thunderwave",
+        metadata: damaging("Thunderwave", "space", "CON", true),
+      },
+      {
+        slug: "inflict-wounds",
+        metadata: damaging("Inflict Wounds", "creature"),
+      },
+      { slug: "cure-wounds", metadata: heal("Cure Wounds") },
+      { slug: "healing-word", metadata: heal("Healing Word") },
+      { slug: "bless", metadata: buff("Bless") },
       { slug: "shield-of-faith", metadata: buff("Shield of Faith") },
-      { slug: "shield",          metadata: buff("Shield", "self") },
-      { slug: "mage-armor",      metadata: buff("Mage Armor") },
-      { slug: "sanctuary",       metadata: buff("Sanctuary") },
-      { slug: "protection-from-evil-and-good", metadata: buff("Protection from Evil and Good") },
+      { slug: "shield", metadata: buff("Shield", "self") },
+      { slug: "mage-armor", metadata: buff("Mage Armor") },
+      { slug: "sanctuary", metadata: buff("Sanctuary") },
+      {
+        slug: "protection-from-evil-and-good",
+        metadata: buff("Protection from Evil and Good"),
+      },
       {
         slug: "charm-person",
         metadata: {
@@ -181,10 +217,13 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
           },
         },
       },
-      { slug: "command",         metadata: debuff("Command", "WIS") },
-      { slug: "sleep",           metadata: debuff("Sleep", "WIS", "space") },
-      { slug: "bane",            metadata: debuff("Bane", "CHA", "space") },
-      { slug: "dissonant-whispers", metadata: damaging("Dissonant Whispers", "creature", "WIS") },
+      { slug: "command", metadata: debuff("Command", "WIS") },
+      { slug: "sleep", metadata: debuff("Sleep", "WIS", "space") },
+      { slug: "bane", metadata: debuff("Bane", "CHA", "space") },
+      {
+        slug: "dissonant-whispers",
+        metadata: damaging("Dissonant Whispers", "creature", "WIS"),
+      },
       {
         slug: "hex",
         metadata: {
@@ -226,19 +265,25 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       },
 
       // ───── Level 2 ─────
-      { slug: "scorching-ray",   metadata: damaging("Scorching Ray", "creature") },
-      { slug: "shatter",         metadata: damaging("Shatter", "space", "CON", true) },
-      { slug: "hold-person",     metadata: debuff("Hold Person", "WIS") },
-      { slug: "suggestion",      metadata: debuff("Suggestion", "WIS") },
-      { slug: "blindness-deafness", metadata: debuff("Blindness/Deafness", "CON") },
-      { slug: "aid",             metadata: heal("Aid") },
+      {
+        slug: "scorching-ray",
+        metadata: damaging("Scorching Ray", "creature"),
+      },
+      { slug: "shatter", metadata: damaging("Shatter", "space", "CON", true) },
+      { slug: "hold-person", metadata: debuff("Hold Person", "WIS") },
+      { slug: "suggestion", metadata: debuff("Suggestion", "WIS") },
+      {
+        slug: "blindness-deafness",
+        metadata: debuff("Blindness/Deafness", "CON"),
+      },
+      { slug: "aid", metadata: heal("Aid") },
       { slug: "lesser-restoration", metadata: heal("Lesser Restoration") },
-      { slug: "invisibility",    metadata: buff("Invisibility") },
-      { slug: "mirror-image",    metadata: buff("Mirror Image", "self") },
-      { slug: "misty-step",      metadata: buff("Misty Step", "self") },
-      { slug: "blur",            metadata: buff("Blur", "self") },
-      { slug: "spike-growth",    metadata: damaging("Spike Growth", "space") },
-      { slug: "web",             metadata: debuff("Web", "DEX", "space") },
+      { slug: "invisibility", metadata: buff("Invisibility") },
+      { slug: "mirror-image", metadata: buff("Mirror Image", "self") },
+      { slug: "misty-step", metadata: buff("Misty Step", "self") },
+      { slug: "blur", metadata: buff("Blur", "self") },
+      { slug: "spike-growth", metadata: damaging("Spike Growth", "space") },
+      { slug: "web", metadata: debuff("Web", "DEX", "space") },
 
       // ───── Level 3 ─────
       {
@@ -255,33 +300,99 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
           hostile_intent_default: "always",
         },
       },
-      { slug: "lightning-bolt",  metadata: damaging("Lightning Bolt", "space", "DEX", true) },
-      { slug: "fear",            metadata: debuff("Fear", "WIS", "space") },
-      { slug: "hypnotic-pattern", metadata: debuff("Hypnotic Pattern", "WIS", "space") },
-      { slug: "haste",           metadata: buff("Haste") },
-      { slug: "slow",            metadata: debuff("Slow", "WIS", "space") },
-      { slug: "counterspell",    metadata: { name: "Counterspell", is_harmful: true, target_type: "creature", target_perception_mode: "obvious", hostile_intent_default: "conditional" } },
-      { slug: "dispel-magic",    metadata: { name: "Dispel Magic", is_harmful: false, target_type: "creature_or_object", target_perception_mode: "obvious", hostile_intent_default: "conditional" } },
+      {
+        slug: "lightning-bolt",
+        metadata: damaging("Lightning Bolt", "space", "DEX", true),
+      },
+      { slug: "fear", metadata: debuff("Fear", "WIS", "space") },
+      {
+        slug: "hypnotic-pattern",
+        metadata: debuff("Hypnotic Pattern", "WIS", "space"),
+      },
+      { slug: "haste", metadata: buff("Haste") },
+      { slug: "slow", metadata: debuff("Slow", "WIS", "space") },
+      {
+        slug: "counterspell",
+        metadata: {
+          name: "Counterspell",
+          is_harmful: true,
+          target_type: "creature",
+          target_perception_mode: "obvious",
+          hostile_intent_default: "conditional",
+        },
+      },
+      {
+        slug: "dispel-magic",
+        metadata: {
+          name: "Dispel Magic",
+          is_harmful: false,
+          target_type: "creature_or_object",
+          target_perception_mode: "obvious",
+          hostile_intent_default: "conditional",
+        },
+      },
       { slug: "mass-healing-word", metadata: heal("Mass Healing Word") },
-      { slug: "fly",             metadata: buff("Fly") },
-      { slug: "revivify",        metadata: heal("Revivify") },
+      { slug: "fly", metadata: buff("Fly") },
+      { slug: "revivify", metadata: heal("Revivify") },
 
       // ───── Level 4-5 (cobertura mínima) ─────
-      { slug: "polymorph",       metadata: debuff("Polymorph", "WIS") },
-      { slug: "wall-of-fire",    metadata: damaging("Wall of Fire", "space", "DEX", true) },
-      { slug: "dimension-door",  metadata: buff("Dimension Door", "self") },
-      { slug: "stoneskin",       metadata: buff("Stoneskin") },
-      { slug: "cone-of-cold",    metadata: damaging("Cone of Cold", "space", "CON", true) },
-      { slug: "hold-monster",    metadata: debuff("Hold Monster", "WIS") },
+      { slug: "polymorph", metadata: debuff("Polymorph", "WIS") },
+      {
+        slug: "wall-of-fire",
+        metadata: damaging("Wall of Fire", "space", "DEX", true),
+      },
+      { slug: "dimension-door", metadata: buff("Dimension Door", "self") },
+      { slug: "stoneskin", metadata: buff("Stoneskin") },
+      {
+        slug: "cone-of-cold",
+        metadata: damaging("Cone of Cold", "space", "CON", true),
+      },
+      { slug: "hold-monster", metadata: debuff("Hold Monster", "WIS") },
       { slug: "mass-cure-wounds", metadata: heal("Mass Cure Wounds") },
-      { slug: "raise-dead",      metadata: heal("Raise Dead") },
+      { slug: "raise-dead", metadata: heal("Raise Dead") },
 
       // ───── Utility (objects/space, never hostile alone) ─────
-      { slug: "knock",           metadata: { name: "Knock", is_harmful: false, target_type: "object", target_perception_mode: "obvious", hostile_intent_default: "never" } },
-      { slug: "fog-cloud",       metadata: { name: "Fog Cloud", is_harmful: false, target_type: "space", target_perception_mode: "obvious", hostile_intent_default: "never" } },
-      { slug: "darkness",        metadata: { name: "Darkness", is_harmful: false, target_type: "space", target_perception_mode: "obvious", hostile_intent_default: "never" } },
-      { slug: "silence",         metadata: { name: "Silence", is_harmful: false, target_type: "space", target_perception_mode: "obvious", hostile_intent_default: "never" } },
-      { slug: "detect-magic",    metadata: buff("Detect Magic", "self") },
+      {
+        slug: "knock",
+        metadata: {
+          name: "Knock",
+          is_harmful: false,
+          target_type: "object",
+          target_perception_mode: "obvious",
+          hostile_intent_default: "never",
+        },
+      },
+      {
+        slug: "fog-cloud",
+        metadata: {
+          name: "Fog Cloud",
+          is_harmful: false,
+          target_type: "space",
+          target_perception_mode: "obvious",
+          hostile_intent_default: "never",
+        },
+      },
+      {
+        slug: "darkness",
+        metadata: {
+          name: "Darkness",
+          is_harmful: false,
+          target_type: "space",
+          target_perception_mode: "obvious",
+          hostile_intent_default: "never",
+        },
+      },
+      {
+        slug: "silence",
+        metadata: {
+          name: "Silence",
+          is_harmful: false,
+          target_type: "space",
+          target_perception_mode: "obvious",
+          hostile_intent_default: "never",
+        },
+      },
+      { slug: "detect-magic", metadata: buff("Detect Magic", "self") },
     ];
 
     let updated = 0;
@@ -299,7 +410,9 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       } else if (Array.isArray(result) && result.length > 0) {
         // pg driver às vezes retorna [[rows], rowCount]; outras só [rows].
         // Conta linhas retornadas pra cobrir os dois shapes.
-        updated += result.filter((r: unknown) => r && typeof r === "object" && "id" in (r as object)).length;
+        updated += result.filter(
+          (r: unknown) => r && typeof r === "object" && "id" in r,
+        ).length;
       }
     }
 
@@ -311,7 +424,6 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
     );
     const enriched = total?.[0]?.n ?? 0;
     if (enriched === 0 && updated === 0) {
-      // eslint-disable-next-line no-console
       console.warn(
         `[EnrichSpellMetadata] Backfill rodou mas 0 spells matched (DB sem seed?). ` +
           `Coluna criada — agents vai usar registry stub como fallback.`,
@@ -320,7 +432,11 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_spells_arbiter_metadata"`);
-    await queryRunner.query(`ALTER TABLE "spells" DROP COLUMN IF EXISTS "arbiter_metadata"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_spells_arbiter_metadata"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "spells" DROP COLUMN IF EXISTS "arbiter_metadata"`,
+    );
   }
 }

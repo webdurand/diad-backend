@@ -166,8 +166,14 @@ describe("InventoryService", () => {
       const eq = makeEquipment("torch");
       repos.equipment.findOneBy!.mockResolvedValue(eq);
       repos.charEquip.findOne!.mockResolvedValue(null);
-      repos.charEquip.create!.mockReturnValue({ id: "new-item", equipment: eq });
-      repos.charEquip.save!.mockResolvedValue({ id: "new-item", equipment: eq });
+      repos.charEquip.create!.mockReturnValue({
+        id: "new-item",
+        equipment: eq,
+      });
+      repos.charEquip.save!.mockResolvedValue({
+        id: "new-item",
+        equipment: eq,
+      });
       repos.charEquip.findOneOrFail!.mockResolvedValue({
         id: "new-item",
         equipment: eq,
@@ -187,8 +193,14 @@ describe("InventoryService", () => {
       const eq = makeEquipment("longsword", { id: uuid });
       repos.equipment.findOneBy!.mockResolvedValue(eq);
       repos.charEquip.findOne!.mockResolvedValue(null);
-      repos.charEquip.create!.mockReturnValue({ id: "new-item", equipment: eq });
-      repos.charEquip.save!.mockResolvedValue({ id: "new-item", equipment: eq });
+      repos.charEquip.create!.mockReturnValue({
+        id: "new-item",
+        equipment: eq,
+      });
+      repos.charEquip.save!.mockResolvedValue({
+        id: "new-item",
+        equipment: eq,
+      });
       repos.charEquip.findOneOrFail!.mockResolvedValue({
         id: "new-item",
         equipment: eq,

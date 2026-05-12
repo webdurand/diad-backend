@@ -8,10 +8,7 @@ import type { Request, Response } from "express";
 import { ProblemFactory } from "./problem.factory";
 import { DiadLogger } from "../logger/diad-logger.service";
 import { DiadException } from "./diad-exception";
-import {
-  pickBodyOrSummary,
-  sanitize,
-} from "../http/request-body.interceptor";
+import { pickBodyOrSummary, sanitize } from "../http/request-body.interceptor";
 import type { ErrorEnvelope } from "../types/error-envelope.types";
 
 /**

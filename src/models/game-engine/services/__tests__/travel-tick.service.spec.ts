@@ -51,7 +51,13 @@ describe("TravelTickService.tick", () => {
       contextCache as any,
       makeLogger() as any,
     );
-    return { service, sessionRepo, sceneService, locationService, gameClockService };
+    return {
+      service,
+      sessionRepo,
+      sceneService,
+      locationService,
+      gameClockService,
+    };
   };
 
   it("returns no_travel when session has no travelState", async () => {
@@ -200,7 +206,8 @@ describe("TravelTickService.tick", () => {
         reason: "player_movement",
       },
     });
-    const { service, sessionRepo, sceneService, locationService } = buildService({ session });
+    const { service, sessionRepo, sceneService, locationService } =
+      buildService({ session });
     const result = await service.arrive("sess-1");
     expect(result.status).toBe("arrived");
     if (result.status === "arrived") {

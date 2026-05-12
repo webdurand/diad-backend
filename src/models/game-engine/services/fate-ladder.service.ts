@@ -256,7 +256,11 @@ export class FateLadderService {
     characterId: string,
     stateChanges: string[],
   ): Promise<{
-    appliedChanges: Array<{ change: string; applied: boolean; reason?: string }>;
+    appliedChanges: Array<{
+      change: string;
+      applied: boolean;
+      reason?: string;
+    }>;
     pcFinalState: {
       current_hp: number;
       max_hp_bonus: number;

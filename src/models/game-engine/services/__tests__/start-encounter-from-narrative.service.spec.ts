@@ -63,7 +63,10 @@ function makeSceneRepo(
       ...data,
     })),
     save: jest.fn(async (data: any) => {
-      savedStub = { ...data, id: data.id ?? "auto-scene-99999999-9999-4999-8999-999999999999" };
+      savedStub = {
+        ...data,
+        id: data.id ?? "auto-scene-99999999-9999-4999-8999-999999999999",
+      };
       return savedStub;
     }),
   } as unknown as Repository<SceneEntity>;
@@ -94,7 +97,10 @@ function makeParticipantRepo() {
       ...data,
     })),
     save: jest.fn(async (p: any) => {
-      const stored = { ...p, id: p.id ?? `npc-part-${savedParticipants.length + 1}` };
+      const stored = {
+        ...p,
+        id: p.id ?? `npc-part-${savedParticipants.length + 1}`,
+      };
       savedParticipants.push(stored);
       return stored;
     }),
@@ -111,7 +117,7 @@ function makeEncounterService(
   initialParticipants: any[] = [],
 ): EncounterService {
   // mantém uma lista interna mutável de participants (PCs + NPCs após materialização)
-  let participants = [...initialParticipants];
+  const participants = [...initialParticipants];
   const encounter: any = {
     id: ENCOUNTER_ID,
     sessionId: SESSION_ID,
@@ -145,7 +151,10 @@ function makeEncounterService(
 
 function makeCombatService(): CombatService {
   return {
-    applyCondition: jest.fn(async () => ({ ok: true, value: { conditions: [] } })),
+    applyCondition: jest.fn(async () => ({
+      ok: true,
+      value: { conditions: [] },
+    })),
   } as unknown as CombatService;
 }
 
@@ -393,7 +402,10 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
       dexterity: 14,
     });
     const partRepo = makeParticipantRepo();
-    const sessionRepo = makeSessionRepo({ id: SESSION_ID, campaignId: CAMPAIGN_ID });
+    const sessionRepo = makeSessionRepo({
+      id: SESSION_ID,
+      campaignId: CAMPAIGN_ID,
+    });
     savedParticipants = [];
     const encounterSvc = makeEncounterService([]);
     const npcSvc = {
@@ -453,7 +465,7 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
 
     expect(result.encounterId).toBe(ENCOUNTER_ID);
     // Não criou stub — usou active
-    expect((sceneRepo.save as jest.Mock)).not.toHaveBeenCalled();
+    expect(sceneRepo.save as jest.Mock).not.toHaveBeenCalled();
   });
 
   it("sceneId omitido + sem active → cria stub auto", async () => {
@@ -479,7 +491,10 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
       dexterity: 14,
     });
     const partRepo = makeParticipantRepo();
-    const sessionRepo = makeSessionRepo({ id: SESSION_ID, campaignId: CAMPAIGN_ID });
+    const sessionRepo = makeSessionRepo({
+      id: SESSION_ID,
+      campaignId: CAMPAIGN_ID,
+    });
     savedParticipants = [];
     const encounterSvc = makeEncounterService([]);
     const npcSvc = {
@@ -550,7 +565,10 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
   it("targets vazios → chama agno extract-combat-targets e usa npcIds devolvidos", async () => {
     const { svc, aiProxy, messageRepo } = build();
     (messageRepo.find as jest.Mock).mockResolvedValueOnce([
-      { content: "Cinco homens ao redor do fogo. Um sexto se aproxima.", sequenceNumber: 10 },
+      {
+        content: "Cinco homens ao redor do fogo. Um sexto se aproxima.",
+        sequenceNumber: 10,
+      },
     ]);
     // Agno devolve os IDs já materializados
     (aiProxy.postJsonToAgent as jest.Mock).mockResolvedValueOnce({
@@ -584,7 +602,9 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
     (messageRepo.find as jest.Mock).mockResolvedValueOnce([
       { content: "uma cena qualquer", sequenceNumber: 1 },
     ]);
-    (aiProxy.postJsonToAgent as jest.Mock).mockRejectedValueOnce(new Error("agno down"));
+    (aiProxy.postJsonToAgent as jest.Mock).mockRejectedValueOnce(
+      new Error("agno down"),
+    );
 
     await expect(
       svc.run({

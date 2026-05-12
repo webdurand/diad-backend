@@ -97,9 +97,9 @@ describe("LootRollService — Spec 020", () => {
       makeBus(),
       new EventEnvelopeFactory(undefined),
     );
-    await expect(
-      svc.roll({ campaignId: CAMPAIGN_ID }),
-    ).rejects.toMatchObject({ code: ErrorCode.LOOT_PARAMS_INVALID });
+    await expect(svc.roll({ campaignId: CAMPAIGN_ID })).rejects.toMatchObject({
+      code: ErrorCode.LOOT_PARAMS_INVALID,
+    });
   });
 
   it("rejeita LOOT_PARAMS_INVALID quando 2+ modos informados", async () => {

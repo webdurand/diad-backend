@@ -217,7 +217,9 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
     await queryRunner.query(`
       ALTER TABLE npcs DROP CONSTRAINT IF EXISTS "FK_npcs_game_session_id"
     `);
-    await queryRunner.query(`ALTER TABLE npcs DROP COLUMN IF EXISTS game_session_id`);
+    await queryRunner.query(
+      `ALTER TABLE npcs DROP COLUMN IF EXISTS game_session_id`,
+    );
     await queryRunner.query(`
       ALTER TABLE npcs ADD COLUMN status varchar NOT NULL DEFAULT 'alive'
     `);
@@ -228,21 +230,36 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
       ALTER TABLE npcs ADD COLUMN current_location_id uuid REFERENCES locations(id) ON DELETE SET NULL
     `);
 
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_narrative_decisions_session_created_at"`);
-    await queryRunner.query(`ALTER TABLE narrative_decisions ALTER COLUMN session_id DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE narrative_decisions ADD COLUMN campaign_id uuid`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_narrative_decisions_session_created_at"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE narrative_decisions ALTER COLUMN session_id DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE narrative_decisions ADD COLUMN campaign_id uuid`,
+    );
 
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_vows_game_session_id"`);
-    await queryRunner.query(`ALTER TABLE vows DROP CONSTRAINT IF EXISTS "FK_vows_game_session_id"`);
-    await queryRunner.query(`ALTER TABLE vows DROP COLUMN IF EXISTS game_session_id`);
+    await queryRunner.query(
+      `ALTER TABLE vows DROP CONSTRAINT IF EXISTS "FK_vows_game_session_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE vows DROP COLUMN IF EXISTS game_session_id`,
+    );
     await queryRunner.query(`ALTER TABLE vows ADD COLUMN campaign_id uuid`);
 
     await queryRunner.query(`DROP INDEX IF EXISTS idx_quests_main_per_session`);
     await queryRunner.query(`DROP INDEX IF EXISTS "UQ_quests_session_slug"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_quests_game_session_id"`);
-    await queryRunner.query(`ALTER TABLE quests DROP CONSTRAINT IF EXISTS "FK_quests_game_session_id"`);
-    await queryRunner.query(`ALTER TABLE quests DROP COLUMN IF EXISTS game_session_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_quests_game_session_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE quests DROP CONSTRAINT IF EXISTS "FK_quests_game_session_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE quests DROP COLUMN IF EXISTS game_session_id`,
+    );
     await queryRunner.query(`ALTER TABLE quests ADD COLUMN campaign_id uuid`);
-
   }
 }

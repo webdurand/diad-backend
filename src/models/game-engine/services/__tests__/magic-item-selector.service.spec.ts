@@ -27,12 +27,16 @@ const POOL: MagicItemEntity[] = [
   makeItem("artifact-of-doom", "Artifact"),
 ];
 
-function makeRepo(items: MagicItemEntity[] = POOL): Repository<MagicItemEntity> {
+function makeRepo(
+  items: MagicItemEntity[] = POOL,
+): Repository<MagicItemEntity> {
   return {
     find: jest.fn(async (opts: { where?: { rarity?: { name?: string } } }) => {
       const target = opts?.where?.rarity?.name;
       if (!target) return items;
-      return items.filter((it) => (it.rarity as { name: string }).name === target);
+      return items.filter(
+        (it) => (it.rarity as { name: string }).name === target,
+      );
     }),
   } as unknown as Repository<MagicItemEntity>;
 }
@@ -51,7 +55,9 @@ describe("MagicItemSelectorService", () => {
         const item = await svc.pickByTier("1");
         if (item) seen.add((item.rarity as { name: string }).name);
       }
-      expect([...seen].every((r) => r === "Common" || r === "Uncommon")).toBe(true);
+      expect([...seen].every((r) => r === "Common" || r === "Uncommon")).toBe(
+        true,
+      );
       expect(seen.size).toBeGreaterThan(0);
     });
 

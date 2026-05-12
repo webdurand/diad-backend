@@ -127,7 +127,8 @@ export class DyingStateService {
     participant.dyingState = next as "none" | "dying" | "stable" | "dead";
     // captured stored as "captured" string — varchar(16) holds it; type assertion
     if (next === "captured") {
-      (participant as unknown as { dyingState: string }).dyingState = "captured";
+      (participant as unknown as { dyingState: string }).dyingState =
+        "captured";
     }
 
     // Death saves persistem na character-state (PC), não no participant.

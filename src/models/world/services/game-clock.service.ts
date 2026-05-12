@@ -84,7 +84,10 @@ export class GameClockService {
       throw new DomainException(
         ErrorCode.CLOCK_NEGATIVE_HOURS,
         "hours deve ser número positivo (>0).",
-        { context: { hours }, hint: "Use horas inteiras ou frações positivas." },
+        {
+          context: { hours },
+          hint: "Use horas inteiras ou frações positivas.",
+        },
       );
     }
     if (hours > MAX_HOURS_PER_CALL) {

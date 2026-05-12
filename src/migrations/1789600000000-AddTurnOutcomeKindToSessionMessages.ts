@@ -5,9 +5,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * canon beats do turno: quest update, fato aprendido, recurso alterado,
  * viagem disponível/bloqueada e vitória de campanha.
  */
-export class AddTurnOutcomeKindToSessionMessages1789600000000
-  implements MigrationInterface
-{
+export class AddTurnOutcomeKindToSessionMessages1789600000000 implements MigrationInterface {
   name = "AddTurnOutcomeKindToSessionMessages1789600000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

@@ -139,7 +139,8 @@ export class QuestRewardListener implements EventListener {
     const atScene = campaign.currentCounts?.scenes ?? 0;
     campaign.questionAnswered = true;
     campaign.questionAnswer =
-      campaign.questionAnswer ?? `A missão principal "${quest.name}" foi concluída.`;
+      campaign.questionAnswer ??
+      `A missão principal "${quest.name}" foi concluída.`;
     campaign.status = "completed";
     campaign.arcState = {
       currentBeat: "CHANGE",
@@ -260,7 +261,7 @@ export class QuestRewardListener implements EventListener {
       } catch (err) {
         this.logger.warn("quest_reward.reputation_failed", {
           "faction.id": faction.id,
-          "delta": delta,
+          delta: delta,
           "error.message": err instanceof Error ? err.message : String(err),
         });
       }

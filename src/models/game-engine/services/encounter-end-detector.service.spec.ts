@@ -66,9 +66,11 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
     };
 
     const characterRepo: any = {
-      find: jest.fn().mockResolvedValue([
-        { id: "char-1", character_classes: [{ class_level: 3 }] },
-      ]),
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          { id: "char-1", character_classes: [{ class_level: 3 }] },
+        ]),
     };
 
     const lootRollService: any = {
@@ -109,7 +111,9 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
     };
   }
 
-  function pcParticipant(opts: { dyingState?: string; characterId?: string } = {}) {
+  function pcParticipant(
+    opts: { dyingState?: string; characterId?: string } = {},
+  ) {
     return {
       type: "pc",
       controlledBy: "pc",

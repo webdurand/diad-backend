@@ -68,10 +68,9 @@ export class SessionMessageService {
     return this.dataSource.transaction(async (manager) => {
       // pg_advisory_xact_lock libera automaticamente no commit/rollback.
       // hashtext devolve int4 — assinatura `pg_advisory_xact_lock(int4)`.
-      await manager.query(
-        `SELECT pg_advisory_xact_lock(hashtext($1))`,
-        [`session_msg:${dto.sessionId}`],
-      );
+      await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+        `session_msg:${dto.sessionId}`,
+      ]);
 
       if (dto.clientId) {
         const existing = await manager.findOne(SessionMessageEntity, {

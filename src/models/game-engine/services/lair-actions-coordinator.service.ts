@@ -48,7 +48,10 @@ export class LairActionsCoordinator {
           snapshot,
           monsterParticipantId: entry.participantId,
         });
-        if (decision.actionIndex === null || decision.actionIndex === undefined) {
+        if (
+          decision.actionIndex === null ||
+          decision.actionIndex === undefined
+        ) {
           continue;
         }
         const exec = await this.lairService.execute(

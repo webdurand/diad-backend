@@ -17,9 +17,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  *
  * Down() simétrico (cascade child antes do parent).
  */
-export class CreateNpcDispositionConsent1785010000000
-  implements MigrationInterface
-{
+export class CreateNpcDispositionConsent1785010000000 implements MigrationInterface {
   name = "CreateNpcDispositionConsent1785010000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

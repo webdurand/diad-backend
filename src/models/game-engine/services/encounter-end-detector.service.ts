@@ -79,9 +79,7 @@ export class EncounterEndDetectorService {
    * loot transient via `LootRollService` por CR band do hostil mais forte,
    * e injeta `xpRewards` + `goldRewards` no payload do `resolveEncounter`.
    */
-  async tryAutoEnd(
-    encounterId: string,
-  ): Promise<"victory" | "defeat" | null> {
+  async tryAutoEnd(encounterId: string): Promise<"victory" | "defeat" | null> {
     try {
       const encounter = await this.encounterRepo.findOne({
         where: { id: encounterId },
@@ -271,8 +269,7 @@ export class EncounterEndDetectorService {
         encounterId,
         partyLevels.length > 0 ? partyLevels : [1],
       );
-      difficulty =
-        ENCOUNTER_TO_LOOT_DIFFICULTY[calc.threshold] ?? "medium";
+      difficulty = ENCOUNTER_TO_LOOT_DIFFICULTY[calc.threshold] ?? "medium";
     } catch (err) {
       this.logger.warn(
         `calculateDifficulty falhou em ${encounterId}: ${err instanceof Error ? err.message : String(err)}`,

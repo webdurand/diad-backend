@@ -54,10 +54,7 @@ export class StoryArcService {
     });
   }
 
-  async update(
-    arcId: string,
-    dto: UpdateStoryArcDto,
-  ): Promise<StoryArcEntity> {
+  async update(arcId: string, dto: UpdateStoryArcDto): Promise<StoryArcEntity> {
     const arc = await this.getById(arcId);
     Object.assign(arc, dto);
     return this.arcRepo.save(arc);

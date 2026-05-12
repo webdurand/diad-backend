@@ -7,9 +7,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * conforme eventos), não identidade do mundo. Antes da split mundo↔aventura
  * vazava entre aventuras do mesmo mundo.
  */
-export class MoveChaosFactorToSession1789100000000
-  implements MigrationInterface
-{
+export class MoveChaosFactorToSession1789100000000 implements MigrationInterface {
   name = "MoveChaosFactorToSession1789100000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {

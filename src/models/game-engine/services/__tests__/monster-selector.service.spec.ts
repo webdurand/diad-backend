@@ -48,7 +48,9 @@ const MIXED: MonsterEntity[] = [
   ...FOREST_T1,
   ...DUNGEON_VARIETY,
   m("aboleth", 10, 5900, "aberration", ["underdark"]),
-  m("ancient-red-dragon", 24, 62000, "dragon", ["mountain"], { legendary: true }),
+  m("ancient-red-dragon", 24, 62000, "dragon", ["mountain"], {
+    legendary: true,
+  }),
   m("celestial", 5, 1800, "celestial", undefined),
 ];
 

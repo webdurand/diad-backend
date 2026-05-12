@@ -8,10 +8,7 @@ import { DiadLogger } from "../../observability/logger/diad-logger.service";
 import { EventListener } from "../event-bus.types";
 import { EventBusService } from "../event-bus.service";
 import { EventEnvelopeFactory } from "../event-envelope.factory";
-import {
-  EventCategory,
-  EventEnvelope,
-} from "../event-envelope.types";
+import { EventCategory, EventEnvelope } from "../event-envelope.types";
 
 /**
  * Spec 027 (M2, AC2.5) — WitnessPropagationListener.
@@ -57,7 +54,9 @@ export class WitnessPropagationListener implements EventListener {
   }
 
   async handle(envelope: EventEnvelope): Promise<void> {
-    if (!WitnessPropagationListener.TARGET_EVENT_TYPES.has(envelope.eventType)) {
+    if (
+      !WitnessPropagationListener.TARGET_EVENT_TYPES.has(envelope.eventType)
+    ) {
       return;
     }
     if (await this.alreadyProcessed(envelope.eventId)) {
@@ -94,7 +93,9 @@ export class WitnessPropagationListener implements EventListener {
       },
       select: ["npcId"],
     });
-    const witnesses = states.map((s) => ({ id: s.npcId } as Pick<NpcEntity, "id">));
+    const witnesses = states.map(
+      (s) => ({ id: s.npcId }) as Pick<NpcEntity, "id">,
+    );
 
     const filtered = witnesses.filter((npc) => {
       if (perpetratorId && npc.id === perpetratorId) return false;
@@ -150,20 +151,17 @@ export class WitnessPropagationListener implements EventListener {
             severity >= 3
               ? "Uma testemunha viu morte violenta."
               : severity === 2
-              ? "Uma testemunha viu agressão séria."
-              : "Uma testemunha viu o ataque.",
+                ? "Uma testemunha viu agressão séria."
+                : "Uma testemunha viu o ataque.",
         });
         await this.eventBus.publish(propagated);
       } catch (err) {
         // Falha em emit não rollback — log e continua próximas testemunhas.
-        this.logger.warn(
-          "event_bus.witness_propagation.publish_failed",
-          {
-            "event.id": envelope.eventId,
-            "witness.id": witness.id,
-            "error.message": err instanceof Error ? err.message : String(err),
-          },
-        );
+        this.logger.warn("event_bus.witness_propagation.publish_failed", {
+          "event.id": envelope.eventId,
+          "witness.id": witness.id,
+          "error.message": err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -199,10 +197,13 @@ export class WitnessPropagationListener implements EventListener {
         this.processedRepo.create({ listenerName: this.name, eventId }),
       );
     } catch (err) {
-      this.logger.warn("event_bus.witness_propagation.mark_processed_conflict", {
-        "event.id": eventId,
-        "error.message": err instanceof Error ? err.message : String(err),
-      });
+      this.logger.warn(
+        "event_bus.witness_propagation.mark_processed_conflict",
+        {
+          "event.id": eventId,
+          "error.message": err instanceof Error ? err.message : String(err),
+        },
+      );
     }
   }
 }

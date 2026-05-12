@@ -3,11 +3,23 @@ import {
   __serializeErrorForTest,
 } from "../logger/pino.config";
 
+interface TestPinoHttpOptions {
+  redact?: { paths: string[]; censor: string };
+  base?: Record<string, string>;
+  formatters?: { level?: (label: string, number: number) => object };
+  transport?: unknown;
+  level?: string;
+}
+
+function pinoHttpOptions(): TestPinoHttpOptions {
+  return buildPinoOptions({ env: "test" }).pinoHttp as TestPinoHttpOptions;
+}
+
 describe("pino.config", () => {
   describe("buildPinoOptions", () => {
     it("aplica redact paths sensíveis", () => {
-      const opts = buildPinoOptions({ env: "test" });
-      const redact = opts.pinoHttp?.redact;
+      const opts = pinoHttpOptions();
+      const redact = opts.redact;
       expect(redact).toBeDefined();
       const paths = (redact as { paths: string[] }).paths;
       expect(paths).toEqual(
@@ -24,30 +36,30 @@ describe("pino.config", () => {
 
     it("inclui base com service.name=diad-backend", () => {
       const opts = buildPinoOptions({ env: "test", serviceVersion: "1.2.3" });
-      const base = opts.pinoHttp?.base as Record<string, string>;
+      const base = (opts.pinoHttp as TestPinoHttpOptions).base ?? {};
       expect(base["service.name"]).toBe("diad-backend");
       expect(base["service.version"]).toBe("1.2.3");
       expect(base["deployment.environment"]).toBe("test");
     });
 
     it("formata level como string (não número)", () => {
-      const opts = buildPinoOptions({ env: "test" });
-      const formatter = opts.pinoHttp?.formatters?.level;
+      const opts = pinoHttpOptions();
+      const formatter = opts.formatters?.level;
       expect(formatter).toBeDefined();
       expect(formatter!("info", 30)).toEqual({ level: "info" });
     });
 
     it("usa pino-pretty transport apenas em development", () => {
       const dev = buildPinoOptions({ env: "development" });
-      expect(dev.pinoHttp?.transport).toBeDefined();
+      expect((dev.pinoHttp as TestPinoHttpOptions).transport).toBeDefined();
 
       const prod = buildPinoOptions({ env: "production" });
-      expect(prod.pinoHttp?.transport).toBeUndefined();
+      expect((prod.pinoHttp as TestPinoHttpOptions).transport).toBeUndefined();
     });
 
     it("respeita LOG_LEVEL via args", () => {
       const opts = buildPinoOptions({ env: "test", level: "debug" });
-      expect(opts.pinoHttp?.level).toBe("debug");
+      expect((opts.pinoHttp as TestPinoHttpOptions).level).toBe("debug");
     });
   });
 
@@ -73,7 +85,7 @@ describe("pino.config", () => {
     });
 
     it("respeita maxDepth (não loop infinito)", () => {
-      const e: Error & { cause?: Error } = new Error("e");
+      const e = new Error("e") as Error & { cause?: Error };
       e.cause = e; // self-reference
       // Não deve estourar stack
       const out = __serializeErrorForTest(e);

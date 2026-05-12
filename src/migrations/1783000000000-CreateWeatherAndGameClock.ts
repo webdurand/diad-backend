@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  *
  * Down() simétrico (drops em ordem reversa).
  */
-export class CreateWeatherAndGameClock1783000000000
-  implements MigrationInterface
-{
+export class CreateWeatherAndGameClock1783000000000 implements MigrationInterface {
   name = "CreateWeatherAndGameClock1783000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

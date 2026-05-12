@@ -285,8 +285,7 @@ export class CombatService {
         attacker.characterId,
       );
       const eq = sheet.equipment.find(
-        (e) =>
-          e.slug === equipSlug && (e.mainHand || e.offHand) && !!e.damage,
+        (e) => e.slug === equipSlug && (e.mainHand || e.offHand) && !!e.damage,
       );
       if (!eq) {
         return failure(
@@ -1478,9 +1477,8 @@ export class CombatService {
       events.push({ event_type: "round_start", data: { round: newRound } });
       await this.pruneDeadFromTurnOrder(encounter);
       try {
-        const lairEvents = await this.lairActionsCoordinator.processRoundStart(
-          encounter,
-        );
+        const lairEvents =
+          await this.lairActionsCoordinator.processRoundStart(encounter);
         events.push(...lairEvents);
       } catch (err) {
         // lair actions são best-effort; falha não aborta o round
@@ -2076,10 +2074,7 @@ export class CombatService {
               attacker.monster,
               candidateName,
             );
-            if (
-              r &&
-              (typeof r.attackBonus === "number" || r.damageDice)
-            ) {
+            if (r && (typeof r.attackBonus === "number" || r.damageDice)) {
               resolved = r;
               break;
             }

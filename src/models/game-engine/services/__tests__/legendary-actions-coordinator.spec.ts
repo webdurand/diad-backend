@@ -6,7 +6,9 @@ const ENC_ID = "11111111-1111-4111-8111-111111111111";
 const PC_ID = "22222222-2222-4222-8222-222222222222";
 const MON_ID = "33333333-3333-4333-8333-333333333333";
 
-function makeMonster(overrides: Partial<EncounterParticipantEntity> = {}): EncounterParticipantEntity {
+function makeMonster(
+  overrides: Partial<EncounterParticipantEntity> = {},
+): EncounterParticipantEntity {
   return {
     id: MON_ID,
     encounterId: ENC_ID,

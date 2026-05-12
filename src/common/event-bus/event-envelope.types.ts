@@ -117,4 +117,3 @@ export const TRACE_ID_REGEX = /^[0-9a-f]{32}$/;
  * Regex eventType — ^[a-z][a-z0-9_]+$ (snake_case en, padrão indústria).
  */
 export const EVENT_TYPE_REGEX = /^[a-z][a-z0-9_]+$/;
-

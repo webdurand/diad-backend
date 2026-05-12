@@ -182,7 +182,10 @@ export class AdminMetricsService {
           "Intervalo from/to inválido",
         );
       }
-      const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / DAY_MS));
+      const days = Math.max(
+        1,
+        Math.round((to.getTime() - from.getTime()) / DAY_MS),
+      );
       if (days > 365) {
         throw new ValidationException(
           ErrorCode.ADMIN_METRICS_PERIOD_INVALID,
@@ -211,8 +214,7 @@ export class AdminMetricsService {
     const cacheReadTokens = Number(row?.cache_read_tokens ?? 0);
     const totalCostUsd = Number(row?.total_cost_usd ?? row?.cost_usd ?? 0);
     const totalCalls = Number(row?.total_calls ?? row?.calls ?? 0);
-    const cacheableTotal =
-      cacheReadTokens + cacheCreationTokens + inputTokens;
+    const cacheableTotal = cacheReadTokens + cacheCreationTokens + inputTokens;
     const cacheHitRate =
       cacheableTotal > 0 ? cacheReadTokens / cacheableTotal : 0;
     return {
@@ -472,9 +474,7 @@ export class AdminMetricsService {
     };
   }
 
-  private async queryUsageAggregates(
-    period: ResolvedPeriod,
-  ): Promise<{
+  private async queryUsageAggregates(period: ResolvedPeriod): Promise<{
     activeUsers: number;
     activeSessions: number;
     activeCampaigns: number;
@@ -501,18 +501,20 @@ export class AdminMetricsService {
     const period = this.resolvePeriod(query);
     const cohortStart: "M0" | "M3" = query.cohortStart ?? "M0";
 
-    const [daily, cohort, topFeatures, healthy, activation] = await Promise.all([
-      this.dailyActiveUsers(period),
-      this.cohortMatrix(period, cohortStart),
-      this.topFeatures(period),
-      this.healthySessionRate(period),
-      this.activationRate24h(period),
-    ]);
+    const [daily, cohort, topFeatures, healthy, activation] = await Promise.all(
+      [
+        this.dailyActiveUsers(period),
+        this.cohortMatrix(period, cohortStart),
+        this.topFeatures(period),
+        this.healthySessionRate(period),
+        this.activationRate24h(period),
+      ],
+    );
 
     const today = new Date();
-    const dau = daily.find(
-      (d) => d.day === today.toISOString().slice(0, 10),
-    )?.activeUsers ?? 0;
+    const dau =
+      daily.find((d) => d.day === today.toISOString().slice(0, 10))
+        ?.activeUsers ?? 0;
     const wauWindow = daily.slice(-7);
     const wau = Math.max(...wauWindow.map((d) => d.activeUsers), 0);
     const mauWindow = daily.slice(-30);
@@ -678,7 +680,9 @@ export class AdminMetricsService {
     const cursor = this.parseCursor(query.cursor);
 
     const sources: Array<"session_event" | "ai_usage" | "admin_audit"> =
-      query.source ? [query.source] : ["session_event", "ai_usage", "admin_audit"];
+      query.source
+        ? [query.source]
+        : ["session_event", "ai_usage", "admin_audit"];
 
     const allRows: LogRow[] = [];
     for (const src of sources) {
@@ -702,7 +706,9 @@ export class AdminMetricsService {
   async exportLogsCsv(query: LogsQueryDto): Promise<string> {
     const period = this.resolvePeriod(query);
     const sources: Array<"session_event" | "ai_usage" | "admin_audit"> =
-      query.source ? [query.source] : ["session_event", "ai_usage", "admin_audit"];
+      query.source
+        ? [query.source]
+        : ["session_event", "ai_usage", "admin_audit"];
 
     const rows: LogRow[] = [];
     for (const src of sources) {

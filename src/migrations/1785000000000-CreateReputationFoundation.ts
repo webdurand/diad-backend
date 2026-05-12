@@ -16,9 +16,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  *
  * Down() simétrico.
  */
-export class CreateReputationFoundation1785000000000
-  implements MigrationInterface
-{
+export class CreateReputationFoundation1785000000000 implements MigrationInterface {
   name = "CreateReputationFoundation1785000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

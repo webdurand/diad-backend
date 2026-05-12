@@ -36,7 +36,11 @@ export class CampaignAudienceOverrideEntity {
   campaign: CampaignEntity;
 
   @Column({ name: "event_category", type: "varchar", length: 20 })
-  eventCategory: "EncounterEvent" | "WorldEvent" | "NarrativeEvent" | "SocialEvent";
+  eventCategory:
+    | "EncounterEvent"
+    | "WorldEvent"
+    | "NarrativeEvent"
+    | "SocialEvent";
 
   @Column({ name: "event_type", type: "varchar", length: 64 })
   eventType: string;

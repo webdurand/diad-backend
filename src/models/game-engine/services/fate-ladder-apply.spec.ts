@@ -63,7 +63,8 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
   }
 
   it("opção C (Pay Price): hp=1 + stable_unconscious + dyingState=stable", async () => {
-    const { svc, stateRepo, stateRow, participantRepo, activeParticipant } = setup();
+    const { svc, stateRepo, stateRow, participantRepo, activeParticipant } =
+      setup();
 
     const result = await svc.applyResolution("char-1", [
       "pc_hp=1",

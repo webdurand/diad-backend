@@ -4,10 +4,7 @@ import { AudienceMapService } from "../audience-map.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
-import {
-  EventCategory,
-  EventEnvelope,
-} from "../event-envelope.types";
+import { EventCategory, EventEnvelope } from "../event-envelope.types";
 import { EventListener } from "../event-bus.types";
 
 function makeLogger(): DiadLogger {
@@ -46,8 +43,8 @@ function makeDataSource(): FakeDataSource {
   };
   return {
     manager,
-    transaction: jest.fn(
-      async (cb: (m: FakeManager) => Promise<unknown>) => cb(manager),
+    transaction: jest.fn(async (cb: (m: FakeManager) => Promise<unknown>) =>
+      cb(manager),
     ),
   };
 }
@@ -61,9 +58,7 @@ function makeAudienceMap(audiences: string[] = ["HUD"]): AudienceMapService {
   } as unknown as AudienceMapService;
 }
 
-function makeEnvelope(
-  overrides: Partial<EventEnvelope> = {},
-): EventEnvelope {
+function makeEnvelope(overrides: Partial<EventEnvelope> = {}): EventEnvelope {
   return {
     eventId: "9f6c7b1a-2d3e-4f5a-8b9c-1d2e3f4a5b6c",
     version: 1,

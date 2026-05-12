@@ -59,7 +59,7 @@ describe("ChaosFactorService", () => {
     const svc = new ChaosFactorService(repo, bus, factory);
 
     await expect(
-      svc.setChaosFactor(SESSION_ID, v as number, "director"),
+      svc.setChaosFactor(SESSION_ID, v, "director"),
     ).rejects.toBeInstanceOf(DomainException);
   });
 

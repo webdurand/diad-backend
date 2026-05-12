@@ -15,9 +15,16 @@ function makeCoordinator(opts: {
     execute: jest.fn(async () => ({
       ok: opts.executeOk ?? true,
       value: { monsterParticipantId: MON_ID, skipped: false },
-      events: opts.executeOk !== false
-        ? [{ event_type: "lair_action_used", actor_participant_id: MON_ID, data: {} }]
-        : [],
+      events:
+        opts.executeOk !== false
+          ? [
+              {
+                event_type: "lair_action_used",
+                actor_participant_id: MON_ID,
+                data: {},
+              },
+            ]
+          : [],
     })),
   } as any;
   const snapshotService = {
@@ -30,7 +37,11 @@ function makeCoordinator(opts: {
       decisionMode: "rule-based",
     })),
   } as any;
-  const coord = new LairActionsCoordinator(lairService, snapshotService, aiProxy);
+  const coord = new LairActionsCoordinator(
+    lairService,
+    snapshotService,
+    aiProxy,
+  );
   return { coord, lairService, snapshotService, aiProxy };
 }
 

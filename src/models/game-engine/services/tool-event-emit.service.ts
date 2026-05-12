@@ -169,7 +169,11 @@ export class ToolEventEmitService {
   }
 
   private async publishSafe(args: {
-    eventCategory: "EncounterEvent" | "WorldEvent" | "NarrativeEvent" | "SocialEvent";
+    eventCategory:
+      | "EncounterEvent"
+      | "WorldEvent"
+      | "NarrativeEvent"
+      | "SocialEvent";
     eventType: string;
     module: string;
     campaignId: string;

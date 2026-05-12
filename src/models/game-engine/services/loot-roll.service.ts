@@ -14,7 +14,10 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { LootTableEntity } from "src/entities/loot-table.entity";
 import { LootService } from "./loot.service";
-import { MagicItemSelectorService, PartyTier } from "./magic-item-selector.service";
+import {
+  MagicItemSelectorService,
+  PartyTier,
+} from "./magic-item-selector.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
@@ -71,8 +74,8 @@ const DIFFICULTY_GP_MULTIPLIER: Record<EncounterDifficulty, number> = {
 const MAGIC_ITEM_DROP_CHANCE: Record<EncounterDifficulty, number> = {
   trivial: 0.0,
   easy: 0.05,
-  medium: 0.10,
-  hard: 0.20,
+  medium: 0.1,
+  hard: 0.2,
   deadly: 0.35,
 };
 
@@ -80,10 +83,10 @@ const TIER_COIN_DISTRIBUTION: Record<
   PartyTier,
   { cp: number; sp: number; gp: number; pp: number }
 > = {
-  "1": { cp: 0.30, sp: 0.50, gp: 0.18, pp: 0.02 },
+  "1": { cp: 0.3, sp: 0.5, gp: 0.18, pp: 0.02 },
   "2": { cp: 0.05, sp: 0.25, gp: 0.65, pp: 0.05 },
-  "3": { cp: 0.0, sp: 0.05, gp: 0.75, pp: 0.20 },
-  "4": { cp: 0.0, sp: 0.0, gp: 0.60, pp: 0.40 },
+  "3": { cp: 0.0, sp: 0.05, gp: 0.75, pp: 0.2 },
+  "4": { cp: 0.0, sp: 0.0, gp: 0.6, pp: 0.4 },
 };
 
 @Injectable()

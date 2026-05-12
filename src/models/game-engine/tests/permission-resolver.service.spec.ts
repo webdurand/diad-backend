@@ -66,11 +66,7 @@ describe("PermissionResolver", () => {
       sessionService,
       campaignService,
       campaignPlayerRepo,
-    } = mockServices(
-      participant,
-      encounter,
-      session,
-    );
+    } = mockServices(participant, encounter, session);
     const resolver = new PermissionResolver(
       encounterService,
       sessionService,
@@ -99,12 +95,7 @@ describe("PermissionResolver", () => {
       sessionService,
       campaignService,
       campaignPlayerRepo,
-    } = mockServices(
-      participant,
-      encounter,
-      session,
-      "user-dm",
-    );
+    } = mockServices(participant, encounter, session, "user-dm");
     const resolver = new PermissionResolver(
       encounterService,
       sessionService,
@@ -133,12 +124,7 @@ describe("PermissionResolver", () => {
       sessionService,
       campaignService,
       campaignPlayerRepo,
-    } = mockServices(
-      participant,
-      encounter,
-      session,
-      "user-dm",
-    );
+    } = mockServices(participant, encounter, session, "user-dm");
     const resolver = new PermissionResolver(
       encounterService,
       sessionService,
@@ -163,12 +149,7 @@ describe("PermissionResolver", () => {
       sessionService,
       campaignService,
       campaignPlayerRepo,
-    } = mockServices(
-      participant,
-      encounter,
-      session,
-      "user-dm",
-    );
+    } = mockServices(participant, encounter, session, "user-dm");
     const resolver = new PermissionResolver(
       encounterService,
       sessionService,
@@ -196,12 +177,7 @@ describe("PermissionResolver", () => {
       sessionService,
       campaignService,
       campaignPlayerRepo,
-    } = mockServices(
-      participant,
-      encounter,
-      session,
-      "user-dm",
-    );
+    } = mockServices(participant, encounter, session, "user-dm");
     const resolver = new PermissionResolver(
       encounterService,
       sessionService,
@@ -227,11 +203,7 @@ describe("PermissionResolver", () => {
       sessionService,
       campaignService,
       campaignPlayerRepo,
-    } = mockServices(
-      participant,
-      encounter,
-      session,
-    );
+    } = mockServices(participant, encounter, session);
     const resolver = new PermissionResolver(
       encounterService,
       sessionService,
@@ -256,11 +228,7 @@ describe("PermissionResolver", () => {
       sessionService,
       campaignService,
       campaignPlayerRepo,
-    } = mockServices(
-      participant,
-      encounter,
-      session,
-    );
+    } = mockServices(participant, encounter, session);
     const resolver = new PermissionResolver(
       encounterService,
       sessionService,

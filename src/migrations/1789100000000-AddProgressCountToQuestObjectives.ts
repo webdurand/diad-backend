@@ -6,9 +6,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * incrementam a cada match, comparam com `completion_conditions.amount`,
  * marcam completed quando atinge.
  */
-export class AddProgressCountToQuestObjectives1789100000000
-  implements MigrationInterface
-{
+export class AddProgressCountToQuestObjectives1789100000000 implements MigrationInterface {
   name = "AddProgressCountToQuestObjectives1789100000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {

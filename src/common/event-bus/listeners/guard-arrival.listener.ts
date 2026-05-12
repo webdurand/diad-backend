@@ -8,10 +8,7 @@ import {
 } from "src/entities/pending-guard-dispatch.entity";
 import { DiadLogger } from "../../observability/logger/diad-logger.service";
 import { EventListener } from "../event-bus.types";
-import {
-  EventCategory,
-  EventEnvelope,
-} from "../event-envelope.types";
+import { EventCategory, EventEnvelope } from "../event-envelope.types";
 
 const TURNS_TO_SEQUENCE_MULTIPLIER = 2;
 const DEFAULT_DELAY_TURNS = 1;

@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class CreateLocationPoisAndSceneStage1789700000000
-  implements MigrationInterface
-{
+export class CreateLocationPoisAndSceneStage1789700000000 implements MigrationInterface {
   name = "CreateLocationPoisAndSceneStage1789700000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {

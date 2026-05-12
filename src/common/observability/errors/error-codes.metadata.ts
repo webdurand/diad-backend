@@ -213,8 +213,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
   [ErrorCode.WEATHER_INVALID_BIOME]: {
     httpStatus: 422,
     defaultTitle: "Invalid biome",
-    defaultHint:
-      "Biomes válidos: forest, plains, mountain, swamp, desert.",
+    defaultHint: "Biomes válidos: forest, plains, mountain, swamp, desert.",
     domain: "world",
   },
   [ErrorCode.CLOCK_NEGATIVE_HOURS]: {
@@ -309,7 +308,8 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
   [ErrorCode.INVENTORY_ITEM_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Item not found in inventory",
-    defaultHint: "Verificar se o item já foi consumido/removido em turn anterior.",
+    defaultHint:
+      "Verificar se o item já foi consumido/removido em turn anterior.",
     domain: "inventory",
   },
   [ErrorCode.ITEM_OWNERSHIP_MISMATCH]: {
@@ -439,8 +439,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
   [ErrorCode.RANDOM_ENCOUNTER_INVALID_LOCATION]: {
     httpStatus: 400,
     defaultTitle: "Location type does not support random encounter",
-    defaultHint:
-      "Random encounters só em wilderness, dungeon ou dungeon_room.",
+    defaultHint: "Random encounters só em wilderness, dungeon ou dungeon_room.",
     domain: "encounter",
   },
   [ErrorCode.PARTICIPANT_NOT_FOUND]: {
@@ -482,7 +481,8 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
   [ErrorCode.SUMMARIZE_INVALID_INPUT]: {
     httpStatus: 400,
     defaultTitle: "Invalid input for hot-recap",
-    defaultHint: "Payload do summarize inválido. Verifique sessionId + messages[].",
+    defaultHint:
+      "Payload do summarize inválido. Verifique sessionId + messages[].",
     domain: "session-recap",
   },
   [ErrorCode.SUMMARIZE_AUTH_FAILED]: {

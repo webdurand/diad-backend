@@ -5,6 +5,33 @@ import {
 } from "./ai-proxy.controller";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
+interface ProxiedNarrativeBody {
+  systemHint?: string;
+  sceneContext?: {
+    recent_events?: Array<{ type: string; payload?: unknown }>;
+  };
+}
+
+type PipeStreamMock = jest.Mock<
+  Promise<void>,
+  [
+    string,
+    ProxiedNarrativeBody,
+    Response,
+    ((chunk: Buffer) => void)?,
+    (() => Promise<void> | void)?,
+    Record<string, string>?,
+  ]
+>;
+
+function makePipeStream(
+  impl: PipeStreamMock["mockImplementation"] extends (fn: infer Fn) => unknown
+    ? Fn
+    : never = async () => undefined,
+): PipeStreamMock {
+  return jest.fn(impl) as PipeStreamMock;
+}
+
 /**
  * Spec 027 (M1, AC1.12) — guard in-flight no controller pra rejeitar duplo
  * POST do mesmo turn (jogador clicando 2× muito rápido). Aqui testamos só
@@ -45,7 +72,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
   }
 
   function makeController(opts: {
-    pipeStream: jest.Mock;
+    pipeStream: PipeStreamMock;
     activeScene?: { id: string } | null;
     gameEventRepo?: { findOne: jest.Mock };
     sessionMessageService?: {
@@ -126,7 +153,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     const firstDone = new Promise<void>((resolve) => {
       resolveFirst = resolve;
     });
-    const pipeStream = jest.fn(async () => {
+    const pipeStream = makePipeStream(async () => {
       await firstDone;
     });
 
@@ -183,9 +210,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
   });
 
   it("narrativeTurn: turns sequenciais com lastMessageId diferentes NÃO colidem", async () => {
-    const pipeStream = jest.fn(async () => {
-      // Resolve imediato — não trava.
-    });
+    const pipeStream = makePipeStream();
     const controller = makeController({ pipeStream });
     const req: any = { user: { id: USER_ID } };
 
@@ -216,7 +241,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     const firstDone = new Promise<void>((resolve) => {
       resolveFirst = resolve;
     });
-    const pipeStream = jest.fn(async () => {
+    const pipeStream = makePipeStream(async () => {
       await firstDone;
     });
 
@@ -243,8 +268,10 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
   });
 
   it("narrativeTurn: chave é liberada no finally mesmo se pipeStream lançar", async () => {
-    const pipeStream = jest
-      .fn()
+    const pipeStream = jest.fn(
+      async () => undefined,
+    ) as unknown as PipeStreamMock;
+    pipeStream
       .mockRejectedValueOnce(new Error("agents down"))
       .mockResolvedValueOnce(undefined);
 
@@ -268,7 +295,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
 
   describe("narrativeTurn: systemHint event injection", () => {
     it("post_combat: injeta encounter_outcome_summary em sceneContext.recent_events", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const eventPayload = {
         outcome: "victory",
         defeatedNpcs: [{ name: "Goblin Capanga", type: "monster" }],
@@ -276,7 +303,8 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         gold: { cp: 0, sp: 0, gp: 30, pp: 0 },
         items: [],
         pcFinalHp: { characterId: "c1", current: 6, max: 22, percent: 27 },
-        summary: "Inimigos derrotados: Goblin Capanga. PC 27%HP. Recompensa: 50XP, 30gp.",
+        summary:
+          "Inimigos derrotados: Goblin Capanga. PC 27%HP. Recompensa: 50XP, 30gp.",
       };
       const findOne = jest.fn().mockResolvedValue({
         sequence: 42,
@@ -312,7 +340,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       expect(pipeStream).toHaveBeenCalledTimes(1);
       const proxiedBody = pipeStream.mock.calls[0][1];
       expect(proxiedBody.systemHint).toBe("post_combat");
-      const recent = proxiedBody.sceneContext.recent_events;
+      const recent = proxiedBody.sceneContext?.recent_events ?? [];
       expect(Array.isArray(recent)).toBe(true);
       expect(recent[recent.length - 1]).toEqual({
         type: "encounter_outcome_summary",
@@ -321,7 +349,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
 
     it("post_fate_choice: injeta fate_ladder_resolved", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const fatePayload = {
         characterId: "c1",
         ladderId: "ladder-1",
@@ -362,7 +390,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         order: { sequence: "DESC" },
       });
       const recent =
-        pipeStream.mock.calls[0][1].sceneContext.recent_events;
+        pipeStream.mock.calls[0][1].sceneContext?.recent_events ?? [];
       expect(recent[recent.length - 1]).toEqual({
         type: "fate_ladder_resolved",
         payload: fatePayload,
@@ -370,7 +398,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
 
     it("systemHint sem evento correspondente: forwarded sem mescla, não erra", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const findOne = jest.fn().mockResolvedValue(null);
       const controller = makeController({
         pipeStream,
@@ -401,7 +429,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
 
     it("sem systemHint: query nem é executada", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const findOne = jest.fn();
       const controller = makeController({
         pipeStream,
@@ -419,7 +447,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
 
     it("systemHint não-mapeado: forwarded sem touch no DB", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const findOne = jest.fn();
       const controller = makeController({
         pipeStream,
@@ -442,10 +470,8 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
 
     it("query falha: stream segue, evento não é injetado", async () => {
-      const pipeStream = jest.fn(async () => {});
-      const findOne = jest
-        .fn()
-        .mockRejectedValue(new Error("DB unreachable"));
+      const pipeStream = makePipeStream();
+      const findOne = jest.fn().mockRejectedValue(new Error("DB unreachable"));
       const controller = makeController({
         pipeStream,
         gameEventRepo: { findOne },
@@ -477,7 +503,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
   // retorna do histórico sem chamar o agent.
   describe("narrativeTurn: post_combat F5 idempotency", () => {
     it("post_combat: narração já persistida → não chama agent, emite session_sync + done", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const findOne = jest.fn().mockImplementation((opts: any) => {
         if (opts.where?.eventType === "encounter_resolved") {
           return Promise.resolve({
@@ -528,7 +554,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
 
     it("post_combat: sem narração persistida → chama agent normalmente com clientId determinístico", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const findOne = jest.fn().mockImplementation((opts: any) => {
         if (opts.where?.eventType === "encounter_resolved") {
           return Promise.resolve({
@@ -568,7 +594,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
 
     it("post_combat: sem encounter_resolved no histórico → segue fluxo normal sem clientId determinístico", async () => {
-      const pipeStream = jest.fn(async () => {});
+      const pipeStream = makePipeStream();
       const findOne = jest.fn().mockResolvedValue(null);
       const findByClientId = jest.fn();
 

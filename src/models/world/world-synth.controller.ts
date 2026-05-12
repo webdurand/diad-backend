@@ -80,7 +80,10 @@ export class WorldSynthController {
   async bootstrap(
     @Req() req: AuthRequest,
     @Body() body: BootstrapBody,
-  ): Promise<{ seed: Record<string, unknown>; preview: Record<string, unknown> }> {
+  ): Promise<{
+    seed: Record<string, unknown>;
+    preview: Record<string, unknown>;
+  }> {
     getUserId(req); // só valida auth
     return this.aiProxy.requestAgent(
       "POST",

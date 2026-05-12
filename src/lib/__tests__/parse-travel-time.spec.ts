@@ -60,7 +60,10 @@ describe("computeTravelTurns", () => {
     [241, 8],
     [12 * 60, 8],
     [24 * 60, 8],
-  ])("computes %p minutes → %d turns (~30min/turn, cap 1-8)", (input, expected) => {
-    expect(computeTravelTurns(input)).toBe(expected);
-  });
+  ])(
+    "computes %p minutes → %d turns (~30min/turn, cap 1-8)",
+    (input, expected) => {
+      expect(computeTravelTurns(input)).toBe(expected);
+    },
+  );
 });

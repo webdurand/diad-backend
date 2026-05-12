@@ -284,7 +284,11 @@ export class SessionScopedWorldController {
     @Body() body: { evidence?: string },
   ) {
     await this.ensureDm(sessionId, getUserId(req));
-    return this.questService.revealQuest(sessionId, slug, body.evidence ?? null);
+    return this.questService.revealQuest(
+      sessionId,
+      slug,
+      body.evidence ?? null,
+    );
   }
 
   @Post(":sessionId/quests/:slug/advance-objective")

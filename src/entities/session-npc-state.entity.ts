@@ -86,7 +86,10 @@ export class SessionNpcStateEntity {
    * acontece. Defaults zeros — getEffectiveCurrency consulta wealthTier
    * pra derivar pool quando saldo < threshold.
    */
-  @Column({ type: "jsonb", default: () => "'{\"cp\":0,\"sp\":0,\"gp\":0,\"pp\":0}'::jsonb" })
+  @Column({
+    type: "jsonb",
+    default: () => '\'{"cp":0,"sp":0,"gp":0,"pp":0}\'::jsonb',
+  })
   currency: { cp: number; sp: number; gp: number; pp: number };
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })

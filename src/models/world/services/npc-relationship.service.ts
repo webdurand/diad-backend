@@ -37,9 +37,7 @@ export class NpcRelationshipService {
     private readonly relRepo: Repository<NpcRelationshipEntity>,
   ) {}
 
-  async create(
-    dto: CreateNpcRelationshipDto,
-  ): Promise<NpcRelationshipEntity> {
+  async create(dto: CreateNpcRelationshipDto): Promise<NpcRelationshipEntity> {
     if (!dto.targetNpcId && !dto.targetFactionId) {
       throw new Error(
         "Relationship precisa de targetNpcId OU targetFactionId.",
@@ -64,9 +62,7 @@ export class NpcRelationshipService {
     });
   }
 
-  async listByCampaign(
-    campaignId: string,
-  ): Promise<NpcRelationshipEntity[]> {
+  async listByCampaign(campaignId: string): Promise<NpcRelationshipEntity[]> {
     // Relationships nao tem campaignId direto — JOIN via source NPC.
     return this.relRepo
       .createQueryBuilder("r")

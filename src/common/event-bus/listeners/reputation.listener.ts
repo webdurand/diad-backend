@@ -6,10 +6,7 @@ import { DiadLogger } from "../../observability/logger/diad-logger.service";
 import { EventListener } from "../event-bus.types";
 import { EventBusService } from "../event-bus.service";
 import { EventEnvelopeFactory } from "../event-envelope.factory";
-import {
-  EventCategory,
-  EventEnvelope,
-} from "../event-envelope.types";
+import { EventCategory, EventEnvelope } from "../event-envelope.types";
 
 /**
  * Spec 027 (M2, AC2.5) — ReputationListener.

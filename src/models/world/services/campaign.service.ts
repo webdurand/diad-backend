@@ -154,7 +154,6 @@ export class CampaignService {
       .filter((c): c is CampaignEntity => Boolean(c) && !c.isSandbox);
   }
 
-  
   async listSoloWorlds(
     userId: string,
     query: ListSoloWorldsQuery = {},
@@ -214,7 +213,7 @@ export class CampaignService {
   private async fetchCountsForCampaign(
     campaignId: string,
   ): Promise<SoloWorldListItem["counts"]> {
-    const result = (await this.campaignRepo.query(
+    const result = await this.campaignRepo.query(
       `SELECT
          (SELECT COUNT(*) FROM npcs WHERE campaign_id = $1 AND game_session_id IS NULL) AS npcs,
          (SELECT COUNT(*) FROM locations WHERE campaign_id = $1) AS locations,
@@ -224,8 +223,14 @@ export class CampaignService {
             JOIN game_sessions s ON s.id = q.game_session_id
             WHERE s.campaign_id = $1) AS quests`,
       [campaignId],
-    )) as Array<{ npcs: string; locations: string; factions: string; lore: string; quests: string }>;
-    const row = result[0] ?? { npcs: "0", locations: "0", factions: "0", lore: "0", quests: "0" };
+    );
+    const row = result[0] ?? {
+      npcs: "0",
+      locations: "0",
+      factions: "0",
+      lore: "0",
+      quests: "0",
+    };
     return {
       npcs: parseInt(row.npcs, 10) || 0,
       locations: parseInt(row.locations, 10) || 0,
@@ -255,24 +260,24 @@ export class CampaignService {
     quests: unknown[],
   ): Promise<{ questsTemplate: unknown[] }> {
     const campaign = await this.getById(campaignId);
-    const seed = (campaign.generationSeed ?? {}) as Record<string, unknown>;
+    const seed = campaign.generationSeed ?? {};
     seed.questsTemplate = quests;
     campaign.generationSeed = seed;
     await this.campaignRepo.save(campaign);
     return { questsTemplate: quests };
   }
 
-  async getQuestsTemplate(campaignId: string): Promise<{ questsTemplate: unknown[] }> {
+  async getQuestsTemplate(
+    campaignId: string,
+  ): Promise<{ questsTemplate: unknown[] }> {
     const campaign = await this.getById(campaignId);
-    const seed = (campaign.generationSeed ?? {}) as Record<string, unknown>;
+    const seed = campaign.generationSeed ?? {};
     const tpl = seed.questsTemplate;
     return { questsTemplate: Array.isArray(tpl) ? tpl : [] };
   }
 
-  
   private static readonly UUID_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 
   async resolveId(slugOrId: string): Promise<string> {
     const candidate = (slugOrId || "").trim();
@@ -296,7 +301,6 @@ export class CampaignService {
     return bySlug.id;
   }
 
- 
   async getById(campaignId: string): Promise<CampaignEntity> {
     const candidate = (campaignId || "").trim();
     const where = CampaignService.UUID_REGEX.test(candidate)
@@ -409,7 +413,6 @@ export class CampaignService {
     return `${base}-${suffix}`;
   }
 
-
   async initializeWithBudget(
     campaignId: string,
     dto: InitializeBudgetDto,
@@ -464,7 +467,6 @@ export class CampaignService {
     return this.campaignRepo.save(campaign);
   }
 
-  
   async incrementCount(
     campaignId: string,
     kind: BoundedCountKind,
@@ -536,5 +538,4 @@ export class CampaignService {
     }
     return [];
   }
-
 }
