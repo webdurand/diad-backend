@@ -70,11 +70,10 @@ export class WorldSynthController {
   ) {}
 
   /**
-   * Haiku 4.5 — gera seed bruto a partir de descrição livre.
+   * Haiku — gera seed canônico compacto a partir de descrição livre.
    * Não persiste — frontend chama, edita e depois cria campaign + items.
-   * Timeout 100s — Haiku com 4k tokens cap pode levar 60-80s no pior caso.
-   * Estrutura narrativa (story arc/clocks/quests) fica pra synthesize-complete
-   * no [Salvar mundo].
+   * O roster inicial já vem com 20 NPCs canônicos; estrutura narrativa
+   * (story arc/clocks/quests) fica pra synthesize-complete no [Salvar mundo].
    */
   @Post("synthesize-bootstrap")
   async bootstrap(
