@@ -63,6 +63,80 @@ describe("SessionMessageService.getMaxSequenceNumber", () => {
   });
 });
 
+describe("SessionMessageService.listBySession", () => {
+  const SESSION_ID = "00000000-0000-4000-8000-000000000001";
+  const USER_ID = "00000000-0000-4000-8000-000000000002";
+
+  interface MessageQueryBuilderMock {
+    where: jest.Mock<
+      MessageQueryBuilderMock,
+      [string, Record<string, unknown>?]
+    >;
+    orderBy: jest.Mock<MessageQueryBuilderMock, [string, "ASC" | "DESC"]>;
+    take: jest.Mock<MessageQueryBuilderMock, [number]>;
+    andWhere: jest.Mock<
+      MessageQueryBuilderMock,
+      [string, Record<string, unknown>]
+    >;
+    getMany: jest.Mock<Promise<SessionMessageEntity[]>, []>;
+  }
+
+  function buildService(messages: SessionMessageEntity[]) {
+    const qb = {} as MessageQueryBuilderMock;
+    qb.where = jest.fn(() => qb);
+    qb.orderBy = jest.fn(() => qb);
+    qb.take = jest.fn(() => qb);
+    qb.andWhere = jest.fn(() => qb);
+    qb.getMany = jest.fn().mockResolvedValue(messages);
+
+    const messageRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    } as unknown as Repository<SessionMessageEntity>;
+    const sessionRepo = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: SESSION_ID, ownerId: USER_ID }),
+    } as unknown as Repository<GameSessionEntity>;
+    const dataSource = {} as unknown as DataSource;
+
+    return {
+      service: new SessionMessageService(messageRepo, sessionRepo, dataSource),
+      qb,
+    };
+  }
+
+  it("sem cursor retorna a janela mais recente em ordem cronologica", async () => {
+    const newestFirst = [
+      { id: "m-5", sequenceNumber: 5 },
+      { id: "m-4", sequenceNumber: 4 },
+    ] as SessionMessageEntity[];
+    const ctx = buildService(newestFirst);
+
+    const result = await ctx.service.listBySession(SESSION_ID, USER_ID, 2);
+
+    expect(ctx.qb.orderBy).toHaveBeenCalledWith("m.sequence_number", "DESC");
+    expect(ctx.qb.take).toHaveBeenCalledWith(2);
+    expect(result.map((m) => m.sequenceNumber)).toEqual([4, 5]);
+  });
+
+  it("com cursor busca mensagens novas em ordem ascendente", async () => {
+    const newestAfterCursor = [
+      { id: "m-6", sequenceNumber: 6 },
+      { id: "m-7", sequenceNumber: 7 },
+    ] as SessionMessageEntity[];
+    const ctx = buildService(newestAfterCursor);
+
+    const result = await ctx.service.listBySession(SESSION_ID, USER_ID, 20, 5);
+
+    expect(ctx.qb.orderBy).toHaveBeenCalledWith("m.sequence_number", "ASC");
+    expect(ctx.qb.andWhere).toHaveBeenCalledWith(
+      "m.sequence_number > :afterSequence",
+      { afterSequence: 5 },
+    );
+    expect(result.map((m) => m.sequenceNumber)).toEqual([6, 7]);
+  });
+});
+
 /**
  * Spec 027 (M1, AC1.11) — `append` precisa rodar inteiro dentro de uma
  * transação que adquire pg_advisory_xact_lock por sessionId. Sem o lock,

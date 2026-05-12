@@ -101,14 +101,33 @@ export class SessionMessageService {
     afterSequence?: number,
   ): Promise<SessionMessageEntity[]> {
     await this.assertOwnership(sessionId, userId);
+    const safeLimit =
+      Number.isFinite(limit) && limit > 0
+        ? Math.min(Math.floor(limit), 500)
+        : 200;
+    const safeAfterSequence =
+      typeof afterSequence === "number" && Number.isFinite(afterSequence)
+        ? afterSequence
+        : null;
+
+    if (safeAfterSequence === null) {
+      const recent = await this.messageRepo
+        .createQueryBuilder("m")
+        .where("m.session_id = :sessionId", { sessionId })
+        .orderBy("m.sequence_number", "DESC")
+        .take(safeLimit)
+        .getMany();
+      return recent.reverse();
+    }
+
     const qb = this.messageRepo
       .createQueryBuilder("m")
       .where("m.session_id = :sessionId", { sessionId })
       .orderBy("m.sequence_number", "ASC")
-      .take(limit);
-    if (typeof afterSequence === "number") {
-      qb.andWhere("m.sequence_number > :afterSequence", { afterSequence });
-    }
+      .take(safeLimit)
+      .andWhere("m.sequence_number > :afterSequence", {
+        afterSequence: safeAfterSequence,
+      });
     return qb.getMany();
   }
 

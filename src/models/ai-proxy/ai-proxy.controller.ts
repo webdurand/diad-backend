@@ -262,6 +262,7 @@ export class AiProxyController {
   ): Promise<void> {
     if (!outcomes || outcomes.length === 0) return;
     for (const [index, outcome] of outcomes.entries()) {
+      if (outcome.outcomeType === "fact_learned") continue;
       try {
         await this.sessionMessageService.append({
           sessionId,
