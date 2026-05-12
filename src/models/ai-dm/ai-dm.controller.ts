@@ -19,6 +19,8 @@ import { ClockService } from "./services/clock.service";
 import type { AdvanceClockDto, CreateClockDto } from "./services/clock.service";
 import { NarrativeDecisionService } from "./services/narrative-decision.service";
 import type { CreateNarrativeDecisionDto } from "./services/narrative-decision.service";
+import { ContinuityFactService } from "./services/continuity-fact.service";
+import type { CreateContinuityFactDto } from "./services/continuity-fact.service";
 import { LoreEntryService } from "./services/lore-entry.service";
 import type { CreateLoreEntryDto } from "./services/lore-entry.service";
 import { VoiceProfileService } from "./services/voice-profile.service";
@@ -44,6 +46,7 @@ export class AiDmController {
     private readonly sessionService: SessionService,
     private readonly clockService: ClockService,
     private readonly decisionService: NarrativeDecisionService,
+    private readonly continuityFactService: ContinuityFactService,
     private readonly loreService: LoreEntryService,
     private readonly voiceService: VoiceProfileService,
     private readonly aiUsageService: AiUsageService,
@@ -137,10 +140,40 @@ export class AiDmController {
     @Query("limit") limit?: string,
   ) {
     await this.sessionService.ensureAccess(sessionId, getUserId(req));
-    return this.decisionService.top(
-      sessionId,
-      limit ? parseInt(limit, 10) : 5,
-    );
+    return this.decisionService.top(sessionId, limit ? parseInt(limit, 10) : 5);
+  }
+
+  // ============= CONTINUITY FACTS (session-scoped) =============
+
+  @Post("sessions/:sessionId/continuity-facts")
+  async createContinuityFact(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Body() dto: CreateContinuityFactDto,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.continuityFactService.create(sessionId, dto);
+  }
+
+  @Get("sessions/:sessionId/continuity-facts/relevant")
+  async relevantContinuityFacts(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Query("limit") limit?: string,
+    @Query("entityIds") entityIds?: string,
+    @Query("q") q?: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.continuityFactService.listRelevant(sessionId, {
+      limit: limit ? parseInt(limit, 10) : undefined,
+      entityIds: entityIds
+        ? entityIds
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Boolean)
+        : undefined,
+      q,
+    });
   }
 
   // ============= LORE ENTRIES =============
@@ -156,7 +189,10 @@ export class AiDmController {
   }
 
   @Get("campaigns/:id/lore-entries")
-  async listLore(@Req() req: AuthRequest, @Param("id", CampaignIdPipe) campaignId: string) {
+  async listLore(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) campaignId: string,
+  ) {
     await this.campaignService.ensureMembership(campaignId, getUserId(req));
     return this.loreService.listByCampaign(campaignId);
   }

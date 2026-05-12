@@ -85,6 +85,7 @@ import { CampaignChronicleEntity } from "./campaign-chronicle.entity";
 import { PartyKnowledgeEntity } from "./party-knowledge.entity";
 import { ClockEntity } from "./clock.entity";
 import { NarrativeDecisionEntity } from "./narrative-decision.entity";
+import { ContinuityFactEntity } from "./continuity-fact.entity";
 import { LoreEntryEntity } from "./lore-entry.entity";
 import { EndingSlideEntity } from "./ending-slide.entity";
 import { VoiceProfileEntity } from "./voice-profile.entity";
@@ -197,6 +198,7 @@ export {
   PartyKnowledgeEntity,
   ClockEntity,
   NarrativeDecisionEntity,
+  ContinuityFactEntity,
   LoreEntryEntity,
   EndingSlideEntity,
   VoiceProfileEntity,
@@ -305,6 +307,7 @@ export const ENTITIES = [
   PartyKnowledgeEntity,
   ClockEntity,
   NarrativeDecisionEntity,
+  ContinuityFactEntity,
   LoreEntryEntity,
   EndingSlideEntity,
   VoiceProfileEntity,
