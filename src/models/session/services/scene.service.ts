@@ -7,6 +7,7 @@ import { ArcBeat, CampaignEntity } from "src/entities/campaign.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignService } from "src/models/world/services/campaign.service";
 import { SessionNpcStateService } from "src/models/world/services/session-npc-state.service";
+import { LocationPoiService } from "src/models/world/services/location-poi.service";
 import { SceneContextCacheService } from "./scene-context-cache.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
@@ -14,12 +15,16 @@ import { DiadLogger } from "src/common/observability/logger/diad-logger.service"
 
 export interface CreateSceneDto {
   locationId?: string;
+  poiId?: string;
+  currentInterlocutorNpcId?: string | null;
   title?: string;
   description?: string;
   mood?: string;
   reason?: string;
   skipBudgetIncrement?: boolean;
 }
+
+export type ScenePresenceRole = "present" | "interlocutor" | "companion";
 
 const BEAT_ORDER: ArcBeat[] = [
   "YOU",
@@ -49,6 +54,7 @@ export class SceneService {
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
     private readonly npcStateService: SessionNpcStateService,
+    private readonly poiService: LocationPoiService,
   ) {
     this.logger.setContext(SceneService.name);
   }
@@ -56,7 +62,7 @@ export class SceneService {
   async create(sessionId: string, dto: CreateSceneDto): Promise<SceneEntity> {
     const previousActive = await this.sceneRepo.findOne({
       where: { sessionId, isActive: true },
-      select: ["id", "locationId"],
+      select: ["id", "locationId", "poiId"],
     });
     if (previousActive) this.contextCache.invalidate(previousActive.id);
     await this.sceneRepo.update(
@@ -80,6 +86,12 @@ export class SceneService {
       previousActive?.locationId ??
       campaign?.startingLocationId ??
       null;
+    const resolvedPoiId = await this.resolvePoiIdForScene({
+      campaignId: campaign?.id ?? null,
+      locationId: resolvedLocationId,
+      requestedPoiId: dto.poiId,
+      previousActive,
+    });
 
     if (!resolvedLocationId) {
       this.logger.warn("scene.created.without_location", {
@@ -93,6 +105,8 @@ export class SceneService {
       sessionId,
       sceneNumber: nextNumber,
       locationId: resolvedLocationId ?? undefined,
+      poiId: resolvedPoiId ?? undefined,
+      currentInterlocutorNpcId: dto.currentInterlocutorNpcId ?? undefined,
       title: dto.title,
       description: dto.description,
       mood: dto.mood,
@@ -110,6 +124,8 @@ export class SceneService {
       toSceneId: saved.id,
       sceneNumber: nextNumber,
       locationId: resolvedLocationId,
+      poiId: resolvedPoiId,
+      currentInterlocutorNpcId: dto.currentInterlocutorNpcId ?? null,
       arcBeat: arcBeat ?? null,
       reason: dto.reason ?? null,
     });
@@ -124,6 +140,8 @@ export class SceneService {
     toSceneId: string;
     sceneNumber: number;
     locationId: string | null;
+    poiId: string | null;
+    currentInterlocutorNpcId: string | null;
     arcBeat: ArcBeat | null;
     reason: string | null;
   }): Promise<void> {
@@ -147,6 +165,8 @@ export class SceneService {
           toSceneId: payload.toSceneId,
           sceneNumber: payload.sceneNumber,
           locationId: payload.locationId,
+          poiId: payload.poiId,
+          currentInterlocutorNpcId: payload.currentInterlocutorNpcId,
           arcBeat: payload.arcBeat,
           reason: payload.reason,
         },
@@ -298,7 +318,7 @@ export class SceneService {
   async getActive(sessionId: string): Promise<SceneEntity | null> {
     return this.sceneRepo.findOne({
       where: { sessionId, isActive: true },
-      relations: ["location"],
+      relations: ["location", "poi", "currentInterlocutorNpc"],
     });
   }
 
@@ -322,24 +342,55 @@ export class SceneService {
     this.contextCache.invalidate(sceneId);
   }
 
-  async addNpcToScene(sceneId: string, npcId: string): Promise<SceneNpcEntity> {
+  async addNpcToScene(
+    sceneId: string,
+    npcId: string,
+    presenceRole: ScenePresenceRole = "present",
+  ): Promise<SceneNpcEntity> {
     const existing = await this.sceneNpcRepo.findOne({
       where: { sceneId, npcId },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.presenceRole !== presenceRole) {
+        if (presenceRole === "interlocutor") {
+          await this.sceneNpcRepo.update(
+            { sceneId, presenceRole: "interlocutor" },
+            { presenceRole: "present" },
+          );
+        }
+        existing.presenceRole = presenceRole;
+        await this.sceneNpcRepo.save(existing);
+        if (presenceRole === "interlocutor") {
+          await this.setCurrentInterlocutor(sceneId, npcId);
+        }
+        this.contextCache.invalidate(sceneId);
+      }
+      return existing;
+    }
 
-    const sceneNpc = this.sceneNpcRepo.create({ sceneId, npcId });
+    if (presenceRole === "interlocutor") {
+      await this.sceneNpcRepo.update(
+        { sceneId, presenceRole: "interlocutor" },
+        { presenceRole: "present" },
+      );
+    }
+
+    const sceneNpc = this.sceneNpcRepo.create({ sceneId, npcId, presenceRole });
     const saved = await this.sceneNpcRepo.save(sceneNpc);
+    if (presenceRole === "interlocutor") {
+      await this.setCurrentInterlocutor(sceneId, npcId);
+    }
     this.contextCache.invalidate(sceneId);
 
     try {
       const scene = await this.sceneRepo.findOne({
         where: { id: sceneId },
-        select: ["sessionId", "locationId"],
+        select: ["sessionId", "locationId", "poiId"],
       });
       if (scene?.sessionId && scene.locationId) {
         await this.npcStateService.upsert(scene.sessionId, npcId, {
           currentLocationId: scene.locationId,
+          currentPoiId: scene.poiId ?? null,
         });
       }
     } catch (err) {
@@ -379,5 +430,41 @@ export class SceneService {
       .where("s.session_id = :sessionId", { sessionId })
       .getRawOne();
     return (parseInt(result.max, 10) || 0) + 1;
+  }
+
+  private async setCurrentInterlocutor(
+    sceneId: string,
+    npcId: string,
+  ): Promise<void> {
+    await this.sceneRepo.update(sceneId, {
+      currentInterlocutorNpcId: npcId,
+    });
+  }
+
+  private async resolvePoiIdForScene(params: {
+    campaignId: string | null;
+    locationId: string | null;
+    requestedPoiId?: string;
+    previousActive: Pick<SceneEntity, "id" | "locationId" | "poiId"> | null;
+  }): Promise<string | null> {
+    if (!params.locationId || !params.campaignId) return null;
+    if (params.requestedPoiId) {
+      const poi = await this.poiService.getById(params.requestedPoiId);
+      if (poi.campaignId !== params.campaignId || poi.locationId !== params.locationId) {
+        throw new NotFoundException("POI nao pertence a location da cena.");
+      }
+      return poi.id;
+    }
+    if (
+      params.previousActive?.locationId === params.locationId &&
+      params.previousActive.poiId
+    ) {
+      return params.previousActive.poiId;
+    }
+    const defaultPoi = await this.poiService.ensureDefaultForLocation(
+      params.campaignId,
+      params.locationId,
+    );
+    return defaultPoi.id;
   }
 }

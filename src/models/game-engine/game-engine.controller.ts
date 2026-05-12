@@ -103,6 +103,7 @@ import { LootRollService } from "./services/loot-roll.service";
 import type { CRBand, LootMode } from "./services/loot-roll.service";
 import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
 import { MoveToLocationService } from "./services/move-to-location.service";
+import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
 // Spec 027 (M2 follow-up) — WS realtime substitui polling no frontend.
 import { RealtimeService } from "src/realtime/realtime.service";
@@ -195,6 +196,7 @@ export class GameEngineController {
     private readonly lootRollService: LootRollService,
     private readonly startEncounterFromNarrativeService: StartEncounterFromNarrativeService,
     private readonly moveToLocationService: MoveToLocationService,
+    private readonly moveToPoiService: MoveToPoiService,
     private readonly travelTickService: TravelTickService,
     // Spec 027 (M2 follow-up) — WS realtime para invalidar cache do frontend
     // após mutações de turno/encontro. Sala: encounter:<id>.
@@ -359,6 +361,29 @@ export class GameEngineController {
   }
 
   /**
+   * Move dentro da location atual, entre POIs conhecidos. Não altera travel graph
+   * nem inicia viagem; cria uma nova cena ancorada no mesmo node.
+   */
+  @Post("sessions/:sessionId/move-to-poi")
+  async moveToPoi(
+    @Param("sessionId") sessionId: string,
+    @Body()
+    dto: {
+      targetPoiId?: string;
+      targetPoiName?: string;
+      reason?: string;
+    },
+  ) {
+    const result = await this.moveToPoiService.run({
+      sessionId,
+      targetPoiId: dto.targetPoiId,
+      targetPoiName: dto.targetPoiName,
+      reason: dto.reason,
+    });
+    return { ok: true as const, value: result };
+  }
+
+  /**
    * Resolve destino textual/UUID contra o mundo conhecido antes de tentar mover.
    * Retorna se a viagem é direta, exige primeiro trecho, está bloqueada,
    * não tem rota conhecida, não foi encontrada ou já estamos lá.
@@ -389,6 +414,15 @@ export class GameEngineController {
     const travels =
       await this.moveToLocationService.listAvailableTravels(sessionId);
     return { ok: true as const, value: travels };
+  }
+
+  /**
+   * Lista POIs conhecidos/desbloqueados do palco local atual.
+   */
+  @Get("sessions/:sessionId/available-pois")
+  async availablePois(@Param("sessionId") sessionId: string) {
+    const pois = await this.moveToPoiService.listAvailablePois(sessionId);
+    return { ok: true as const, value: pois };
   }
 
   @Post("sessions/:sessionId/travel/tick")

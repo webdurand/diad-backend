@@ -28,4 +28,7 @@ export class SceneNpcEntity {
   @ManyToOne(() => NpcEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "npc_id" })
   npc: NpcEntity;
+
+  @Column({ name: "presence_role", type: "varchar", default: "present" })
+  presenceRole: "present" | "interlocutor" | "companion";
 }

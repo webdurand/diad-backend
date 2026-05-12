@@ -10,6 +10,7 @@ import {
   NpcRelationshipEntity,
   FactionEntity,
   FactionRelationEntity,
+  LocationPoiEntity,
   StoryArcEntity,
   QuestEntity,
   QuestObjectiveEntity,
@@ -50,6 +51,7 @@ import { SessionScopedWorldController } from "./session-scoped.controller";
 import { GameEngineModule } from "../game-engine/game-engine.module";
 import { CampaignService } from "./services/campaign.service";
 import { LocationService } from "./services/location.service";
+import { LocationPoiService } from "./services/location-poi.service";
 import { NpcService } from "./services/npc.service";
 import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
@@ -73,6 +75,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       CampaignEntity,
       CampaignPlayerEntity,
       LocationEntity,
+      LocationPoiEntity,
       LocationConnectionEntity,
       NpcEntity,
       NpcArchetypeTemplateEntity,
@@ -119,6 +122,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
   providers: [
     CampaignService,
     LocationService,
+    LocationPoiService,
     NpcService,
     FactionService,
     QuestService,
@@ -143,6 +147,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
   exports: [
     CampaignService,
     LocationService,
+    LocationPoiService,
     NpcService,
     FactionService,
     QuestService,

@@ -130,12 +130,15 @@ import { RandomEncounterController } from "./controllers/random-encounter.contro
 import { ToolEventEmitService } from "./services/tool-event-emit.service";
 import { StartEncounterFromNarrativeService } from "./services/start-encounter-from-narrative.service";
 import { SceneEntity } from "src/entities/scene.entity";
+import { SceneNpcEntity } from "src/entities/scene-npc.entity";
 import { NpcEntity } from "src/entities/npc.entity";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { MagicItemEntity } from "src/entities/magic-item.entity";
 import { LocationEntity } from "src/entities/location.entity";
+import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { MoveToLocationService } from "./services/move-to-location.service";
+import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
 
 @Module({
@@ -165,10 +168,12 @@ import { TravelTickService } from "./services/travel-tick.service";
       XpAwardEventEntity,
       // Spec 020 — start_encounter_from_narrative
       SceneEntity,
+      SceneNpcEntity,
       NpcEntity,
       SessionMessageEntity,
       MagicItemEntity,
       LocationEntity,
+      LocationPoiEntity,
       LocationConnectionEntity,
     ]),
     AuthModule,
@@ -277,6 +282,7 @@ import { TravelTickService } from "./services/travel-tick.service";
     // Spec 027 (M2 follow-up) — auto-end de combate em DIAD solo
     EncounterEndDetectorService,
     MoveToLocationService,
+    MoveToPoiService,
     TravelTickService,
   ],
   exports: [

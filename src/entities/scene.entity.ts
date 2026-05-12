@@ -8,6 +8,8 @@ import {
 } from "typeorm";
 import { GameSessionEntity } from "./game-session.entity";
 import { LocationEntity } from "./location.entity";
+import { LocationPoiEntity } from "./location-poi.entity";
+import { NpcEntity } from "./npc.entity";
 import type { ArcBeat } from "./campaign.entity";
 
 @Entity("scenes")
@@ -29,6 +31,20 @@ export class SceneEntity {
   @ManyToOne(() => LocationEntity, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "location_id" })
   location?: LocationEntity;
+
+  @Column({ name: "poi_id", type: "uuid", nullable: true })
+  poiId?: string;
+
+  @ManyToOne(() => LocationPoiEntity, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "poi_id" })
+  poi?: LocationPoiEntity;
+
+  @Column({ name: "current_interlocutor_npc_id", type: "uuid", nullable: true })
+  currentInterlocutorNpcId?: string;
+
+  @ManyToOne(() => NpcEntity, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "current_interlocutor_npc_id" })
+  currentInterlocutorNpc?: NpcEntity;
 
   @Column({ name: "scene_number", type: "int" })
   sceneNumber: number;

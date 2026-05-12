@@ -7,6 +7,7 @@ export interface UpsertNpcStateDto {
   status?: "alive" | "dead" | "missing" | "unknown";
   disposition?: "friendly" | "neutral" | "hostile" | "indifferent";
   currentLocationId?: string | null;
+  currentPoiId?: string | null;
 }
 
 @Injectable()
@@ -31,6 +32,7 @@ export class SessionNpcStateService {
       status: defaults.status ?? "alive",
       disposition: defaults.disposition ?? "neutral",
       currentLocationId: defaults.currentLocationId ?? undefined,
+      currentPoiId: defaults.currentPoiId ?? undefined,
     });
     return this.repo.save(created);
   }
@@ -45,6 +47,9 @@ export class SessionNpcStateService {
     if (patch.disposition !== undefined) state.disposition = patch.disposition;
     if (patch.currentLocationId !== undefined) {
       state.currentLocationId = patch.currentLocationId ?? undefined;
+    }
+    if (patch.currentPoiId !== undefined) {
+      state.currentPoiId = patch.currentPoiId ?? undefined;
     }
     return this.repo.save(state);
   }
@@ -66,6 +71,16 @@ export class SessionNpcStateService {
   ): Promise<SessionNpcStateEntity[]> {
     return this.repo.find({
       where: { gameSessionId, currentLocationId: locationId },
+    });
+  }
+
+  async listByPoi(
+    gameSessionId: string,
+    poiId: string,
+  ): Promise<SessionNpcStateEntity[]> {
+    return this.repo.find({
+      where: { gameSessionId, currentPoiId: poiId },
+      relations: ["npc", "currentPoi"],
     });
   }
 }

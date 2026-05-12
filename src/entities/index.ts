@@ -61,6 +61,7 @@ import { GameEventEntity } from "./game-event.entity";
 import { CampaignEntity } from "./campaign.entity";
 import { CampaignPlayerEntity } from "./campaign-player.entity";
 import { LocationEntity } from "./location.entity";
+import { LocationPoiEntity } from "./location-poi.entity";
 import { LocationConnectionEntity } from "./location-connection.entity";
 import { NpcEntity } from "./npc.entity";
 import { NpcArchetypeTemplateEntity } from "./npc-archetype-template.entity";
@@ -172,6 +173,7 @@ export {
   CampaignEntity,
   CampaignPlayerEntity,
   LocationEntity,
+  LocationPoiEntity,
   LocationConnectionEntity,
   NpcEntity,
   NpcArchetypeTemplateEntity,
@@ -279,6 +281,7 @@ export const ENTITIES = [
   CampaignEntity,
   CampaignPlayerEntity,
   LocationEntity,
+  LocationPoiEntity,
   LocationConnectionEntity,
   NpcEntity,
   NpcArchetypeTemplateEntity,

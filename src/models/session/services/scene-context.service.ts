@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { SceneEntity } from "src/entities/scene.entity";
 import { SceneNpcEntity } from "src/entities/scene-npc.entity";
 import { LocationEntity } from "src/entities/location.entity";
+import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { CampaignEntity } from "src/entities/campaign.entity";
 import {
@@ -30,10 +31,19 @@ import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 export interface SceneContext {
   // Tier 1: Current scene
   scene: {
+    id?: string;
     title?: string;
     description?: string;
     mood?: string;
     location?: {
+      id?: string;
+      name: string;
+      type: string;
+      description?: string;
+      atmosphere?: string;
+    };
+    poi?: {
+      id: string;
       name: string;
       type: string;
       description?: string;
@@ -52,6 +62,8 @@ export interface SceneContext {
     title?: string;
     race?: string;
     disposition: string;
+    presenceRole?: "present" | "interlocutor" | "companion";
+    currentPoiId?: string | null;
     personalityBig5: Record<string, number>;
     motivation?: string;
     knowledgeScope: string[];
@@ -103,6 +115,58 @@ export interface SceneContext {
     isLocked: boolean;
   }>;
 
+  availablePois: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description?: string | null;
+    atmosphere?: string | null;
+    aliases: string[];
+    tags: string[];
+    isDefault: boolean;
+    isLocked: boolean;
+  }>;
+
+  stage: {
+    location?: {
+      id: string;
+      name: string;
+      type: string;
+      description?: string;
+      atmosphere?: string;
+    };
+    poi?: {
+      id: string;
+      name: string;
+      type: string;
+      description?: string;
+      atmosphere?: string;
+    };
+    availablePois: SceneContext["availablePois"];
+    npcsPresent: SceneContext["npcsPresent"];
+    nearbyNpcs: Array<{
+      id: string;
+      name: string;
+      title?: string;
+      disposition: string;
+      status: string;
+      currentPoiId?: string | null;
+      currentPoiName?: string | null;
+    }>;
+    currentInterlocutor?: {
+      id: string;
+      name: string;
+      title?: string;
+      disposition: string;
+    } | null;
+    mentionedEntities: Array<{
+      name: string;
+      type?: string;
+      status: "mentioned" | "absent" | "unknown";
+      source?: string;
+    }>;
+  };
+
   travelState?: SessionTravelState | null;
 }
 
@@ -115,6 +179,8 @@ export class SceneContextService {
     private readonly sceneNpcRepo: Repository<SceneNpcEntity>,
     @InjectRepository(LocationEntity)
     private readonly locationRepo: Repository<LocationEntity>,
+    @InjectRepository(LocationPoiEntity)
+    private readonly poiRepo: Repository<LocationPoiEntity>,
     @InjectRepository(LocationConnectionEntity)
     private readonly connectionRepo: Repository<LocationConnectionEntity>,
     @InjectRepository(CampaignEntity)
@@ -151,7 +217,7 @@ export class SceneContextService {
     // Onda A — sequencial, early return se cena some.
     const scene = await this.sceneRepo.findOne({
       where: { id: sceneId },
-      relations: ["location", "session"],
+      relations: ["location", "session", "poi", "currentInterlocutorNpc"],
     });
     if (!scene) {
       return this.emptyContext();
@@ -170,6 +236,8 @@ export class SceneContextService {
       chroniclesRaw,
       arc,
       connections,
+      availablePoisRaw,
+      nearbyNpcStatesRaw,
       locationChain,
     ] = await Promise.all([
       this.sessionRepo.findOne({ where: { id: sessionId } }),
@@ -195,6 +263,18 @@ export class SceneContextService {
             relations: ["toLocation"],
           })
         : Promise.resolve([]),
+      locationId
+        ? this.poiRepo.find({
+            where: { locationId, isKnownToParty: true },
+            order: { sortOrder: "ASC", name: "ASC" },
+          })
+        : Promise.resolve([]),
+      locationId
+        ? this.npcStateRepo.find({
+            where: { gameSessionId: sessionId, currentLocationId: locationId },
+            relations: ["npc", "currentPoi"],
+          })
+        : Promise.resolve([]),
       this.getLocationChain(locationId),
     ]);
 
@@ -214,6 +294,7 @@ export class SceneContextService {
       presentNpcIds.length > 0
         ? this.npcStateRepo.find({
             where: { gameSessionId: sessionId, npcId: In(presentNpcIds) },
+            relations: ["currentPoi"],
           })
         : Promise.resolve([]),
       campaignId
@@ -237,6 +318,9 @@ export class SceneContextService {
     const dispositionByNpc = new Map(
       npcStates.map((s) => [s.npcId, s.disposition]),
     );
+    const currentPoiByNpc = new Map(
+      npcStates.map((s) => [s.npcId, s.currentPoiId ?? null]),
+    );
 
     const npcsPresent = sceneNpcs
       .filter((sn) => sn.npc)
@@ -246,6 +330,8 @@ export class SceneContextService {
         title: sn.npc.title,
         race: sn.npc.race,
         disposition: dispositionByNpc.get(sn.npc.id) ?? "neutral",
+        presenceRole: sn.presenceRole,
+        currentPoiId: currentPoiByNpc.get(sn.npc.id) ?? scene.poiId ?? null,
         personalityBig5: sn.npc.personalityBig5 as Record<string, number>,
         motivation: sn.npc.motivation,
         knowledgeScope: sn.npc.knowledgeScope,
@@ -297,19 +383,100 @@ export class SceneContextService {
       }),
     );
 
+    const availablePois: SceneContext["availablePois"] = availablePoisRaw
+      .filter((poi) => poi.isKnownToParty)
+      .map((poi) => ({
+        id: poi.id,
+        name: poi.name,
+        type: poi.type,
+        description: poi.description ?? null,
+        atmosphere: poi.atmosphere ?? null,
+        aliases: poi.aliases ?? [],
+        tags: poi.tags ?? [],
+        isDefault: poi.isDefault,
+        isLocked: poi.isLocked,
+      }));
+
+    const currentInterlocutorNpc =
+      scene.currentInterlocutorNpc ??
+      sceneNpcs.find((sn) => sn.presenceRole === "interlocutor")?.npc ??
+      null;
+    const currentInterlocutor = currentInterlocutorNpc
+      ? {
+          id: currentInterlocutorNpc.id,
+          name: currentInterlocutorNpc.name,
+          title: currentInterlocutorNpc.title,
+          disposition:
+            dispositionByNpc.get(currentInterlocutorNpc.id) ?? "neutral",
+        }
+      : null;
+
+    const presentNpcSet = new Set(presentNpcIds);
+    const nearbyNpcs: SceneContext["stage"]["nearbyNpcs"] =
+      nearbyNpcStatesRaw
+        .filter((state) => state.npc)
+        .filter((state) => !presentNpcSet.has(state.npcId))
+        .filter((state) => state.status !== "dead")
+        .map((state) => ({
+          id: state.npc.id,
+          name: state.npc.name,
+          title: state.npc.title,
+          disposition: state.disposition,
+          status: state.status,
+          currentPoiId: state.currentPoiId ?? null,
+          currentPoiName: state.currentPoi?.name ?? null,
+        }));
+
+    const stage: SceneContext["stage"] = {
+      location: scene.location
+        ? {
+            id: scene.location.id,
+            name: scene.location.name,
+            type: scene.location.type,
+            description: scene.location.description,
+            atmosphere: scene.location.atmosphere,
+          }
+        : undefined,
+      poi: scene.poi
+        ? {
+            id: scene.poi.id,
+            name: scene.poi.name,
+            type: scene.poi.type,
+            description: scene.poi.description,
+            atmosphere: scene.poi.atmosphere,
+          }
+        : undefined,
+      availablePois,
+      npcsPresent,
+      nearbyNpcs,
+      currentInterlocutor,
+      mentionedEntities: [],
+    };
+
     const travelState = session?.travelState ?? null;
 
     return {
       scene: {
+        id: scene.id,
         title: scene.title,
         description: scene.description,
         mood: scene.mood,
         location: scene.location
           ? {
+              id: scene.location.id,
               name: scene.location.name,
               type: scene.location.type,
               description: scene.location.description,
               atmosphere: scene.location.atmosphere,
+            }
+          : undefined,
+        poi: scene.poi
+          ? {
+              id: scene.poi.id,
+              name: scene.poi.name,
+              type: scene.poi.type,
+              description: scene.poi.description,
+              atmosphere: scene.poi.atmosphere,
             }
           : undefined,
       },
@@ -322,6 +489,8 @@ export class SceneContextService {
       storyArc,
       playerCharacter,
       availableLocations,
+      availablePois,
+      stage,
       travelState,
     };
   }
@@ -368,6 +537,14 @@ export class SceneContextService {
       recentChronicles: [],
       playerCharacter: null,
       availableLocations: [],
+      availablePois: [],
+      stage: {
+        availablePois: [],
+        npcsPresent: [],
+        nearbyNpcs: [],
+        currentInterlocutor: null,
+        mentionedEntities: [],
+      },
       travelState: null,
     };
   }

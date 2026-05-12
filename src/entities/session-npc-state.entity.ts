@@ -12,6 +12,7 @@ import {
 import { GameSessionEntity } from "./game-session.entity";
 import { NpcEntity } from "./npc.entity";
 import { LocationEntity } from "./location.entity";
+import { LocationPoiEntity } from "./location-poi.entity";
 
 @Entity("session_npc_state")
 @Unique(["gameSessionId", "npcId"])
@@ -47,6 +48,13 @@ export class SessionNpcStateEntity {
   @ManyToOne(() => LocationEntity, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "current_location_id" })
   currentLocation?: LocationEntity;
+
+  @Column({ name: "current_poi_id", type: "uuid", nullable: true })
+  currentPoiId?: string;
+
+  @ManyToOne(() => LocationPoiEntity, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "current_poi_id" })
+  currentPoi?: LocationPoiEntity;
 
   /**
    * Tier de riqueza pra NPCs anônimos (commoner/guard/etc) — substitui

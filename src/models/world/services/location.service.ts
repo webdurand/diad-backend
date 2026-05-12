@@ -4,6 +4,10 @@ import { Repository } from "typeorm";
 import { LocationEntity } from "src/entities/location.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { randomBytes } from "crypto";
+import {
+  LocationPoiService,
+  type CreateLocationPoiDto,
+} from "./location-poi.service";
 
 export interface CreateLocationDto {
   name: string;
@@ -14,6 +18,7 @@ export interface CreateLocationDto {
   atmosphere?: string;
   tags?: string[];
   properties?: Record<string, any>;
+  pois?: CreateLocationPoiDto[];
 }
 
 export interface UpdateLocationDto {
@@ -44,6 +49,7 @@ export class LocationService {
     private readonly locationRepo: Repository<LocationEntity>,
     @InjectRepository(LocationConnectionEntity)
     private readonly connectionRepo: Repository<LocationConnectionEntity>,
+    private readonly poiService: LocationPoiService,
   ) {}
 
   async create(
@@ -63,7 +69,26 @@ export class LocationService {
       tags: dto.tags ?? [],
       properties: dto.properties ?? {},
     });
-    return this.locationRepo.save(location);
+    const saved = await this.locationRepo.save(location);
+    const pois = dto.pois ?? [];
+    if (pois.length > 0) {
+      let hasDefault = false;
+      for (const [index, poi] of pois.entries()) {
+        const isDefault = poi.isDefault ?? (!hasDefault && !poi.isSecret);
+        hasDefault = hasDefault || isDefault;
+        await this.poiService.create(campaignId, saved.id, {
+          ...poi,
+          isDefault,
+          sortOrder: poi.sortOrder ?? index,
+        });
+      }
+      if (!hasDefault) {
+        await this.poiService.ensureDefaultForLocation(campaignId, saved.id);
+      }
+    } else {
+      await this.poiService.ensureDefaultForLocation(campaignId, saved.id);
+    }
+    return saved;
   }
 
   async getById(locationId: string): Promise<LocationEntity> {

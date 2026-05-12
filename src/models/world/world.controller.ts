@@ -43,6 +43,11 @@ import type {
   UpdateLocationDto,
   AddConnectionDto,
 } from "./services/location.service";
+import {
+  LocationPoiService,
+  type CreateLocationPoiDto,
+  type UpdateLocationPoiDto,
+} from "./services/location-poi.service";
 import type { CreateNpcDto } from "./services/npc.service";
 import { isDmOmniscient } from "./services/npc-projection";
 import type { CreateFactionDto } from "./services/faction.service";
@@ -90,6 +95,7 @@ export class WorldController {
   constructor(
     private readonly campaignService: CampaignService,
     private readonly locationService: LocationService,
+    private readonly locationPoiService: LocationPoiService,
     private readonly npcService: NpcService,
     private readonly factionService: FactionService,
     // Spec 019 — Living World & Ambiance
@@ -457,6 +463,55 @@ export class WorldController {
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
     return this.locationService.markVisited(locId);
+  }
+
+  @Get(":id/locations/:locId/pois")
+  async listLocationPois(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Param("locId") locId: string,
+    @Query("includeHidden") includeHidden?: string,
+  ) {
+    await this.campaignService.ensureMembership(id, getUserId(req));
+    const pois = await this.locationPoiService.listByLocation(id, locId, {
+      includeHidden: includeHidden === "true",
+    });
+    return pois.map((poi) => this.locationPoiService.toDto(poi));
+  }
+
+  @Post(":id/locations/:locId/pois")
+  async createLocationPoi(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Param("locId") locId: string,
+    @Body() dto: CreateLocationPoiDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    const poi = await this.locationPoiService.create(id, locId, dto);
+    return this.locationPoiService.toDto(poi);
+  }
+
+  @Patch(":id/pois/:poiId")
+  async updateLocationPoi(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Param("poiId") poiId: string,
+    @Body() dto: UpdateLocationPoiDto,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    const poi = await this.locationPoiService.update(id, poiId, dto);
+    return this.locationPoiService.toDto(poi);
+  }
+
+  @Post(":id/pois/:poiId/reveal")
+  async revealLocationPoi(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Param("poiId") poiId: string,
+  ) {
+    await this.campaignService.ensureMembership(id, getUserId(req));
+    const poi = await this.locationPoiService.revealExisting(id, { poiId });
+    return { ok: true as const, value: poi ? this.locationPoiService.toDto(poi) : null };
   }
 
   @Get(":id/locations/:locId/connections")
