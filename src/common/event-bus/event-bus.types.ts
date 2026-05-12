@@ -71,6 +71,9 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "event_bus_listener_registered",
     "session_resumed",
     "scene_changed",
+    "clock_progressed",
+    "clock_filled",
+    "clock_resolved",
     // Spec 027 (M2, AC2.5)
     "npc_witnessed_event",
     "guard_dispatched",

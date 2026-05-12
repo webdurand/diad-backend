@@ -16,7 +16,11 @@ import { SceneService } from "../session/services/scene.service";
 import { SessionService } from "../game-engine/services/session.service";
 import type { ArcBeat } from "src/entities/campaign.entity";
 import { ClockService } from "./services/clock.service";
-import type { AdvanceClockDto, CreateClockDto } from "./services/clock.service";
+import type {
+  AdvanceClockDto,
+  CreateClockDto,
+  ResolveClockDto,
+} from "./services/clock.service";
 import { NarrativeDecisionService } from "./services/narrative-decision.service";
 import type { CreateNarrativeDecisionDto } from "./services/narrative-decision.service";
 import { ContinuityFactService } from "./services/continuity-fact.service";
@@ -105,6 +109,20 @@ export class AiDmController {
       getUserId(req),
     );
     return this.clockService.advance(clockId, dto);
+  }
+
+  @Post("clocks/:clockId/resolve")
+  async resolveClock(
+    @Req() req: AuthRequest,
+    @Param("clockId") clockId: string,
+    @Body() dto: ResolveClockDto,
+  ) {
+    const clock = await this.clockService.getById(clockId);
+    await this.campaignService.ensureDmOwnership(
+      clock.campaignId,
+      getUserId(req),
+    );
+    return this.clockService.resolve(clockId, dto);
   }
 
   // ============= NARRATIVE DECISIONS (session-scoped) =============

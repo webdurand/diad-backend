@@ -11,6 +11,7 @@ import {
 import { CampaignEntity } from "./campaign.entity";
 
 export type ClockType = "main" | "threat" | "opportunity";
+export type ClockStatus = "active" | "filled" | "resolved" | "expired";
 
 export interface ClockOnFullAction {
   trigger: "climax_phase" | "complication" | "opportunity_window" | "reveal";
@@ -45,6 +46,9 @@ export class ClockEntity {
 
   @Column({ type: "int", default: 0 })
   filled: number;
+
+  @Column({ type: "varchar", default: "active" })
+  status: ClockStatus;
 
   @Column({ type: "varchar", default: "threat" })
   type: ClockType;
