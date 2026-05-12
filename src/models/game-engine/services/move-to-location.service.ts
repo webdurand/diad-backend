@@ -56,11 +56,83 @@ export interface AvailableTravel {
   requirements: Record<string, any>;
 }
 
+export type TravelResolveStatus =
+  | "direct"
+  | "route_required"
+  | "no_known_route"
+  | "blocked"
+  | "not_found"
+  | "already_there";
+
+export interface TravelResolveLocation {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export type TravelResolveResult =
+  | {
+      status: "direct";
+      destination: TravelResolveLocation;
+      fromLocationId: string | null;
+      directTravel?: AvailableTravel;
+      message: string;
+    }
+  | {
+      status: "route_required";
+      destination: TravelResolveLocation;
+      fromLocationId: string;
+      nextHop: AvailableTravel;
+      route: Array<TravelResolveLocation>;
+      message: string;
+    }
+  | {
+      status: "no_known_route";
+      destination: TravelResolveLocation;
+      fromLocationId: string | null;
+      availableTravels: AvailableTravel[];
+      message: string;
+    }
+  | {
+      status: "blocked";
+      destination?: TravelResolveLocation;
+      fromLocationId: string | null;
+      directTravel?: AvailableTravel;
+      reason: string;
+      message: string;
+    }
+  | {
+      status: "not_found";
+      targetLocationName?: string;
+      suggestions: TravelResolveLocation[];
+      message: string;
+    }
+  | {
+      status: "already_there";
+      destination: TravelResolveLocation;
+      fromLocationId: string;
+      sceneId: string;
+      message: string;
+    };
+
 const OUTDOOR_TYPES = new Set(["wilderness", "dungeon", "dungeon_room"]);
 
 function deriveDestinationBiome(toLocationType: string): string {
   if (OUTDOOR_TYPES.has(toLocationType)) return toLocationType;
   return "road";
+}
+
+function normalizeLocationText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function toResolveLocation(location: LocationEntity): TravelResolveLocation {
+  return { id: location.id, name: location.name, type: location.type };
 }
 
 @Injectable()
@@ -205,6 +277,151 @@ export class MoveToLocationService {
     }));
   }
 
+  async resolveTravel(input: MoveToLocationInput): Promise<TravelResolveResult> {
+    const session = await this.sessionRepo.findOne({
+      where: { id: input.sessionId },
+    });
+    if (!session) {
+      throw new DomainException(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Sessão ${input.sessionId} não encontrada.`,
+      );
+    }
+    if (!session.campaignId) {
+      return {
+        status: "blocked",
+        fromLocationId: null,
+        reason: "session_without_campaign",
+        message: "Esta sessão não tem campanha vinculada para resolver viagem.",
+      };
+    }
+
+    if (session.travelState?.active) {
+      return {
+        status: "blocked",
+        fromLocationId: session.travelState.fromLocationId,
+        destination: {
+          id: session.travelState.toLocationId,
+          name: session.travelState.toLocationName,
+          type: session.travelState.toLocationType,
+        },
+        reason: "travel_already_active",
+        message: `Já existe uma viagem em andamento para ${session.travelState.toLocationName}.`,
+      };
+    }
+
+    const locations = await this.locationService.listByCampaign(
+      session.campaignId,
+    );
+    const target = await this.resolveTargetLoose(
+      session.campaignId,
+      input,
+      locations,
+    );
+    if (!target) {
+      return {
+        status: "not_found",
+        targetLocationName: input.targetLocationName?.trim(),
+        suggestions: this.suggestLocations(input.targetLocationName, locations),
+        message: input.targetLocationName
+          ? `Não encontrei "${input.targetLocationName}" como lugar conhecido deste mundo.`
+          : "Preciso de um destino para resolver a viagem.",
+      };
+    }
+
+    const currentScene = await this.sceneService.getActive(input.sessionId);
+    const fromLocationId = currentScene?.locationId ?? null;
+    if (fromLocationId === target.id) {
+      return {
+        status: "already_there",
+        destination: toResolveLocation(target),
+        fromLocationId,
+        sceneId: currentScene!.id,
+        message: `Você já está em ${target.name}.`,
+      };
+    }
+
+    const availableTravels = await this.listAvailableTravels(input.sessionId);
+
+    if (!fromLocationId) {
+      return {
+        status: "direct",
+        destination: toResolveLocation(target),
+        fromLocationId: null,
+        message: `${target.name} pode ser definido como próximo destino.`,
+      };
+    }
+
+    const directConnection = await this.connectionRepo.findOne({
+      where: { fromLocationId, toLocationId: target.id },
+      relations: ["toLocation"],
+    });
+    if (directConnection) {
+      const directTravel = this.toAvailableTravel(
+        directConnection,
+        target,
+      );
+      if (directConnection.isLocked) {
+        return {
+          status: "blocked",
+          destination: toResolveLocation(target),
+          fromLocationId,
+          directTravel,
+          reason: "connection_locked",
+          message: `O caminho direto para ${target.name} existe, mas está bloqueado.`,
+        };
+      }
+      if (directConnection.isHidden) {
+        return {
+          status: "blocked",
+          destination: toResolveLocation(target),
+          fromLocationId,
+          directTravel,
+          reason: "connection_hidden",
+          message: `Existe um caminho para ${target.name}, mas ele ainda não foi descoberto.`,
+        };
+      }
+      return {
+        status: "direct",
+        destination: toResolveLocation(target),
+        fromLocationId,
+        directTravel,
+        message: `Destino conectado: iniciar viagem para ${target.name}.`,
+      };
+    }
+
+    const route = await this.findKnownRoute(fromLocationId, target.id, locations);
+    if (route.length >= 2) {
+      const nextHopLocationId = route[1];
+      const nextHopLocation = locations.find((l) => l.id === nextHopLocationId);
+      const nextConnection = await this.connectionRepo.findOne({
+        where: { fromLocationId, toLocationId: nextHopLocationId },
+        relations: ["toLocation"],
+      });
+      if (nextConnection && nextHopLocation) {
+        return {
+          status: "route_required",
+          destination: toResolveLocation(target),
+          fromLocationId,
+          nextHop: this.toAvailableTravel(nextConnection, nextHopLocation),
+          route: route
+            .map((locationId) => locations.find((l) => l.id === locationId))
+            .filter((l): l is LocationEntity => Boolean(l))
+            .map(toResolveLocation),
+          message: `Para chegar a ${target.name}, primeiro vá até ${nextHopLocation.name}.`,
+        };
+      }
+    }
+
+    return {
+      status: "no_known_route",
+      destination: toResolveLocation(target),
+      fromLocationId,
+      availableTravels,
+      message: `Não há rota conhecida daqui até ${target.name}.`,
+    };
+  }
+
   private async runInTransit(params: {
     session: GameSessionEntity;
     target: LocationEntity;
@@ -312,10 +529,9 @@ export class MoveToLocationService {
       return loc;
     }
     const name = input.targetLocationName!.trim();
-    const loc = await this.locationService.findByNameInCampaign(
-      campaignId,
-      name,
-    );
+    const loc =
+      (await this.locationService.findByNameInCampaign(campaignId, name)) ??
+      (await this.resolveTargetLoose(campaignId, input));
     if (!loc) {
       throw new DomainException(
         ErrorCode.LOCATION_NOT_FOUND,
@@ -327,5 +543,151 @@ export class MoveToLocationService {
       );
     }
     return loc;
+  }
+
+  private toAvailableTravel(
+    connection: LocationConnectionEntity,
+    toLocation: LocationEntity,
+  ): AvailableTravel {
+    return {
+      connectionId: connection.id,
+      toLocationId: connection.toLocationId,
+      toLocationName: toLocation.name,
+      toLocationType: toLocation.type,
+      travelTime: connection.travelTime ?? null,
+      description: connection.description ?? null,
+      isLocked: connection.isLocked,
+      requirements: connection.requirements ?? {},
+    };
+  }
+
+  private async resolveTargetLoose(
+    campaignId: string,
+    input: MoveToLocationInput,
+    knownLocations?: LocationEntity[],
+  ): Promise<LocationEntity | null> {
+    if (input.targetLocationId) {
+      const loc = await this.locationService
+        .getById(input.targetLocationId)
+        .catch(() => null);
+      return loc?.campaignId === campaignId ? loc : null;
+    }
+    const rawName = input.targetLocationName?.trim();
+    if (!rawName) return null;
+    const locations =
+      knownLocations ?? (await this.locationService.listByCampaign(campaignId));
+    const needle = normalizeLocationText(rawName);
+    if (!needle) return null;
+
+    const scored = locations
+      .map((location) => ({
+        location,
+        score: this.scoreLocationMatch(location, needle),
+      }))
+      .filter((m) => m.score > 0)
+      .sort((a, b) => b.score - a.score);
+    const best = scored[0];
+    if (!best || best.score < 45) return null;
+    const tied = scored.filter((m) => m.score === best.score);
+    if (tied.length > 1 && best.score >= 80) return null;
+    return best.location;
+  }
+
+  private scoreLocationMatch(location: LocationEntity, needle: string): number {
+    const terms = this.locationSearchTerms(location)
+      .map(normalizeLocationText)
+      .filter(Boolean);
+    if (terms.some((term) => term === needle)) return 100;
+    if (terms.some((term) => term.includes(needle))) return 85;
+    if (terms.some((term) => needle.includes(term) && term.length >= 4)) {
+      return 75;
+    }
+    const description = normalizeLocationText(location.description ?? "");
+    if (description.includes(needle) && needle.length >= 5) return 50;
+    const tokens = needle.split(" ").filter((t) => t.length >= 4);
+    if (
+      tokens.length > 0 &&
+      tokens.every((token) =>
+        terms.some((term) => term.includes(token)) ||
+        description.includes(token),
+      )
+    ) {
+      return 45;
+    }
+    return 0;
+  }
+
+  private locationSearchTerms(location: LocationEntity): string[] {
+    const props = (location.properties ?? {}) as Record<string, unknown>;
+    const aliases = [
+      props.aliases,
+      props.alias,
+      props.knownAs,
+      props.region,
+      props.regionName,
+    ]
+      .flat()
+      .filter((v): v is string => typeof v === "string");
+    return [
+      location.name,
+      location.slug,
+      ...(location.tags ?? []),
+      ...aliases,
+    ].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  }
+
+  private suggestLocations(
+    rawName: string | undefined,
+    locations: LocationEntity[],
+  ): TravelResolveLocation[] {
+    const needle = normalizeLocationText(rawName ?? "");
+    if (!needle) return locations.slice(0, 4).map(toResolveLocation);
+    return locations
+      .map((location) => ({
+        location,
+        score: this.scoreLocationMatch(location, needle),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map((m) => toResolveLocation(m.location));
+  }
+
+  private async findKnownRoute(
+    fromLocationId: string,
+    toLocationId: string,
+    locations: LocationEntity[],
+  ): Promise<string[]> {
+    const locationIds = new Set(locations.map((l) => l.id));
+    const connections = await this.connectionRepo.find({
+      where: { isHidden: false, isLocked: false },
+    });
+    const outgoing = new Map<string, LocationConnectionEntity[]>();
+    for (const connection of connections) {
+      if (
+        !locationIds.has(connection.fromLocationId) ||
+        !locationIds.has(connection.toLocationId)
+      ) {
+        continue;
+      }
+      const list = outgoing.get(connection.fromLocationId) ?? [];
+      list.push(connection);
+      outgoing.set(connection.fromLocationId, list);
+    }
+
+    const queue: Array<{ id: string; path: string[] }> = [
+      { id: fromLocationId, path: [fromLocationId] },
+    ];
+    const visited = new Set<string>([fromLocationId]);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const connection of outgoing.get(current.id) ?? []) {
+        if (visited.has(connection.toLocationId)) continue;
+        const path = [...current.path, connection.toLocationId];
+        if (connection.toLocationId === toLocationId) return path;
+        visited.add(connection.toLocationId);
+        queue.push({ id: connection.toLocationId, path });
+      }
+    }
+    return [];
   }
 }

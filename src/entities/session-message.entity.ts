@@ -21,7 +21,8 @@ export type SessionMessageKind =
   | "combat_resolution"
   | "dice_roll"
   | "choices"
-  | "rewards";
+  | "rewards"
+  | "turn_outcome";
 
 /**
  * Histórico de mensagens narrativas da sessão de chat — fonte-de-verdade
@@ -62,7 +63,7 @@ export class SessionMessageEntity {
   /**
    * Markdown bruto (kinds narration|player_action|system|recap) ou JSON
    * serializado (kinds xp|rest_done|morning_briefing|combat_resolution|
-   * dice_roll|choices). Frontend conhece o shape via `kind`.
+   * dice_roll|choices|rewards|turn_outcome). Frontend conhece o shape via `kind`.
    */
   @Column({ type: "text" })
   content: string;

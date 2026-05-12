@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { EventListenerProcessedEntity } from "src/entities/event-listener-processed.entity";
 import { QuestEntity } from "src/entities/quest.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
+import { CampaignEntity } from "src/entities/campaign.entity";
 import { CharacterEntity } from "src/entities/character.entity";
 import { CharacterStateEntity } from "src/entities/character-state.entity";
 import { FactionEntity } from "src/entities/faction.entity";
@@ -46,6 +47,8 @@ export class QuestRewardListener implements EventListener {
     private readonly questRepo: Repository<QuestEntity>,
     @InjectRepository(GameSessionEntity)
     private readonly sessionRepo: Repository<GameSessionEntity>,
+    @InjectRepository(CampaignEntity)
+    private readonly campaignRepo: Repository<CampaignEntity>,
     @InjectRepository(CharacterEntity)
     private readonly characterRepo: Repository<CharacterEntity>,
     @InjectRepository(CharacterStateEntity)
@@ -72,6 +75,10 @@ export class QuestRewardListener implements EventListener {
     }
 
     const quest = await this.questRepo.findOne({ where: { id: questId } });
+    if (quest?.isMainQuest && campaignId) {
+      await this.markCampaignVictory(campaignId, quest);
+    }
+
     const rewards = (quest?.rewards ?? {}) as QuestRewards;
     const hasAny =
       (rewards.xp ?? 0) > 0 ||
@@ -117,6 +124,51 @@ export class QuestRewardListener implements EventListener {
     }
 
     await this.markProcessed(envelope.eventId);
+  }
+
+  private async markCampaignVictory(
+    campaignId: string,
+    quest: QuestEntity,
+  ): Promise<void> {
+    const campaign = await this.campaignRepo.findOne({
+      where: { id: campaignId },
+    });
+    if (!campaign || campaign.questionAnswered) return;
+
+    const previousBeat = campaign.arcState?.currentBeat ?? "YOU";
+    const atScene = campaign.currentCounts?.scenes ?? 0;
+    campaign.questionAnswered = true;
+    campaign.questionAnswer =
+      campaign.questionAnswer ?? `A missão principal "${quest.name}" foi concluída.`;
+    campaign.status = "completed";
+    campaign.arcState = {
+      currentBeat: "CHANGE",
+      beatEnteredAtScene: atScene,
+      transitionHistory: [
+        ...(campaign.arcState?.transitionHistory ?? []),
+        {
+          from: previousBeat,
+          to: "CHANGE",
+          atScene,
+          reason: `Main quest completed: ${quest.slug}`,
+        },
+      ],
+    };
+
+    try {
+      await this.campaignRepo.save(campaign);
+      this.logger.info("campaign_victory.marked", {
+        "campaign.id": campaignId,
+        "quest.id": quest.id,
+        "quest.slug": quest.slug,
+      });
+    } catch (err) {
+      this.logger.warn("campaign_victory.mark_failed", {
+        "campaign.id": campaignId,
+        "quest.id": quest.id,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private async applyXpAndGold(

@@ -359,6 +359,28 @@ export class GameEngineController {
   }
 
   /**
+   * Resolve destino textual/UUID contra o mundo conhecido antes de tentar mover.
+   * Retorna se a viagem é direta, exige primeiro trecho, está bloqueada,
+   * não tem rota conhecida, não foi encontrada ou já estamos lá.
+   */
+  @Post("sessions/:sessionId/travel/resolve")
+  async resolveTravel(
+    @Param("sessionId") sessionId: string,
+    @Body()
+    dto: {
+      targetLocationId?: string;
+      targetLocationName?: string;
+    },
+  ) {
+    const result = await this.moveToLocationService.resolveTravel({
+      sessionId,
+      targetLocationId: dto.targetLocationId,
+      targetLocationName: dto.targetLocationName,
+    });
+    return { ok: true as const, value: result };
+  }
+
+  /**
    * Lista connections (saídas) da scene ativa, filtrando hidden.
    * Frontend renderiza chips TIER 3 (1 chip por travel disponível).
    */
@@ -1317,6 +1339,9 @@ export class GameEngineController {
       } catch {
         // best-effort — falha de persistência não aborta o cast
       }
+    }
+    if (result.ok) {
+      this.emitEncounterInvalidate(id, "cast-spell");
     }
     return result;
   }

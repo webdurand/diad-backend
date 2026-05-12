@@ -32,6 +32,7 @@ const VALID_KINDS: ReadonlySet<SessionMessageKind> = new Set([
   "dice_roll",
   "choices",
   "rewards",
+  "turn_outcome",
 ]);
 
 @Injectable()

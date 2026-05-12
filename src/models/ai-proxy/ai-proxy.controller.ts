@@ -28,6 +28,7 @@ import {
   SseNarrationCollector,
   type CollectedChoice,
   type CollectedDiceRoll,
+  type CollectedTurnOutcome,
 } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { GameEventEntity } from "src/entities/game-event.entity";
@@ -245,6 +246,36 @@ export class AiProxyController {
       } catch (err: any) {
         this.logger.warn(
           `dice_roll persist failed (session=${sessionId}, roll=${roll.rollId}): ${err?.message}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Persiste canon beats do turno como SessionMessage kind='turn_outcome'.
+   * Importante: toast/SSE é efêmero; a timeline precisa sobreviver a reload.
+   */
+  private async persistTurnOutcomes(
+    sessionId: string,
+    userId: string,
+    outcomes: CollectedTurnOutcome[],
+  ): Promise<void> {
+    if (!outcomes || outcomes.length === 0) return;
+    for (const [index, outcome] of outcomes.entries()) {
+      try {
+        await this.sessionMessageService.append({
+          sessionId,
+          userId,
+          kind: "turn_outcome",
+          content: JSON.stringify(outcome),
+          clientId: `srv-outcome-${createHash("sha256")
+            .update(`${sessionId}:${outcome.createdAt}:${outcome.outcomeType}:${outcome.title}:${index}`)
+            .digest("hex")
+            .slice(0, 32)}`,
+        });
+      } catch (err: any) {
+        this.logger.warn(
+          `turn_outcome persist failed (session=${sessionId}, type=${outcome.outcomeType}): ${err?.message}`,
         );
       }
     }
@@ -713,6 +744,11 @@ export class AiProxyController {
             req.user!.id,
             collector.getDiceRolls(),
           );
+          await this.persistTurnOutcomes(
+            sessionId,
+            req.user!.id,
+            collector.getTurnOutcomes(),
+          );
           await this.emitSessionSync(sessionId, res);
           tPostPersistEnd = performance.now();
         },
@@ -850,6 +886,11 @@ export class AiProxyController {
             sessionId,
             req.user!.id,
             collector.getDiceRolls(),
+          );
+          await this.persistTurnOutcomes(
+            sessionId,
+            req.user!.id,
+            collector.getTurnOutcomes(),
           );
           await this.emitSessionSync(sessionId, res);
         },

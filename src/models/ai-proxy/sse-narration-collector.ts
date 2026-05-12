@@ -56,6 +56,15 @@ export interface CollectedDiceRoll {
   };
 }
 
+export interface CollectedTurnOutcome {
+  outcomeType: string;
+  title: string;
+  description?: string;
+  severity?: "info" | "success" | "warning" | "danger";
+  payload?: unknown;
+  createdAt: string;
+}
+
 function normalizeAdvantage(
   v: unknown,
 ): "normal" | "advantage" | "disadvantage" {
@@ -78,6 +87,7 @@ export class SseNarrationCollector {
   private narration = "";
   private choices: CollectedChoice[] = [];
   private diceRolls = new Map<string, CollectedDiceRoll>();
+  private turnOutcomes: CollectedTurnOutcome[] = [];
   private preflightCounter = 0;
   private narratorDoneFired = false;
   private onNarratorDoneCb: ((narration: string) => void) | null = null;
@@ -132,6 +142,11 @@ export class SseNarrationCollector {
     );
   }
 
+  /** Canon beats emitidos pelo agents para persistir na timeline do turno. */
+  getTurnOutcomes(): CollectedTurnOutcome[] {
+    return this.turnOutcomes;
+  }
+
   private processLine(line: string): void {
     const trimmed = line.replace(/\r$/, "").trim();
     if (!trimmed.startsWith("data:")) return;
@@ -181,6 +196,11 @@ export class SseNarrationCollector {
       return;
     }
 
+    if (ev.type === "turn_outcome" || ev.type === "turn_blocked") {
+      this.handleTurnOutcome(parsed as Record<string, unknown>);
+      return;
+    }
+
     if (ev.type === "choices" && Array.isArray(ev.choices)) {
       const collected: CollectedChoice[] = [];
       for (const raw of ev.choices) {
@@ -211,6 +231,66 @@ export class SseNarrationCollector {
         ? ev.text
         : "";
     if (piece) this.narration += piece;
+  }
+
+  private handleTurnOutcome(ev: Record<string, unknown>): void {
+    const outcomeTypeRaw =
+      ev.outcomeType ?? ev.kind ?? ev.code ?? (ev.type === "turn_blocked" ? "turn_blocked" : null);
+    const outcomeType =
+      typeof outcomeTypeRaw === "string" && outcomeTypeRaw.trim()
+        ? outcomeTypeRaw.trim()
+        : "turn_outcome";
+    const titleRaw = ev.title ?? ev.label;
+    const title =
+      typeof titleRaw === "string" && titleRaw.trim()
+        ? titleRaw.trim()
+        : outcomeType === "turn_blocked"
+          ? "Ação bloqueada"
+          : "Aconteceu algo importante";
+    const descriptionRaw = ev.description ?? ev.content ?? ev.message;
+    const severity =
+      ev.severity === "success" ||
+      ev.severity === "warning" ||
+      ev.severity === "danger" ||
+      ev.severity === "info"
+        ? ev.severity
+        : outcomeType === "turn_blocked"
+          ? "warning"
+          : "info";
+    const payload =
+      ev.payload && typeof ev.payload === "object"
+        ? ev.payload
+        : Object.fromEntries(
+            Object.entries(ev).filter(
+              ([key]) =>
+                ![
+                  "type",
+                  "outcomeType",
+                  "kind",
+                  "code",
+                  "title",
+                  "label",
+                  "description",
+                  "content",
+                  "message",
+                  "severity",
+                ].includes(key),
+            ),
+          );
+    this.turnOutcomes.push({
+      outcomeType,
+      title,
+      description:
+        typeof descriptionRaw === "string" && descriptionRaw.trim()
+          ? descriptionRaw.trim()
+          : undefined,
+      severity,
+      payload,
+      createdAt:
+        typeof ev.createdAt === "string" && ev.createdAt
+          ? ev.createdAt
+          : new Date().toISOString(),
+    });
   }
 
   private handleDiceRollRequest(ev: Record<string, unknown>): void {

@@ -75,6 +75,14 @@ export interface SpellCastResult {
     expression: string;
     total: number;
   };
+  resourceDelta?: {
+    spellSlots?: Array<{
+      level: number;
+      used: number;
+      total: number;
+      kind?: string;
+    }>;
+  };
 }
 
 // --- DTOs ---
@@ -239,6 +247,7 @@ export class SpellCastingService {
 
     // 4. Cantrips don't consume slots
     const isCantrip = spell.level === 0;
+    let resourceDelta: SpellCastResult["resourceDelta"] | undefined;
 
     if (!isCantrip) {
       // 5. Check slot availability
@@ -272,10 +281,21 @@ export class SpellCastingService {
       // 6. Consume the slot — pact usa level=-1 convention no updateSpellSlots.
       // Spec 012 Lote D — skip consumption quando Wizard cast free (Spell Mastery/Signature).
       if (!dto._skipSlotConsumption) {
+        const level = slotBlock.kind === "pact" ? -1 : dto.slotLevel;
         await this.spellService.updateSpellSlots(dto.userId, dto.characterId, {
-          level: slotBlock.kind === "pact" ? -1 : dto.slotLevel,
+          level,
           used: slotBlock.used + 1,
         });
+        resourceDelta = {
+          spellSlots: [
+            {
+              level,
+              used: slotBlock.used + 1,
+              total: slotBlock.total,
+              kind: slotBlock.kind,
+            },
+          ],
+        };
       }
     }
 
@@ -295,6 +315,7 @@ export class SpellCastingService {
       slotUsed: isCantrip ? 0 : dto.slotLevel,
       concentration: isConcentration,
       previousConcentration,
+      ...(resourceDelta ? { resourceDelta } : {}),
     };
 
     // 9. Resolve damage if applicable.

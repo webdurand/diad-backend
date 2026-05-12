@@ -78,6 +78,38 @@ describe("SseNarrationCollector", () => {
     expect(c.finalize()).toBe("");
   });
 
+  it("captura turn_outcome sem misturar na narração", () => {
+    const c = new SseNarrationCollector();
+    c.feed(
+      `data: {"type":"turn_outcome","outcomeType":"quest_revealed","title":"Quest revelada","description":"A trilha surgiu.","severity":"success","payload":{"slug":"trilha"}}\n\n`,
+    );
+    c.feed(`data: {"type":"text","content":"Cena segue."}\n\n`);
+    expect(c.finalize()).toBe("Cena segue.");
+    expect(c.getTurnOutcomes()).toMatchObject([
+      {
+        outcomeType: "quest_revealed",
+        title: "Quest revelada",
+        description: "A trilha surgiu.",
+        severity: "success",
+        payload: { slug: "trilha" },
+      },
+    ]);
+  });
+
+  it("normaliza turn_blocked como warning persistível", () => {
+    const c = new SseNarrationCollector();
+    c.feed(
+      `data: {"type":"turn_blocked","message":"Destino sem rota conhecida."}\n\n`,
+    );
+    c.finalize();
+    expect(c.getTurnOutcomes()[0]).toMatchObject({
+      outcomeType: "turn_blocked",
+      title: "Ação bloqueada",
+      description: "Destino sem rota conhecida.",
+      severity: "warning",
+    });
+  });
+
   it("tolera CRLF (\\r\\n) usado por alguns proxies SSE", () => {
     const c = new SseNarrationCollector();
     c.feed(`data: {"type":"text","content":"OK"}\r\n\r\n`);

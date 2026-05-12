@@ -119,10 +119,12 @@ export class AiProxyService {
       let firstChunkAt: number | null = null;
       let lastChunkAt: number | null = null;
       let clientClosed = false;
+      let normalEndStarted = false;
 
       const onClientClose = () => {
         if (clientClosed) return;
         clientClosed = true;
+        if (normalEndStarted) return;
         this.logger.warn("http.client.stream.client_closed_mid_stream", {
           "upstream.service": "diad-agents",
           "url.path": url.pathname,
@@ -213,6 +215,7 @@ export class AiProxyService {
           });
 
           proxyRes.on("end", () => {
+            normalEndStarted = true;
             this.logger.info("http.client.stream.end", {
               "upstream.service": "diad-agents",
               "url.path": url.pathname,
@@ -234,6 +237,7 @@ export class AiProxyService {
                   });
                 }
               }
+              res.off("close", onClientClose);
               res.end();
               resolve();
             };
