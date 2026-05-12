@@ -288,17 +288,15 @@ export class AiProxyController {
     serverId: string,
     clientTempId: string | null | undefined,
   ): void {
-    try {
-      res.write(
-        `data: ${JSON.stringify({
-          type: "narration_persisted",
-          serverId,
-          clientTempId: clientTempId ?? null,
-        })}\n\n`,
-      );
-    } catch (err: any) {
-      this.logger.warn(`narration_persisted emit failed: ${err?.message}`);
-    }
+    this.emitSse(
+      res,
+      {
+        type: "narration_persisted",
+        serverId,
+        clientTempId: clientTempId ?? null,
+      },
+      "narration_persisted",
+    );
   }
 
   private async emitSessionSync(
@@ -308,16 +306,33 @@ export class AiProxyController {
     try {
       const lastSequenceNumber =
         await this.sessionMessageService.getMaxSequenceNumber(sessionId);
-      res.write(
-        `data: ${JSON.stringify({
+      this.emitSse(
+        res,
+        {
           type: "session_sync",
           lastSequenceNumber,
-        })}\n\n`,
+        },
+        "session_sync",
       );
     } catch (err: any) {
       this.logger.warn(
         `session_sync emit failed (session=${sessionId}): ${err?.message}`,
       );
+    }
+  }
+
+  private emitSse(
+    res: Response,
+    payload: Record<string, unknown>,
+    label = "sse",
+  ): void {
+    try {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      if (typeof (res as any).flush === "function") {
+        (res as any).flush();
+      }
+    } catch (err: any) {
+      this.logger.warn(`${label} emit failed: ${err?.message}`);
     }
   }
 
@@ -527,7 +542,12 @@ export class AiProxyController {
     let tAgentsCallStart = 0;
     let tPostPersistStart = 0;
     let tPostPersistEnd = 0;
+    let tFirstSse = 0;
     let earlyReturnReason: string | null = null;
+    const emitStatus = (content: string) => {
+      if (tFirstSse === 0) tFirstSse = performance.now();
+      this.emitSse(res, { type: "status", content }, "status");
+    };
 
     // Spec 027 (M1, AC1.12) — guard in-flight contra duplo-POST do mesmo
     // turn (jogador clicando rápido). Chave inclui lastMessageId pra que
@@ -565,6 +585,8 @@ export class AiProxyController {
             : "none",
       );
       res.setHeader("X-Session-Is-Resumed", ctx.isResumed ? "true" : "false");
+
+      emitStatus("Recolhendo memórias da cena...");
 
       if (ctx.lastMessageMismatch) {
         // Cliente ficou para trás (stream truncado, aba inativa durante a
@@ -633,15 +655,11 @@ export class AiProxyController {
       }
 
       // Spec 026 Pillar 4 — `SceneContext` (Spec 018) não carrega `sceneId`
-      // no top-level (só `scene.{title,description,mood,location}`). O
-      // Coordinator agents precisa do sceneId pra dispatch
-      // start_encounter_from_narrative — sem ele, encounter dispatch retorna
-      // None silenciosamente. Injetamos via `sceneService.getActive()`.
-      const activeScene = await this.sceneService
-        .getActive(sessionId)
-        .catch(() => null);
-      let sceneContextForAgent = activeScene
-        ? { ...(ctx.sceneContext ?? {}), sceneId: activeScene.id }
+      // no top-level. O SessionResumeService já buscou a cena ativa para
+      // montar o contexto; reaproveitamos o id para evitar outro lookup antes
+      // do primeiro chunk do Narrator.
+      let sceneContextForAgent = ctx.activeSceneId
+        ? { ...(ctx.sceneContext ?? {}), sceneId: ctx.activeSceneId }
         : ctx.sceneContext;
 
       // Spec 027 (M2 follow-up) — quando systemHint mapeia pra um evento
@@ -770,6 +788,8 @@ export class AiProxyController {
       const tEnd = performance.now();
       const prePersistMs =
         tAgentsCallStart > 0 ? Math.round(tAgentsCallStart - tStart) : null;
+      const firstSseMs =
+        tFirstSse > 0 ? Math.round(tFirstSse - tStart) : null;
       const agentsCallMs =
         tAgentsCallStart > 0 && tPostPersistStart > 0
           ? Math.round(tPostPersistStart - tAgentsCallStart)
@@ -782,6 +802,7 @@ export class AiProxyController {
       this.logger.log(
         `ai.narrative_turn.streamtrace session=${sessionId} ` +
           `total_ms=${totalMs} ` +
+          `first_sse_ms=${firstSseMs ?? "null"} ` +
           `pre_persist_ms=${prePersistMs ?? "null"} ` +
           `agents_call_ms=${agentsCallMs ?? "null"} ` +
           `post_persist_ms=${postPersistMs ?? "null"}` +
@@ -807,6 +828,15 @@ export class AiProxyController {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
+    const tStart = performance.now();
+    let tFirstSse = 0;
+    let tAgentsCallStart = 0;
+    let earlyReturnReason: string | null = null;
+    const emitStatus = (content: string) => {
+      if (tFirstSse === 0) tFirstSse = performance.now();
+      this.emitSse(res, { type: "status", content }, "status");
+    };
+
     // Spec 027 (M1, AC1.12) — guard in-flight idêntico ao narrativeTurn.
     // Sem playerInput o payload é sempre vazio; chave usa só sessionId +
     // marker fixo "narrative-start" pra rejeitar duplo-POST de abertura.
@@ -830,13 +860,12 @@ export class AiProxyController {
     }
 
     try {
+      emitStatus("Recolhendo memórias da cena...");
+
       const ctx = await this.resumeService.assemble(sessionId);
 
-      const activeScene = await this.sceneService
-        .getActive(sessionId)
-        .catch(() => null);
-      const sceneContextForAgent = activeScene
-        ? { ...(ctx.sceneContext ?? {}), sceneId: activeScene.id }
+      const sceneContextForAgent = ctx.activeSceneId
+        ? { ...(ctx.sceneContext ?? {}), sceneId: ctx.activeSceneId }
         : ctx.sceneContext;
 
       const collector = new SseNarrationCollector();
@@ -855,6 +884,7 @@ export class AiProxyController {
           this.emitNarrationPersisted(res, persisted.serverId, null);
         }
       });
+      tAgentsCallStart = performance.now();
       await this.aiProxyService.pipeStream(
         "/narrative/turn",
         {
@@ -904,11 +934,24 @@ export class AiProxyController {
         },
       );
     } catch (err: any) {
+      earlyReturnReason = `error:${err?.name ?? "unknown"}`;
       this.logger.error(`Narrative start error: ${err.message}`);
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       res.end();
     } finally {
       releaseIdempotency(idempotencyKey);
+      const tEnd = performance.now();
+      const firstSseMs =
+        tFirstSse > 0 ? Math.round(tFirstSse - tStart) : null;
+      const prePersistMs =
+        tAgentsCallStart > 0 ? Math.round(tAgentsCallStart - tStart) : null;
+      this.logger.log(
+        `ai.narrative_start.streamtrace session=${sessionId} ` +
+          `total_ms=${Math.round(tEnd - tStart)} ` +
+          `first_sse_ms=${firstSseMs ?? "null"} ` +
+          `pre_persist_ms=${prePersistMs ?? "null"}` +
+          (earlyReturnReason ? ` early_return=${earlyReturnReason}` : ""),
+      );
     }
   }
 

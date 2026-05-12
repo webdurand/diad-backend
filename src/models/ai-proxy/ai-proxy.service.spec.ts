@@ -47,16 +47,19 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
 
   function makeFakeRes() {
     const writes: Buffer[] = [];
+    const writeOrder: string[] = [];
     let ended = false;
     const closeListeners: Array<() => void> = [];
     const res: any = {
       write: jest.fn((chunk: any) => {
+        writeOrder.push(Buffer.isBuffer(chunk) ? chunk.toString("utf-8") : String(chunk));
         writes.push(
           Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)),
         );
         return true;
       }),
       end: jest.fn(() => {
+        writeOrder.push("end");
         ended = true;
       }),
       flush: jest.fn(),
@@ -66,10 +69,18 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
         if (event === "close") closeListeners.push(cb);
         return res;
       }),
+      off: jest.fn((event: string, cb: () => void) => {
+        if (event === "close") {
+          const index = closeListeners.indexOf(cb);
+          if (index >= 0) closeListeners.splice(index, 1);
+        }
+        return res;
+      }),
     };
     return {
       res,
       writes,
+      writeOrder,
       isEnded: () => ended,
       joinedOutput: () => Buffer.concat(writes).toString("utf-8"),
       simulateClose: () => closeListeners.forEach((cb) => cb()),
@@ -175,6 +186,26 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
 
     expect(fake.res.write).toHaveBeenCalledTimes(1);
     expect(fake.joinedOutput()).toBe(customChunk);
+  });
+
+  it("escreve cada chunk upstream antes de encerrar o response", async () => {
+    const firstChunk = 'data: {"type":"status","content":"um"}\n\n';
+    const secondChunk = 'data: {"type":"narrator","content":"dois"}\n\n';
+
+    mockHttpRequest({ chunks: [firstChunk, secondChunk] });
+
+    const svc = new AiProxyService(
+      makeConfig(),
+      makeOutbound(),
+      makeLogger(),
+      makeCls(),
+    );
+    const fake = makeFakeRes();
+
+    await svc.pipeStream("/solo/abc/message", { message: "hi" }, fake.res);
+
+    expect(fake.writeOrder).toEqual([firstChunk, secondChunk, "end"]);
+    expect(fake.res.flush).toHaveBeenCalledTimes(2);
   });
 
   it("em statusCode != 200, emite chunk de erro e encerra", async () => {

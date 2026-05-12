@@ -8,6 +8,7 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 interface ProxiedNarrativeBody {
   systemHint?: string;
   sceneContext?: {
+    sceneId?: string;
     recent_events?: Array<{ type: string; payload?: unknown }>;
   };
 }
@@ -74,6 +75,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
   function makeController(opts: {
     pipeStream: PipeStreamMock;
     activeScene?: { id: string } | null;
+    sceneService?: { getActive: jest.Mock };
     gameEventRepo?: { findOne: jest.Mock };
     sessionMessageService?: {
       append?: jest.Mock;
@@ -91,6 +93,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         isResumed: false,
         previousSessionId: undefined,
         sceneContext: { scene: { title: "x" } },
+        activeSceneId: opts.activeScene?.id ?? null,
         recentMessages: [],
         previousSessionSummary: undefined,
         gapMinutes: 0,
@@ -100,7 +103,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       }),
     };
     const recapService: any = {};
-    const sceneService: any = {
+    const sceneService: any = opts.sceneService ?? {
       getActive: jest.fn().mockResolvedValue(opts.activeScene ?? null),
     };
     const sessionMessageService: any = {
@@ -236,6 +239,34 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     expect(pipeStream).toHaveBeenCalledTimes(2);
   });
 
+  it("narrativeTurn: emite status imediatamente antes do passthrough", async () => {
+    const sceneService = {
+      getActive: jest.fn().mockResolvedValue({ id: "scene-from-old-path" }),
+    };
+    const r = makeRes();
+    const pipeStream = makePipeStream(async (_path, body) => {
+      expect(r.writes[0]).toContain('"type":"status"');
+      expect(r.writes[0]).toContain("Recolhendo memórias da cena");
+      expect(body.sceneContext).toMatchObject({ sceneId: "scene-from-resume" });
+    });
+    const controller = makeController({
+      pipeStream,
+      activeScene: { id: "scene-from-resume" },
+      sceneService,
+    });
+    const req: any = { user: { id: USER_ID } };
+
+    await controller.narrativeTurn(
+      SESSION_ID,
+      { playerInput: "abrir a porta", lastMessageId: 5 },
+      req,
+      r.res,
+    );
+
+    expect((r.res as any).flush).toHaveBeenCalled();
+    expect(sceneService.getActive).not.toHaveBeenCalled();
+  });
+
   it("narrativeStart: duplo POST em paralelo recebe 409", async () => {
     let resolveFirst: () => void;
     const firstDone = new Promise<void>((resolve) => {
@@ -265,6 +296,21 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
 
     resolveFirst!();
     await first;
+  });
+
+  it("narrativeStart: emite status antes de chamar agents", async () => {
+    const r = makeRes();
+    const pipeStream = makePipeStream(async () => {
+      expect(r.writes[0]).toContain('"type":"status"');
+      expect(r.writes[0]).toContain("Recolhendo memórias da cena");
+    });
+    const controller = makeController({ pipeStream });
+    const req: any = { user: { id: USER_ID } };
+
+    await controller.narrativeStart(SESSION_ID, {}, req, r.res);
+
+    expect((r.res as any).flush).toHaveBeenCalled();
+    expect(pipeStream).toHaveBeenCalledTimes(1);
   });
 
   it("narrativeTurn: chave é liberada no finally mesmo se pipeStream lançar", async () => {

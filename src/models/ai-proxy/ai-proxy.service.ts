@@ -235,7 +235,11 @@ export class AiProxyService {
                   });
                 }
               }
-              res.off("close", onClientClose);
+              if (typeof (res as any).off === "function") {
+                (res as any).off("close", onClientClose);
+              } else if (typeof (res as any).removeListener === "function") {
+                (res as any).removeListener("close", onClientClose);
+              }
               res.end();
               resolve();
             };

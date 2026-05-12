@@ -28,6 +28,7 @@ export interface AssembledTurnContext {
   gapMinutes: number;
   previousSessionId: string | null;
   sceneContext: SceneContext | null;
+  activeSceneId: string | null;
   recentMessages: RecentMessageDto[];
   previousSessionSummary: string | null;
   hotRecapTriggered: boolean;
@@ -98,17 +99,35 @@ export class SessionResumeService {
       serverLastMessageId,
     );
 
-    const previousSessionId = await this.lookupPreviousSession(
+    const previousSessionIdPromise = this.lookupPreviousSession(
       session.campaignId,
       session.id,
     );
 
-    const previousSession = previousSessionId
-      ? await this.sessionRepo.findOne({
-          where: { id: previousSessionId },
-          select: ["id", "summaryText"],
-        })
-      : null;
+    const previousSessionPromise = previousSessionIdPromise.then(
+      (previousSessionId) =>
+        previousSessionId
+          ? this.sessionRepo.findOne({
+              where: { id: previousSessionId },
+              select: ["id", "summaryText"],
+            })
+          : null,
+    );
+
+    const sceneSnapshotPromise = this.assembleSceneSnapshot(sessionId);
+    const recentMessagesPromise = this.loadRecentMessages(sessionId);
+
+    const [
+      previousSessionId,
+      previousSession,
+      sceneSnapshot,
+      recentMessages,
+    ] = await Promise.all([
+      previousSessionIdPromise,
+      previousSessionPromise,
+      sceneSnapshotPromise,
+      recentMessagesPromise,
+    ]);
 
     const previousSessionSummary: string | null =
       previousSession?.summaryText ?? null;
@@ -128,9 +147,6 @@ export class SessionResumeService {
       );
     }
 
-    const sceneContext = await this.assembleSceneContext(sessionId);
-    const recentMessages = await this.loadRecentMessages(sessionId);
-
     if (isResumed && !lastMessageMismatch) {
       void this.publishSessionResumed({
         campaignId: session.campaignId ?? "",
@@ -147,7 +163,8 @@ export class SessionResumeService {
       isResumed,
       gapMinutes,
       previousSessionId,
-      sceneContext,
+      sceneContext: sceneSnapshot.sceneContext,
+      activeSceneId: sceneSnapshot.activeSceneId,
       recentMessages,
       previousSessionSummary,
       hotRecapTriggered,
@@ -184,19 +201,25 @@ export class SessionResumeService {
     return previous?.id ?? null;
   }
 
-  private async assembleSceneContext(
+  private async assembleSceneSnapshot(
     sessionId: string,
-  ): Promise<SceneContext | null> {
+  ): Promise<{
+    sceneContext: SceneContext | null;
+    activeSceneId: string | null;
+  }> {
     try {
       const scene = await this.sceneService.getActive(sessionId);
-      if (!scene) return null;
-      return this.sceneContextService.assembleContext(scene.id);
+      if (!scene) return { sceneContext: null, activeSceneId: null };
+      const sceneContext = await this.sceneContextService.assembleContext(
+        scene.id,
+      );
+      return { sceneContext, activeSceneId: scene.id };
     } catch (err) {
       this.logger.warn("session.resume.scene_context_failed", {
         "session.id": sessionId,
         "error.type": err instanceof Error ? err.name : "unknown",
       });
-      return null;
+      return { sceneContext: null, activeSceneId: null };
     }
   }
 
@@ -272,6 +295,7 @@ export class SessionResumeService {
       gapMinutes: 0,
       previousSessionId: null,
       sceneContext: null,
+      activeSceneId: null,
       recentMessages: [],
       previousSessionSummary: null,
       hotRecapTriggered: false,
