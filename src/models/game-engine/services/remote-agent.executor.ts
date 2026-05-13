@@ -17,19 +17,7 @@ import { DiadLogger } from "../../../common/observability/logger/diad-logger.ser
 import { UpstreamException } from "../../../common/observability/errors/diad-exception";
 import { ErrorCode } from "../../../common/observability/errors/error-codes.catalog";
 
-/**
- * Spec 003 T047 — implementação default do `AiTurnExecutor`. Delega a decisão
- * ao serviço Python `diad-agents` via `AiProxyService.decideMonsterTurn`.
- *
- * Spec 016 — usa OutboundFetch via AiProxyService. Erros upstream chegam como
- * UpstreamException com code semântico (AGENT_TIMEOUT, AGENT_UNREACHABLE,
- * AGENT_UPSTREAM_ERROR), permitindo classificação precisa.
- *
- * Classificação de erros:
- *  - AGENT_TIMEOUT → `AI_TIMEOUT` (caller pode fallback pra `end-turn` implícito).
- *  - AGENT_UNREACHABLE / AGENT_UPSTREAM_ERROR / outros → `AI_UNAVAILABLE`.
- *  - Resposta inválida → `AI_UNAVAILABLE`.
- */
+
 @Injectable()
 export class RemoteAgentExecutor extends AiTurnExecutor {
   constructor(

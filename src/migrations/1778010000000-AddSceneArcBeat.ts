@@ -1,11 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M1 — Harmon Story Circle beat tracking por cena.
- *
- * arc_beat ∈ {YOU,NEED,GO,SEARCH,FIND,TAKE,RETURN,CHANGE}, nullable
- * (scenes antigas ficam sem beat; computed apenas em scenes novas).
- */
+
 export class AddSceneArcBeat1778010000000 implements MigrationInterface {
   name = "AddSceneArcBeat1778010000000";
 

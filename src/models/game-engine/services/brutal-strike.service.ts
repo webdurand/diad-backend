@@ -15,23 +15,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Barbarian L9 Brutal Strike (RAW 2024 XPHB).
- *
- * Trigger: ao usar Reckless Attack + escolher abrir mão da advantage, o hit
- * resultante concede +1d10 damage + 1 efeito à escolha.
- *
- *  - Forceful Blow: target push 10ft (Large ou menor) + attacker move ½ speed sem OA
- *  - Hamstring Blow: target -15ft speed até fim do próximo turno
- *  - L13 adiciona: Staggering Blow (disadvantage próximo save + sem OA)
- *  - L13 adiciona: Sundering Blow (+2d6 damage próximo aliado que acertar target)
- *  - L17+: Improved Brutal Strike = 2d10 + escolhe 2 efeitos simultâneos
- *
- * MVP: Forceful + Hamstring (tier 1). V2: Staggering + Sundering + 2d10.
- *
- * Valida: barbarian L9+, raging (condition 'raging'), Reckless Attack armed.
- * Endpoint chamado APÓS attack hit (cliente computa hit → chama endpoint).
- */
+
 @Injectable()
 export class BrutalStrikeService {
   constructor(
@@ -46,7 +30,7 @@ export class BrutalStrikeService {
     private readonly effectInstances: EffectInstanceService,
   ) {}
 
-  /** L9-12: 1d10. L13-16: 1d10 (2 options permitidos). L17+: 2d10. */
+
   private computeBrutalDamage(barbarianLevel: number): {
     roll: number;
     diceCount: 1 | 2;
@@ -93,9 +77,7 @@ export class BrutalStrikeService {
     return success({ barbarian, barbarianLevel: barbLv });
   }
 
-  /**
-   * Forceful Blow: +Nd10 damage + target push 10ft + attacker move ½ speed grátis.
-   */
+
   async forcefulBlow(
     userId: string,
     encounterId: string,
@@ -117,13 +99,13 @@ export class BrutalStrikeService {
       await this.encounterService.getParticipant(targetParticipantId);
     const { roll, diceCount } = this.computeBrutalDamage(barbarianLevel);
 
-    // Damage direto em target (HP). Monster vs PC: mesmo approach do BM Trip.
+
     const prevHp = target.currentHp ?? 0;
     target.currentHp = Math.max(0, prevHp - roll);
     await this.participantRepo.save(target);
 
-    // Attacker recebe move_bonus via effect (similar Tactical Shift rider)
-    // Half speed calc: sheet.speed ÷ 2
+
+
     const barbSheet = await this.sheetService.computeSheet(
       userId,
       barbarian.characterId!,
@@ -160,9 +142,7 @@ export class BrutalStrikeService {
     );
   }
 
-  /**
-   * Hamstring Blow: +Nd10 damage + target speed -15ft até fim próximo turno.
-   */
+
   async hamstringBlow(
     userId: string,
     encounterId: string,
@@ -187,7 +167,7 @@ export class BrutalStrikeService {
     target.currentHp = Math.max(0, prevHp - roll);
     await this.participantRepo.save(target);
 
-    // Aplica effect speed_reduction no target até fim próximo turno
+
     await this.effectInstances.addEffect(target, {
       kind: "speed_reduction",
       sourceFeatureSlug: "brutal-strike",

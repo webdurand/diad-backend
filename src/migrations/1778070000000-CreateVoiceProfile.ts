@@ -1,15 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M1 — Narrator voice presets + SPR (System Prompt Repetition).
- *
- * 4 system presets seedados pela migration seguinte:
- *   heroic-high-fantasy, grim-low-fantasy,
- *   investigativo-misterioso, comico-pulp.
- *
- * Cada preset carrega few_shot_examples curados (mín 3, ideal 5-7)
- * e emotional_triggers pra keying em beats narrativos específicos.
- */
+
 export class CreateVoiceProfile1778070000000 implements MigrationInterface {
   name = "CreateVoiceProfile1778070000000";
 

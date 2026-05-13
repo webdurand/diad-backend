@@ -1,18 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 
-/**
- * Single source of truth for resolving a monster's statblock action into
- * concrete combat mechanics: attack bonus, damage dice, damage type, range.
- *
- * Resolution order (strongest → weakest signal):
- *   1. structured `attack_bonus` field on the action (SRD import)
- *   2. `+X to hit` regex over `desc`
- *   3. fallback `0` with a warning (indicates missing/corrupt data)
- *
- * Both `CombatService.buildMonsterActionBlock` (turn-actions UI) and
- * `CombatService.resolveAttack` (actual roll) MUST use this resolver
- * so the number shown and the number rolled never diverge.
- */
+
 
 export interface ResolvedMonsterAction {
   name: string;

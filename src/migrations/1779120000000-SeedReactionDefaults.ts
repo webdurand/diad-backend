@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 016 M5 — Seed defaults de reactions por classe (RAW 2024 + Solasta lesson).
- *
- * Defaults sensatos reduzem fadiga: Fighter OA always (passivo),
- * Shield/Counterspell ask (consomem slot), Sanctuary ask (custa slot 1),
- * Rogue Uncanny Dodge auto (sem custo de slot).
- *
- * Player override persiste em `character_state.reaction_prefs` jsonb.
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §8.2.
- */
+
 
 interface DefaultRow {
   classSlug: string;
@@ -21,7 +11,7 @@ interface DefaultRow {
 }
 
 const DEFAULTS: DefaultRow[] = [
-  // Fighter
+
   {
     classSlug: "fighter",
     reactionName: "opportunity-attack",
@@ -36,7 +26,7 @@ const DEFAULTS: DefaultRow[] = [
     consumesSpellSlot: false,
     description: "Recupera HP quando você cai abaixo de 50%; bônus action.",
   },
-  // Wizard
+
   {
     classSlug: "wizard",
     reactionName: "shield",
@@ -52,7 +42,7 @@ const DEFAULTS: DefaultRow[] = [
     description:
       "Cancela spell inimiga; consome slot 3+ (RAW 2024 ability check).",
   },
-  // Cleric
+
   {
     classSlug: "cleric",
     reactionName: "sanctuary",
@@ -60,7 +50,7 @@ const DEFAULTS: DefaultRow[] = [
     consumesSpellSlot: true,
     description: "Protege aliado de ataque; consome slot 1.",
   },
-  // Sorcerer
+
   {
     classSlug: "sorcerer",
     reactionName: "counterspell",
@@ -75,7 +65,7 @@ const DEFAULTS: DefaultRow[] = [
     consumesSpellSlot: true,
     description: "+5 CA via subclass spell list; consome slot 1.",
   },
-  // Bard
+
   {
     classSlug: "bard",
     reactionName: "cutting-words",
@@ -83,7 +73,7 @@ const DEFAULTS: DefaultRow[] = [
     consumesSpellSlot: false,
     description: "Reduz attack/check inimigo (Lore L3); consome bardic die.",
   },
-  // Paladin
+
   {
     classSlug: "paladin",
     reactionName: "rebuke-the-violent-2024",
@@ -91,7 +81,7 @@ const DEFAULTS: DefaultRow[] = [
     consumesSpellSlot: true,
     description: "Oath of Vengeance L7 — força save quando aliado é atingido.",
   },
-  // Rogue
+
   {
     classSlug: "rogue",
     reactionName: "uncanny-dodge",

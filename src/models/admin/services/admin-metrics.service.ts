@@ -164,7 +164,7 @@ export class AdminMetricsService {
 
   constructor(@InjectDataSource() private readonly ds: DataSource) {}
 
-  // ---------------------------------------------------------------- Helpers
+
 
   resolvePeriod(query: PeriodQueryDto): ResolvedPeriod {
     if (query.from || query.to) {
@@ -228,7 +228,7 @@ export class AdminMetricsService {
     };
   }
 
-  // ---------------------------------------------------------------- Costs
+
 
   private buildSqlBindings(filters: CostsQueryDto, period: ResolvedPeriod) {
     const params: unknown[] = [period.from, period.to];
@@ -427,7 +427,7 @@ export class AdminMetricsService {
     };
   }
 
-  // ---------------------------------------------------------------- Overview
+
 
   async getOverview(query: PeriodQueryDto): Promise<OverviewResponse> {
     const period = this.resolvePeriod(query);
@@ -495,7 +495,7 @@ export class AdminMetricsService {
     };
   }
 
-  // ---------------------------------------------------------------- Usage
+
 
   async getUsage(query: UsageQueryDto): Promise<UsageResponse> {
     const period = this.resolvePeriod(query);
@@ -672,7 +672,7 @@ export class AdminMetricsService {
     return Number(rows[0]?.total ?? 0);
   }
 
-  // ---------------------------------------------------------------- Logs
+
 
   async getLogs(query: LogsQueryDto): Promise<LogsResponse> {
     const period = this.resolvePeriod(query);
@@ -908,14 +908,14 @@ export class AdminMetricsService {
     }));
   }
 
-  // ---------------------------------------------------------------- Refresh
+
 
   async refreshMatviews(): Promise<{ refreshedAt: string }> {
     await this.ds.query(`SELECT refresh_admin_metrics_matviews()`);
     return { refreshedAt: new Date().toISOString() };
   }
 
-  // ---------------------------------------------------------------- Helpers
+
 
   private formatPeriod(p: ResolvedPeriod) {
     return {

@@ -18,20 +18,7 @@ const DEBUG_PATH_PREFIXES = ["/_next/", "/swagger"];
 const SENSITIVE_KEY_RX =
   /^(authorization|cookie|password|api[_-]?key|token|secret)$/i;
 
-/**
- * Loga request/response body em eventos correlacionados com http.server.request.
- *
- * Filosofia (alinhada com pino.config.ts customLogLevel):
- *   - Sucesso GET (2xx): NADA — só metadata via auto-log do pinoHttp.
- *   - Sucesso de mutation (POST/PATCH/PUT/DELETE 2xx): request.body + response.body
- *     (full se ≤2KB, senão summary com top-level keys + tipos).
- *   - Erros (4xx/5xx): este interceptor NÃO loga — GlobalExceptionFilter cobre,
- *     pra logar request.body + envelope RFC 9457 numa única linha.
- *   - LOG_LEVEL=debug: tudo em debug, inclusive GETs.
- *
- * Redaction profunda: keys sensíveis (authorization, cookie, password, apiKey,
- * token, secret) → "[REDACTED]". Strings >300 chars truncadas com sufixo.
- */
+
 @Injectable()
 export class RequestBodyLogInterceptor implements NestInterceptor {
   constructor(private readonly logger: DiadLogger) {
@@ -65,7 +52,7 @@ export class RequestBodyLogInterceptor implements NestInterceptor {
 
     const isMutation = MUTATION_METHODS.has(method);
     if (!isMutation && !debugLevel) return;
-    if (status >= 400) return; // erros caem no filter
+    if (status >= 400) return;
 
     const attrs: Record<string, unknown> = {
       "http.request.method": method,
@@ -101,10 +88,7 @@ function shouldConsider(req: Request): boolean {
   return true;
 }
 
-/**
- * Decide entre body completo (se serializado ≤MAX_BODY_BYTES) ou summary
- * compacto (top-level keys com tipos+sizes). undefined se body vazio.
- */
+
 export function pickBodyOrSummary(body: unknown): unknown {
   if (body === undefined || body === null) return undefined;
   if (typeof body !== "object") return body;
@@ -150,9 +134,7 @@ function describeType(v: unknown): string {
   return typeof v;
 }
 
-/**
- * Redacta keys sensíveis e trunca strings longas. Recursivo, com guard de profundidade.
- */
+
 export function sanitize(value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value;
   if (depth >= MAX_OBJECT_DEPTH) return "[depth_exceeded]";

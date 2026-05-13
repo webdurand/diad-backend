@@ -66,11 +66,7 @@ export class SessionFactionStateService {
     return saved;
   }
 
-  /**
-   * Atualiza reputação por delta (positivo ou negativo). Emite
-   * `SocialEvent.reputation_shift` com payload completo. Usado por listeners
-   * (e.g. quest reward) e pela narrativa quando NPC importante reage.
-   */
+
   async applyDelta(
     gameSessionId: string,
     factionId: string,
@@ -133,7 +129,7 @@ export class SessionFactionStateService {
       });
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort */
+
     }
   }
 }

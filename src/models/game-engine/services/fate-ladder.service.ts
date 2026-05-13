@@ -21,14 +21,7 @@ import {
   validateSacrificeBounded,
 } from "./fate-ladder-helpers";
 
-/**
- * Fate Ladder — death moment ritual. Triggered ao 3º failed death save ou
- * massive damage 2024. Presents 4 options (hardcore mode = só A):
- *   A) Aceitar morte — epilogue forçado
- *   B) Sacrifício heroico — great feat narrativo
- *   C) Pagar o preço — sobrevive perdendo algo permanente
- *   D) Ressurreição RAW — requires diamond+caster
- */
+
 export type FateLadderTrigger =
   | "three_failed_death_saves"
   | "massive_damage_2024"
@@ -51,7 +44,7 @@ export interface FateLadderResolution {
   characterId: string;
   ladderId: string;
   chosenOption: FateLadderOption;
-  // Option B requires player input (sacrifice description)
+
   sacrificeDescription?: string;
 }
 
@@ -70,13 +63,7 @@ export class FateLadderService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
   ) {}
 
-  /**
-   * Triggered ao 3º death save fail ou massive damage.
-   *
-   * M3 implementação: helpers puros wireados. Carrega campaign.death_handling,
-   * resolve options disponíveis. Ritual-of-death message é template default;
-   * voice-aware rendering pelo Narrator (M4 enrichment).
-   */
+
   async openLadder(
     characterId: string,
     trigger: FateLadderTrigger,
@@ -100,7 +87,7 @@ export class FateLadderService {
       (campaign as { deathHandling?: DeathHandlingMode } | null)
         ?.deathHandling ?? "narrative";
 
-    // Em hardcore, apenas opção A.
+
     const baseOptions: FateLadderOption[] =
       mode === "hardcore" ? ["A"] : ["A", "B", "C"];
 
@@ -126,10 +113,7 @@ export class FateLadderService {
     });
   }
 
-  /**
-   * Resolve a opção escolhida. Retorna stateChanges descritivos
-   * (Archivist consome via Coordinator hook).
-   */
+
   async resolveLadder(
     resolution: FateLadderResolution,
   ): Promise<GameResult<{ stateChanges: string[]; outcome?: unknown }>> {
@@ -194,13 +178,7 @@ export class FateLadderService {
     }
   }
 
-  /**
-   * Probe: can option D ("Ressurreição") be offered?
-   * Requires ≥1 caster with appropriate spell + diamante in inventory + time window.
-   *
-   * M3 simplified: caller provides casterHasSpell + diamondsAvailableGp.
-   * Full DB scan (party iteration, inventory items) ficará em M4.
-   */
+
   async checkResurrectionAvailability(input: {
     minutesSinceDeath: number;
     diamondsAvailableGp: number;
@@ -220,7 +198,7 @@ export class FateLadderService {
     if (usable.length === 0) {
       return { available: false };
     }
-    // Prefer cheapest spell.
+
     const cheapest = usable.sort(
       (a, b) =>
         RESURRECTION_TABLE[a].diamondGp - RESURRECTION_TABLE[b].diamondGp,
@@ -236,22 +214,7 @@ export class FateLadderService {
     return `E assim, ${name}, a luz dos céus se apaga lentamente. O destino aguarda sua escolha.`;
   }
 
-  /**
-   * Spec 027 (M2 follow-up) — aplica `stateChanges` descritivos do `resolveLadder`
-   * no `character_state` real. Sem isso, a narrativa do turno seguinte mente
-   * sobre o estado do PC (ex: "você desperta com HP=1" mas current_hp=0).
-   *
-   * Mapping V1 (focado nas 4 opções A/B/C/D do Fate Ladder):
-   *  - `pc_hp=1` → state.current_hp = 1
-   *  - `pc_status=stable_unconscious` → state.conditions += 'unconscious'; participant.dyingState='stable' se houver
-   *  - `pc_status=alive` → remove 'unconscious'/'dying'/'dead' de state.conditions
-   *  - `pc_status=dead_permanent` → state.conditions = ['dead']; participant.dyingState='dead'
-   *  - `consume_diamond_component` → log + TODO (precisa lookup de inventory item slug)
-   *
-   * Demais descritores (`arc_beat=...`, `trigger_epilogue_modal*`, `wakes_next_round`,
-   * `legacy_bond_for_next_pc=...`, etc) não mapeiam pra DB direto — viram
-   * itens em `appliedChanges` com `applied=false` pra audit.
-   */
+
   async applyResolution(
     characterId: string,
     stateChanges: string[],
@@ -316,9 +279,9 @@ export class FateLadderService {
         continue;
       }
       if (change === "consume_diamond_component") {
-        // V1: log + audit. Lookup do item específico no inventário e
-        // consume_one fica como TODO (depende de slug canônico de
-        // 'diamond_500gp' no equipment_catalog).
+
+
+
         this.logger.warn(
           `consume_diamond_component não aplicado em ${characterId} (V1 — TODO).`,
         );
@@ -329,10 +292,10 @@ export class FateLadderService {
         });
         continue;
       }
-      // Descritores narrativos (arc_beat=..., trigger_epilogue_modal*,
-      // wakes_next_round, legacy_bond_for_next_pc, bonus_inspiration_next_pc,
-      // cost_applied=...) não modificam character_state — Coordinator
-      // consome via narrative event.
+
+
+
+
       applied.push({
         change,
         applied: false,
@@ -344,9 +307,9 @@ export class FateLadderService {
       await this.stateRepo.save(state);
     }
 
-    // Sincroniza dyingState do participant ATIVO (se existir) — Fate Ladder
-    // pode acontecer fora de encounter, mas se houver participant ativo
-    // queremos manter coerência com state.conditions.
+
+
+
     let dyingState: string | null = null;
     try {
       const activeParticipant = await this.participantRepo

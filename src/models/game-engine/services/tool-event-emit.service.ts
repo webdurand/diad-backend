@@ -1,17 +1,4 @@
-/**
- * Spec 020 — ToolEventEmitService.
- *
- * Helper de emit de events cross-domain para tools que wrappam endpoints
- * existentes (move_npc, create_npc_from_narrative, set_currency, remove_item,
- * apply_condition_narrative). Centraliza envelope build + audience tags.
- *
- * Os endpoints originais (NpcService.moveNpc, InventoryService.removeItem etc.)
- * permanecem com semântica RAW; este service apenas dispara o evento. Caller
- * (controller wrapper) chama emit_* APÓS o sucesso da operação.
- *
- * Princípio X: state delta + metadata + narrativeDescriptor.
- * Best-effort: falha na publish não bloqueia retorno HTTP.
- */
+
 
 import { Injectable } from "@nestjs/common";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
@@ -196,7 +183,7 @@ export class ToolEventEmitService {
       });
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort — falha de event não bloqueia tool. */
+
     }
   }
 }

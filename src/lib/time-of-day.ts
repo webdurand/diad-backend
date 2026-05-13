@@ -1,17 +1,4 @@
-/**
- * Spec 019 — pure function que deriva TimeOfDay de
- * `currentInGameDateTime` + `sunriseTime` + `sunsetTime`.
- *
- * Não persistido — recalculado a cada read. Permite mudar sunrise/sunset
- * (estações, planos) sem tocar rows existentes.
- *
- *   dawn      = sunrise - 30min .. sunrise + 30min
- *   morning   = sunrise + 30min .. 12:00
- *   afternoon = 12:00 .. sunset - 30min
- *   dusk      = sunset - 30min .. sunset + 30min
- *   night     = sunset + 30min .. 23:59
- *   midnight  = 00:00 .. sunrise - 30min
- */
+
 
 export type TimeOfDay =
   | "dawn"
@@ -55,6 +42,6 @@ export function computeTimeOfDay(
   if (nowMin >= 12 * 60 && nowMin < duskStart) return "afternoon";
   if (nowMin >= duskStart && nowMin < duskEnd) return "dusk";
   if (nowMin >= duskEnd) return "night";
-  // 00:00 .. dawnStart
+
   return "midnight";
 }

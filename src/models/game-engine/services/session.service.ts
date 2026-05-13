@@ -388,10 +388,10 @@ export class SessionService {
     }
     const saved = await this.sessionRepo.save(session);
 
-    // Spec 027 (M2 follow-up) — espelhar (campaignId, userId, characterId)
-    // em campaign_players. Sem isso, em DIAD solo o frontend não conseguia
-    // resolver `currentOwnerUserId` via campaignPlayers.find(...) e o player
-    // perdia ActionBar do próprio PC. Idempotente: upsert por (campaignId, userId).
+
+
+
+
     if (saved.campaignId) {
       try {
         const character = await this.characterRepo.findOne({
@@ -429,9 +429,9 @@ export class SessionService {
   }
 
   async delete(sessionId: string): Promise<void> {
-    // Mundo (campaign) é setting reusável: 1 mundo → N aventuras. Apagar
-    // aventura NÃO apaga o mundo — cleanup de campaign é explícito via
-    // DELETE /campaigns/:id.
+
+
+
     await this.sessionRepo.delete(sessionId);
   }
 

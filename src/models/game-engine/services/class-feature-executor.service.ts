@@ -22,16 +22,7 @@ import {
 import { GenericActionsService } from "./generic-actions.service";
 import { ClassFeatureResolverService } from "./class-feature-resolver.service";
 
-/**
- * Spec 003 Fatia 7/8 — executor de class features ativáveis.
- *
- * FULL: resolve a mecânica inteira (Second Wind heal, Action Surge reset,
- * Lay on Hands pool, Reckless Attack flag, Cunning Action wrapper).
- *
- * STUB: valida classe/level/usos, consome custo, emite evento
- * `class_feature_invoked` com `status: 'emitted_pending_resolution'` para
- * a Spec 4 resolver o efeito mecânico.
- */
+
 @Injectable()
 export class ClassFeatureExecutorService {
   constructor(
@@ -48,11 +39,7 @@ export class ClassFeatureExecutorService {
     private readonly classFeatureResolver: ClassFeatureResolverService,
   ) {}
 
-  /**
-   * Dispatch central das kinds novas de `/generic-action`. Retorna:
-   *  - success({ deferred: true, eventId, featureSlug, ... }) para STUB
-   *  - success({ appliedTo, hpChange, ... }) para FULL
-   */
+
   async execute(
     encounterId: string,
     participantId: string,
@@ -91,7 +78,7 @@ export class ClassFeatureExecutorService {
       participant.characterId,
     );
 
-    // Pré-requisito de classe + level.
+
     const { matches, classLevel } = matchesClass(
       spec,
       sheet.classes.map((c) => ({ slug: c.slug, level: c.level })),
@@ -109,7 +96,7 @@ export class ClassFeatureExecutorService {
       );
     }
 
-    // Action economy: turno + custo disponível.
+
     if (spec.actionCost === "reaction") {
       if (participant.reactionsUsed > 0) {
         return failure("Reacao ja utilizada.", "REACTION_ALREADY_USED");
@@ -128,9 +115,9 @@ export class ClassFeatureExecutorService {
       }
     }
 
-    // Usos restantes.
-    // Spec 015 — quando a spec declara `usesSharedWith`, pool e fórmula vêm
-    // do slug compartilhado (ex: Cutting Words usa pool de Bardic Inspiration).
+
+
+
     const usesKey = spec.usesSharedWith ?? spec.slug;
     const usesSource =
       spec.usesSharedWith !== undefined
@@ -146,10 +133,10 @@ export class ClassFeatureExecutorService {
         ? maxUsesFormula(classLevel)
         : Number.POSITIVE_INFINITY;
 
-    // Spec 015 — overrides de maxUses que dependem de ability score (não vivem
-    // no catalog, porque o catalog só recebe classLevel). Curado por slug.
+
+
     if (usesKey === "bardic-inspiration") {
-      // RAW: CHA modifier (min 1) uses. L1-4 LR, L5+ SR (Font of Inspiration).
+
       const chaMod =
         sheet.abilityScores.find(
           (a: { slug: string; modifier: number }) => a.slug === "cha",
@@ -157,7 +144,7 @@ export class ClassFeatureExecutorService {
       maxUses = Math.max(1, chaMod);
     }
 
-    // Pool-based (lay-on-hands): validação feita no handler FULL.
+
     if (spec.slug !== "lay-on-hands" && used >= maxUses) {
       return failure(
         `Sem usos restantes de '${usesKey}' (${used}/${maxUses}).`,
@@ -165,7 +152,7 @@ export class ClassFeatureExecutorService {
       );
     }
 
-    // Dispatch — FULL resolution ou STUB emission.
+
     switch (spec.slug) {
       case "second-wind":
         return this.handleSecondWind(
@@ -196,12 +183,12 @@ export class ClassFeatureExecutorService {
           ownerUserId,
         );
       default:
-        // STUB: emite evento e consome custo.
+
         return this.handleStub(spec, participant, body, sheet, encounter);
     }
   }
 
-  // ---- FULL handlers ----
+
 
   private async handleSecondWind(
     participant: EncounterParticipantEntity,
@@ -209,13 +196,13 @@ export class ClassFeatureExecutorService {
     encounter: EncounterEntity,
     pcOwnerId: string,
   ): Promise<GameResult<unknown>> {
-    // RAW: heal = 1d10 + fighterLevel.
+
     const roll = this.diceService.rollExpression("1d10");
     const healAmount = roll.total + fighterLevel;
     const prevHp = participant.currentHp ?? 0;
 
-    // Spec 011 princípio X — HP de PC vive em character_state.
-    // updateHp aplica o cap em maxHp computado a partir da ficha.
+
+
     const hpResult = await this.stateService.updateHp(
       pcOwnerId,
       participant.characterId!,
@@ -223,9 +210,9 @@ export class ClassFeatureExecutorService {
     );
     const newHp = hpResult.currentHp;
 
-    // Tactical Shift L5 (RAW 2024): ao usar Second Wind, move ½ speed sem OA.
-    // Implementação minimal: adiciona movementRemaining extra + emite evento.
-    // O "sem OA" é handled separately via movement system.
+
+
+
     let tacticalShiftMoveFt = 0;
     if (fighterLevel >= 5) {
       const sheet = await this.sheetService.computeSheet(
@@ -243,14 +230,14 @@ export class ClassFeatureExecutorService {
         .some((f) => f.slug.startsWith("tactical-shift"));
       if (hasShift) {
         tacticalShiftMoveFt = Math.floor((sheet.speed ?? 30) / 2);
-        // Some um bônus de movement pro turno atual (não persistente fora do turno).
+
         participant.movementRemaining =
           (participant.movementRemaining ?? 0) + tacticalShiftMoveFt;
       }
     }
 
-    // Mantém snapshot no participant para consumidores síncronos que ainda
-    // leem `participant.currentHp` (enrichment re-sincroniza no próximo GET).
+
+
     participant.currentHp = newHp;
     participant.bonusActionUsed = true;
     await this.participantRepo.save(participant);
@@ -292,7 +279,7 @@ export class ClassFeatureExecutorService {
     participant: EncounterParticipantEntity,
     encounter: EncounterEntity,
   ): Promise<GameResult<unknown>> {
-    // Reseta action + attack budget para permitir 1 action extra no turno.
+
     participant.actionUsed = false;
     participant.attacksUsedThisTurn = 0;
     await this.participantRepo.save(participant);
@@ -324,13 +311,7 @@ export class ClassFeatureExecutorService {
     );
   }
 
-  /**
-   * Fighter L9 Indomitable (RAW 2024) — arma preventivamente + consome 1 use.
-   * O consumo ocorre no ato de armar (não no use real) pra simplificar UI:
-   * se o player arma e nunca falha save, o use "se perde" até short rest.
-   * Saving-throw.service intercepta failed saves e rerola com +fighter_level
-   * se `indomitable_armed=true`, depois desarma.
-   */
+
   private async handleIndomitable(
     participant: EncounterParticipantEntity,
     fighterLevel: number,
@@ -482,11 +463,11 @@ export class ClassFeatureExecutorService {
       return failure("Acao bonus ja utilizada.", "BONUS_ACTION_ALREADY_USED");
     }
 
-    // Delega o sub-kind ao GenericActionsService, mas marca bonusActionUsed
-    // em vez de actionUsed (esse é o ponto do wrapper).
-    // Estratégia: salvar actionUsed antes de executar, restaurar depois.
+
+
+
     const prevActionUsed = rogue.actionUsed;
-    rogue.actionUsed = false; // habilita o dispatch
+    rogue.actionUsed = false;
     await this.participantRepo.save(rogue);
 
     const result = await this.genericActionsService.execute(encounter.id, {
@@ -495,7 +476,7 @@ export class ClassFeatureExecutorService {
       ownerUserId,
     } as any);
 
-    // Reverte actionUsed e consome bonus action.
+
     const freshRogue = await this.participantRepo.findOne({
       where: { id: rogue.id },
     });
@@ -517,7 +498,7 @@ export class ClassFeatureExecutorService {
     );
   }
 
-  // ---- STUB handler ----
+
 
   private async handleStub(
     spec: FeatureSpec,
@@ -526,7 +507,7 @@ export class ClassFeatureExecutorService {
     sheet: Awaited<ReturnType<CharacterSheetService["computeSheet"]>>,
     encounter: EncounterEntity,
   ): Promise<GameResult<unknown>> {
-    // Consome action economy.
+
     if (spec.actionCost === "reaction") {
       participant.reactionsUsed = participant.reactionsUsed + 1;
     } else if (spec.actionCost === "action") {
@@ -536,8 +517,8 @@ export class ClassFeatureExecutorService {
     }
     await this.participantRepo.save(participant);
 
-    // Decrementa usos (exceto 'free' features sem maxUses).
-    // Spec 015 — incrementa no pool compartilhado se `usesSharedWith`.
+
+
     const incrementKey = spec.usesSharedWith ?? spec.slug;
     const sharedSource =
       spec.usesSharedWith !== undefined
@@ -562,7 +543,7 @@ export class ClassFeatureExecutorService {
       {},
     );
 
-    // Save DC = 8 + profBonus + primary-casting-ability mod (heurística por classe).
+
     const primaryMod = this.primaryAbilityModForClass(
       spec.classSlug,
       abilityMods,
@@ -593,8 +574,8 @@ export class ClassFeatureExecutorService {
     };
     await this.eventService.emit(encounter.sessionId, encounter.id, [event]);
 
-    // Spec 004 — consumer resolve o efeito mecanico imediatamente
-    // (rage aplica effects, turn-undead rola saves, etc).
+
+
     const resolution = await this.classFeatureResolver.resolveInvocation(
       participant.id,
       {
@@ -633,7 +614,7 @@ export class ClassFeatureExecutorService {
     );
   }
 
-  /** Extrai classLevel para a classe owner da feature (ex: barbarian 3). */
+
   private getClassLevel(sheet: any, classSlug?: string): number {
     if (!classSlug || !sheet?.classes) return 1;
     const cls = sheet.classes.find((c: any) =>
@@ -644,14 +625,14 @@ export class ClassFeatureExecutorService {
     return cls?.level ?? 1;
   }
 
-  // ---- helpers ----
+
 
   private async resolveOwner(
     participant: EncounterParticipantEntity,
     ownerUserId: string,
   ): Promise<string> {
-    // Same pattern of CombatService.resolveParticipantOwner but localized.
-    // Em PC, sheet é computado pelo owner (dono do PC). Se DM chama, fallback = ownerUserId.
+
+
     const character = participant.character;
     if (character && (character as any).userId) {
       return (character as any).userId;
@@ -662,7 +643,7 @@ export class ClassFeatureExecutorService {
   private extractOptions(
     body: Record<string, unknown>,
   ): Record<string, unknown> {
-    // Clone sem chaves estruturais (participantId, kind).
+
     const { participantId, kind, ownerUserId, ...rest } = body as any;
     return rest;
   }
@@ -691,7 +672,7 @@ export class ClassFeatureExecutorService {
 
   private saveAbilityForFeature(slug: string): string | undefined {
     const map: Record<string, string> = {
-      "channel-divinity": "wis", // Turn Undead default
+      "channel-divinity": "wis",
       "wild-shape": "wis",
       "bardic-inspiration": undefined as unknown as string,
       "cunning-strike": "con",

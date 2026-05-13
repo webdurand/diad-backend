@@ -110,14 +110,14 @@ export class MonsterEntity {
   @Column({ type: "jsonb", nullable: true })
   forms?: Record<string, unknown>;
 
-  // Typed structures populated by data migrations from SRD free-text.
+
   @Column({ type: "jsonb", nullable: true })
   multiattack: MonsterMultiattack | null;
 
   @Column({ type: "jsonb", nullable: true })
   spellcasting: MonsterSpellcasting | null;
 
-  // Spec 004: lair actions e mapa de custo de ações lendárias
+
   @Column({ name: "lair_actions", type: "jsonb", nullable: true })
   lair_actions: LairAction[] | null;
 

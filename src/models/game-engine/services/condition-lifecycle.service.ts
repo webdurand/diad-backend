@@ -24,11 +24,7 @@ export interface ApplyConditionInput {
   appliedBy?: string | null;
   sourceSpell?: string | null;
   sourceConcentration?: boolean;
-  /**
-   * Spec 015 Eixo 3 — origem semântica (default `'manual'`). Quando não
-   * passado mas `sourceSpell` está preenchido, gera `'spell:<slug>'`
-   * automaticamente em `applyCondition` pra compat.
-   */
+
   source?: ConditionSource;
   saveAbility?: SaveAbility | null;
   saveDc?: number | null;
@@ -37,14 +33,7 @@ export interface ApplyConditionInput {
   level?: number;
 }
 
-/**
- * Spec 015 Eixo 3 — resolve o `ConditionSource` do input da aplicação.
- *
- * Ordem:
- *   1. `input.source` explícito (preferido).
- *   2. Auto-deriva `spell:<slug>` quando só `sourceSpell` foi passado.
- *   3. Fallback `'manual'` (legacy, DM manual).
- */
+
 function resolveSource(input: ApplyConditionInput): ConditionSource {
   if (input.source) return input.source;
   if (input.sourceSpell) {
@@ -53,14 +42,7 @@ function resolveSource(input: ApplyConditionInput): ConditionSource {
   return "manual";
 }
 
-/**
- * Spec 004 — Lifecycle de ConditionInstance:
- *  - aplicar (gera id; sincroniza legacy `conditions: string[]`; trigger concentração quebra se incapacitar próprio alvo concentrando)
- *  - remover por id (precisão)
- *  - processar saves no fim do turno do alvo
- *  - decrementar durações no início de round
- *  - cascata por concentração (delegada para ConcentrationService)
- */
+
 @Injectable()
 export class ConditionLifecycleService {
   constructor(
@@ -72,10 +54,7 @@ export class ConditionLifecycleService {
     private readonly dice: DiceService,
   ) {}
 
-  /**
-   * Spec 012 — Nature's Ward (Land Druid L10 XPHB). Imunidade Charmed, Frightened,
-   * Poisoned pra PC. Retorna true se a condição deve ser bloqueada.
-   */
+
   private async isBlockedByNaturesWard(
     target: EncounterParticipantEntity,
     slug: string,
@@ -96,10 +75,7 @@ export class ConditionLifecycleService {
     return sub === "land";
   }
 
-  /**
-   * Cria uma ConditionInstance no participante.
-   * Retorna eventos + a instância criada (id).
-   */
+
   async applyCondition(
     target: EncounterParticipantEntity,
     input: ApplyConditionInput,
@@ -108,7 +84,7 @@ export class ConditionLifecycleService {
     instance: ConditionInstance;
     concentrationBroken: boolean;
   }> {
-    // Spec 012 Gap #6 — Land Druid L10+ imune a charmed/frightened/poisoned.
+
     const blockedByWard = await this.isBlockedByNaturesWard(target, input.slug);
     if (blockedByWard) {
       const stubInstance: ConditionInstance = {
@@ -163,7 +139,7 @@ export class ConditionLifecycleService {
     ];
     target.conditions = this.deriveSlugs(target.conditionInstances);
 
-    // Vínculo grappledByParticipantId quando aplica grappled com appliedBy
+
     if (input.slug === "grappled" && input.appliedBy) {
       target.grappledByParticipantId = input.appliedBy;
     }
@@ -188,7 +164,7 @@ export class ConditionLifecycleService {
       },
     ];
 
-    // Trigger: nova condição incapacitante quebra a própria concentração do alvo
+
     const conc = await this.concentration.checkBreakOnCondition(
       target,
       input.slug,
@@ -198,7 +174,7 @@ export class ConditionLifecycleService {
     return { events, instance, concentrationBroken: conc.broken };
   }
 
-  /** Remove uma instância específica por id. Sincroniza legacy. */
+
   async removeConditionInstance(
     target: EncounterParticipantEntity,
     instanceId: string,
@@ -216,7 +192,7 @@ export class ConditionLifecycleService {
     }
     target.conditions = this.deriveSlugs(target.conditionInstances);
 
-    // Se a instância removida era 'grappled', limpar vínculo
+
     if (!target.conditionInstances.some((ci) => ci.slug === "grappled")) {
       target.grappledByParticipantId = null;
     }
@@ -236,7 +212,7 @@ export class ConditionLifecycleService {
             source: removed?.source ?? "manual",
             removalReason: reason,
             narrativeDescriptor,
-            // legado — manter `reason` por retrocompat com listeners antigos
+
             reason,
           },
         },
@@ -245,16 +221,7 @@ export class ConditionLifecycleService {
     };
   }
 
-  /**
-   * Spec 015 Eixo 3 — revalida condições após mudança de HP.
-   *
-   * Quando HP sai de ≤0 pra >0 (heal clássico), instâncias com
-   * `source='hp_zero'` são removidas (Unconscious derivada de dying acaba).
-   * Instâncias com outra source (spell:faerie-fire, feature:stun, etc.)
-   * permanecem — RAW 5e consistente.
-   *
-   * Retorna ids removidos + events pra caller incluir no stream.
-   */
+
   async revalidateAfterHpChange(
     target: EncounterParticipantEntity,
     prevHp: number,
@@ -293,13 +260,7 @@ export class ConditionLifecycleService {
     return { events, removed: toRemove };
   }
 
-  /**
-   * Spec 015 Eixo 3 — remove todas as instâncias de UMA source específica
-   * dos targets passados. Usado pela cascata de concentration break.
-   *
-   * Ex: `removeConditionsBySource([g1,g2,g3], 'spell:faerie-fire', 'concentration_broken')`
-   * → remove Faerie Fire nos 3 goblins atomicamente, emitindo 3 events.
-   */
+
   async removeConditionsBySource(
     targets: EncounterParticipantEntity[],
     source: ConditionSource,
@@ -336,11 +297,7 @@ export class ConditionLifecycleService {
     return { events, removedCount };
   }
 
-  /**
-   * Processa saves no fim do turno do participante.
-   * Para cada ConditionInstance com `repeatSaveTiming='end_of_turn'`,
-   * rola o save automaticamente. Sucesso remove; falha decrementa duração.
-   */
+
   async processEndOfTurn(
     target: EncounterParticipantEntity,
     getSaveModifier: (ability: SaveAbility) => Promise<{
@@ -383,10 +340,10 @@ export class ConditionLifecycleService {
           },
         });
         if (passed) {
-          // remove
+
           continue;
         }
-        // falha: decrementa duração se aplicável
+
         if (ci.durationRoundsRemaining != null) {
           ci.durationRoundsRemaining -= 1;
           if (ci.durationRoundsRemaining <= 0) {
@@ -412,10 +369,7 @@ export class ConditionLifecycleService {
     return { events };
   }
 
-  /**
-   * Decrementa durações no início de cada round para condições com
-   * duração não-nula e timing != 'end_of_turn' (estas decrementam no save).
-   */
+
   async decrementDurationsAtRoundStart(
     participants: EncounterParticipantEntity[],
   ): Promise<{ events: GameEventData[] }> {

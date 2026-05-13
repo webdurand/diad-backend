@@ -29,12 +29,7 @@ interface DiadExceptionBody {
   errors?: FieldError[];
 }
 
-/**
- * Base exception classe pra todo erro cross-boundary do backend (Princípio XI).
- *
- * Carrega code semântico, message PT-BR, context livre, hint opcional, cause preservado.
- * Status HTTP é derivado do catálogo; subclasses podem refinar.
- */
+
 export class DiadException extends HttpException {
   public readonly code: ErrorCode;
   public readonly hint?: string;
@@ -62,14 +57,10 @@ export class DiadException extends HttpException {
   }
 }
 
-/**
- * Erros de domínio (regras de negócio, recursos não encontrados, conflitos).
- */
+
 export class DomainException extends DiadException {}
 
-/**
- * Erro vindo de um service upstream (diad-agents, etc). Preserva body/status/code originais.
- */
+
 export class UpstreamException extends DiadException {
   public readonly upstream: UpstreamContext;
 
@@ -87,9 +78,7 @@ export class UpstreamException extends DiadException {
   }
 }
 
-/**
- * Erros de validação de payload (ValidationPipe, schemas custom).
- */
+
 export class ValidationException extends DiadException {
   constructor(
     code: ErrorCode,

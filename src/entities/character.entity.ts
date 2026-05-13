@@ -35,7 +35,7 @@ export class CharacterEntity {
   @Column({ type: "varchar" })
   name: string;
 
-  /** @deprecated Kept as backup; new data lives in relational tables. */
+
   @Column({ type: "jsonb", nullable: true })
   data?: Record<string, unknown>;
 

@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M2.C — cross-session recap.
- *
- * - summary_text: prosa resumida da sessão (500-800 tokens), gerada por
- *   SessionSummaryService no /finalize. Injetada no prompt da próxima
- *   sessão via previousSessionId.
- * - summary_key_facts: estruturado (NPCs vivos/mortos, locais visitados,
- *   alianças formadas) pra Director consultar sem custo de tokens.
- * - previous_session_id: self-FK; permite trace cross-session da campanha.
- * - ended_at: timestamp do /finalize (não confunde com updated_at).
- */
+
 export class AddSessionSummaryFields1778100000000 implements MigrationInterface {
   name = "AddSessionSummaryFields1778100000000";
 

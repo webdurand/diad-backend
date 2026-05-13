@@ -1,12 +1,7 @@
 import { GameEventEntity } from "src/entities/game-event.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 
-/**
- * Spec 006 — DTO de resposta para eventos de combate.
- *
- * Converte GameEventEntity (DB snake_case) em shape camelCase com
- * actorName/targetName/description humanizados.
- */
+
 export interface EventResponseDto {
   id: string;
   encounterId: string;
@@ -25,16 +20,12 @@ function snakeToCamelCase(s: string): string {
   return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-/** Converte camelCase para snake_case: 'attackRoll' → 'attack_roll' */
+
 export function camelToSnakeCase(s: string): string {
   return s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
-/**
- * Mapeia um GameEventEntity para EventResponseDto.
- * @param event Entidade do DB
- * @param participantsMap Mapa participantId → displayName
- */
+
 export function toEventResponseDto(
   event: GameEventEntity,
   participantsMap: Map<string, string>,
@@ -65,9 +56,7 @@ export function toEventResponseDto(
   };
 }
 
-/**
- * Gera description humana em PT-BR a partir do tipo e dados do evento.
- */
+
 function generateEventDescription(
   eventType: string,
   data: Record<string, unknown>,
@@ -191,9 +180,7 @@ function generateEventDescription(
   }
 }
 
-/**
- * Constrói mapa participantId → displayName a partir de lista de participants.
- */
+
 export function buildParticipantsMap(
   participants: EncounterParticipantEntity[],
 ): Map<string, string> {

@@ -61,9 +61,7 @@ export class EventService {
     });
   }
 
-  /**
-   * Spec 006 — timeline com filtros, paginação e count.
-   */
+
   async getEncounterTimelineFiltered(
     encounterId: string,
     options: {

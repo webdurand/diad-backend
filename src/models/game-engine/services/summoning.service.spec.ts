@@ -1,15 +1,6 @@
 import { SummoningService } from "./summoning.service";
 
-/**
- * Spec 012 \u2014 SummoningService core.
- *
- * Cobertura:
- * - spawnSummon cria participant linkado (linkedCasterParticipantId) com monster slug
- * - dismissSummon remove o participant
- * - dismissAllOfCaster remove todos summons linkados em cascata
- * - getSummonsOf retorna lista correta
- * - rejeita quando caster ou monster n\u00e3o existe
- */
+
 describe("SummoningService (spec 012)", () => {
   function makeWolfMonster() {
     return {

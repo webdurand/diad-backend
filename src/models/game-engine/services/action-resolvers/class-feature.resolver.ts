@@ -12,15 +12,7 @@ import {
   matchesClass,
 } from "./class-feature-catalog";
 
-/**
- * Spec 003 — enumera class features ativáveis (FULL + STUB + WRAPPER) no registry.
- *
- * Regras de `available`:
- *  - PC deve ter a classe + level mínimo
- *  - `feature_uses_used[slug] >= max` → disabledReason=NO_USES_REMAINING
- *  - Action economy: bonus/action/free/reaction respeitam flags de turno
- *  - Reactions disponíveis fora do turno se reactionUsed=false
- */
+
 @Injectable()
 export class ClassFeatureActionResolver implements ActionResolver {
   readonly kind: ActionKind = "class-feature";

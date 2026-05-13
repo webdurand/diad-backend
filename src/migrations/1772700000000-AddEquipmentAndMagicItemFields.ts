@@ -2,7 +2,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddEquipmentAndMagicItemFields1772700000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Equipment: new columns
+
     await queryRunner.query(`
       ALTER TABLE "equipments"
         ADD COLUMN IF NOT EXISTS "stealth_disadvantage" boolean NOT NULL DEFAULT false,
@@ -12,7 +12,7 @@ export class AddEquipmentAndMagicItemFields1772700000000 implements MigrationInt
         ADD COLUMN IF NOT EXISTS "doff_time" text
     `);
 
-    // Magic Items: new columns
+
     await queryRunner.query(`
       ALTER TABLE "magic_items"
         ADD COLUMN IF NOT EXISTS "weight" numeric NOT NULL DEFAULT 0,

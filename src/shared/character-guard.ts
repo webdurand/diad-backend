@@ -1,4 +1,4 @@
-// Shared character ownership and state helpers — eliminates duplication across 4 services
+
 
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { In, Repository } from "typeorm";
@@ -8,10 +8,7 @@ import {
   CharacterStateEntity,
 } from "src/entities";
 
-/**
- * Ensures the character belongs to the given user.
- * Throws NotFoundException if not found.
- */
+
 export async function ensureCharacterReadAccess(
   characterRepo: Repository<CharacterEntity>,
   userId: string,
@@ -70,10 +67,7 @@ export async function ensureCharacterWriteAccess(
   return character;
 }
 
-/**
- * Legacy PC-only guard kept for old call sites. New character sheet mutations
- * should use ensureCharacterReadAccess/ensureCharacterWriteAccess.
- */
+
 export async function ensureCharacterOwnership(
   characterRepo: Repository<CharacterEntity>,
   userId: string,
@@ -88,9 +82,7 @@ export async function ensureCharacterOwnership(
   return character;
 }
 
-/**
- * Fetches the character state or throws NotFoundException.
- */
+
 export async function getCharacterState(
   stateRepo: Repository<CharacterStateEntity>,
   characterId: string,

@@ -4,20 +4,7 @@ import { PinoLogger, InjectPinoLogger } from "nestjs-pino";
 import { DOMAIN_CLS_KEY } from "../domain/domain-context.middleware";
 import { DOMAIN_KEYS, type DomainContext } from "../domain/domain-context";
 
-/**
- * Wrapper sobre PinoLogger que injeta trace.id/span.id E contexto de domínio
- * (session.id, pc.id, turn.id, ...) do CLS em toda log line.
- *
- * Uso:
- *   constructor(private readonly logger: DiadLogger) {
- *     this.logger.setContext('AiProxyService');
- *   }
- *   this.logger.info('http.client.request', { 'http.request.method': 'POST', ... });
- *
- * Quem popula o CLS:
- *   - TraceContextMiddleware → traceId, spanId, parentSpanId, trace.origin
- *   - DomainContextMiddleware → domain (DomainContext)
- */
+
 @Injectable()
 export class DiadLogger {
   constructor(

@@ -62,7 +62,7 @@ function tryAcquireIdempotency(key: string): boolean {
     return false;
   }
   inFlightRequests.set(key, now + IDEMPOTENCY_TTL_MS);
-  // Sweep oportunista — se o Map crescer, limpa entradas expiradas.
+
   if (inFlightRequests.size > 256) {
     for (const [k, exp] of inFlightRequests) {
       if (exp <= now) inFlightRequests.delete(k);
@@ -75,7 +75,7 @@ function releaseIdempotency(key: string): void {
   inFlightRequests.delete(key);
 }
 
-/** Exposto APENAS pra testes — limpa todo o cache in-flight entre runs. */
+
 export function __resetIdempotencyForTests(): void {
   inFlightRequests.clear();
 }
@@ -195,11 +195,7 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Persiste choices da última narração como SessionMessage kind='choices'.
-   * Permite re-hidratar opções de ação após F5/reload — choices vivem
-   * vinculadas à mensagem do Narrator. Conteúdo é JSON serializado.
-   */
+
   private async persistChoices(
     sessionId: string,
     userId: string,
@@ -221,12 +217,7 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Persiste cada dice roll resolvido como SessionMessage kind='dice_roll'.
-   * Sem isso, DiceRollCards somem da timeline após F5/login (eram só efêmeros
-   * do stream SSE — game_events guarda dado bruto mas o resume lê
-   * session_messages). Idempotência por rollId via clientId.
-   */
+
   private async persistDiceRolls(
     sessionId: string,
     userId: string,
@@ -250,10 +241,7 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Persiste canon beats do turno como SessionMessage kind='turn_outcome'.
-   * Importante: toast/SSE é efêmero; a timeline precisa sobreviver a reload.
-   */
+
   private async persistTurnOutcomes(
     sessionId: string,
     userId: string,
@@ -448,7 +436,7 @@ export class AiProxyController {
     }
   }
 
-  // ────── Assistente D&D ──────
+
 
   @Post("assistant/message")
   async assistantMessage(
@@ -486,7 +474,7 @@ export class AiProxyController {
     );
   }
 
-  // ────── Solo Play ──────
+
 
   @Post("solo/create")
   async soloCreate(
@@ -508,7 +496,7 @@ export class AiProxyController {
     });
   }
 
-  // ────── Multi-agent narrative pipeline (Spec 014/026 Pillar 4) ──────
+
 
   @Post("narrative/:sessionId/turn")
   async narrativeTurn(
@@ -519,14 +507,14 @@ export class AiProxyController {
       lastMessageId?: number | null;
       clientId?: string;
       voiceProfile?: string;
-      // Spec 027 (M1, AC1.10) — hint do quick-action button. Quando válido,
-      // IntentClassifier (Camada 1 / Brain) bypassa o Haiku (latência 0ms).
-      // Campo opcional, validado no agents (`VALID_INTENTS` enum).
+
+
+
       intent?: string;
-      // Spec 027 (M2 follow-up) — hint sistêmico (não-player) pro Narrator.
-      // Hoje único valor: 'post_combat' — sinaliza que o turn anterior foi
-      // o fim de um encounter; Narrator deve fechar o arco diegeticamente
-      // usando session_events recentes (encounter_ended, xp_awarded, etc).
+
+
+
+
       systemHint?: string;
       restEventKind?: string;
     },
@@ -549,9 +537,9 @@ export class AiProxyController {
       this.emitSse(res, { type: "status", content }, "status");
     };
 
-    // Spec 027 (M1, AC1.12) — guard in-flight contra duplo-POST do mesmo
-    // turn (jogador clicando rápido). Chave inclui lastMessageId pra que
-    // turns sequenciais legítimos não colidam.
+
+
+
     const idempotencyKey = buildIdempotencyKey(
       sessionId,
       body.lastMessageId,
@@ -589,12 +577,12 @@ export class AiProxyController {
       emitStatus("Recolhendo memórias da cena...");
 
       if (ctx.lastMessageMismatch) {
-        // Cliente ficou para trás (stream truncado, aba inativa durante a
-        // narração, refresh durante turn). Server é fonte da verdade — em
-        // vez de 409, emitimos session_sync upfront pro front se atualizar
-        // e seguimos o turn normalmente. Mismatch só ocorre quando cliente
-        // está atrás (detectMismatch retorna true só para serverSeq - clientSeq > 1),
-        // e isso é sempre recuperável.
+
+
+
+
+
+
         this.logger.warn("session.last_message_mismatch_recovered", {
           "session.id": sessionId,
           "client.lastMessageId": body.lastMessageId ?? null,
@@ -610,12 +598,12 @@ export class AiProxyController {
         body.clientId,
       );
 
-      // Sync antecipado: emite `session_sync` logo após persistir o
-      // `player_action` (server +1). Sem isso, se o stream cair entre
-      // `persistNarration` (server +2) e o `emitSessionSync` final, o ref do
-      // front fica defasado em 2 e o próximo turn cai em 409
-      // SESSION_LAST_MESSAGE_MISMATCH. Com o sync precoce, mesmo stream
-      // truncado deixa o ref no máximo 1 atrás (tolerado pelo detectMismatch).
+
+
+
+
+
+
       await this.emitSessionSync(sessionId, res);
 
       const guardArrival = ctx.campaignId
@@ -654,30 +642,30 @@ export class AiProxyController {
         return;
       }
 
-      // Spec 026 Pillar 4 — `SceneContext` (Spec 018) não carrega `sceneId`
-      // no top-level. O SessionResumeService já buscou a cena ativa para
-      // montar o contexto; reaproveitamos o id para evitar outro lookup antes
-      // do primeiro chunk do Narrator.
+
+
+
+
       let sceneContextForAgent = ctx.activeSceneId
         ? { ...(ctx.sceneContext ?? {}), sceneId: ctx.activeSceneId }
         : ctx.sceneContext;
 
-      // Spec 027 (M2 follow-up) — quando systemHint mapeia pra um evento
-      // estruturado em `game_events`, injetamos esse evento em
-      // `sceneContext.recent_events` pro Coordinator (post_combat /
-      // post_fate_choice) ler outcome + dados do PC.
+
+
+
+
       sceneContextForAgent = (await this.injectSystemHintEvent(
         sessionId,
         body.systemHint,
         sceneContextForAgent as Record<string, any> | null | undefined,
       )) as typeof sceneContextForAgent;
 
-      // Idempotência F5 — para `systemHint='post_combat'`, a narração é
-      // persistida com clientId determinístico por encounterId. Se já existe,
-      // não chamamos o agent — apenas re-emitimos `narration_persisted` (com
-      // o serverId existente) e `session_sync`. Cobre F5 mesmo quando o
-      // `lastMessageId` no payload mudou (idempotency global por hash falha
-      // nesse caso porque o key inclui lastMessageId).
+
+
+
+
+
+
       const postCombatEncounterId =
         body.systemHint === "post_combat"
           ? await this.findLatestEncounterId(sessionId, "encounter_resolved")
@@ -734,11 +722,11 @@ export class AiProxyController {
           recentMessages: ctx.recentMessages,
           previousSessionSummary: ctx.previousSessionSummary,
           gapMinutes: ctx.gapMinutes,
-          // Spec 027 (M1, AC1.10) — forward do intent hint pro IntentClassifier
-          // bypassar o Haiku quando o input vem de quick-action button.
+
+
           ...(body.intent ? { intent: body.intent } : {}),
-          // Spec 027 (M2 follow-up) — forward do systemHint pro Narrator
-          // ('post_combat' | 'post_fate_choice' = closure narrativa estruturada).
+
+
           ...(body.systemHint ? { systemHint: body.systemHint } : {}),
           ...(body.restEventKind ? { restEventKind: body.restEventKind } : {}),
         },
@@ -811,11 +799,7 @@ export class AiProxyController {
     }
   }
 
-  /**
-   * Abertura de sessão via pipeline multi-agent. Mesmo pipeline do
-   * `/ai/narrative/:sessionId/turn` mas com `playerInput=null` — Director
-   * resolve via forcing rule "scene 1 → YOU beat".
-   */
+
   @Post("narrative/:sessionId/start")
   async narrativeStart(
     @Param("sessionId") sessionId: string,
@@ -837,9 +821,9 @@ export class AiProxyController {
       this.emitSse(res, { type: "status", content }, "status");
     };
 
-    // Spec 027 (M1, AC1.12) — guard in-flight idêntico ao narrativeTurn.
-    // Sem playerInput o payload é sempre vazio; chave usa só sessionId +
-    // marker fixo "narrative-start" pra rejeitar duplo-POST de abertura.
+
+
+
     const idempotencyKey = buildIdempotencyKey(
       sessionId,
       null,
@@ -965,10 +949,10 @@ export class AiProxyController {
     @Param("sessionId") sessionId: string,
     @Req() _req: AuthRequest,
   ) {
-    // Backend-authoritative — orquestra recap + finalize localmente.
-    // ensureRecap chama /internal/summarize no agents (com lock advisory pra
-    // evitar duplo-trabalho concorrente). finalizeSession persiste summary +
-    // marca status=completed + endedAt. Idempotente.
+
+
+
+
     const recap = await this.recapService.ensureRecap(sessionId);
     let summaryText = "";
     if (recap.status === "cached" || recap.status === "generated") {
@@ -989,7 +973,7 @@ export class AiProxyController {
     };
   }
 
-  // ────── Admin: Knowledge Management ──────
+
 
   @Post("admin/knowledge/upload")
   @UseGuards(AdminGuard)

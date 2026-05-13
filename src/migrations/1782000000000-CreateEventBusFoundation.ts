@@ -1,25 +1,11 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 017 — World–Encounter–Narrative Bridge Foundation (M1).
- *
- * Estende `session_events` com colunas cross-domain (eventCategory, audiences,
- * traceId, version, aggregateId — ADR-017 future-proofing) e cria 4 tabelas
- * suporte do EventBus:
- *
- *  - audience_routing: matriz default (eventCategory, eventType) → defaultAudiences[]
- *  - campaign_audience_overrides: per-campaign overrides em cima dos defaults
- *  - event_subscribers: registry pra listeners dinâmicos (spec 022)
- *  - event_listener_processed: idempotência (ADR-017 prática 4)
- *
- * Migration semi-aditiva — colunas novas em session_events são NULL/default-friendly,
- * não force backfill em rows antigas. Down() simétrico (drop colunas + tabelas).
- */
+
 export class CreateEventBusFoundation1782000000000 implements MigrationInterface {
   name = "CreateEventBusFoundation1782000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    // 1. Estende session_events com colunas cross-domain.
+
     await queryRunner.query(`
       ALTER TABLE session_events
       ADD COLUMN IF NOT EXISTS event_category VARCHAR(20) NULL,
@@ -53,7 +39,7 @@ export class CreateEventBusFoundation1782000000000 implements MigrationInterface
         ON session_events(session_id, event_category, sequence)
     `);
 
-    // 2. audience_routing — matriz default global (campaign-agnostic).
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS audience_routing (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,7 +57,7 @@ export class CreateEventBusFoundation1782000000000 implements MigrationInterface
       )
     `);
 
-    // 3. campaign_audience_overrides — per-campaign overrides.
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS campaign_audience_overrides (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -92,7 +78,7 @@ export class CreateEventBusFoundation1782000000000 implements MigrationInterface
         ON campaign_audience_overrides(campaign_id)
     `);
 
-    // 4. event_subscribers — registry pra subscribers dinâmicos (spec 022).
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS event_subscribers (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -103,7 +89,7 @@ export class CreateEventBusFoundation1782000000000 implements MigrationInterface
       )
     `);
 
-    // 5. event_listener_processed — ADR-017 prática 4 (idempotência).
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS event_listener_processed (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -119,10 +105,10 @@ export class CreateEventBusFoundation1782000000000 implements MigrationInterface
         ON event_listener_processed(event_id)
     `);
 
-    // 6. Seed audience_routing defaults a partir da matriz formal de
-    //    contracts/audience-routing.json. Ordem importa: lista exatamente
-    //    as 39 entries do contract spec 017. INSERT ... ON CONFLICT DO NOTHING
-    //    permite re-run idempotente.
+
+
+
+
     await queryRunner.query(`
       INSERT INTO audience_routing (event_category, event_type, default_audiences, overrideable, sub_channel, rationale)
       VALUES

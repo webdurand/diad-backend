@@ -9,19 +9,7 @@ import { DiadLogger } from "src/common/observability/logger/diad-logger.service"
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { UpstreamException } from "src/common/observability/errors/diad-exception";
 
-/**
- * Spec 024 — Hot-recap on-demand para sessions cuja `summary_text` ficou NULL
- * (player fechou aba sem `/finalize`). Idempotente, async, advisory-lock.
- *
- * Princípio X v1.4.0 — esta camada existe pra suprir `previousSessionSummary`
- * em retomadas (cross-session continuity da spec 014). Sem isso, Narrator
- * perde o arco anterior — caso `d251a52f`.
- *
- * Princípio XI — falhas log estruturado, errors envelope-compliant; nunca
- * relança upstream (não-bloqueante por design). Retry imediato 1× +
- * agendado 1× após 30s; após 2 falhas, telemetria registra e desiste (M2
- * adiciona cron diário).
- */
+
 export interface RecapSuccess {
   status: "cached" | "generated";
   summaryText: string;
@@ -59,7 +47,7 @@ interface InternalSummarizeResponse {
 export class SessionRecapService {
   private readonly agentBaseUrl: string;
   private readonly internalToken: string;
-  /** sessionId pra o qual já foi agendado retry — evita acumular timers. */
+
   private readonly retryScheduled = new Set<string>();
 
   constructor(
@@ -281,9 +269,7 @@ export class SessionRecapService {
     return "system";
   }
 
-  /**
-   * pg_try_advisory_lock aceita bigint. Hash do sessionId em int32 estável.
-   */
+
   private lockKey(sessionId: string): number {
     let h = 0;
     const s = `recap:${sessionId}`;

@@ -50,7 +50,7 @@ describe("ExhaustionService (Spec 004 CP9)", () => {
       const m = svc.getModifiers(1, "2024_ten_levels");
       expect(m.d20Penalty).toBe(-2);
       expect(m.speedPenaltyFt).toBe(-5);
-      // 2024 não usa disadvantage — penalidade flat
+
       expect(m.disadvAttack).toBe(false);
       expect(m.disadvAbility).toBe(false);
       expect(m.disadvSave).toBe(false);

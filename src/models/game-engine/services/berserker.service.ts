@@ -16,17 +16,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Barbarian Path of the Berserker (RAW 2024 XPHB):
- *  - L3 Frenzy: Reckless+Rage primeiro hit no turno → +Nd6 bonus damage.
- *    N = rage damage tier (2 em L1-8, 3 em L9-15, 4 em L16+).
- *  - L6 Mindless Rage: sheet flag — bloqueado em condition apply quando raging.
- *  - L10 Retaliation (RAW 2024 — corrigido L14→L10 via migration): reaction
- *    quando tomar dano de criatura adjacente 5ft → melee attack contra ela.
- *  - L14 Intimidating Presence (RAW 2024): Bonus action, 30ft emanation, cada
- *    criatura escolhida faz WIS save DC 8+STR+PB. Falha = Frightened 1min.
- *    Recarrega com 1 uso de Rage.
- */
+
 @Injectable()
 export class BerserkerService {
   constructor(
@@ -42,17 +32,14 @@ export class BerserkerService {
     private readonly effectInstances: EffectInstanceService,
   ) {}
 
-  /** Rage damage tier → N dos d6 de Frenzy. */
+
   private frenzyDiceCount(barbarianLevel: number): number {
     if (barbarianLevel >= 16) return 4;
     if (barbarianLevel >= 9) return 3;
     return 2;
   }
 
-  /**
-   * Frenzy (RAW 2024): ao usar Reckless Attack em Rage, primeiro hit do turno
-   * ganha +Nd6 bonus damage. 1/turn. Endpoint chamado após hit confirmado.
-   */
+
   async frenzy(
     userId: string,
     encounterId: string,
@@ -125,13 +112,7 @@ export class BerserkerService {
     );
   }
 
-  /**
-   * Retaliation (RAW 2024 L10, corrigido L14→L10): reaction ao tomar dano de
-   * criatura adjacente 5ft. Faz 1 melee attack grátis contra ela.
-   *
-   * MVP: recebe targetParticipantId, rola attack (1d20 + STR + PB), on hit aplica
-   * damage via weapon default (1d6+STR). V2: usa weapon empunhada real.
-   */
+
   async retaliation(
     userId: string,
     encounterId: string,
@@ -188,7 +169,7 @@ export class BerserkerService {
     let prevHp: number | undefined;
     let newHp: number | undefined;
     if (hit) {
-      // MVP: 1d8 + STR (unarmed barbarian-typical, weapon real em V2)
+
       damage = this.dice.roll(8) + strMod;
       prevHp = target.currentHp ?? 0;
       target.currentHp = Math.max(0, prevHp - damage);
@@ -234,13 +215,7 @@ export class BerserkerService {
     );
   }
 
-  /**
-   * Intimidating Presence (RAW 2024 L14, corrigido L10→L14): Bonus action,
-   * emanação 30ft, cada criatura escolhida faz WIS save DC 8+STR+PB. Falha =
-   * Frightened 1min. Recarrega com 1 uso de Rage.
-   *
-   * MVP: aceita lista targetParticipantIds, aplica save pra cada.
-   */
+
   async intimidatingPresence(
     userId: string,
     encounterId: string,
@@ -304,7 +279,7 @@ export class BerserkerService {
           saveAbility: "wis",
           saveDc,
           repeatSaveTiming: "end_of_turn",
-          durationRoundsRemaining: 10, // 1 min
+          durationRoundsRemaining: 10,
         });
         applied = true;
       }

@@ -20,11 +20,7 @@ export interface MonsterCastCheck {
   message?: string;
 }
 
-/**
- * Tracks monster spellcasting resources per encounter.
- * Stateless: reads `monster.spellcasting` and `participant.spellSlotsUsed`.
- * Callers must persist `participant.spellSlotsUsed` after calling `debit`.
- */
+
 @Injectable()
 export class MonsterSpellcastingService {
   getAvailability(

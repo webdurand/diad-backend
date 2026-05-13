@@ -63,7 +63,7 @@ export class NpcRelationshipService {
   }
 
   async listByCampaign(campaignId: string): Promise<NpcRelationshipEntity[]> {
-    // Relationships nao tem campaignId direto — JOIN via source NPC.
+
     return this.relRepo
       .createQueryBuilder("r")
       .innerJoin("npcs", "src", "src.id = r.source_npc_id")

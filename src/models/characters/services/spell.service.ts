@@ -48,10 +48,10 @@ import { ReputationDecayService } from "src/models/world/services/reputation-dec
 
 type CasterType = CasterClassType;
 
-// ---- DTOs ----
+
 
 export interface PreparedSpellsDto {
-  spells: string[]; // spell slugs
+  spells: string[];
 }
 
 export interface SpellSlotUpdateDto {
@@ -62,8 +62,8 @@ export interface SpellSlotUpdateDto {
 export interface RestDto {
   type: "short" | "long";
   hitDiceToSpend?: Array<{ classSlug: string; count: number }>;
-  preparedSpells?: string[]; // full replacement for 'all' mode (Cleric/Druid/Wizard)
-  spellSwap?: { removeSlug: string; addSlug: string }; // single swap for 'one' mode (Paladin/Ranger)
+  preparedSpells?: string[];
+  spellSwap?: { removeSlug: string; addSlug: string };
 }
 
 export interface PreparedSpellsResult {
@@ -94,7 +94,7 @@ export interface AvailableSpellsResult {
   casterType: string;
   maxPrepared: number;
   maxSpellLevel: number;
-  /** 'all' = replace entire list (Cleric/Druid/Wizard), 'one' = swap 1 spell (Paladin/Ranger), 'none' = level-up only */
+
   prepChangeMode: "all" | "one" | "none";
   currentPrepared: Array<{
     slug: string;
@@ -208,7 +208,7 @@ export class SpellService {
           trigger,
         });
       } catch {
-        /* best-effort — clock advance falha não derruba o rest */
+
       }
     }
   }
@@ -230,7 +230,7 @@ export class SpellService {
     }
   }
 
-  // ---- Helpers ----
+
 
   private async ensureReadAccess(
     userId: string,
@@ -339,13 +339,7 @@ export class SpellService {
     return result;
   }
 
-  /**
-   * Returns the maximum number of prepared spells for a given class.
-   * - Cleric/Druid: class_level + WIS mod (min 1)
-   * - Paladin: floor(class_level/2) + CHA mod (min 1)
-   * - Wizard: wizard_level + INT mod (min 1)
-   * - Known casters (Bard/Sorcerer/Ranger/Warlock): all known spells are always prepared
-   */
+
   private computeMaxPrepared(
     classSlug: string,
     classLevel: number,
@@ -353,7 +347,7 @@ export class SpellService {
     editionRules?: EditionRules,
   ): number {
     const baseSlug = normalizeClassSlug(classSlug);
-    // Check edition-specific caster type override (e.g., Ranger -> total_access in 2024)
+
     const casterTypeOverride = getCasterTypeOverride(baseSlug, editionRules) as
       | CasterType
       | undefined;
@@ -365,22 +359,22 @@ export class SpellService {
 
     switch (casterType) {
       case "total_access": {
-        // Check edition-specific prepared formula
+
         const formula = getPreparedFormula(baseSlug, editionRules);
         if (formula === "halfLevel+mod") {
           return Math.max(1, Math.floor(classLevel / 2) + abilityMod);
         }
-        // Default: level + mod (2024 Paladin, Cleric, Druid, 2024 Ranger)
+
         return Math.max(1, classLevel + abilityMod);
       }
 
       case "spellbook":
-        // Wizard: INT mod + wizard level
+
         return Math.max(1, classLevel + abilityMod);
 
       case "known":
       case "pact":
-        // Known casters: all known are always prepared, no limit
+
         return Infinity;
 
       default:
@@ -388,7 +382,7 @@ export class SpellService {
     }
   }
 
-  // ---- PUT /characters/:id/prepared-spells ----
+
 
   async updatePreparedSpells(
     userId: string,
@@ -406,7 +400,7 @@ export class SpellService {
       this.charSpellRepo.find({ where: { character_id: characterId } }),
     ]);
 
-    // Find primary caster class
+
     const casterClass = charClasses.find((cc) =>
       getCasterClassType(cc.class.slug),
     );
@@ -417,7 +411,7 @@ export class SpellService {
     const classSlug = casterClass.class.slug;
     const casterType = getCasterClassType(classSlug)!;
 
-    // Known-spell casters cannot change prepared spells outside of level up
+
     if (casterType === "known" || casterType === "pact") {
       throw new BadRequestException(
         "Esta classe so pode trocar magias ao subir de nivel.",
@@ -431,7 +425,7 @@ export class SpellService {
       character.source?.rules,
     );
 
-    // Filter out cantrips from the request (cantrips are always known)
+
     const requestedSlugs = dto.spells.filter(Boolean);
 
     if (requestedSlugs.length > maxPrepared) {
@@ -440,7 +434,7 @@ export class SpellService {
       );
     }
 
-    // Resolve spell entities
+
     const requestedSpells =
       requestedSlugs.length > 0
         ? await this.spellRepo.find({ where: { slug: In(requestedSlugs) } })
@@ -454,7 +448,7 @@ export class SpellService {
       );
     }
 
-    // Validate: all spells must be level > 0 (cantrips handled separately)
+
     for (const spell of requestedSpells) {
       if (spell.level === 0) {
         throw new BadRequestException(
@@ -463,7 +457,7 @@ export class SpellService {
       }
     }
 
-    // Validate max spell level
+
     const maxSpellLevel = this.getMaxSpellLevel(charClasses);
     for (const spell of requestedSpells) {
       if (spell.level > maxSpellLevel) {
@@ -473,7 +467,7 @@ export class SpellService {
       }
     }
 
-    // For total_access casters: validate spells belong to the class list
+
     if (casterType === "total_access") {
       const classSpellIds = await this.spellClassRepo.find({
         where: { class_id: casterClass.class_id },
@@ -488,7 +482,7 @@ export class SpellService {
       }
     }
 
-    // For spellbook casters: validate spells are in the character's spellbook
+
     if (casterType === "spellbook") {
       const spellbookSpellIds = new Set(
         charSpells
@@ -509,7 +503,7 @@ export class SpellService {
       }
     }
 
-    // Apply changes: unprepare all non-always_prepared non-cantrip spells, then prepare requested
+
     const requestedSpellIds = new Set(requestedSpells.map((s) => s.id));
 
     for (const cs of charSpells) {
@@ -517,26 +511,26 @@ export class SpellService {
       if (cs.source !== SpellSourceEnum.Class) continue;
 
       if (requestedSpellIds.has(cs.spell_id)) {
-        // Should be prepared
+
         if (cs.status !== SpellStatusEnum.Prepared) {
-          // For spellbook: spell stays in spellbook, we mark prepared via a flag
-          // Actually in the entity model, we use status field
-          // Spellbook spells that are prepared: we keep status as Spellbook but the fetch logic checks
-          // Wait - let me reconsider. The status enum is known|prepared|spellbook
-          // For wizard: spellbook spells that are "prepared" should keep status=Spellbook
-          // but we need another way to track which ones are currently prepared
-          // Looking at the existing model, Wizard spells at creation are saved as status=Spellbook
-          // The sheet displays them separately. So we need to handle this differently.
+
+
+
+
+
+
+
+
         }
       }
     }
 
-    // Simpler approach: For total_access casters (Cleric/Druid/Paladin), we manage
-    // CharacterSpellEntity records directly (add/remove prepared spells from the class list).
-    // For Wizard, we toggle a subset of spellbook entries to "prepared" status.
+
+
+
 
     if (casterType === "total_access") {
-      // Remove all existing class prepared (non-always_prepared) spells
+
       const toRemove = charSpells.filter(
         (cs) =>
           cs.source === SpellSourceEnum.Class &&
@@ -548,9 +542,9 @@ export class SpellService {
         await this.charSpellRepo.remove(toRemove);
       }
 
-      // Add new prepared spells
+
       for (const spell of requestedSpells) {
-        // Check if already exists (e.g., always_prepared or from another source)
+
         const existing = charSpells.find((cs) => cs.spell_id === spell.id);
         if (existing) continue;
 
@@ -563,9 +557,9 @@ export class SpellService {
         });
       }
     } else if (casterType === "spellbook") {
-      // For Wizard: all spells stay in spellbook, but we toggle status between
-      // 'spellbook' (not prepared) and 'prepared' (prepared from spellbook)
-      // Also clean up duplicate records when found
+
+
+
       const bySpellId = new Map<string, CharacterSpellEntity[]>();
       for (const cs of charSpells) {
         if (cs.source !== SpellSourceEnum.Class || cs.spell.level === 0)
@@ -577,7 +571,7 @@ export class SpellService {
       }
 
       for (const [spellId, records] of bySpellId) {
-        // Keep first, delete extras
+
         const keep = records[0];
         for (let i = 1; i < records.length; i++) {
           await this.charSpellRepo.remove(records[i]);
@@ -608,7 +602,7 @@ export class SpellService {
     };
   }
 
-  // ---- GET /characters/:id/available-spells ----
+
 
   async getAvailableSpells(
     userId: string,
@@ -641,7 +635,7 @@ export class SpellService {
         editionRules,
       );
 
-      // Current prepared spells (deduplicated)
+
       const seenPrepared = new Set<string>();
       const currentPrepared = charSpells
         .filter(
@@ -662,7 +656,7 @@ export class SpellService {
           alwaysPrepared: cs.always_prepared,
         }));
 
-      // Available spells depend on caster type
+
       let availableSpells: Array<{
         slug: string;
         name: string;
@@ -671,7 +665,7 @@ export class SpellService {
       }> = [];
 
       if (casterType === "total_access") {
-        // Can prepare any spell from the class list up to max spell level
+
         const classSpells = await this.spellClassRepo.find({
           where: { class_id: cc.class_id },
           relations: ["spell", "spell.school"],
@@ -691,7 +685,7 @@ export class SpellService {
             school: sc.spell.school?.name,
           }));
       } else if (casterType === "spellbook") {
-        // Wizard: can prepare from spellbook (deduplicated)
+
         const seenBook = new Set<string>();
         availableSpells = charSpells
           .filter(
@@ -713,7 +707,7 @@ export class SpellService {
             school: cs.spell.school?.name,
           }));
       } else {
-        // Known/Pact casters: their known spells are always prepared
+
         availableSpells = charSpells
           .filter(
             (cs) =>
@@ -730,7 +724,7 @@ export class SpellService {
           }));
       }
 
-      // Determine how spells can be changed on long rest per SRD 5.2.1
+
       const baseSlug = normalizeClassSlug(classSlug);
       let prepChangeMode: "all" | "one" | "none" = "none";
       if (
@@ -746,7 +740,7 @@ export class SpellService {
       } else if (casterType === "spellbook") {
         prepChangeMode = "all";
       }
-      // known/pact => 'none' (only on level up)
+
 
       results.push({
         classSlug,
@@ -762,7 +756,7 @@ export class SpellService {
     return results;
   }
 
-  // ---- GET /characters/:id/manageable-spells ----
+
 
   async getManageableSpells(
     userId: string,
@@ -798,7 +792,7 @@ export class SpellService {
         editionRules,
       );
 
-      // Current character spells (deduplicated)
+
       const seenSlugs = new Set<string>();
       const currentSpells = charSpells
         .filter(
@@ -819,7 +813,7 @@ export class SpellService {
         }))
         .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
-      // Spells available to learn from the class list
+
       const classSpells = await this.spellClassRepo.find({
         where: { class_id: cc.class_id },
         relations: ["spell", "spell.school"],
@@ -860,7 +854,7 @@ export class SpellService {
     return results;
   }
 
-  // ---- POST /characters/:id/spells ----
+
 
   async learnSpell(
     userId: string,
@@ -876,7 +870,7 @@ export class SpellService {
       throw new BadRequestException(`Magia '${dto.spellSlug}' nao encontrada.`);
     }
 
-    // Check if already known
+
     const existing = await this.charSpellRepo.findOne({
       where: { character_id: characterId, spell_id: spell.id },
     });
@@ -886,7 +880,7 @@ export class SpellService {
       );
     }
 
-    // Find the caster class for this spell
+
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },
       order: { order: "ASC" },
@@ -913,7 +907,7 @@ export class SpellService {
 
     const casterType = getCasterClassType(targetClass.class.slug)!;
 
-    // Determine status based on caster type
+
     let status: SpellStatusEnum;
     if (spell.level === 0) {
       status = SpellStatusEnum.Known;
@@ -922,7 +916,7 @@ export class SpellService {
     } else if (casterType === "known" || casterType === "pact") {
       status = SpellStatusEnum.Known;
     } else {
-      // total_access: add as prepared
+
       status = SpellStatusEnum.Prepared;
     }
 
@@ -943,7 +937,7 @@ export class SpellService {
     };
   }
 
-  // ---- DELETE /characters/:id/spells/:spellSlug ----
+
 
   async unlearnSpell(
     userId: string,
@@ -977,7 +971,7 @@ export class SpellService {
     };
   }
 
-  // ---- PATCH /characters/:id/spell-slots ----
+
 
   async updateSpellSlots(
     userId: string,
@@ -997,8 +991,8 @@ export class SpellService {
     const slotTotals = this.getSpellSlotTotals(charClasses);
     const levelKey = String(dto.level);
 
-    // Check if pact slot
-    const isPact = dto.level === -1; // convention: -1 = pact slots
+
+    const isPact = dto.level === -1;
     const key = isPact ? "pact" : levelKey;
 
     const total = slotTotals[key];
@@ -1026,12 +1020,7 @@ export class SpellService {
     };
   }
 
-  /**
-   * Spec 011 Phase 1 — zera entries de `feature_uses_used` cujo
-   * `FeatureSpec.rechargeOn` bate com `restType` (ou qualquer entry se
-   * `restType === 'long'`). Retorna os slugs afetados para compor o summary.
-   * Mutação in-place em `state.feature_uses_used`.
-   */
+
   private resetFeatureUses(
     state: CharacterStateEntity,
     restType: "short" | "long",
@@ -1047,8 +1036,8 @@ export class SpellService {
         continue;
       }
       const spec = CLASS_FEATURE_CATALOG.find((s) => s.slug === slug);
-      // Só zera entries cuja feature recarrega em short rest. Entries
-      // desconhecidas ou de recarga long persistem.
+
+
       if (spec?.rechargeOn === "short") {
         used[slug] = 0;
         reset.push(slug);
@@ -1059,7 +1048,7 @@ export class SpellService {
     return reset;
   }
 
-  // ---- POST /characters/:id/rest ----
+
 
   async rest(
     userId: string,
@@ -1084,7 +1073,7 @@ export class SpellService {
     let deathSavesReset = false;
 
     if (dto.type === "short") {
-      // Short rest: Warlock recovers pact slots
+
       const hasWarlock = charClasses.some(
         (cc) => normalizeClassSlug(cc.class.slug) === "warlock",
       );
@@ -1100,7 +1089,7 @@ export class SpellService {
         }
       }
 
-      // Spend hit dice to heal
+
       if (dto.hitDiceToSpend?.length) {
         const maxHp = await this.computeMaxHp(
           characterId,
@@ -1123,7 +1112,7 @@ export class SpellService {
           hitDiceUsed[hd.classSlug] =
             (hitDiceUsed[hd.classSlug] ?? 0) + toSpend;
 
-          // Each hit die heals: roll (average = die/2 + 0.5) + CON mod; use fixed
+
           const healPerDie = Math.max(
             1,
             Math.floor(cc.class.hit_die / 2) + 1 + conMod,
@@ -1140,13 +1129,13 @@ export class SpellService {
         state.hit_dice_used = hitDiceUsed;
       }
 
-      // Restore ki points on short rest
+
       if (state.ki_points_used > 0) {
         state.ki_points_used = 0;
         summary.push("Pontos de Ki restaurados.");
       }
 
-      // Spec 011 Phase 1 — reset class-feature uses that recharge on a short rest.
+
       const resetShort = this.resetFeatureUses(state, "short");
       if (resetShort.length > 0) {
         summary.push(`Features recuperadas: ${resetShort.join(", ")}.`);
@@ -1156,20 +1145,20 @@ export class SpellService {
 
       await this.advanceClockAfterRest(characterId, 1, "short_rest");
     } else {
-      // Long rest
+
       const maxHp = await this.computeMaxHp(
         characterId,
         charClasses,
         charAbilities,
       );
 
-      // 1. Restore HP to max
+
       hpRestored = maxHp - state.current_hp;
       state.current_hp = maxHp;
       state.temp_hp = 0;
       summary.push(`HP restaurado ao maximo (${maxHp}).`);
 
-      // 2. Restore all spell slots
+
       const slotsUsed = state.spell_slots_used;
       const hadUsedSlots = Object.values(slotsUsed).some((v) => v > 0);
       state.spell_slots_used = {};
@@ -1178,7 +1167,7 @@ export class SpellService {
         summary.push("Todos os spell slots recuperados.");
       }
 
-      // 3. Recover half of total hit dice (rounded down, min 1)
+
       const hitDiceUsed = {
         ...state.hit_dice_used,
       };
@@ -1187,7 +1176,7 @@ export class SpellService {
       const toRecover = Math.max(1, Math.floor(totalHitDice / 2));
       let recovered = 0;
 
-      // Distribute recovery across classes proportionally
+
       for (const cc of charClasses) {
         if (recovered >= toRecover) break;
         const used = hitDiceUsed[cc.class.slug] ?? 0;
@@ -1203,7 +1192,7 @@ export class SpellService {
         summary.push(`${recovered} dado(s) de vida recuperado(s).`);
       }
 
-      // 4. Reset death saves
+
       if (state.death_saves_success > 0 || state.death_saves_fail > 0) {
         state.death_saves_success = 0;
         state.death_saves_fail = 0;
@@ -1211,13 +1200,13 @@ export class SpellService {
         summary.push("Death saves resetados.");
       }
 
-      // 5. Restore ki points
+
       if (state.ki_points_used > 0) {
         state.ki_points_used = 0;
         summary.push("Pontos de Ki restaurados.");
       }
 
-      // Spec 011 Phase 1 — long rest recovers every class-feature use.
+
       const resetAll = this.resetFeatureUses(state, "long");
       if (resetAll.length > 0) {
         summary.push(`Features recuperadas: ${resetAll.join(", ")}.`);
@@ -1227,7 +1216,7 @@ export class SpellService {
 
       const maxSpellLevel = this.getMaxSpellLevel(charClasses);
 
-      // 5. Handle prepared spell changes on long rest
+
       if (dto.preparedSpells) {
         await this.updatePreparedSpells(userId, characterId, {
           spells: dto.preparedSpells,
@@ -1235,7 +1224,7 @@ export class SpellService {
         summary.push("Magias preparadas atualizadas.");
       }
 
-      // 6. Handle single spell swap on long rest (Paladin/Ranger)
+
       if (dto.spellSwap) {
         const { removeSlug, addSlug } = dto.spellSwap;
         const charSpells = await this.charSpellRepo.find({
@@ -1271,7 +1260,7 @@ export class SpellService {
           );
         }
 
-        // Validate the new spell belongs to the caster's class list
+
         const casterClass = charClasses.find((cc) =>
           getCasterClassType(cc.class.slug),
         );
@@ -1292,7 +1281,7 @@ export class SpellService {
           character_id: characterId,
           spell_id: newSpell.id,
           source: SpellSourceEnum.Class,
-          status: toRemove.status, // keep same status (Known or Prepared)
+          status: toRemove.status,
           always_prepared: false,
         });
 
@@ -1313,7 +1302,7 @@ export class SpellService {
           );
         }
       } catch {
-        /* best-effort */
+
       }
 
       await this.advanceClockAfterRest(characterId, 8, "long_rest");

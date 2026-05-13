@@ -59,7 +59,7 @@ describe("CharacterStateService", () => {
     );
   };
 
-  // ---- HP Tests ----
+
 
   describe("updateHp()", () => {
     it("should apply simple damage", async () => {
@@ -98,9 +98,9 @@ describe("CharacterStateService", () => {
       setupOwnership();
       const state = makeCharacterState({ current_hp: 5 });
       stateRepo.findOne!.mockResolvedValue(state);
-      setupMaxHp(10, 10); // maxHp = 10
+      setupMaxHp(10, 10);
 
-      // damage 8 drops HP to 0, but remaining(8) < maxHp(10): no instant death
+
       const result = await service.updateHp("user-1", "char-1", { damage: 8 });
       expect(result.currentHp).toBe(0);
       expect(result.isDown).toBe(true);
@@ -110,8 +110,8 @@ describe("CharacterStateService", () => {
       setupOwnership();
       const state = makeCharacterState({ current_hp: 20 });
       stateRepo.findOne!.mockResolvedValue(state);
-      setupMaxHp(10, 10); // maxHp = 10 + 0 = 10
-      // stateRepo for computeMaxHp
+      setupMaxHp(10, 10);
+
       stateRepo.findOne!.mockResolvedValue(state);
 
       const result = await service.updateHp("user-1", "char-1", { damage: 40 });
@@ -142,8 +142,8 @@ describe("CharacterStateService", () => {
       setupMaxHp(10, 10);
       stateRepo.findOne!.mockResolvedValue(state);
 
-      // Sem nonlethal, 30 dmg em 5 HP com maxHp 10 = instant death.
-      // Com nonlethal, knocks out a 1 HP.
+
+
       const result = await service.updateHp("user-1", "char-1", {
         damage: 30,
         nonlethal: true,
@@ -157,7 +157,7 @@ describe("CharacterStateService", () => {
       setupOwnership();
       const state = makeCharacterState({ current_hp: 5 });
       stateRepo.findOne!.mockResolvedValue(state);
-      setupMaxHp(10, 10); // maxHp = 10
+      setupMaxHp(10, 10);
 
       const result = await service.updateHp("user-1", "char-1", { healing: 3 });
       expect(result.currentHp).toBe(8);
@@ -167,15 +167,15 @@ describe("CharacterStateService", () => {
       setupOwnership();
       const state = makeCharacterState({ current_hp: 18 });
       stateRepo.findOne!.mockResolvedValue(state);
-      setupMaxHp(10, 14); // maxHp = 10 + 2 = 12... wait, con 14 => mod +2 => maxHp = 10 + 2 = 12
-      // Actually we need the state returned by computeMaxHp's stateRepo.findOne
+      setupMaxHp(10, 14);
+
       stateRepo.findOne!.mockImplementation(async () => state);
 
       const result = await service.updateHp("user-1", "char-1", {
         healing: 10,
       });
-      // maxHp is hit_die(10) + conMod(2) = 12, but current_hp starts at 18 which is > maxHp
-      // healing caps at maxHp: since 18 > 12, healing 10 -> min(12, 28) = 12
+
+
       expect(result.currentHp).toBeLessThanOrEqual(result.maxHp);
     });
 
@@ -220,7 +220,7 @@ describe("CharacterStateService", () => {
     });
   });
 
-  // ---- XP Tests ----
+
 
   describe("updateXp()", () => {
     it("should add XP to existing total", async () => {
@@ -268,7 +268,7 @@ describe("CharacterStateService", () => {
     });
   });
 
-  // ---- Death Saves Tests ----
+
 
   describe("updateDeathSaves()", () => {
     it("should increment success", async () => {
@@ -346,7 +346,7 @@ describe("CharacterStateService", () => {
     });
   });
 
-  // ---- getXpInfo (static) ----
+
 
   describe("getXpInfo()", () => {
     it("level 1, XP 0 -> nextLevelXp=300, levelUpAvailable=false", () => {

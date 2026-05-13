@@ -1,10 +1,4 @@
-/**
- * DiceService — Spec 016 P2 (M2) tests.
- *
- * buildDiceRollRequest computa targetD20 = max(2, dc - totalModifier),
- * resolveDiceRoll classifica verdict (success/failure/crit_success/crit_failure)
- * por kind.
- */
+
 import { DiceService } from "../services/dice.service";
 
 describe("DiceService — buildDiceRollRequest (Spec 016)", () => {

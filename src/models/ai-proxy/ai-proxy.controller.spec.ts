@@ -33,12 +33,7 @@ function makePipeStream(
   return jest.fn(impl) as PipeStreamMock;
 }
 
-/**
- * Spec 027 (M1, AC1.12) — guard in-flight no controller pra rejeitar duplo
- * POST do mesmo turn (jogador clicando 2× muito rápido). Aqui testamos só
- * o comportamento do guard — `pipeStream` é mockado pra não bater no
- * agents real.
- */
+
 describe("AiProxyController — idempotency guard (spec 027)", () => {
   const SESSION_ID = "00000000-0000-4000-8000-000000000010";
   const USER_ID = "00000000-0000-4000-8000-000000000020";
@@ -112,9 +107,9 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       findByClientId: jest.fn().mockResolvedValue(null),
       ...(opts.sessionMessageService ?? {}),
     };
-    // Spec 027 (M2 follow-up) — repo de game_events pra inject de
-    // encounter_outcome_summary / fate_ladder_resolved em sceneContext.
-    // Default: nenhum evento (controller passa adiante sem mescla).
+
+
+
     const gameEventRepo: any = opts.gameEventRepo ?? {
       findOne: jest.fn().mockResolvedValue(null),
     };
@@ -151,7 +146,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
   });
 
   it("narrativeTurn: segundo POST idêntico em paralelo recebe 409 IDEMPOTENCY_CACHE_MISS_AFTER_RACE", async () => {
-    // pipeStream "trava" até liberarmos manualmente via resolver.
+
     let resolveFirst: () => void;
     const firstDone = new Promise<void>((resolve) => {
       resolveFirst = resolve;
@@ -171,16 +166,16 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     const r1 = makeRes();
     const r2 = makeRes();
 
-    // Dispara o primeiro turn — fica preso no pipeStream.
+
     const first = controller.narrativeTurn(SESSION_ID, body, req, r1.res);
 
-    // Aguarda o microtask drenar pra que o primeiro tenha entrado no try{}
-    // e adquirido a chave antes do segundo bater.
+
+
     await Promise.resolve();
     await Promise.resolve();
 
-    // Dispara o segundo turn IDÊNTICO — deve falhar com 409 e retornar
-    // imediatamente, sem chamar pipeStream.
+
+
     await controller.narrativeTurn(SESSION_ID, body, req, r2.res);
 
     expect(r2.getStatusCode()).toBe(409);
@@ -188,15 +183,15 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     const out = r2.writes.join("");
     expect(out).toContain(ErrorCode.IDEMPOTENCY_CACHE_MISS_AFTER_RACE);
 
-    // Libera o primeiro pra finalizar.
+
     resolveFirst!();
     await first;
 
-    // O primeiro chamou pipeStream uma vez; o segundo NUNCA chamou.
+
     expect(pipeStream).toHaveBeenCalledTimes(1);
 
-    // Após o finally do primeiro, a chave foi liberada — terceiro POST
-    // idêntico (sequencial agora) deve voltar a passar.
+
+
     const r3 = makeRes();
     let resolveThird: () => void;
     const thirdDone = new Promise<void>((resolve) => {
@@ -233,7 +228,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       r2.res,
     );
 
-    // Nenhum dos dois recebe 409.
+
     expect(r1.getStatusCode()).not.toBe(409);
     expect(r2.getStatusCode()).not.toBe(409);
     expect(pipeStream).toHaveBeenCalledTimes(2);
@@ -326,10 +321,10 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     const body = { playerInput: "ação 1", lastMessageId: 5 };
 
     const r1 = makeRes();
-    // O controller já trata erro internamente (catch), portanto não rejeita.
+
     await controller.narrativeTurn(SESSION_ID, body, req, r1.res);
 
-    // Mesma chave novamente — chave foi liberada no finally do primeiro.
+
     const r2 = makeRes();
     await controller.narrativeTurn(SESSION_ID, body, req, r2.res);
 
@@ -337,7 +332,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     expect(pipeStream).toHaveBeenCalledTimes(2);
   });
 
-  // ─── Spec 027 (M2 follow-up) — systemHint event injection ───
+
 
   describe("narrativeTurn: systemHint event injection", () => {
     it("post_combat: injeta encounter_outcome_summary em sceneContext.recent_events", async () => {
@@ -462,10 +457,10 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         makeRes().res,
       );
 
-      // findOne é chamado 2x quando systemHint='post_combat':
-      //   1) findLatestEncounterId(eventType='encounter_resolved')
-      //   2) injectSystemHintEvent(eventType='encounter_outcome_summary')
-      // Ambas retornam null aqui — nenhuma resolve em mescla.
+
+
+
+
       expect(findOne).toHaveBeenCalledTimes(2);
       const proxied = pipeStream.mock.calls[0][1];
       const recent = proxied.sceneContext?.recent_events ?? [];
@@ -534,7 +529,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         makeRes().res,
       );
 
-      // pipeStream ainda foi chamado — best-effort não derruba turn.
+
       expect(pipeStream).toHaveBeenCalledTimes(1);
       const recent =
         pipeStream.mock.calls[0][1].sceneContext?.recent_events ?? [];
@@ -544,9 +539,9 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     });
   });
 
-  // Idempotência F5 do post_combat — quando a narração pós-combate já foi
-  // persistida (clientId determinístico por encounterId), o segundo POST
-  // retorna do histórico sem chamar o agent.
+
+
+
   describe("narrativeTurn: post_combat F5 idempotency", () => {
     it("post_combat: narração já persistida → não chama agent, emite session_sync + done", async () => {
       const pipeStream = makePipeStream();
@@ -585,13 +580,13 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         r.res,
       );
 
-      // Não chama o agent (idempotência ativou).
+
       expect(pipeStream).not.toHaveBeenCalled();
       expect(findByClientId).toHaveBeenCalledWith(
         SESSION_ID,
         "srv-narr-post-combat-enc-abc",
       );
-      // Emite narration_persisted (com clientId existente) + session_sync + done.
+
       const writeStr = r.writes.join("");
       expect(writeStr).toContain("narration_persisted");
       expect(writeStr).toContain("session_sync");
@@ -630,9 +625,9 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         makeRes().res,
       );
 
-      // Agent foi chamado normalmente.
+
       expect(pipeStream).toHaveBeenCalledTimes(1);
-      // Lookup de existente foi feito mesmo assim (defesa contra race).
+
       expect(findByClientId).toHaveBeenCalledWith(
         SESSION_ID,
         "srv-narr-post-combat-enc-abc",
@@ -662,7 +657,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       );
 
       expect(pipeStream).toHaveBeenCalledTimes(1);
-      // Sem encounterId, lookup do clientId determinístico não roda.
+
       expect(findByClientId).not.toHaveBeenCalled();
     });
   });

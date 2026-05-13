@@ -195,7 +195,7 @@ describe("LevelUpService", () => {
     });
 
     it("should reject if XP is insufficient", async () => {
-      setupForExecute({ totalLevel: 1, xp: 100 }); // need 300 for level 2
+      setupForExecute({ totalLevel: 1, xp: 100 });
 
       await expect(
         service.execute("user-1", "char-1", {
@@ -206,7 +206,7 @@ describe("LevelUpService", () => {
     });
 
     it("should calculate fixed HP as hitDie/2 + 1 + conMod", async () => {
-      // Fighter hit_die=10: fixed = 10/2+1 = 6, con 14 -> mod 2, total = 8
+
       setupForExecute({ totalLevel: 1, xp: 300, con: 14 });
 
       const result = await service.execute("user-1", "char-1", {
@@ -214,7 +214,7 @@ describe("LevelUpService", () => {
         hpMethod: "fixed",
       });
 
-      expect(result.hpGained).toBe(8); // 6 + 2
+      expect(result.hpGained).toBe(8);
       expect(result.totalLevel).toBe(2);
       expect(result.classLevel).toBe(2);
     });
@@ -228,16 +228,16 @@ describe("LevelUpService", () => {
         hpRoll: 7,
       });
 
-      expect(result.hpGained).toBe(7); // 7 + 0 conMod
+      expect(result.hpGained).toBe(7);
     });
 
     it("should enforce minimum 1 HP gained", async () => {
-      // Wizard hit_die=6, con 6 -> mod -2, fixed = 4-2 = 2 (still > 1)
-      // But with roll of 1: 1 + (-2) = -1 -> min 1
+
+
       setupForExecute({ classSlug: "wizard", totalLevel: 1, xp: 300, con: 6 });
       repos.class.findOneBy!.mockResolvedValue(makeClass("wizard"));
 
-      // Spec 005 deep validation needs spell + spellClass mocks
+
       const alarm = { id: "sp-al", slug: "alarm", level: 1 };
       const mm = { id: "sp-mm", slug: "magic-missile", level: 1 };
       repos.spell.findOneBy!.mockImplementation(
@@ -257,7 +257,7 @@ describe("LevelUpService", () => {
         classSlug: "wizard",
         hpMethod: "roll",
         hpRoll: 1,
-        // Spec 005: Wizard advance needs exactly 2 spells in the selection
+
         newSpells: ["alarm", "magic-missile"],
       });
 
@@ -271,7 +271,7 @@ describe("LevelUpService", () => {
         service.execute("user-1", "char-1", {
           classSlug: "fighter",
           hpMethod: "roll",
-          hpRoll: 11, // fighter hit_die = 10
+          hpRoll: 11,
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -288,9 +288,9 @@ describe("LevelUpService", () => {
     });
 
     it("should handle CON ASI with retroactive HP adjustment", async () => {
-      // Level up from 1 -> 2, then apply +2 CON
-      // CON 14 -> mod 2, after ASI CON 16 -> mod 3, diff = 1
-      // Retroactive: diff * totalLevel = 1 * 2 = 2 extra HP
+
+
+
       setupForExecute({ totalLevel: 1, xp: 300, con: 14 });
 
       const result = await service.execute("user-1", "char-1", {
@@ -299,9 +299,9 @@ describe("LevelUpService", () => {
         abilityScoreIncreases: [{ abilitySlug: "con", increase: 2 }],
       });
 
-      expect(result.hpGained).toBe(8); // 6 + 2 conMod
-      // The retroactive adjustment happens via state.current_hp += retroHp
-      // We can verify the manager.save was called with adjusted HP
+      expect(result.hpGained).toBe(8);
+
+
       const stateSaves = mockManager.save.mock.calls.filter((call: any[]) => {
         const entity = call[0];
         return (
@@ -329,24 +329,24 @@ describe("LevelUpService", () => {
         { spell: alarm, class_id: "c-wiz", spell_id: alarm.id },
       ]);
       repos.charSpell.find!.mockResolvedValue([]);
-      mockManager.findOne.mockResolvedValue(null); // No existing spell
+      mockManager.findOne.mockResolvedValue(null);
       mockManager.findOneBy.mockResolvedValue(null);
 
       await service.execute("user-1", "char-1", {
         classSlug: "wizard",
         hpMethod: "fixed",
-        // Spec 005: Wizard advance requires exactly 2 spells
+
         newSpells: ["magic-missile", "alarm"],
       });
 
-      // Verify spell was saved with Spellbook status (wizard = spellbook caster)
+
       const spellSaves = mockManager.save.mock.calls.filter((call: any[]) => {
         const data = call[1];
         return data?.spell_id === "spell-mm";
       });
-      // With Spec 005 validation, Wizard adds exactly 2 spells per level-up.
-      // The mock returns the same SpellEntity for both slugs, so the assertion
-      // checks status (not count) — Spellbook status for Wizard caster.
+
+
+
       expect(spellSaves.length).toBeGreaterThanOrEqual(1);
       expect(spellSaves[0][1].status).toBe(SpellStatusEnum.Spellbook);
     });
@@ -386,10 +386,10 @@ describe("LevelUpService", () => {
     });
   });
 
-  // ---- Spec 005: PHB slug normalization ----
-  // Bug: PC criado com classSlug 'fighter-phb' (source PHB) recebendo POST
-  // /level-up { classSlug: 'fighter' } virava multiclass em vez de avançar.
-  // Causa: comparação exata `cc.class.slug === dto.classSlug` (line 369).
+
+
+
+
   describe("Spec 005: PHB slug normalization", () => {
     const setupForPhbExecute = (opts: {
       classSlug: string;
@@ -411,8 +411,8 @@ describe("LevelUpService", () => {
       repos.state.findOne!.mockResolvedValue(state);
       repos.charClass.find!.mockResolvedValue([cc]);
       repos.charAbility.find!.mockResolvedValue(abilities);
-      // classRepo should resolve the char's own class when input is 'fighter'
-      // but cc uses 'fighter-phb'. The service must resolve to cc.class.
+
+
       repos.class.findOneBy!.mockImplementation(
         async (where: { slug: string }) => {
           if (where.slug === opts.ccSlug) return classEntity;
@@ -435,7 +435,7 @@ describe("LevelUpService", () => {
 
       expect(result.totalLevel).toBe(2);
       expect(result.classLevel).toBe(2);
-      // critical: classLevel reflects advance, not a new multiclass level 1
+
     });
 
     it('PC fighter-phb + classSlug "fighter-phb" → advances L2 (idempotent)', async () => {
@@ -477,7 +477,7 @@ describe("LevelUpService", () => {
     it("GET /level-up-options: PC fighter-phb sees ONE Fighter entry with canonical slug + sourceQualifiedSlug=fighter-phb + isCurrentClass=true", async () => {
       const phbCc = makeCharacterClass("fighter-phb", 1);
       const phbFighter = phbCc.class;
-      const xphbFighter = makeClass("fighter"); // same canonical, different source-qualified
+      const xphbFighter = makeClass("fighter");
       const state = makeCharacterState({ xp: 300 });
 
       repos.character.findOne!.mockResolvedValue(makeCharacter());
@@ -485,7 +485,7 @@ describe("LevelUpService", () => {
       repos.charClass.find!.mockResolvedValue([phbCc]);
       repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
       repos.charSpell.find!.mockResolvedValue([]);
-      // DB has BOTH fighter-phb and fighter (different source rows)
+
       repos.class.find!.mockResolvedValue([phbFighter, xphbFighter]);
       repos.level.findOne!.mockResolvedValue(null);
       repos.subclass.find!.mockResolvedValue([]);
@@ -498,7 +498,7 @@ describe("LevelUpService", () => {
       );
       expect(fighterEntries).toHaveLength(1);
       const entry = fighterEntries[0];
-      expect(entry.slug).toBe("fighter"); // canonical, no suffix
+      expect(entry.slug).toBe("fighter");
       expect(entry.sourceQualifiedSlug).toBe("fighter-phb");
       expect(entry.isCurrentClass).toBe(true);
       expect(entry.isMulticlass).toBe(false);
@@ -556,7 +556,7 @@ describe("LevelUpService", () => {
       const phbCc = makeCharacterClass("fighter-phb", 1);
       const phbFighter = phbCc.class;
       const xphbFighter = makeClass("fighter");
-      // PC loaded with source = PHB carrying featureFallbackSource='XPHB'
+
       const character = makeCharacter({
         source: {
           code: "PHB",
@@ -590,7 +590,7 @@ describe("LevelUpService", () => {
       repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
       repos.charSpell.find!.mockResolvedValue([]);
       repos.class.find!.mockResolvedValue([phbFighter, xphbFighter]);
-      // PHB LevelEntity missing; XPHB resolution returns data
+
       repos.class.findOne!.mockImplementation(
         async ({ where }: { where: { slug: string } }) => {
           if (where.slug === "fighter") {
@@ -602,7 +602,7 @@ describe("LevelUpService", () => {
       repos.level.findOne!.mockImplementation(
         async ({ where }: { where: { class_id: string } }) => {
           if (where.class_id === xphbFighter.id) return xphbLevel2Data;
-          return null; // PHB misses
+          return null;
         },
       );
       repos.subclass.find!.mockResolvedValue([]);
@@ -630,7 +630,7 @@ describe("LevelUpService", () => {
       repos.character.findOne!.mockResolvedValue(makeCharacter());
       repos.state.findOne!.mockResolvedValue(state);
       repos.charClass.find!.mockResolvedValue([fighterCc]);
-      // Fighter STR 13 (multiclass prereq), CHA 8 (below bard requirement)
+
       repos.charAbility.find!.mockResolvedValue(
         makeCharacterAbilityScores({ str: 13, cha: 8 }),
       );
@@ -663,7 +663,7 @@ describe("LevelUpService", () => {
       repos.character.findOne!.mockResolvedValue(makeCharacter());
       repos.state.findOne!.mockResolvedValue(state);
       repos.charClass.find!.mockResolvedValue([fighterCc]);
-      // CHA 8 (below bard prereq), STR 13 (multiclass fighter prereq)
+
       repos.charAbility.find!.mockResolvedValue(
         makeCharacterAbilityScores({ str: 13, cha: 8 }),
       );
@@ -844,7 +844,7 @@ describe("LevelUpService", () => {
           return null;
         },
       );
-      // Wizard has alarm + fireball in class spell list
+
       repos.spellClass.find!.mockResolvedValue([
         { class_id: wizCc.class.id, spell_id: alarm.id, spell: alarm },
         { class_id: wizCc.class.id, spell_id: fireball.id, spell: fireball },
@@ -891,7 +891,7 @@ describe("LevelUpService", () => {
           return null;
         },
       );
-      // Wizard class list contains only alarm — cure-wounds is cleric
+
       repos.spellClass.find!.mockResolvedValue([
         { class_id: wizCc.class.id, spell_id: alarm.id, spell: alarm },
       ]);
@@ -922,7 +922,7 @@ describe("LevelUpService", () => {
       const state = makeCharacterState({ xp: 300, current_hp: 8 });
       const alarm = { id: "spell-alarm", slug: "alarm", level: 1 };
       const magicMissile = { id: "spell-mm", slug: "magic-missile", level: 1 };
-      // Existing CharacterSpell: alarm already in spellbook
+
       const existingAlarm = {
         id: "cs-1",
         character_id: "char-1",
@@ -972,9 +972,9 @@ describe("LevelUpService", () => {
     });
 
     it("GET /level-up-options: Paladin PHB formula = halfLevel+mod; XPHB = level+mod", async () => {
-      // Paladin L5 → preview L6. CHA 14 (mod +2). newClassLevel = 6.
-      // PHB: halfLevel+mod = floor(6/2)+2 = 5
-      // XPHB: level+mod = 6+2 = 8
+
+
+
       const paladinCc = makeCharacterClass("paladin", 5, {
         class: {
           ...makeClass("paladin"),
@@ -1009,9 +1009,9 @@ describe("LevelUpService", () => {
       const paladinPhb = resultPhb.availableClasses.find(
         (c) => c.slug === "paladin",
       );
-      expect(paladinPhb?.spellSelection?.maxPrepared).toBe(5); // PHB: floor(6/2)+2
+      expect(paladinPhb?.spellSelection?.maxPrepared).toBe(5);
 
-      // Swap to XPHB rules → same PC arithmetic should return 7
+
       const xphbCharacter = makeCharacter({
         source: {
           code: "XPHB",
@@ -1024,11 +1024,11 @@ describe("LevelUpService", () => {
       const paladinXphb = resultXphb.availableClasses.find(
         (c) => c.slug === "paladin",
       );
-      expect(paladinXphb?.spellSelection?.maxPrepared).toBe(8); // XPHB: 6+2
+      expect(paladinXphb?.spellSelection?.maxPrepared).toBe(8);
     });
 
     it("POST /level-up: Fighter STR 12 CHA 8 attempting Paladin → 403 with BOTH missing prereqs", async () => {
-      // Paladin multiclass prereq (RAW): STR 13 AND CHA 13
+
       const fighterCc = makeCharacterClass("fighter", 1);
       const paladinEntity = makeClass("paladin", {
         multi_classing: {
@@ -1069,7 +1069,7 @@ describe("LevelUpService", () => {
         missingPrerequisites: MissingPrereqPayload[];
       };
       expect(body.code).toBe("MULTICLASS_PREREQ_NOT_MET");
-      // Both STR and CHA are missing — both surfaced
+
       expect(body.missingPrerequisites).toEqual(
         expect.arrayContaining([
           { ability: "str", required: 13, current: 12 },
@@ -1080,7 +1080,7 @@ describe("LevelUpService", () => {
     });
 
     it("Non-Wizard classes are not gated by the 2-spells rule", async () => {
-      // Bard L1 → L2 without newSpells; should NOT throw WIZARD_SPELLS_REQUIRED
+
       setupForExecute({ classSlug: "bard", totalLevel: 1, xp: 300 });
       repos.class.findOneBy!.mockResolvedValue(makeClass("bard"));
 
@@ -1092,7 +1092,7 @@ describe("LevelUpService", () => {
     });
 
     it("Wizard first level (multiclass entry at L1) does NOT require 2 spells", async () => {
-      // Fighter L1 multiclassing into Wizard → new class at level 1
+
       const fighterCc = makeCharacterClass("fighter", 1);
       const wizardEntity = makeClass("wizard");
       const state = makeCharacterState({ xp: 300, current_hp: 10 });
@@ -1116,13 +1116,13 @@ describe("LevelUpService", () => {
         classSlug: "wizard",
         hpMethod: "fixed",
       });
-      expect(result.classLevel).toBe(1); // new wizard class at level 1
+      expect(result.classLevel).toBe(1);
     });
 
     it('PC fighter-phb + classSlug "wizard" → multiclass (different canonical root)', async () => {
       const fighterPhbCc = makeCharacterClass("fighter-phb", 1);
       const wizardEntity = makeClass("wizard");
-      const abilities = makeCharacterAbilityScores({ int: 13 }); // passes wizard INT 13
+      const abilities = makeCharacterAbilityScores({ int: 13 });
       const state = makeCharacterState({
         xp: XP_THRESHOLDS[1],
         current_hp: 10,
@@ -1147,7 +1147,7 @@ describe("LevelUpService", () => {
       });
 
       expect(result.totalLevel).toBe(2);
-      expect(result.classLevel).toBe(1); // new class, level 1
+      expect(result.classLevel).toBe(1);
       expect(result.className).toBe("Wizard");
     });
   });

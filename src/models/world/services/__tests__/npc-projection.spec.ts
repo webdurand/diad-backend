@@ -62,7 +62,7 @@ describe("projectNpc — Spec 020 redaction filter (AI3 leak fix)", () => {
     const out = projectNpc(npc, { knownKeys: known });
 
     expect(out.motivation).toBe("passar info pros Dragões");
-    // outros campos ainda redacted
+
     expect(out.descriptionHidden).toBeUndefined();
     expect(out.knowledgeScope).toBeUndefined();
   });

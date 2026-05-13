@@ -5,13 +5,7 @@ import { DOMAIN_HEADER, parseDomainHeader } from "./domain-context";
 
 export const DOMAIN_CLS_KEY = "domain";
 
-/**
- * Lê header `X-Diad-Domain`, parseia (whitelist + truncate) e popula o CLS
- * sob a key "domain". DiadLogger e OutboundFetch leem essa key para injetar
- * `session.id`, `pc.id`, etc. em todo log e propagar pra agents.
- *
- * Sempre graceful — não rejeita request por header inválido (parser é defensivo).
- */
+
 @Injectable()
 export class DomainContextMiddleware implements NestMiddleware {
   constructor(private readonly cls: ClsService) {}
@@ -24,7 +18,7 @@ export class DomainContextMiddleware implements NestMiddleware {
         this.cls.set(DOMAIN_CLS_KEY, ctx);
       }
     } catch {
-      // Observability nunca quebra request.
+
     }
     next();
   }

@@ -2,15 +2,7 @@ import { SceneService } from "../scene.service";
 import { SceneEntity } from "src/entities/scene.entity";
 import { CampaignEntity } from "src/entities/campaign.entity";
 
-/**
- * Spec: SceneService.create() emite NarrativeEvent.scene_changed para
- * EventBus quando há transição de cena. Cobre:
- *   - emit no fluxo "transição" (previousActive existe)
- *   - emit no fluxo "abertura" (sem previousActive)
- *   - skip silencioso quando session sem campaignId (best-effort)
- *   - falha em publish não rollbacka save da cena
- *   - cache invalidation da cena anterior
- */
+
 describe("SceneService.create — scene_changed emission", () => {
   const SESSION_ID = "session-uuid";
   const CAMPAIGN_ID = "campaign-uuid";

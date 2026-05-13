@@ -145,7 +145,7 @@ describe("EventBusService", () => {
   it("publish() persiste em session_events em background dentro de tx com advisory lock", async () => {
     const env = makeEnvelope();
     await service.publish(env);
-    // background — flush microtasks
+
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -181,7 +181,7 @@ describe("EventBusService", () => {
       handle: goodHandle,
     });
 
-    // publish() retorna envelope enriched (não undefined) — listener crash não rollback.
+
     await expect(service.publish(makeEnvelope())).resolves.toMatchObject({
       eventCategory: "EncounterEvent",
     });

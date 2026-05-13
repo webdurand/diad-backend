@@ -46,7 +46,7 @@ export class LocationEntity {
   slug: string;
 
   @Column({ type: "varchar" })
-  type: string; // continent, region, city, district, building, room, wilderness, dungeon, dungeon_room
+  type: string;
 
   @Column({ type: "text", nullable: true })
   description?: string;

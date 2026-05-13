@@ -1,23 +1,12 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Big-bang refactor: separa Mundo (Campaign) de Aventura (GameSession).
- *
- * Estado mutável de jogo (clocks, quests, vows, narrative_decisions, NPCs auto)
- * passa a ser session-scoped. Identidade do mundo (locations, factions identity,
- * NPCs canônicos, story arcs templates) permanece campaign-scoped.
- *
- * Tabelas mistas (NPC, Faction, StoryArc) são divididas: ficha canônica fica
- * na tabela original; estado mutável vai pra tabela ponte session_<x>_state.
- *
- * Sem migração de dados — limpa tudo afetado e recria.
- */
+
 export class BigBangAdventureScope1789000000000 implements MigrationInterface {
   name = "BigBangAdventureScope1789000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // 1) Limpa tudo que depende dos schemas antigos.
-    //    Clocks (tensão) ficam de fora — não migram nesta refactor.
+
+
     await queryRunner.query(`
       TRUNCATE TABLE
         narrative_decisions,
@@ -33,7 +22,7 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
       RESTART IDENTITY CASCADE
     `);
 
-    // 3) quests: campaign_id -> game_session_id (+ unique slug per session)
+
     await queryRunner.query(`
       DROP INDEX IF EXISTS idx_quests_main_per_campaign
     `);
@@ -64,7 +53,7 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
         ON quests (game_session_id) WHERE is_main_quest = true
     `);
 
-    // 4) vows: campaign_id -> game_session_id
+
     await queryRunner.query(`
       ALTER TABLE vows DROP CONSTRAINT IF EXISTS "FK_vows_campaign_id"
     `);
@@ -82,7 +71,7 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
       CREATE INDEX "IDX_vows_game_session_id" ON vows(game_session_id)
     `);
 
-    // 5) narrative_decisions: drop campaign_id, session_id passa a NOT NULL.
+
     await queryRunner.query(`
       DROP INDEX IF EXISTS "IDX_narrative_decisions_campaign_id_created_at"
     `);
@@ -100,8 +89,8 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
         ON narrative_decisions(session_id, created_at)
     `);
 
-    // 6) npcs: + game_session_id (nullable: NULL = canônico, set = auto-materializado).
-    //    Drop colunas mutáveis (vão pra session_npc_state).
+
+
     await queryRunner.query(`
       ALTER TABLE npcs DROP COLUMN IF EXISTS status
     `);
@@ -122,12 +111,12 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
       CREATE INDEX "IDX_npcs_game_session_id" ON npcs(game_session_id)
     `);
 
-    // 7) factions: drop is_known_to_party (vai pra session_faction_state).
+
     await queryRunner.query(`
       ALTER TABLE factions DROP COLUMN IF EXISTS is_known_to_party
     `);
 
-    // 8) story_arcs: drop current_phase + phase_notes (vão pra session_story_arc_state).
+
     await queryRunner.query(`
       ALTER TABLE story_arcs DROP COLUMN IF EXISTS current_phase
     `);
@@ -135,7 +124,7 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
       ALTER TABLE story_arcs DROP COLUMN IF EXISTS phase_notes
     `);
 
-    // 9) Tabelas ponte (estado por aventura).
+
     await queryRunner.query(`
       CREATE TABLE session_npc_state (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -197,7 +186,7 @@ export class BigBangAdventureScope1789000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    // Down não restaura dados (mantemos coerente com "big bang sem migração de dados").
+
     await queryRunner.query(`DROP TABLE IF EXISTS session_story_arc_state`);
     await queryRunner.query(`DROP TABLE IF EXISTS session_faction_state`);
     await queryRunner.query(`DROP TABLE IF EXISTS session_npc_state`);

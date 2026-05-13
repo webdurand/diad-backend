@@ -3,24 +3,7 @@ import type {
   MonsterMultiattackSubAttack,
 } from "../../models/game-engine/interfaces/monster-typed";
 
-/**
- * Parses a monster's Multiattack description into a structured `MonsterMultiattack`.
- *
- * Supported SRD patterns:
- *   - "makes N attacks: K with Y and M with Z"
- *   - "makes N attacks: one with X and one with Y"  (word-numbers)
- *   - "makes N attacks: one X, one Y, and one Z"
- *   - "makes N X attacks"
- *   - "makes N attacks with its X"
- *   - "makes a X attack and a Y attack"
- *
- * Sub-action names are resolved against the monster's `actions` list so the
- * resolver can match them back to the statblock entry when applying the attack.
- * Unknown sub-actions are kept as-is (the resolver will log a warning).
- *
- * Returns `null` when no pattern matches — caller should leave `multiattack`
- * NULL and rely on the runtime fallback (single attack).
- */
+
 
 const WORD_NUMBERS: Record<string, number> = {
   one: 1,
@@ -88,20 +71,20 @@ export function parseMultiattackFromDescription(
 
   const sequence: MonsterMultiattackSubAttack[] = [];
 
-  // Pattern: "makes N attacks: K <kind> and M <kind>"
-  //          "makes N attacks: one <kind> and one <kind>"
+
+
   const colonMatch = lower.match(
     /makes\s+(\w+)\s+attacks?\s*[:\-]\s*([^.]+?)(?:\.|$)/i,
   );
   if (colonMatch) {
     const body = colonMatch[2];
-    // Split on commas + 'and'
+
     const parts = body
       .split(/,| and |,\s*and\s+/i)
       .map((s) => s.trim())
       .filter(Boolean);
     for (const part of parts) {
-      // "one with its beak", "two beak attacks", "one bite"
+
       const qtyMatch = part.match(/^(\w+)\s+(.+)$/);
       if (!qtyMatch) continue;
       const qty = toNumber(qtyMatch[1]);
@@ -116,7 +99,7 @@ export function parseMultiattackFromDescription(
     }
   }
 
-  // Pattern: "makes two X attacks" or "makes two attacks with its X"
+
   const simpleMatch = lower.match(
     /makes\s+(\w+)\s+(?:(.+?)\s+attacks?|attacks?\s+with\s+(?:its\s+)?(.+?))(?:[.,]|$)/i,
   );
@@ -133,7 +116,7 @@ export function parseMultiattackFromDescription(
     }
   }
 
-  // Pattern: "makes a X attack and a Y attack"
+
   const pairMatch = lower.match(
     /makes\s+(?:a\s+)?(\w+[\w\s]*?)\s+attack\s+and\s+(?:a\s+)?(\w+[\w\s]*?)\s+attack/i,
   );

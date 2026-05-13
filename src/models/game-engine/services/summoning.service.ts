@@ -11,17 +11,7 @@ import { MonsterEntity } from "src/entities/monster.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { SummonSpawnDto } from "../interfaces/summoning.interfaces";
 
-/**
- * Spec 012 \u2014 SummoningService.
- *
- * Cria participants linked ao caster (summons/pets/duplicates/illusions).
- * Cleanup em cascata quando caster morre, perde concentra\u00e7\u00e3o ou a dura\u00e7\u00e3o
- * expira.
- *
- * Clientes futuros (9+ spells/features): Summon Beast/Fey/Elemental (L2-L5
- * spells 2024), Conjure Animals (L3), Find Familiar, Spiritual Weapon,
- * Flaming Sphere, Animate Dead, Ranger Beast Master Companion, Echo Knight.
- */
+
 @Injectable()
 export class SummoningService {
   private readonly logger = new Logger(SummoningService.name);
@@ -35,9 +25,7 @@ export class SummoningService {
     private readonly encounterRepo: Repository<EncounterEntity>,
   ) {}
 
-  /**
-   * Cria 1 summon linkado ao caster. Retorna o participant salvo.
-   */
+
   async spawnSummon(
     encounterId: string,
     dto: SummonSpawnDto,
@@ -125,9 +113,7 @@ export class SummoningService {
     return saved;
   }
 
-  /**
-   * Remove 1 summon espec\u00edfico.
-   */
+
   async dismissSummon(
     summonParticipantId: string,
     reason:
@@ -146,9 +132,7 @@ export class SummoningService {
     );
   }
 
-  /**
-   * Lista todos summons linkados ao caster.
-   */
+
   async getSummonsOf(
     casterParticipantId: string,
   ): Promise<EncounterParticipantEntity[]> {
@@ -157,9 +141,7 @@ export class SummoningService {
     });
   }
 
-  /**
-   * Cascade: caster morreu \u2192 todos summons dele somem.
-   */
+
   async dismissAllOfCaster(
     casterParticipantId: string,
     reason: "caster-death" | "concentration-broken",

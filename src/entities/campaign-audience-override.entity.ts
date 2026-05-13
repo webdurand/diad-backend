@@ -10,13 +10,7 @@ import {
 } from "typeorm";
 import { CampaignEntity } from "./campaign.entity";
 
-/**
- * Spec 017 — Override per-campaign sobre a matriz global de audience_routing.
- *
- * Campanha pode adicionar/remover audiences default por (eventCategory,
- * eventType). Remoção só é válida se a entry global tiver `overrideable=true`
- * — gate aplicado pelo AudienceMapService.
- */
+
 @Entity("campaign_audience_overrides")
 @Unique("campaign_audience_overrides_unique", [
   "campaignId",

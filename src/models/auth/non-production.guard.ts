@@ -5,16 +5,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 
-/**
- * Guard que bloqueia endpoints em ambiente de produção.
- *
- * Libera quando:
- *   - `NODE_ENV !== 'production'`, OU
- *   - `process.env.ALLOW_TEST_ENDPOINTS === 'true'` (override explícito para staging controlado).
- *
- * Usado em endpoints destinados a teste/harness (ex: dice seed, seed-character),
- * que não devem ficar acessíveis em produção mesmo para admins.
- */
+
 @Injectable()
 export class NonProductionGuard implements CanActivate {
   canActivate(_context: ExecutionContext): boolean {

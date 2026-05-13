@@ -7,26 +7,7 @@ export interface ReputationDecayResult {
   npcsDecayed: number;
 }
 
-/**
- * Spec 027 (M3/AC3.2) — ReputationDecayService.
- *
- * Reputação decai 1 step toward 0 por NPC a cada long rest do PC. Trigger
- * canônico D&D 5e RAW: long rest = "passou tempo, comunidade esfria". Em
- * vez de cron daily (que nunca dispara durante sessão de horas in-game),
- * usa o long rest como evento discreto natural — alinhado ao gameplay loop
- * do BG3 (rest entre dungeons cura body + reputação).
- *
- * Decay step:
- *  - tier: ±1 toward 0 (-3..3 → -2..2 → ... → 0).
- *  - score: ±10 toward 0 com clamp a 0 (impede atravessar zero).
- *
- * NÃO toca tags (são marcadores históricos, persistentes — "witnessed-murder"
- * não esquece com rest). Decay afeta só pontuação numérica.
- *
- * Idempotência fraca: long rest spam (rest 5x seguidas) decai 5x — feature,
- * não bug. Long rest é trigger raro no fluxo real (1-2 por sessão); spam
- * só ocorre em harness/teste e desejado pra validar decay rápido.
- */
+
 @Injectable()
 export class ReputationDecayService {
   constructor(
@@ -36,11 +17,7 @@ export class ReputationDecayService {
     this.logger.setContext(ReputationDecayService.name);
   }
 
-  /**
-   * Aplica 1 step de decay em todos os NPCs dos campaigns onde o character
-   * está em sessão ativa/pausada. Best-effort — falhas logam warn e
-   * retornam zeros.
-   */
+
   async applyOnLongRest(characterId: string): Promise<ReputationDecayResult> {
     try {
       const result = await this.dataSource.query(

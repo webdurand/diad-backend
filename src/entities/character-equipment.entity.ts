@@ -36,13 +36,7 @@ export class CharacterEquipmentEntity {
   @Column({ type: "boolean", default: false })
   equipped: boolean;
 
-  /**
-   * RAW 2024 — weapons-in-hand. Marca qual item está empunhado. ActionBar
-   * só expõe weapons com `main_hand=true` ou `off_hand=true` (+ Unarmed
-   * Strike, que é intrínseco). Validações de hand occupancy ficam no
-   * `EquipmentService.equipHand`: 2H weapon ocupa ambas; shield vai off;
-   * dual-wield exige ambas com property `light`.
-   */
+
   @Column({ name: "main_hand", type: "boolean", default: false })
   mainHand: boolean;
 

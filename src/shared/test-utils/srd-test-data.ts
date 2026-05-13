@@ -1,4 +1,4 @@
-// SRD 5.2.1 reference data for test assertions
+
 
 export const HIT_DIE_BY_CLASS: Record<string, number> = {
   barbarian: 12,
@@ -94,7 +94,7 @@ export const SRD_XP_THRESHOLDS: Array<{ level: number; xp: number }> = [
   { level: 20, xp: 355000 },
 ];
 
-// Monk Martial Arts die progression
+
 export const MONK_MARTIAL_ARTS_DIE: Array<{ level: number; die: string }> = [
   { level: 1, die: "1d6" },
   { level: 5, die: "1d8" },
@@ -102,5 +102,5 @@ export const MONK_MARTIAL_ARTS_DIE: Array<{ level: number; die: string }> = [
   { level: 17, die: "1d12" },
 ];
 
-// Cantrip damage scaling thresholds
+
 export const CANTRIP_SCALING_LEVELS = [1, 5, 11, 17];

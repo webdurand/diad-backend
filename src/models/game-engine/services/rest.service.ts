@@ -9,15 +9,15 @@ import {
 import { RestKind, RestEventTriggered } from "src/entities/rest-session.entity";
 import { GameResult, failure } from "../interfaces/result.type";
 
-/** Short/long rest RAW 2024. Stub — métodos retornam failure() até implementação. */
+
 export interface ShortRestRequest {
   characterId: string;
-  hdToSpend: Record<string, number>; // { 'd10': 2 }
+  hdToSpend: Record<string, number>;
 }
 
 export interface LongRestRequest {
   characterId: string;
-  watchAssignment: string; // characterId
+  watchAssignment: string;
   rationsConsumed?: number;
   acknowledgesHostileWarning?: boolean;
 }
@@ -71,7 +71,7 @@ export class RestService {
     );
   }
 
-  /** Priority order: bond > chekhov > dream > mythic > interruption > nothing. Max 1 per long rest. */
+
   protected async pickRestEvent(
     _campaignId: string,
     _kind: RestKind,

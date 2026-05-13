@@ -106,7 +106,7 @@ export class LocationService {
       order: { sortOrder: "ASC", name: "ASC" },
     });
 
-    // Build tree: root nodes have no parentId
+
     const map = new Map<
       string,
       LocationEntity & { children: LocationEntity[] }
@@ -142,11 +142,7 @@ export class LocationService {
     await this.locationRepo.delete(locationId);
   }
 
-  /**
-   * Spec 014 M2.A — idempotent visit marker.
-   * Primeiro call grava visitedAt=now(); subsequentes preservam o timestamp original.
-   * Retorna {firstVisit: boolean} pra caller decidir se emite evento narrativo.
-   */
+
   async markVisited(
     locationId: string,
   ): Promise<{ location: LocationEntity; firstVisit: boolean }> {
@@ -191,11 +187,7 @@ export class LocationService {
     });
   }
 
-  /**
-   * Spec 027 (M2, AC2.9 / bug D2) — resolve `name → UUID` dentro do escopo
-   * da campanha. Match case-insensitive exato; multiple match retorna `null`
-   * (ambiguous, caller decide).
-   */
+
   async findByNameInCampaign(
     campaignId: string,
     name: string,

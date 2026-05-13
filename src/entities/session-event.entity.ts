@@ -31,9 +31,9 @@ export class SessionEventEntity {
 
   @Column({ name: "event_type", type: "varchar" })
   eventType: string;
-  // narrative, combat, social, exploration, rest, level_up,
-  // item_acquired, quest_update, npc_interaction, location_change,
-  // player_decision, dice_roll
+
+
+
 
   @Index()
   @Column({ type: "int" })
@@ -57,9 +57,9 @@ export class SessionEventEntity {
   @Column({ name: "created_at", type: "timestamptz", default: () => "now()" })
   createdAt: Date;
 
-  // ========== Spec 017 — Event Bus Foundation ==========
-  // Colunas adicionadas pela migration 1782000000000-CreateEventBusFoundation.
-  // Convivem com o caminho legado (eventType / details / summary) por 1 sprint.
+
+
+
 
   @Column({
     name: "event_category",

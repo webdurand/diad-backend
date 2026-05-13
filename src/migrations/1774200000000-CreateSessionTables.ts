@@ -4,7 +4,7 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
   name = "CreateSessionTables1774200000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // --- scenes ---
+
     await queryRunner.query(`
       CREATE TABLE "scenes" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -29,7 +29,7 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
       `CREATE INDEX "IDX_scenes_session" ON "scenes" ("session_id")`,
     );
 
-    // --- scene_npcs ---
+
     await queryRunner.query(`
       CREATE TABLE "scene_npcs" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -44,7 +44,7 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
       )
     `);
 
-    // --- session_events ---
+
     await queryRunner.query(`
       CREATE TABLE "session_events" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -72,7 +72,7 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
       `CREATE INDEX "IDX_se_session_seq" ON "session_events" ("session_id", "sequence")`,
     );
 
-    // --- campaign_chronicles ---
+
     await queryRunner.query(`
       CREATE TABLE "campaign_chronicles" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -98,7 +98,7 @@ export class CreateSessionTables1774200000000 implements MigrationInterface {
       `CREATE INDEX "IDX_cc_significance" ON "campaign_chronicles" ("campaign_id", "significance" DESC)`,
     );
 
-    // --- party_knowledge ---
+
     await queryRunner.query(`
       CREATE TABLE "party_knowledge" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),

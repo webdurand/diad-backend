@@ -1,9 +1,4 @@
-/**
- * xp-helpers — Spec 016 P5/P6 (M4) tests.
- *
- * RAW 2024 thresholds, level lookup, progress computation, mode policy
- * (rules/milestone/hybrid), level-up detection.
- */
+
 import {
   XP_THRESHOLDS_2024,
   applyXpAward,

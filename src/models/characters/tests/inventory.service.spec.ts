@@ -79,8 +79,8 @@ describe("InventoryService", () => {
 
       const result = await service.getInventory("user-1", "char-1");
 
-      expect(result.totalWeight).toBe(58); // 3 + 55
-      expect(result.carryingCapacity).toBe(240); // 16 * 15
+      expect(result.totalWeight).toBe(58);
+      expect(result.carryingCapacity).toBe(240);
       expect(result.encumbered).toBe(false);
       expect(result.gold.gp).toBe(50);
     });
@@ -96,12 +96,12 @@ describe("InventoryService", () => {
       repos.charMagicItem.find!.mockResolvedValue([]);
       repos.charState.findOne!.mockResolvedValue(makeCharacterState());
       repos.charAbility.find!.mockResolvedValue(
-        makeCharacterAbilityScores({ str: 8 }), // capacity = 8*15 = 120
+        makeCharacterAbilityScores({ str: 8 }),
       );
 
       const result = await service.getInventory("user-1", "char-1");
 
-      expect(result.totalWeight).toBe(200); // 20 * 10
+      expect(result.totalWeight).toBe(200);
       expect(result.encumbered).toBe(true);
     });
   });
@@ -111,7 +111,7 @@ describe("InventoryService", () => {
       setupOwnership();
       const eq = makeEquipment("longsword");
       repos.equipment.findOneBy!.mockResolvedValue(eq);
-      repos.charEquip.findOne!.mockResolvedValue(null); // not existing
+      repos.charEquip.findOne!.mockResolvedValue(null);
       repos.charEquip.create!.mockReturnValue({
         id: "new-item",
         equipment: eq,
@@ -151,7 +151,7 @@ describe("InventoryService", () => {
         quantity: 5,
       });
 
-      expect(existing.quantity).toBe(15); // 10 + 5
+      expect(existing.quantity).toBe(15);
     });
 
     it("should throw NotFoundException for unknown equipment", async () => {
@@ -300,10 +300,10 @@ describe("InventoryService", () => {
       setupOwnership();
       const item = makeCharacterEquipment("longsword");
       repos.charEquip.findOne!.mockImplementation(async (opts: any) => {
-        if (opts?.where?.equipped) return null; // no validate conflicts
+        if (opts?.where?.equipped) return null;
         return item;
       });
-      repos.charEquip.find!.mockResolvedValue([]); // no equipped items
+      repos.charEquip.find!.mockResolvedValue([]);
       repos.charEquip.save!.mockResolvedValue({ ...item, equipped: true });
 
       const result = await service.toggleEquip("user-1", "char-1", item.id, {
@@ -330,7 +330,7 @@ describe("InventoryService", () => {
       });
 
       repos.charEquip.findOne!.mockResolvedValue(newArmor);
-      repos.charEquip.find!.mockResolvedValue([existingArmor]); // already equipped
+      repos.charEquip.find!.mockResolvedValue([existingArmor]);
 
       await expect(
         service.toggleEquip("user-1", "char-1", newArmor.id, {
@@ -350,9 +350,9 @@ describe("InventoryService", () => {
   });
 
   describe("setHand — shield AC sync", () => {
-    // AC calc em character-sheet.service lê `eq.equipped` pra detectar shield.
-    // setHand precisa sincronizar `equipped` com presença em mão pra escudo
-    // não sumir do AC quando empunhado via paper-doll.
+
+
+
     const buildShield = () =>
       makeCharacterEquipment("shield", {
         equipmentOverrides: {
@@ -428,7 +428,7 @@ describe("InventoryService", () => {
       setupOwnership();
       const item = makeCharacterMagicItem({ attuned: false });
       repos.charMagicItem.findOne!.mockResolvedValue(item);
-      repos.charMagicItem.count!.mockResolvedValue(3); // already at max
+      repos.charMagicItem.count!.mockResolvedValue(3);
 
       await expect(
         service.toggleAttune("user-1", "char-1", item.id, { attuned: true }),

@@ -9,18 +9,7 @@ interface Entry {
   expiresAt: number;
 }
 
-/**
- * In-process cache for SceneContext keyed by sceneId.
- *
- * Backend-authoritative DM agent calls assemble() on every /message, /action
- * and /narrate-start. Without cache, combat-heavy sessions would multiply
- * Neon load (20-25 queries × 5 actions/min). TTL=60s covers rajadas; LRU cap
- * limits memory on Render free plan.
- *
- * Invalidation is explicit — SceneService calls .invalidate(sceneId) after
- * mutations (transitionTo, addNpc, removeNpc, update). Stale data otherwise
- * confuses the DM (NPC fantasma, cena ausente).
- */
+
 @Injectable()
 export class SceneContextCacheService {
   private store = new Map<string, Entry>();

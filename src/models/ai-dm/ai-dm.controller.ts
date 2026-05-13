@@ -56,7 +56,7 @@ export class AiDmController {
     private readonly aiUsageService: AiUsageService,
   ) {}
 
-  // ============= ARC TRANSITION (Director force) =============
+
 
   @Post("campaigns/:id/arc/transition")
   async forceArcTransition(
@@ -73,7 +73,7 @@ export class AiDmController {
     );
   }
 
-  // ============= CLOCKS =============
+
 
   @Post("campaigns/:id/clocks")
   async createClock(
@@ -140,7 +140,7 @@ export class AiDmController {
     return this.clockService.resolve(clockId, dto);
   }
 
-  // ============= NARRATIVE DECISIONS (session-scoped) =============
+
 
   @Post("sessions/:sessionId/narrative-decisions")
   async createDecision(
@@ -176,7 +176,7 @@ export class AiDmController {
     return this.decisionService.top(sessionId, limit ? parseInt(limit, 10) : 5);
   }
 
-  // ============= CONTINUITY FACTS (session-scoped) =============
+
 
   @Post("sessions/:sessionId/continuity-facts")
   async createContinuityFact(
@@ -209,7 +209,7 @@ export class AiDmController {
     });
   }
 
-  // ============= LORE ENTRIES =============
+
 
   @Post("campaigns/:id/lore-entries")
   async createLore(
@@ -230,7 +230,7 @@ export class AiDmController {
     return this.loreService.listByCampaign(campaignId);
   }
 
-  // ============= VOICE PROFILES =============
+
 
   @Get("voice-profiles")
   async listVoices() {
@@ -242,7 +242,7 @@ export class AiDmController {
     return this.voiceService.getById(id);
   }
 
-  // ============= AI USAGE / COST TRACKING =============
+
 
   @Post("campaigns/:id/ai-usage")
   async ingestAiUsage(

@@ -16,14 +16,7 @@ import type {
 } from "../interfaces/encounter-snapshot.interface";
 import type { PlannedActionStep } from "../interfaces/combat.interfaces";
 
-/**
- * Spec 003 T045 — implementação determinística do `AiTurnExecutor` usada em
- * testes (NODE_ENV=test) e como stub quando `diad-agents` não está UP.
- *
- * Heurística mínima RAW-safe: escolhe o inimigo mais próximo visível, move
- * adjacente se possível, ataca com a primeira ação que tem `attackBonus`,
- * encerra o turno. Suficiente para validar o pipeline `/ai-turn` sem LLM.
- */
+
 @Injectable()
 export class MockAiTurnExecutor extends AiTurnExecutor {
   async executeTurn(
@@ -46,12 +39,12 @@ export class MockAiTurnExecutor extends AiTurnExecutor {
     let rationale = "";
 
     if (enemies.length === 0) {
-      // Nenhum inimigo — apenas encerra o turno.
+
       steps.push({ kind: "end-turn" });
       rationale = "Nenhum inimigo visível; turno passa.";
     } else {
       const nearest = pickNearest(self, enemies, snapshot);
-      // Move adjacente se mapa presente e distância > 1 tile
+
       const dist =
         snapshot.map && self.position ? distanceFt(self, nearest) : 0;
       if (
@@ -59,7 +52,7 @@ export class MockAiTurnExecutor extends AiTurnExecutor {
         dist > 5 &&
         self.actionEconomy.movementRemaining > 0
       ) {
-        // Simples heurística: move em direção ao alvo (1 step × movementRemaining)
+
         steps.push({
           kind: "move",
           to: {
@@ -71,7 +64,7 @@ export class MockAiTurnExecutor extends AiTurnExecutor {
         });
       }
 
-      // Escolhe a ação com maior attackBonus
+
       const attackAction = [...self.availableActions]
         .filter((a) => typeof a.attackBonus === "number")
         .sort((a, b) => (b.attackBonus ?? 0) - (a.attackBonus ?? 0))[0];
@@ -84,7 +77,7 @@ export class MockAiTurnExecutor extends AiTurnExecutor {
         });
         rationale = `Atacou ${nearest.displayName} com ${attackAction.name} (alvo mais próximo).`;
       } else {
-        // Fallback: esquiva
+
         steps.push({ kind: "dodge" });
         rationale = "Sem ataque disponível — esquivou.";
       }
@@ -112,8 +105,8 @@ function pickNearest(
   enemies: SnapshotParticipant[],
   snapshot: EncounterSnapshot,
 ): SnapshotParticipant {
-  // Usa `self.distances` se preenchido pelo EncounterSnapshotService; senão
-  // calcula pelo position.
+
+
   if (self.distances && Object.keys(self.distances).length > 0) {
     const sorted = [...enemies].sort(
       (a, b) =>
@@ -124,7 +117,7 @@ function pickNearest(
   const sorted = [...enemies].sort(
     (a, b) => distanceFt(self, a) - distanceFt(self, b),
   );
-  // Suprime warning de `snapshot` não-usado
+
   void snapshot;
   return sorted[0];
 }

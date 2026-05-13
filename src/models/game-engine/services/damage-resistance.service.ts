@@ -6,19 +6,7 @@ import type {
   ResistanceApplyResult,
 } from "../interfaces/combat.interfaces";
 
-/**
- * Spec 004 — Aplicação de resistências/imunidades/vulnerabilidades.
- *
- * RAW (PHB cap. 9, "Damage Resistance and Vulnerability"):
- * - Imune → 0 dano.
- * - Resist → metade (arredondado pra baixo).
- * - Vuln → x2.
- * - Resist + Vuln para o mesmo tipo se cancelam (alvo recebe dano integral).
- * - Aplicado **depois** de outras reduções (ex: Heavy Armor Master).
- *
- * Para tipos compostos (ex: 2d6 fogo + 1d6 piercing), cada parcela aplica seu
- * próprio modificador independente.
- */
+
 @Injectable()
 export class DamageResistanceService {
   applyToDamage(
@@ -44,7 +32,7 @@ export class DamageResistanceService {
             modifier: "immune",
           };
         }
-        // Resist + Vuln cancelam (RAW)
+
         if (isResist && isVuln) {
           return {
             ...part,
@@ -81,7 +69,7 @@ export class DamageResistanceService {
     return { finalDamage, perPartFinal };
   }
 
-  /** Helper para extrair DamageProfile de um monster statblock. */
+
   profileFromMonster(monster: {
     damage_resistances?: unknown;
     damage_immunities?: unknown;
@@ -101,7 +89,7 @@ export class DamageResistanceService {
     }
     if (typeof raw === "object") {
       const obj = raw as Record<string, unknown>;
-      // Algumas entradas SRD vêm como { 0: "fire", 1: "cold" } ou { types: [...] }
+
       const list = Array.isArray(obj.types)
         ? obj.types
         : Object.values(obj).filter((v) => typeof v === "string");

@@ -57,7 +57,7 @@ describe("DiceService", () => {
       service.setSeed(42);
       const r1 = service.roll(20);
       service.clearSeed();
-      // After clearing, results are random; just ensure it runs without error
+
       const r2 = service.roll(20);
       expect(typeof r2).toBe("number");
       expect(r2).toBeGreaterThanOrEqual(1);

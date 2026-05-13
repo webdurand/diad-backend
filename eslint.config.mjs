@@ -1,4 +1,4 @@
-// @ts-check
+
 import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
@@ -32,8 +32,8 @@ export default tseslint.config(
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },
-  // Spec 016 — Princípio XI: erros cross-boundary devem usar DiadException
-  // ou subclasse com error code semântico. `throw new Error(...)` perde causa-raiz.
+
+
   {
     files: ['src/**/*.ts'],
     ignores: [

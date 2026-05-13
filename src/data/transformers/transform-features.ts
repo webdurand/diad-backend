@@ -3,9 +3,9 @@ import * as path from "path";
 import { generateSlug } from "./slug-generator";
 import { parseEntries } from "./entries-parser";
 
-// ────────────────────────────────────────────────────────────────
-// 5etools input types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsClassFeature {
   name: string;
@@ -38,9 +38,9 @@ interface FiveToolsSubclassFeature {
   [key: string]: unknown;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Output types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TransformedFeature {
   slug: string;
@@ -57,9 +57,9 @@ export interface TransformedFeature {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const CORE_CLASSES = new Set([
   "barbarian",
@@ -91,9 +91,9 @@ const CLASS_FILES = [
   "class-wizard.json",
 ];
 
-// ────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function loadClassFile(filename: string): {
   classFeature: FiveToolsClassFeature[];
@@ -158,9 +158,9 @@ function resolveDescription(entries?: unknown[]): Record<string, unknown> {
   return { text: parseEntries(entries as any[]) };
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main function
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export function transformFeatures(): TransformedFeature[] {
   const results: TransformedFeature[] = [];
@@ -169,7 +169,7 @@ export function transformFeatures(): TransformedFeature[] {
   for (const file of CLASS_FILES) {
     const data = loadClassFile(file);
 
-    // Class features
+
     const classFeatures = data.classFeature ?? [];
     for (const feat of classFeatures) {
       if (feat._copy) continue;
@@ -183,7 +183,7 @@ export function transformFeatures(): TransformedFeature[] {
         feat.srd52,
       );
 
-      // Deduplicate by slug
+
       if (seenSlugs.has(slug)) continue;
       seenSlugs.add(slug);
 
@@ -211,7 +211,7 @@ export function transformFeatures(): TransformedFeature[] {
       });
     }
 
-    // Subclass features
+
     const subclassFeatures = data.subclassFeature ?? [];
     for (const feat of subclassFeatures) {
       if (feat._copy) continue;

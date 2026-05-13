@@ -36,41 +36,30 @@ export interface SeedCharacterResult {
   };
 }
 
-/**
- * Ability primária por classe (ordem STR, DEX, CON, INT, WIS, CHA).
- * Usado pra alocar standard array [15,14,13,12,10,8] quando `abilityArray` não vem.
- */
+
 const PRIMARY_ABILITY_INDEX: Record<SupportedClassSlug, number> = {
-  barbarian: 0, // STR
-  bard: 5, // CHA
-  cleric: 4, // WIS
-  druid: 4, // WIS
-  fighter: 0, // STR
-  monk: 1, // DEX (+ WIS secundário)
-  paladin: 0, // STR (+ CHA)
-  ranger: 1, // DEX (+ WIS)
-  rogue: 1, // DEX
-  sorcerer: 5, // CHA
-  warlock: 5, // CHA
-  wizard: 3, // INT
+  barbarian: 0,
+  bard: 5,
+  cleric: 4,
+  druid: 4,
+  fighter: 0,
+  monk: 1,
+  paladin: 0,
+  ranger: 1,
+  rogue: 1,
+  sorcerer: 5,
+  warlock: 5,
+  wizard: 3,
 };
 
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 const E2E_DEFAULT_USER_EMAIL = "e2e-harness@diad.local";
 
-/**
- * Spell defaults por classe pro harness poder castar cantrips/spells icônicos.
- *
- * Cantrips: repertório conhecido (Wizard/Sorc/Bard/Warlock preparam do
- * próprio repertório; Cleric/Druid preparam da full list mas cantrips são
- * known). Spells preparadas: subset representativo pra L1.
- *
- * Classes não-caster (Barb/Fighter/Monk/Rogue) ficam com arrays vazios.
- */
+
 interface ClassSpellDefaults {
   cantrips?: string[];
   preparedSpells?: string[];
-  spellbook?: string[]; // Wizard only
+  spellbook?: string[];
 }
 
 const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
@@ -81,7 +70,7 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
   },
   cleric: {
     cantrips: ["sacred-flame", "guidance", "light"],
-    // Spec 013 — adiciona 'spirit-guardians' (L3) pra ground effects via catalog.
+
     preparedSpells: [
       "cure-wounds",
       "bless",
@@ -92,7 +81,7 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
   },
   druid: {
     cantrips: ["druidcraft", "produce-flame"],
-    // Spec 013 — adiciona 'spike-growth' (L2), 'sleet-storm' (L3), 'wall-of-fire' (L4).
+
     preparedSpells: [
       "cure-wounds",
       "entangle",
@@ -106,18 +95,18 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
   fighter: {},
   monk: {},
   paladin: {
-    preparedSpells: ["bless", "cure-wounds"], // Paladin L1 tem spells só a partir de L2 mas seed não quebra
+    preparedSpells: ["bless", "cure-wounds"],
   },
   ranger: {
-    // Spec 013 — adiciona 'spike-growth' (L2 ranger) pra ground effects.
+
     preparedSpells: ["hunters-mark", "cure-wounds", "spike-growth"],
   },
   rogue: {},
   sorcerer: {
-    // Spec 012 Sorcerer — starter spells RAW 2024: 4 cantrips + 4 L1 spells.
-    // Cantrips incluem ray-of-frost (debuff cold), fire-bolt (damage), light,
-    // prestidigitation, mage-hand. Spells inclui burning-hands (AoE cone),
-    // chromatic-orb (damage versátil), magic-missile (multi-dart), shield (reaction).
+
+
+
+
     cantrips: [
       "fire-bolt",
       "ray-of-frost",
@@ -137,11 +126,11 @@ const CLASS_SPELL_DEFAULTS: Record<SupportedClassSlug, ClassSpellDefaults> = {
     preparedSpells: ["hex", "armor-of-agathys"],
   },
   wizard: {
-    // Spec 012 Gap 4 — cantrips incluem ray-of-frost (debuff) e minor-illusion
-    // (utility). Spellbook inclui witch-bolt (concentration multi-turn) e
-    // burning-hands (AoE cone), alinhado ao starter pack RAW 2024 XPHB.
-    // Spec 013 — adiciona 'grease' (L1), 'web' (L2), 'cloud-of-daggers' (L2),
-    // 'sleet-storm' (L3), 'wall-of-fire' (L4) pra ground effects via catalog.
+
+
+
+
+
     cantrips: [
       "fire-bolt",
       "ray-of-frost",
@@ -200,12 +189,7 @@ export class SeedCharacterService {
     private readonly characterEquipRepo: Repository<CharacterEquipmentEntity>,
   ) {}
 
-  /**
-   * Spec 012 Fase 0 — adiciona extras de equipamento ao char (append-only,
-   * source=bought, equipped=false pra não afetar AC; weapons continuam no
-   * inventário e podem ser usadas como ações). Usado em fixtures que exigem
-   * armas XPHB específicas não incluídas no starter pack (ex: greatsword XPHB).
-   */
+
   private async addExtraEquipment(
     characterId: string,
     slugs: string[],
@@ -228,12 +212,7 @@ export class SeedCharacterService {
     }
   }
 
-  /**
-   * Premissa weapons-in-hand — marca main_hand/off_hand em um CharEquipment
-   * pelo slug do equipment. Se 2H em main, ocupa ambas. Libera o slot alvo de
-   * outros items antes. Usado no seed — sem validação RAW completa (confia no
-   * caller). Pra enforcing RAW use `inventoryService.setHand`.
-   */
+
   private async equipHandBySlug(
     characterId: string,
     equipmentSlug: string,
@@ -258,7 +237,7 @@ export class SeedCharacterService {
       return;
     }
 
-    // Libera o slot alvo de QUALQUER outro item (exclusivo por mão).
+
     const targetCol = hand === "main" ? "mainHand" : "offHand";
     const others = await this.characterEquipRepo.find({
       where: { character_id: characterId },
@@ -271,7 +250,7 @@ export class SeedCharacterService {
       }
     }
 
-    // 2H weapon em main ocupa ambas as mãos.
+
     const props = (eq.properties ?? []) as Array<{
       slug?: string;
       index?: string;
@@ -288,16 +267,7 @@ export class SeedCharacterService {
     await this.characterEquipRepo.save(ce);
   }
 
-  /**
-   * Premissa weapons-in-hand — default: empunha a primeira weapon do inventário
-   * na main hand. Se weapon é 2H, ocupa ambas. Fallback quando fixture não
-   * especifica `mainHandSlug`. Evita ActionBar vazio (sem ataques disponíveis).
-   *
-   * Heurística de prioridade:
-   *  1. Simple melee (longsword > shortsword > mace > club)
-   *  2. Primeira weapon com damage no inventário
-   *  3. Nada (Unarmed Strike intrínseco já resolve)
-   */
+
   private async defaultEquipFirstWeapon(
     characterId: string,
     weaponMasteryChoices?: string[],
@@ -308,10 +278,10 @@ export class SeedCharacterService {
     const weapons = items.filter((i) => !!i.equipment.damage);
     if (weapons.length === 0) return;
 
-    // Prioridade 1: weapon que o char escolheu pra mastery (reflete intenção
-    // do player — "eu quero esse domínio, então empunho essa arma").
-    // Prioridade 2: simple common weapons.
-    // Prioridade 3: primeira weapon do inventário.
+
+
+
+
     const masterySet = new Set(weaponMasteryChoices ?? []);
     let pick = weapons.find((w) => masterySet.has(w.equipment.slug));
     if (!pick) {
@@ -354,16 +324,16 @@ export class SeedCharacterService {
       abilityScores,
     });
 
-    // Spec 012 Fase 0 — adiciona equipments extras (opcional) após starter pack.
+
     if (dto.additionalEquipmentSlugs?.length) {
       await this.addExtraEquipment(character.id, dto.additionalEquipmentSlugs);
     }
 
-    // Premissa weapons-in-hand — default: prioriza uma weapon que o char escolheu
-    // no weapon_mastery_choices (se houver); senão, primeira weapon simples do
-    // starter pack. Garante que todo char tem pelo menos uma arma empunhada
-    // (ActionBar não fica vazio). Se fixture passa mainHandSlug explícito,
-    // sobrescreve abaixo.
+
+
+
+
+
     if (!dto.mainHandSlug) {
       await this.defaultEquipFirstWeapon(
         character.id,
@@ -371,9 +341,9 @@ export class SeedCharacterService {
       );
     }
 
-    // Premissa weapons-in-hand — empunha arma(s)/escudo nos slots indicados.
-    // Deve rodar APÓS o starter pack + additionalEquipmentSlugs (slugs precisam
-    // estar no inventário). 2H weapon em main ocupa ambas automaticamente.
+
+
+
     if (dto.mainHandSlug) {
       await this.equipHandBySlug(character.id, dto.mainHandSlug, "main");
     }
@@ -382,8 +352,8 @@ export class SeedCharacterService {
     }
 
     if (dto.level > 1) {
-      // Harness L10/L20 exige level-up determinístico com escolhas de ASI/feat/spells/subclass.
-      // Deixado pra próxima iteração da spec 012 — endpoint retorna 501 enquanto isso.
+
+
       throw new NotImplementedException({
         code: "LEVEL_UP_NOT_YET_IMPLEMENTED",
         message: `Seed L${dto.level} ainda não implementado. PC L1 criado (id=${character.id}); próxima iteração da spec 012 adiciona level-up determinístico.`,
@@ -476,21 +446,18 @@ export class SeedCharacterService {
     };
   }
 
-  /**
-   * Aloca [15,14,13,12,10,8] com o 15 na ability primária da classe, 14 em CON
-   * (sempre útil), 13/12 no resto por ordem lexicográfica. Determinístico.
-   */
+
   private allocateStandardArray(classSlug: SupportedClassSlug): number[] {
     const result = [10, 10, 10, 10, 10, 10];
     const primaryIdx = PRIMARY_ABILITY_INDEX[classSlug];
     const conIdx = 2;
 
-    result[primaryIdx] = STANDARD_ARRAY[0]; // 15
+    result[primaryIdx] = STANDARD_ARRAY[0];
     if (primaryIdx !== conIdx) {
-      result[conIdx] = STANDARD_ARRAY[1]; // 14 in CON
+      result[conIdx] = STANDARD_ARRAY[1];
     }
 
-    // Remaining scores [13, 12, 10, 8] filled in remaining slots in order
+
     const remainingScores =
       primaryIdx === conIdx ? [14, 13, 12, 10, 8] : [13, 12, 10, 8];
     let scoreIdx = 0;
@@ -526,13 +493,13 @@ export class SeedCharacterService {
     weaponMasteryChoices?: string[];
     fightingStyleSlug?: string;
   }): Promise<CharacterEntity> {
-    // Data mínima válida pro CharactersService.create (spec 001):
-    // - abilityScores obrigatório
-    // - classSlug + raceSlug + backgroundSlug resolvidos via slug
-    // - classEquipmentChoices: ['A'] materializa o equipamento inicial da classe
-    //   (armas + armadura RAW por classe). Antes usávamos classStartingGold (gold
-    //   puro) mas isso deixava fighter/ranger sem armas na grid — usuário reportou
-    //   e bug validado via harness spec 012.
+
+
+
+
+
+
+
     const spellDefaults = CLASS_SPELL_DEFAULTS[params.classSlug];
     const data: Record<string, unknown> = {
       sourceCode: "XPHB",
@@ -544,8 +511,8 @@ export class SeedCharacterService {
       skills: [],
       classEquipmentChoices: ["A"],
       backgroundEquipmentChoices: ["A"],
-      // Spells por classe (spec 012) — sem isso, cast-spell falha com
-      // "magia não encontrada no repertório".
+
+
       ...(spellDefaults.cantrips
         ? { classCantrips: spellDefaults.cantrips }
         : {}),
@@ -555,11 +522,11 @@ export class SeedCharacterService {
       ...(spellDefaults.spellbook
         ? { classSpellbook: spellDefaults.spellbook }
         : {}),
-      // Spec 012 Fase 0 — Weapon Mastery (opcional; só classes marciais usam).
+
       ...(params.weaponMasteryChoices?.length
         ? { weaponMasteryChoices: params.weaponMasteryChoices }
         : {}),
-      // Spec 012 Fase 0 — Fighting Style (opcional; Fighter L1 / Paladin L2 / Ranger L2).
+
       ...(params.fightingStyleSlug
         ? { fightingStyleSlug: params.fightingStyleSlug }
         : {}),
@@ -605,10 +572,10 @@ export class SeedCharacterService {
     const slots = new Array(9).fill(0) as number[];
 
     if (Array.isArray(raw)) {
-      // Shape preferido do sheet atual: [{ level, total, used }]
+
       for (const entry of raw) {
         if (typeof entry === "number") {
-          // Fallback: array plano [2, 3, 0, ...]
+
           const idx = raw.indexOf(entry);
           if (idx >= 0 && idx < 9) slots[idx] = entry;
         } else if (entry && typeof entry === "object") {
@@ -632,7 +599,7 @@ export class SeedCharacterService {
       }
     }
 
-    // Se tudo zero, não é caster — omite do summary.
+
     return slots.some((v) => v > 0) ? slots : undefined;
   }
 }

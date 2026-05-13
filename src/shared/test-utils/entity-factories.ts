@@ -7,7 +7,7 @@ import {
   CharacterProficiencySourceEnum,
 } from "src/entities/enums";
 
-// ---- Helpers ----
+
 
 let idCounter = 0;
 function uid(): string {
@@ -18,7 +18,7 @@ export function resetIdCounter(): void {
   idCounter = 0;
 }
 
-// ---- SRD class data ----
+
 
 const CLASS_DATA: Record<string, { hit_die: number; name: string }> = {
   barbarian: { hit_die: 12, name: "Barbarian" },
@@ -35,7 +35,7 @@ const CLASS_DATA: Record<string, { hit_die: number; name: string }> = {
   wizard: { hit_die: 6, name: "Wizard" },
 };
 
-// ---- Factory functions ----
+
 
 export function makeClass(slug: string, overrides?: Record<string, unknown>) {
   const data = CLASS_DATA[slug] ?? { hit_die: 8, name: slug };
@@ -224,11 +224,11 @@ export function makeCharacterEquipment(
     overrides.equipmentOverrides as Record<string, unknown>,
   );
   const { equipmentOverrides: _, ...rest } = overrides;
-  // Premissa weapons-in-hand — por default testes assumem que weapons
-  // equipadas estão "em main hand" pra aparecer na ActionBar. Quando
-  // `equipped: true` é passado, populamos `mainHand: true` automaticamente
-  // (a menos que o teste sobrescreva explicitamente). Shields/armors seguem
-  // ignorando hand slots (vão pelo `equipped` tradicional).
+
+
+
+
+
   const isWeapon = !!(equipment as { damage?: unknown }).damage;
   const isShield = equipSlug.includes("shield");
   const shouldAutoMainHand =

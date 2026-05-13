@@ -49,9 +49,9 @@ function makeSceneRepo(
   let savedStub: Partial<SceneEntity> | null = null;
   return {
     findOne: jest.fn(async (opts: any) => {
-      // findOne by id (primeiro lookup do path com sceneId explícito)
+
       if (opts?.where?.id) return scene as SceneEntity | null;
-      // findOne by isActive=true (lookup do path sem sceneId)
+
       if (opts?.where?.isActive === true) {
         return (savedStub ?? active) as SceneEntity | null;
       }
@@ -116,7 +116,7 @@ function makeSessionRepo(session: Partial<GameSessionEntity> | null) {
 function makeEncounterService(
   initialParticipants: any[] = [],
 ): EncounterService {
-  // mantém uma lista interna mutável de participants (PCs + NPCs após materialização)
+
   const participants = [...initialParticipants];
   const encounter: any = {
     id: ENCOUNTER_ID,
@@ -131,8 +131,8 @@ function makeEncounterService(
   return {
     create: jest.fn(async () => encounter),
     getById: jest.fn(async () => {
-      // depois da materialização, savedParticipants tem os NPCs novos.
-      // simulamos fazer merge dos NPCs criados via participantRepo.save com os PCs iniciais.
+
+
       const merged = [...participants, ...savedParticipants];
       encounter.participants = merged;
       return encounter;
@@ -161,7 +161,7 @@ function makeCombatService(): CombatService {
 function makeDiceService(): DiceService {
   return {
     rollExpression: jest.fn((expr: string) => {
-      // determinístico nos testes: sempre soma 10
+
       return { total: 10, breakdown: expr } as any;
     }),
   } as unknown as DiceService;
@@ -223,16 +223,16 @@ function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
   const diceSvc = makeDiceService();
   const bus = makeEventBus();
 
-  // NpcService stub — materializeStubFromName usado só no path de targets por
-  // nome livre; testes existentes passam UUIDs e não tocam aqui.
+
+
   const npcSvc = {
     materializeStubFromName: jest.fn(),
     findByNameInCampaign: jest.fn(),
   } as unknown as import("src/models/world/services/npc.service").NpcService;
 
-  // SceneContextService stub — assembleContext só roda no fallback "targets
-  // vazios" do botão "Iniciar combate"; testes que passam targetNpcIds não
-  // tocam aqui.
+
+
+
   const sceneCtxSvc = {
     assembleContext: jest.fn().mockResolvedValue({
       scene: {},
@@ -374,7 +374,7 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
   });
 
   it("sceneId omitido + active scene existe → usa a active", async () => {
-    // Override sceneRepo direto pra retornar active mock
+
     const activeScene: Partial<SceneEntity> = {
       id: "active-scene-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       sessionId: SESSION_ID,
@@ -458,18 +458,18 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
 
     const result = await svc.run({
       sessionId: SESSION_ID,
-      // sem sceneId
+
       targetNpcIds: [NPC_ID_OK],
       ownerUserId: OWNER_USER_ID,
     });
 
     expect(result.encounterId).toBe(ENCOUNTER_ID);
-    // Não criou stub — usou active
+
     expect(sceneRepo.save as jest.Mock).not.toHaveBeenCalled();
   });
 
   it("sceneId omitido + sem active → cria stub auto", async () => {
-    const sceneRepo = makeSceneRepo(null, null); // nenhuma active
+    const sceneRepo = makeSceneRepo(null, null);
     const npcRepo = makeNpcRepo({
       [NPC_ID_OK]: {
         id: NPC_ID_OK,
@@ -570,7 +570,7 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
         sequenceNumber: 10,
       },
     ]);
-    // Agno devolve os IDs já materializados
+
     (aiProxy.postJsonToAgent as jest.Mock).mockResolvedValueOnce({
       targets: [{ npcId: NPC_ID_OK, name: "Homem das listras" }],
       count: 1,
@@ -618,7 +618,7 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
   });
 
   it("targets vazios + sem prosa recente → não chama agno, falha 422", async () => {
-    const { svc, aiProxy } = build(); // messageRepo default retorna []
+    const { svc, aiProxy } = build();
     await expect(
       svc.run({
         sessionId: SESSION_ID,

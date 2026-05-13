@@ -7,13 +7,7 @@ import type {
   DisabledReason,
 } from "../../interfaces/combat-action.interfaces";
 
-/**
- * Spec 003 — resolver das 8 ações genéricas PHB (kind: 'generic').
- *
- * As kinds `dodge|dash|disengage|help|hide|ready|search|use-object` estão sempre
- * disponíveis (não dependem de classe/equipment). `available` depende apenas de
- * action economy do contexto.
- */
+
 @Injectable()
 export class GenericActionResolver implements ActionResolver {
   readonly kind: ActionKind = "generic";

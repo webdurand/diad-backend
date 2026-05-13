@@ -1,66 +1,62 @@
-/**
- * DIAD Error Codes Catalog (TS mirror).
- * Source of truth: contracts/error-codes-catalog.json (Princípio XI).
- * Adicionar code novo é não-breaking; renomear/remover é breaking.
- */
+
 
 export const ErrorCode = {
-  // auth
+
   AUTH_TOKEN_MISSING: "AUTH_TOKEN_MISSING",
   AUTH_TOKEN_INVALID: "AUTH_TOKEN_INVALID",
   AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
   AUTH_PERMISSION_DENIED: "AUTH_PERMISSION_DENIED",
 
-  // agent
+
   AGENT_UPSTREAM_ERROR: "AGENT_UPSTREAM_ERROR",
   AGENT_TIMEOUT: "AGENT_TIMEOUT",
   AGENT_UNREACHABLE: "AGENT_UNREACHABLE",
   AGENT_SESSION_NOT_FOUND: "AGENT_SESSION_NOT_FOUND",
   AGENT_INVALID_RESPONSE: "AGENT_INVALID_RESPONSE",
 
-  // campaign
+
   CAMPAIGN_NOT_FOUND: "CAMPAIGN_NOT_FOUND",
   CAMPAIGN_PLAYER_LIMIT_REACHED: "CAMPAIGN_PLAYER_LIMIT_REACHED",
   CAMPAIGN_FORBIDDEN: "CAMPAIGN_FORBIDDEN",
 
-  // session
+
   SESSION_NOT_FOUND: "SESSION_NOT_FOUND",
   SESSION_NOT_JOINABLE: "SESSION_NOT_JOINABLE",
 
-  // combat
+
   COMBAT_NOT_FOUND: "COMBAT_NOT_FOUND",
   COMBAT_TURN_INVALID: "COMBAT_TURN_INVALID",
   COMBAT_PARTICIPANT_NOT_FOUND: "COMBAT_PARTICIPANT_NOT_FOUND",
 
-  // character
+
   CHARACTER_NOT_FOUND: "CHARACTER_NOT_FOUND",
   CHARACTER_FORBIDDEN: "CHARACTER_FORBIDDEN",
 
-  // spell
+
   SPELL_SLOT_UNAVAILABLE: "SPELL_SLOT_UNAVAILABLE",
   SPELL_NOT_PREPARED: "SPELL_NOT_PREPARED",
 
-  // validation
+
   VALIDATION_INVALID_PAYLOAD: "VALIDATION_INVALID_PAYLOAD",
   VALIDATION_MISSING_FIELD: "VALIDATION_MISSING_FIELD",
 
-  // system
+
   SYSTEM_INTERNAL_ERROR: "SYSTEM_INTERNAL_ERROR",
   SYSTEM_UNAVAILABLE: "SYSTEM_UNAVAILABLE",
   SYSTEM_RATE_LIMITED: "SYSTEM_RATE_LIMITED",
   UNKNOWN_ERROR: "UNKNOWN_ERROR",
 
-  // event bus (spec 017)
+
   EVENT_TYPE_NOT_REGISTERED: "EVENT_TYPE_NOT_REGISTERED",
   TRACE_ID_INVALID: "TRACE_ID_INVALID",
 
-  // world / ambiance (spec 019)
+
   WEATHER_INVALID_BIOME: "WEATHER_INVALID_BIOME",
   CLOCK_NEGATIVE_HOURS: "CLOCK_NEGATIVE_HOURS",
   CHAOS_OUT_OF_RANGE: "CHAOS_OUT_OF_RANGE",
   SPELL_BLOCKED_DEAD_MAGIC: "SPELL_BLOCKED_DEAD_MAGIC",
 
-  // tool surface completion (spec 020)
+
   ENCOUNTER_CREATE_FAILED: "ENCOUNTER_CREATE_FAILED",
   ENCOUNTER_NO_TARGETS_IN_SCENE: "ENCOUNTER_NO_TARGETS_IN_SCENE",
   REVIVIFY_INELIGIBLE: "REVIVIFY_INELIGIBLE",
@@ -94,33 +90,33 @@ export const ErrorCode = {
   DYING_STATE_TRANSITION_INVALID: "DYING_STATE_TRANSITION_INVALID",
   DYING_STATE_REQUIRES_HP_RESTORE: "DYING_STATE_REQUIRES_HP_RESTORE",
 
-  // session-recap (spec 024)
+
   SUMMARIZE_LLM_TIMEOUT: "SUMMARIZE_LLM_TIMEOUT",
   SUMMARIZE_LLM_FAILURE: "SUMMARIZE_LLM_FAILURE",
   SUMMARIZE_INVALID_INPUT: "SUMMARIZE_INVALID_INPUT",
   SUMMARIZE_AUTH_FAILED: "SUMMARIZE_AUTH_FAILED",
   SESSION_LAST_MESSAGE_MISMATCH: "SESSION_LAST_MESSAGE_MISMATCH",
 
-  // deterministic DM refactor (spec 027)
+
   IDEMPOTENCY_CACHE_MISS_AFTER_RACE: "IDEMPOTENCY_CACHE_MISS_AFTER_RACE",
-  // Spec 027 M2 — bug D2: Archivist passa name (ex: "eda") em campo UUID
-  // de affected_entity_id; Postgres rejeita; service deve resolver primeiro.
+
+
   NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND:
     "NARRATIVE_DECISION_AFFECTED_ENTITY_NOT_FOUND",
-  // Spec 027 M2 — bug D3: campaign id em rota é slug (ex: "misterio-aldeia")
-  // mas downstream espera UUID. CampaignIdPipe resolve; este código é pra
-  // telemetria quando resolução falha.
+
+
+
   CAMPAIGN_SLUG_NOT_RESOLVED: "CAMPAIGN_SLUG_NOT_RESOLVED",
-  // Spec 027 M1 (AC1.7+1.8) — endpoints /solo/{id}/narrate-start e
-  // /solo/{id}/message do pipeline legacy DM agent foram removidos. Frontend
-  // usa /ai/narrative/:sessionId/turn (Coordinator multi-agent).
+
+
+
   LEGACY_ENDPOINT_DEPRECATED: "LEGACY_ENDPOINT_DEPRECATED",
 
-  // movement (sistema de localidade real)
+
   LOCATION_CONNECTION_BLOCKED: "LOCATION_CONNECTION_BLOCKED",
   LOCATION_REQUIREMENTS_NOT_MET: "LOCATION_REQUIREMENTS_NOT_MET",
 
-  // admin business metrics
+
   ADMIN_METRICS_PERIOD_INVALID: "ADMIN_METRICS_PERIOD_INVALID",
   ADMIN_METRICS_FILTER_INVALID: "ADMIN_METRICS_FILTER_INVALID",
   ADMIN_METRICS_USER_NOT_FOUND: "ADMIN_METRICS_USER_NOT_FOUND",
@@ -133,10 +129,7 @@ export const ALL_ERROR_CODES: readonly ErrorCode[] = Object.values(
   ErrorCode,
 ) as readonly ErrorCode[];
 
-/**
- * Exhaustiveness helper — usar em switches sobre ErrorCode pra forçar
- * o TypeScript a flagar code novo sem tratamento.
- */
+
 export function assertNever(x: never, msg = "Unhandled discriminant"): never {
   throw new Error(`${msg}: ${JSON.stringify(x)}`);
 }

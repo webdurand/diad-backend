@@ -1,10 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Server } from "socket.io";
 
-/**
- * Programmatic API exposed to domain services for emitting realtime events.
- * The gateway assigns the underlying `Server` via `setServer` at bootstrap.
- */
+
 @Injectable()
 export class RealtimeService {
   private readonly logger = new Logger(RealtimeService.name);

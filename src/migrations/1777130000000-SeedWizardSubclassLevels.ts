@@ -1,19 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 Wizard — Data gap: subclasses alternativas `wizard-abjurer`,
- * `wizard-diviner`, `wizard-illusionist` existem em `subclasses` mas NÃO têm
- * rows em `levels`. Só `evocation` tem 5 features linkadas (L2/L6/L10/L14).
- *
- * Cria L3 row pra cada + linka features XPHB L3 signature da subclass.
- * (Wizard subclass é escolhida L3 em RAW 2024, features signature podem
- * existir em L2 ou L3 dependendo da edição.)
- *
- * Features XPHB L3 esperadas:
- *  - Abjurer: arcane-ward
- *  - Diviner: portent
- *  - Illusionist: improved-minor-illusion
- */
+
 export class SeedWizardSubclassLevels1777130000000 implements MigrationInterface {
   name = "SeedWizardSubclassLevels1777130000000";
 

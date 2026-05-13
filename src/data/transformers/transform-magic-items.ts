@@ -5,9 +5,9 @@ import { parseEntriesAsText } from "./entries-parser";
 import { ITEM_TYPE_MAP } from "./code-maps";
 import { stripTags } from "./tag-stripper";
 
-// ────────────────────────────────────────────────────────────────
-// Types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsMagicItem {
   name: string;
@@ -57,9 +57,9 @@ export interface TransformedMagicItem {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function extractTypeCode(type: string): string {
   return type.split("|")[0];
@@ -122,7 +122,7 @@ function parseChargesInfo(
 
 function getCategorySlug(item: FiveToolsMagicItem): string | null {
   if (!item.type) {
-    // Wondrous items without type get "wondrous-item" if available, else null
+
     if (item.wondrous) return null;
     return null;
   }
@@ -130,9 +130,9 @@ function getCategorySlug(item: FiveToolsMagicItem): string | null {
   return ITEM_TYPE_MAP[code] ?? null;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main transformer
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function transformItem(item: FiveToolsMagicItem): TransformedMagicItem {
   const slug = generateSlug(item.name, item.source, item.srd52);
@@ -171,10 +171,10 @@ export function transformMagicItems(): TransformedMagicItem[] {
   const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const allItems: FiveToolsMagicItem[] = data.item ?? [];
 
-  // Filter: SRD52 items with rarity that is NOT "none" (magic items only)
+
   const magicItems = allItems.filter((i) => i.srd52 && i.rarity !== "none");
 
-  // Deduplicate by slug, preferring SRD52/XPHB/XDMG
+
   const seen = new Map<string, TransformedMagicItem>();
 
   for (const item of magicItems) {

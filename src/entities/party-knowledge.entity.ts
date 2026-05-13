@@ -25,13 +25,13 @@ export class PartyKnowledgeEntity {
   campaign: CampaignEntity;
 
   @Column({ name: "entity_type", type: "varchar" })
-  entityType: string; // npc, location, faction, quest, item, lore
+  entityType: string;
 
   @Column({ name: "entity_id", type: "uuid" })
   entityId: string;
 
   @Column({ name: "knowledge_key", type: "varchar" })
-  knowledgeKey: string; // exists, name, secret_identity, weakness, etc.
+  knowledgeKey: string;
 
   @Column({ name: "knowledge_value", type: "text", nullable: true })
   knowledgeValue?: string;

@@ -12,17 +12,7 @@ import { TransformationService } from "./transformation.service";
 import type { GameEventData } from "../interfaces/result.type";
 import type { SaveAbility } from "../interfaces/combat.interfaces";
 
-/**
- * Spec 004 — Orquestra os ticks do início do turno (ordem RAW):
- *   1. Recharge: rola d6 para habilidades com `recharge: '5-6' | '6'`.
- *   2. Persistent area damage: criaturas dentro de áreas tomam dano + save.
- *   3. Concentração: decrementa duração; expira atomicamente se chegar a 0.
- *   4. Reset de pool de ações lendárias (se for turno do dono).
- *
- * Decremento de durações de condições no início de **round** é feito
- * separadamente em `decrementConditionDurationsAtRoundStart` (chamado uma vez
- * por round, não por turno).
- */
+
 @Injectable()
 export class StartTurnOrchestratorService {
   constructor(
@@ -37,10 +27,7 @@ export class StartTurnOrchestratorService {
     private readonly transformation: TransformationService,
   ) {}
 
-  /**
-   * Roda os ticks de início de turno para um participante.
-   * Ordem importa.
-   */
+
   async run(
     participant: EncounterParticipantEntity,
     opts?: {
@@ -56,20 +43,20 @@ export class StartTurnOrchestratorService {
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
 
-    // 0. Spec 012 Lote C — Capstones start-of-combat (Perfect Self, Arcane
-    // Apotheosis, Superior Inspiration). CapstonesService skip se já processou
-    // via marker effectInstance 'capstone_start_combat_done'.
+
+
+
     const capRes = await this.capstones.runStartOfCombat(
       participant,
       opts?.ownerUserId,
     );
     events.push(...capRes.events);
 
-    // 1. Recharge
+
     const r = await this.rollRecharges(participant);
     events.push(...r.events);
 
-    // 2. Persistent area damage tick
+
     const padTick = await this.persistentArea.tickDamageFor(
       participant,
       opts?.getSaveModifier
@@ -81,30 +68,30 @@ export class StartTurnOrchestratorService {
     );
     events.push(...padTick.events);
     if (padTick.totalDamage > 0) {
-      // Aplicar HP — caller é responsável pelo applyDamage canônico.
-      // Aqui só emitimos eventos. combat.service consome `padTick.totalDamage`
-      // se quiser aplicar via canal regular.
+
+
+
     }
 
-    // 3. Concentração: decrementa duração
+
     const conc = await this.concentration.decrementDurationFor(participant);
     events.push(...conc.events);
 
-    // 3.5 Spec 015 Eixo 4 — tick de duração da transformação ativa (Wild
-    // Shape, Polymorph, True Polymorph). Reverte quando expira OU torna
-    // permanente no caso de True Polymorph.
+
+
+
     const tRes = await this.transformation.tickDurationOnTurnStart(
       participant.id,
     );
     events.push(...tRes.events);
 
-    // 4. Reset legendary pool
+
     if (participant.legendaryPointsMax != null) {
       const pool = await this.legendary.resetPool(participant);
       events.push(...pool.events);
     }
 
-    // Se é início de round, decrementar durações de condições não-end-of-turn
+
     if (opts?.isStartOfRound && opts.allParticipantsInRound?.length) {
       const decr = await this.conditions.decrementDurationsAtRoundStart(
         opts.allParticipantsInRound,

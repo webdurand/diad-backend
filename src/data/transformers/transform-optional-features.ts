@@ -43,7 +43,7 @@ function convertPrerequisites(prereqs?: Record<string, unknown>[]): {
   let minLevel: number | null = null;
 
   for (const prereq of prereqs) {
-    // Level requirement
+
     if (prereq.level && typeof prereq.level === "object") {
       const levelObj = prereq.level as Record<string, unknown>;
       const level = levelObj.level as number | undefined;
@@ -59,7 +59,7 @@ function convertPrerequisites(prereqs?: Record<string, unknown>[]): {
       }
     }
 
-    // Spell requirement
+
     if (prereq.spell) {
       const spells = prereq.spell as (
         | string
@@ -78,18 +78,18 @@ function convertPrerequisites(prereqs?: Record<string, unknown>[]): {
       if (spellReqs.length) result.spells = spellReqs;
     }
 
-    // Other optional feature requirement (e.g. Pact of the Blade)
+
     if (prereq.optionalfeature) {
       const optFeats = prereq.optionalfeature as string[];
       result.optional_features = optFeats.map((f) => f.split("|")[0]);
     }
 
-    // Item requirement
+
     if (prereq.item) {
       result.items = prereq.item;
     }
 
-    // Other summary text
+
     if (prereq.otherSummary) {
       const summary = prereq.otherSummary as { entrySummary?: string };
       result.other = summary.entrySummary ?? "Special";
@@ -107,7 +107,7 @@ function detectSubChoices(entry: FiveToolsOptionalFeature): {
   subChoiceType: string | null;
   subChoiceOptions: Record<string, unknown> | null;
 } {
-  // Additional spells granted by the feature
+
   if (entry.additionalSpells?.length) {
     return {
       hasSubChoices: true,
@@ -116,7 +116,7 @@ function detectSubChoices(entry: FiveToolsOptionalFeature): {
     };
   }
 
-  // Features that consume a resource (like Sorcery Points)
+
   if (entry.consumes) {
     return {
       hasSubChoices: false,

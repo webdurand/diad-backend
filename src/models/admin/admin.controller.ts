@@ -27,12 +27,9 @@ export class AdminController {
     private readonly seedCharacterService: SeedCharacterService,
   ) {}
 
-  // ────── Spec 012 — Game Validation Harness ──────
 
-  /**
-   * Materializa um PC canônico (classe/subclasse/nível) pro harness 012.
-   * Non-prod only. L10/L20 retorna 501 na iteração atual (ver spec).
-   */
+
+
   @Post("seed-character")
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(NonProductionGuard)
@@ -45,7 +42,7 @@ export class AdminController {
     return this.seedCharacterService.seed(dto);
   }
 
-  // ────── Fase 0 ──────
+
 
   @Post("comp-sources")
   @HttpCode(HttpStatus.OK)
@@ -54,7 +51,7 @@ export class AdminController {
     return this.adminService.seedCompSources();
   }
 
-  // ────── Fase 1 — Sem dependências ──────
+
 
   @Post("ability-scores")
   @HttpCode(HttpStatus.OK)
@@ -133,7 +130,7 @@ export class AdminController {
     return this.adminService.seedProficiencies();
   }
 
-  // ────── Fase 2 — Dependem da Fase 1 ──────
+
 
   @Post("skills")
   @HttpCode(HttpStatus.OK)
@@ -163,7 +160,7 @@ export class AdminController {
     return this.adminService.seedRules();
   }
 
-  // ────── Fase 3 — Classes e Races ──────
+
 
   @Post("classes")
   @HttpCode(HttpStatus.OK)
@@ -179,7 +176,7 @@ export class AdminController {
     return this.adminService.seedRaces();
   }
 
-  // ────── Fase 4 — Subclasses, Subraces, Traits, Backgrounds ──────
+
 
   @Post("subclasses")
   @HttpCode(HttpStatus.OK)
@@ -216,7 +213,7 @@ export class AdminController {
     return this.adminService.seedOptionalFeatures();
   }
 
-  // ────── Fase 5 — Features, Spells, MagicItems, Monsters ──────
+
 
   @Post("features")
   @HttpCode(HttpStatus.OK)
@@ -246,7 +243,7 @@ export class AdminController {
     return this.adminService.seedMonsters();
   }
 
-  // ────── Fase 6 — Levels ──────
+
 
   @Post("levels")
   @HttpCode(HttpStatus.OK)
@@ -255,7 +252,7 @@ export class AdminController {
     return this.adminService.seedLevels();
   }
 
-  // ────── Seed All — executa tudo na ordem correta ──────
+
 
   @Post("seed-all")
   @HttpCode(HttpStatus.OK)
@@ -263,10 +260,10 @@ export class AdminController {
     this.logger.log("▶▶▶ Seed ALL — iniciando...");
     const results: SeedResult[] = [];
 
-    // Fase 0
+
     results.push(await this.adminService.seedCompSources());
 
-    // Fase 1
+
     results.push(await this.adminService.seedAbilityScores());
     results.push(await this.adminService.seedAlignments());
     results.push(await this.adminService.seedConditions());
@@ -279,30 +276,30 @@ export class AdminController {
     results.push(await this.adminService.seedEquipmentCategories());
     results.push(await this.adminService.seedProficiencies());
 
-    // Fase 2
+
     results.push(await this.adminService.seedSkills());
     results.push(await this.adminService.seedEquipment());
     results.push(await this.adminService.seedFeats());
     results.push(await this.adminService.seedRules());
 
-    // Fase 3
+
     results.push(await this.adminService.seedClasses());
     results.push(await this.adminService.seedRaces());
 
-    // Fase 4
+
     results.push(await this.adminService.seedSubclasses());
     results.push(await this.adminService.seedSubraces());
     results.push(await this.adminService.seedTraits());
     results.push(await this.adminService.seedBackgrounds());
     results.push(await this.adminService.seedOptionalFeatures());
 
-    // Fase 5
+
     results.push(await this.adminService.seedFeatures());
     results.push(await this.adminService.seedSpells());
     results.push(await this.adminService.seedMagicItems());
     results.push(await this.adminService.seedMonsters());
 
-    // Fase 6
+
     results.push(await this.adminService.seedLevels());
 
     const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);

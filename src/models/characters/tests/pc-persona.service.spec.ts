@@ -195,7 +195,7 @@ describe("PcPersonaService", () => {
     expect(persona.personality.bond).toContain("Tobias");
     expect(persona.personality.flaw).toContain("Soberba");
     expect(persona.conditionsActive).toEqual(["frightened"]);
-    // maxHp = 10 (hitDie) + 2 (con mod) + 7 + 6 (level ups) = 25; current_hp 14 → 56%
+
     expect(persona.currentHpPercent).toBe(56);
     expect(persona.keyEquipmentSummary).toEqual(
       expect.arrayContaining([
@@ -208,7 +208,7 @@ describe("PcPersonaService", () => {
         }),
       ]),
     );
-    // Não-equipados ficam fora.
+
     expect(
       persona.keyEquipmentSummary.find((e) => e.slug === "dagger"),
     ).toBeUndefined();
@@ -325,8 +325,8 @@ describe("PcPersonaService", () => {
     expect(persona.conditionsActive).toEqual([]);
   });
 
-  // Spec 024 follow-up — fix do 500 em /characters/<name>/persona quando
-  // tools agno (Spec 020 `get_pc_persona`) passam o nome ao invés do UUID.
+
+
   describe("UUID-or-name resolution (Spec 024 follow-up)", () => {
     it("resolve por UUID (caminho original preservado)", async () => {
       const service = buildService({
@@ -359,7 +359,7 @@ describe("PcPersonaService", () => {
       const persona = await service.assemblePersona("Aelara", USER_ID);
 
       expect(persona.characterId).toBe(CHARACTER_ID);
-      // Lookup do character usou `name` (não `id`) porque entrada não bateu UUID_RE.
+
       const findOneCall = characterRepoMock.findOne.mock.calls[0]?.[0] as {
         where: Record<string, unknown>;
       };
@@ -390,8 +390,8 @@ describe("PcPersonaService", () => {
 
       await service.assemblePersona("Aelara", USER_ID);
 
-      // FK lookup do origin DEVE usar character_id = UUID real, não "Aelara"
-      // (caso contrário Postgres rejeita com `invalid input syntax for type uuid`).
+
+
       const originCall = originRepoMock.findOne.mock.calls[0]?.[0] as {
         where: Record<string, unknown>;
       };

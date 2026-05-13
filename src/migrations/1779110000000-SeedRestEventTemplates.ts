@@ -1,15 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 016 M4 — Seed dos camp event templates (BG3-inspired).
- *
- * Pool priorizado: bond > chekhov > dream > mythic > interruption > nothing.
- * Director picker faz weighted roll, max 1 event/long rest. Templates
- * mínimos viáveis pra M4; M5 expande com narrative_template_id linkando
- * a beats curados.
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §6.4.
- */
+
 
 interface TemplatePayload {
   kind:
@@ -67,7 +58,7 @@ export class SeedRestEventTemplates1779110000000 implements MigrationInterface {
   name = "SeedRestEventTemplates1779110000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    // Idempotente: limpa antes de re-seed (ainda não temos slug único).
+
     await queryRunner.query(
       `DELETE FROM rest_event_templates WHERE narrative_template_id IS NULL`,
     );

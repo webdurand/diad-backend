@@ -3,44 +3,26 @@ import type {
   TargetShape,
 } from "../../interfaces/combat-action.interfaces";
 
-/**
- * Spec 003 — catálogo estático de class features ativáveis cobertas na spec
- * (6 FULL + 10 STUB + 4 B-lite).
- *
- * Este catálogo descreve o shape declarativo de cada feature:
- * pré-requisitos (classe, level), custo (action economy + feature uses),
- * resolução (FULL vs STUB) e fórmula de max uses.
- *
- * `ClassFeatureActionResolver` consulta esse catálogo + o estado atual
- * (classes do PC, feature_uses_used, action economy) para gerar `ActionDescriptor[]`.
- *
- * `ClassFeatureExecutorService` consulta o mesmo catálogo + o body recebido
- * para validar pré-requisitos, decrementar usos e despachar (ou emitir evento).
- */
+
 
 export type FeatureResolution = "full" | "stub" | "wrapper";
 
 export interface FeatureSpec {
   slug: string;
   displayName: string;
-  /** Slug da classe requerida. Matching normaliza sufixos (`fighter-phb` === `fighter`). */
+
   classSlug: string;
-  /** Sub-source (ex: 'XPHB'). Se omitido, aceita qualquer edition. */
+
   sourceEdition?: "XPHB" | "PHB";
   requiredLevel: number;
   actionCost: ActionCost;
   targetShape: TargetShape;
   targetRange?: number;
   resolution: FeatureResolution;
-  /** Fórmula de max uses a partir do classLevel (ausente = ∞). */
+
   maxUsesByLevel?: (classLevel: number) => number;
   rechargeOn?: "short" | "long";
-  /**
-   * Spec 015 — quando preenchido, as validações + incremento de uses operam
-   * sobre ESTE slug em vez do próprio. Ex.: `cutting-words` compartilha pool
-   * com `bardic-inspiration`. A fórmula `maxUsesByLevel` do slug compartilhado
-   * é usada quando a feature atual não tem a sua própria.
-   */
+
   usesSharedWith?: string;
 }
 
@@ -66,7 +48,7 @@ export function matchesClass(
 }
 
 export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
-  // ---- Fighter ----
+
   {
     slug: "second-wind",
     displayName: "Segundo Fôlego",
@@ -90,12 +72,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     rechargeOn: "short",
   },
   {
-    /**
-     * Fighter L9 Indomitable (RAW 2024 XPHB) — resolução FULL:
-     * consome use + arma flag `indomitable_armed` no participant. Próximo
-     * save failed do PC é automaticamente rerolled com +fighter_level de
-     * bônus (saving-throw.service intercepta via IndomitableService).
-     */
+
     slug: "indomitable",
     displayName: "Indomável",
     classSlug: "fighter",
@@ -106,7 +83,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: (lv) => (lv >= 17 ? 3 : lv >= 13 ? 2 : 1),
     rechargeOn: "short",
   },
-  // ---- Barbarian ----
+
   {
     slug: "rage",
     displayName: "Fúria",
@@ -138,7 +115,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetShape: "self",
     resolution: "full",
   },
-  // ---- Paladin ----
+
   {
     slug: "lay-on-hands",
     displayName: "Imposição de Mãos",
@@ -148,7 +125,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetShape: "single-creature",
     targetRange: 5,
     resolution: "full",
-    maxUsesByLevel: (lv) => lv * 5, // pool de HP (gasto HP, nao usos)
+    maxUsesByLevel: (lv) => lv * 5,
     rechargeOn: "long",
   },
   {
@@ -159,10 +136,10 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     actionCost: "action",
     targetShape: "self",
     resolution: "stub",
-    maxUsesByLevel: () => 1, // fallback; o executor pode somar CHA mod quando sheet disponivel
+    maxUsesByLevel: () => 1,
     rechargeOn: "long",
   },
-  // ---- Cleric ----
+
   {
     slug: "channel-divinity",
     displayName: "Canalizar Divindade",
@@ -176,7 +153,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     rechargeOn: "short",
   },
   {
-    // Expiração separada pra aparecer listável sem passar por wrapper de Channel.
+
     slug: "turn-undead",
     displayName: "Expulsar Mortos-Vivos",
     classSlug: "cleric",
@@ -188,10 +165,10 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: (lv) => (lv >= 18 ? 3 : lv >= 6 ? 2 : 1),
     rechargeOn: "short",
   },
-  // ---- Wizard ----
+
   {
-    // Spec 011 Phase 3 — 1/dia, recupera slots após short rest.
-    // Resolução STUB por ora: Spec 4 pode elevar a FULL conectando ao state.spell_slots_used.
+
+
     slug: "arcane-recovery",
     displayName: "Recuperação Arcana",
     classSlug: "wizard",
@@ -202,7 +179,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: () => 1,
     rechargeOn: "long",
   },
-  // ---- Druid ----
+
   {
     slug: "wild-shape",
     displayName: "Forma Selvagem",
@@ -211,7 +188,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     actionCost: "bonus",
     targetShape: "self",
     resolution: "stub",
-    // Spec 015 Eixo 4: L20 Archdruid = unlimited uses (RAW 2024 XPHB).
+
     maxUsesByLevel: (level: number) => (level >= 20 ? 9999 : 2),
     rechargeOn: "short",
   },
@@ -226,7 +203,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: () => 1,
     rechargeOn: "long",
   },
-  // ---- Bard ----
+
   {
     slug: "bardic-inspiration",
     displayName: "Inspiração Bárdica",
@@ -236,14 +213,14 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetShape: "single-creature",
     targetRange: 60,
     resolution: "stub",
-    // Max uses = CHA modifier (min 1) — executor substitui com sheet.
+
     maxUsesByLevel: () => 1,
     rechargeOn: "long",
   },
-  // Spec 015 — Cutting Words (Lore Bard L3, RAW 2024 XPHB):
-  // Reaction quando criatura visível em 60ft faz attack/check/damage roll.
-  // Gasta 1 uso de Bardic Inspiration; target subtrai o d{N} do resultado.
-  // Compartilha pool com `bardic-inspiration` (RAW — mesmo recurso).
+
+
+
+
   {
     slug: "cutting-words",
     displayName: "Palavras Cortantes",
@@ -255,10 +232,10 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     resolution: "full",
     usesSharedWith: "bardic-inspiration",
   },
-  // Spec 015 — Countercharm (Bard L5 XPHB 2024 / L6 PHB 2014):
-  // Reaction quando criatura em 30ft falha save vs Charmed/Frightened;
-  // força re-roll desse save. Implementação MVP emite o evento e aplica
-  // effect `countercharm_reroll_available` no target pro próximo save.
+
+
+
+
   {
     slug: "countercharm",
     displayName: "Contrafeitiço",
@@ -269,7 +246,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetRange: 30,
     resolution: "full",
   },
-  // ---- Rogue ----
+
   {
     slug: "cunning-action",
     displayName: "Ação Ardilosa",
@@ -308,7 +285,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetShape: "self",
     resolution: "stub",
   },
-  // ---- Monk ----
+
   {
     slug: "flurry-of-blows",
     displayName: "Rajada de Golpes",
@@ -347,7 +324,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetRange: 5,
     resolution: "stub",
   },
-  // ---- Sorcerer ----
+
   {
     slug: "metamagic",
     displayName: "Metamagia",
@@ -357,7 +334,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     targetShape: "none",
     resolution: "stub",
   },
-  // ---- Warlock ----
+
   {
     slug: "pact-of-the-blade-summon",
     displayName: "Invocar Lâmina do Pacto",
@@ -371,7 +348,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     slug: "dark-ones-blessing",
     displayName: "Bênção Fiendish (Dark One's Blessing)",
     classSlug: "warlock",
-    requiredLevel: 1, // Fiend L1 pre-2024; aceita em qualquer level desde que subclass='fiend'
+    requiredLevel: 1,
     actionCost: "free",
     targetShape: "self",
     resolution: "stub",
@@ -387,7 +364,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     maxUsesByLevel: () => 1,
     rechargeOn: "short",
   },
-  // ---- Ranger ----
+
   {
     slug: "favored-enemy",
     displayName: "Inimigo Favorito",

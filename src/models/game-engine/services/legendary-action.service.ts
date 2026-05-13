@@ -26,17 +26,7 @@ export interface LegendaryActionExecuteResult {
   legendaryPointsMax: number;
 }
 
-/**
- * Spec 004 — Pool de pontos lendários.
- *
- * Responsável por:
- *  - validar custo, condition prevent (incapacitated), pool atual
- *  - debitar pontos
- *  - reset no início do turno do dono
- *
- * Resolução do efeito (saves/dano) fica delegada ao caller (geralmente
- * `monster-action-resolver` reutilizado).
- */
+
 @Injectable()
 export class LegendaryActionService {
   constructor(

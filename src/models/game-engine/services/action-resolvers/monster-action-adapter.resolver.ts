@@ -7,16 +7,10 @@ import type {
   ParticipantContext,
 } from "../../interfaces/combat-action.interfaces";
 
-/**
- * Spec 003 — adapter do monster statblock para o registry.
- *
- * Para cada entrada em `ctx.monsterActions`, gera slug
- * `<monsterSlug>-<slugified-action-name>` e expõe como `kind: 'attack'`
- * com a informação disponível (damageDice, damageType).
- */
+
 @Injectable()
 export class MonsterActionAdapterResolver implements ActionResolver {
-  // Monster actions can be attacks or special abilities; `list()` returns both.
+
   readonly kind: ActionKind = "attack";
 
   async list(ctx: ParticipantContext): Promise<ActionDescriptor[]> {
@@ -64,7 +58,7 @@ export class MonsterActionAdapterResolver implements ActionResolver {
       }
     }
 
-    // Habilidades sem attackBonus nem damageDice são especiais (summon, aura, etc.)
+
     const isAttack = action.attackBonus != null || action.damageDice != null;
 
     return {

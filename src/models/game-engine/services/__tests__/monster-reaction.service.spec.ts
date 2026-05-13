@@ -64,8 +64,8 @@ describe("MonsterReactionService.tryParryAfterAttackRoll", () => {
 
   it("aplica Parry: hit marginal vira miss", async () => {
     const svc = makeService();
-    const target = makeTarget(); // Parry +2, AC 16
-    // attack=17 hit AC 16, mas com +2 nova AC=18, attack 17 < 18 → miss
+    const target = makeTarget();
+
     const res = await svc.tryParryAfterAttackRoll(target, 17, true, 16);
     expect(res).not.toBeNull();
     expect(res!.bonus).toBe(2);
@@ -77,8 +77,8 @@ describe("MonsterReactionService.tryParryAfterAttackRoll", () => {
 
   it("Parry consome reaction mesmo se ataque ainda acerta", async () => {
     const svc = makeService();
-    const target = makeTarget(); // Parry +2, AC 16
-    // attack=20 hit AC 16, com +2 nova AC=18, attack 20 ainda hit
+    const target = makeTarget();
+
     const res = await svc.tryParryAfterAttackRoll(target, 20, true, 16);
     expect(res).not.toBeNull();
     expect(res!.hitAfter).toBe(true);

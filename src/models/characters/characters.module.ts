@@ -33,7 +33,7 @@ import {
   ClassStartingEquipmentEntity,
   EquipmentCategoryItemEntity,
   CompSourceEntity,
-  // Spec 016 — Play Shell Foundation
+
   ReactionDefaultEntity,
   EncounterParticipantEntity,
   EncounterEntity,
@@ -91,7 +91,7 @@ import { PcPersonaService } from "./services/pc-persona.service";
       ClassStartingEquipmentEntity,
       EquipmentCategoryItemEntity,
       CompSourceEntity,
-      // Spec 016 — Play Shell Foundation
+
       ReactionDefaultEntity,
       EncounterParticipantEntity,
       EncounterEntity,
@@ -111,14 +111,14 @@ import { PcPersonaService } from "./services/pc-persona.service";
     SpellService,
     InventoryService,
     ActionsService,
-    // Spec 016 — Play Shell Foundation
+
     ReactionPrefsService,
-    // Spec 018 — PC Persona Injection
+
     PcPersonaService,
-    // Spec 027 (M3/AC3.2) — decay de reputação no long rest. Service só
-    // depende de DataSource global, então fica direto aqui pra evitar
-    // ciclo CharactersModule → WorldModule → AiProxyModule → SessionModule
-    // → CharactersModule.
+
+
+
+
     ReputationDecayService,
     GameClockService,
   ],
@@ -129,9 +129,9 @@ import { PcPersonaService } from "./services/pc-persona.service";
     ActionsService,
     SpellService,
     InventoryService,
-    // Spec 016 — Play Shell Foundation
+
     ReactionPrefsService,
-    // Spec 018 — PC Persona Injection
+
     PcPersonaService,
   ],
 })

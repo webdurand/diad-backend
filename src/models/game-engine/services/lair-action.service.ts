@@ -20,12 +20,7 @@ const INCAPACITATING_SLUGS = new Set([
   "unconscious",
 ]);
 
-/**
- * Spec 004 — Lair Actions (MM intro "Lair Actions").
- *
- * Em encontros com `inLair=true`, no início de cada round (initiative count 20)
- * o monstro lendário tem direito a 1 lair action escolhida pelo DM/IA.
- */
+
 @Injectable()
 export class LairActionService {
   constructor(
@@ -35,10 +30,7 @@ export class LairActionService {
     private readonly participants: Repository<EncounterParticipantEntity>,
   ) {}
 
-  /**
-   * Verifica se há lair action para oferecer no início do round.
-   * Retorna a lista de monstros lendários vivos com lair_actions populadas.
-   */
+
   async availableForRound(encounter: EncounterEntity): Promise<
     Array<{
       participantId: string;
@@ -74,10 +66,7 @@ export class LairActionService {
     return out;
   }
 
-  /**
-   * Resolve uma lair action escolhida.
-   * actionIndex=null indica skip.
-   */
+
   async execute(
     encounter: EncounterEntity,
     monsterParticipantId: string,

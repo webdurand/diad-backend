@@ -5,11 +5,7 @@ import { EncounterSnapshotService } from "./encounter-snapshot.service";
 import { AiProxyService } from "src/models/ai-proxy/ai-proxy.service";
 import type { GameEventData } from "../interfaces/result.type";
 
-/**
- * Orquestra lair actions no início de cada round (initiative 20 RAW MM).
- * Pra cada monstro lendário vivo com lair_actions, chama agents pra decidir
- * qual ação executar e dispara via LairActionService.
- */
+
 @Injectable()
 export class LairActionsCoordinator {
   private readonly logger = new Logger(LairActionsCoordinator.name);

@@ -2,9 +2,9 @@ import { generateSlug } from "./slug-generator";
 import { parseEntries } from "./entries-parser";
 import { extractTraitEntries, type RaceTraitEntry } from "./transform-races";
 
-// ────────────────────────────────────────────────────────────────
-// Output type
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TransformedTrait {
   slug: string;
@@ -19,9 +19,9 @@ export interface TransformedTrait {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Enrich traits with additional race-level data
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function resolveTraitSpecific(
   entry: RaceTraitEntry,
@@ -29,12 +29,12 @@ function resolveTraitSpecific(
 ): Record<string, unknown> | null {
   const nameLower = entry.name.toLowerCase();
 
-  // Detect breath weapon tables
+
   if (nameLower.includes("breath weapon")) {
     return { breath_weapon: true };
   }
 
-  // Detect spell-related traits (additionalSpells on the race)
+
   if (
     raceRaw.additionalSpells &&
     (nameLower.includes("spell") ||
@@ -77,9 +77,9 @@ function resolveProficiencyChoices(
   return null;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main: extract traits from races
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TraitExtractionInput {
   raceSlug: string;
@@ -98,7 +98,7 @@ export function extractTraitsFromRace(
   const results: TransformedTrait[] = [];
 
   for (const entry of traitEntries) {
-    // Skip generic size/speed entries that aren't real traits
+
     const nameLower = entry.name.toLowerCase();
     if (
       nameLower === "size" ||

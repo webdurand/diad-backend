@@ -1,11 +1,4 @@
-/**
- * Spec 027 (M2, AC2.9 / bug D2) — NarrativeDecisionService name→UUID
- * resolution.
- *
- * Bug original: Archivist envia `affectedEntityId: "eda"` em campo Postgres
- * UUID. Insert rejeita com `invalid input syntax for type uuid`. Service
- * deve resolver via NpcService.findByNameInCampaign antes de persistir.
- */
+
 import { UnprocessableEntityException } from "@nestjs/common";
 import { NarrativeDecisionService } from "../narrative-decision.service";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
@@ -123,7 +116,7 @@ describe("NarrativeDecisionService.create — D2 name→UUID resolution", () => 
 
   it("auto-materializa stub quando nome de NPC não casa com nenhum canônico", async () => {
     const { svc, saved, npcService } = makeService({
-      // Eda não está cadastrada → cai no path de materializeStubFromName
+
       npcByName: {},
     });
     await svc.create(CAMPAIGN_ID, {
@@ -183,7 +176,7 @@ describe("NarrativeDecisionService.create — D2 name→UUID resolution", () => 
     const { svc, saved } = makeService();
     await svc.create(CAMPAIGN_ID, {
       ...baseDto(),
-      // sem affectedEntityType nem affectedEntityId
+
     });
     expect(
       (saved[0] as { affectedEntityId?: string }).affectedEntityId,

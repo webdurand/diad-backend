@@ -1,8 +1,4 @@
-/**
- * Typed structures for monster multiattack and spellcasting.
- * Persisted as jsonb in `monsters.multiattack` / `monsters.spellcasting`.
- * Populated by data migrations from SRD free-text descriptions.
- */
+
 
 export type SpellSlotLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
@@ -36,10 +32,7 @@ export interface MonsterSpellcasting {
   knownSpells: MonsterKnownSpell[];
 }
 
-/**
- * Runtime-only state tracked per encounter participant (monster or PC).
- * Persisted as `encounter_participants.spell_slots_used`.
- */
+
 export interface ParticipantSpellSlotsUsed {
   byLevel?: Partial<Record<SpellSlotLevel, number>>;
   innateUses?: Record<string, number>;

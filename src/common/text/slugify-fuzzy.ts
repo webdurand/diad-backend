@@ -21,12 +21,7 @@ const STOP_WORDS = new Set([
 const COMBINING_DIACRITICS = /[̀-ͯ]/g;
 const NON_ALNUM = /[^a-z0-9]+/;
 
-/**
- * Mesma lógica do `_slugify` em `diad-agents/src/agents/quest_judge.py`:
- * lowercase + sem acentos + sem stop-words + tokens unidos por hífen. Permite
- * comparar nome canônico ("Aldeia Tamoio de Itapema") contra slug sintetizado
- * por outras camadas ("aldeia_tamoio_itapema").
- */
+
 export function slugifyFuzzy(value: string | null | undefined): string {
   if (!value) return "";
   const normalized = value

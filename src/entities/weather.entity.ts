@@ -33,26 +33,17 @@ export type WeatherMagicalAnomaly =
   | "weave_unstable";
 
 export interface WeatherAffectsChecks {
-  /** Delta numérico em passive perception (ex: -2 chuva forte). */
+
   perception?: number;
-  /** Delta numérico em stealth checks (chuva ajuda stealth = +N). */
+
   stealth?: number;
-  /** RAW DMG: gale wind ou heavy precipitation = disadvantage em ranged attacks. */
+
   ranged?: "normal" | "disadvantage";
-  /** 1.0 = normal; 0.5 = terreno difícil (snow heavy). */
+
   speedMultiplier?: number;
 }
 
-/**
- * Spec 019 — Living World & Ambiance.
- *
- * Weather state per (campaign, scene?). sceneId NULL = default da campanha;
- * preenchido = override de cena específica. Constraint unique
- * (campaign_id, scene_id NULLS NOT DISTINCT) garante 1 row por par.
- *
- * Modifiers em `affectsChecks` são lidos pelo CombatAgent L1 RuleEngine
- * (Princípio II — declarativo, não hardcoded em prompt).
- */
+
 @Entity("weather")
 @Unique("uq_weather_campaign_scene", ["campaignId", "sceneId"])
 export class WeatherEntity {

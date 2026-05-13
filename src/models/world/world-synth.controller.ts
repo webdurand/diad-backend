@@ -47,19 +47,7 @@ interface CompleteBody {
   context: Record<string, unknown>;
 }
 
-/**
- * Spec NNN — Synthesis endpoints (proxies pra diad-agents /world-synth/*).
- *
- * 6 rotas alinhadas com o wizard de criação de mundo:
- *   POST /campaigns/synthesize-bootstrap         (sem :id — pre-create scaffold)
- *   POST /campaigns/:id/synthesize-npc
- *   POST /campaigns/:id/synthesize-location
- *   POST /campaigns/:id/synthesize-lore
- *   POST /campaigns/:id/synthesize-faction
- *   POST /campaigns/:id/synthesize-complete       (completion + narrative scaffold)
- *
- * Auth: AuthGuard + ownership check (campaign deve ser do user).
- */
+
 @Controller("campaigns")
 @UseGuards(AuthGuard)
 export class WorldSynthController {
@@ -69,12 +57,7 @@ export class WorldSynthController {
     private readonly campaignService: CampaignService,
   ) {}
 
-  /**
-   * Haiku — gera seed canônico compacto a partir de descrição livre.
-   * Não persiste — frontend chama, edita e depois cria campaign + items.
-   * O roster inicial já vem com 20 NPCs canônicos; estrutura narrativa
-   * (story arc/clocks/quests) fica pra synthesize-complete no [Salvar mundo].
-   */
+
   @Post("synthesize-bootstrap")
   async bootstrap(
     @Req() req: AuthRequest,
@@ -83,7 +66,7 @@ export class WorldSynthController {
     seed: Record<string, unknown>;
     preview: Record<string, unknown>;
   }> {
-    getUserId(req); // só valida auth
+    getUserId(req);
     return this.aiProxy.requestAgent(
       "POST",
       "/world-synth/bootstrap",
@@ -178,11 +161,7 @@ export class WorldSynthController {
     );
   }
 
-  /**
-   * Completion + narrative scaffold pass.
-   * Recebe context (snapshot do mundo em construção) e retorna additions + rationale.
-   * Timeout 120s — gera N items + scaffold narrativo (story arc + clocks + quests).
-   */
+
   @Post(":id/synthesize-complete")
   async complete(
     @Req() req: AuthRequest,

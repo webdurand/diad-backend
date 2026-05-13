@@ -94,21 +94,21 @@ export class CampaignEntity {
   @Column({ type: "varchar", default: "draft" })
   status: "draft" | "active" | "paused" | "completed" | "archived";
 
-  // ─── Spec NNN: distinção mundo IA vs campanha humana ───
+
   @Column({ name: "dm_mode", type: "varchar", default: "ai" })
   dmMode: "ai" | "human";
 
   @Column({ type: "varchar", default: "solo" })
   scope: "solo" | "party";
 
-  // Wizard cria draft, submit publica. Auto-cleanup > 7 dias sem activity.
+
   @Column({ name: "is_draft", type: "boolean", default: false })
   isDraft: boolean;
 
   @Column({ name: "is_sandbox", type: "boolean", default: false })
   isSandbox: boolean;
 
-  // Snapshot do dict usado pra criar a campaign (replay/audit).
+
   @Column({ name: "generation_seed", type: "jsonb", nullable: true })
   generationSeed?: Record<string, unknown>;
 
@@ -126,7 +126,7 @@ export class CampaignEntity {
   })
   inviteCode?: string;
 
-  // --- Spec 014 M1: Bounded World + Closure ---
+
 
   @Column({
     name: "content_budget",

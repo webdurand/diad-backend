@@ -4,11 +4,7 @@ import {
   substituteSpellcastingMod,
 } from "./spellcasting-mod";
 
-/**
- * Regressão: heal_at_slot_level no DB SRD inclui placeholder `MOD`
- * (ex: "1d4 + MOD" em Healing Word). DiceService não entende placeholder —
- * sem substituição, rolls retornam 0 e cura quebra silenciosamente.
- */
+
 
 function buildSheet(overrides: Partial<CharacterSheet>): CharacterSheet {
   return {

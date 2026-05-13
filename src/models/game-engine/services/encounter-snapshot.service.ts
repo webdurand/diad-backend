@@ -21,13 +21,7 @@ import { CombatService } from "./combat.service";
 import { PersistentAreaService } from "./persistent-area.service";
 import type { TurnActionBlock } from "../interfaces/combat.interfaces";
 
-/**
- * Spec 003 T049 — monta `EncounterSnapshot` auto-contido para consumo de IA.
- *
- * Modelo simples de visibilidade nesta spec: todos visíveis por default
- * (exceto `hidden` que é detectado via `conditions`). Sight system completo
- * (line-of-sight, cover, dim light) fica pra spec 005.
- */
+
 @Injectable()
 export class EncounterSnapshotService {
   private readonly logger = new Logger(EncounterSnapshotService.name);
@@ -61,13 +55,13 @@ export class EncounterSnapshotService {
       relations: ["monster"],
     });
 
-    // Spec 027 (M2 follow-up) — overlay HP do sheet pra PCs.
-    // EncounterParticipantEntity NÃO persiste currentHp/maxHp pra PCs (vivem
-    // em char_state via CharacterSheetService.computeSheet). Sem overlay, o
-    // snapshot mostra hp=0/0 pro PC e a IA filtra com `hp.current > 0` →
-    // bartender vê enemiesAlive=0 → dodge silencioso, PC parado.
-    // Espelha encounter.service.ts:enrichPcParticipants() — se mexer aqui,
-    // mexer lá também (até extrair pra um helper compartilhado).
+
+
+
+
+
+
+
     const pcOverlay = await this.buildPcSheetOverlay(participants);
     const companionMeta = await this.buildPcCompanionMeta(participants);
 
@@ -76,8 +70,8 @@ export class EncounterSnapshotService {
 
     const snapParticipants: SnapshotParticipant[] = await Promise.all(
       participants.map(async (p) => {
-        // Tenta buscar availableActions via CombatService.getTurnActions.
-        // Se falhar (ex: participante que não é o do turno), retorna array vazio.
+
+
         let availableActions: TurnActionBlock[] = [];
         try {
           const turnRes = await this.combatService.getTurnActions(
@@ -93,7 +87,7 @@ export class EncounterSnapshotService {
             ];
           }
         } catch {
-          // noop — snapshot ainda é útil sem availableActions completos
+
         }
 
         return {
@@ -131,14 +125,14 @@ export class EncounterSnapshotService {
           hidden: (p.conditions ?? []).includes("hidden"),
           isConcentrating: p.isConcentrating ?? false,
           concentratingOn: p.concentratingOn ?? null,
-          // Spec 027 (M2 follow-up) — statblock para monster E npc (NPC do
-          // narrative tem type='npc' + monsterId). Carrega `actions` (era
-          // ausente) pra que agno `_pick_best_attack` resolva nome real;
-          // sem isso, AI mandava "attack" genérico que o backend não
-          // reconhece, deixando NPC parado no turno.
-          // `speed` adicionado pra movement_planner do agno saber até onde
-          // pode mover quando alvo está fora de range (evita NPC parado por
-          // OUT_OF_RANGE silencioso).
+
+
+
+
+
+
+
+
           statblockRef:
             (p.type === "monster" || p.type === "npc") && p.monster
               ? {
@@ -179,7 +173,7 @@ export class EncounterSnapshotService {
       }),
     );
 
-    // Spec 013 — tile-effects ativos com cells expandidas + affecting participants.
+
     const areas = await this.areaRepo.find({
       where: { encounterId: encounter.id },
     });
@@ -248,15 +242,7 @@ export class EncounterSnapshotService {
     });
   }
 
-  /**
-   * Spec 027 (M2 follow-up) — resolve HP/tempHp do sheet pra cada PC participant.
-   * Retorna `Map<participantId, {currentHp, maxHp, tempHp}>`. Participants sem
-   * overlay (sheet falhou, owner não resolvido, ou type !== pc) ficam fora —
-   * caller usa fallback no `?? p.currentHp ?? 0`.
-   *
-   * Espelha encounter.service.ts:enrichPcParticipants() — divergir aqui pode
-   * causar drift entre o que o snapshot vê e o que /encounters/:id retorna.
-   */
+
   private async buildPcSheetOverlay(
     participants: EncounterParticipantEntity[],
   ): Promise<
@@ -296,8 +282,8 @@ export class EncounterSnapshotService {
             ownerId,
             p.characterId!,
           );
-          // Transformação ativa (Wild Shape, Polymorph) — espelha
-          // encounter.service.ts:262-267.
+
+
           if (p.transformationState) {
             const form = p.transformationState.form;
             overlay.set(p.id, {
@@ -372,22 +358,18 @@ function computeVisibility(
   all: EncounterParticipantEntity[],
 ): Record<string, boolean> {
   const out: Record<string, boolean> = {};
-  // Modelo simples: todos visíveis, exceto quem está `hidden`. Sight system
-  // completo fica pra 005.
+
+
   for (const other of all) {
     if (other.id === self.id) continue;
     const otherHidden = (other.conditions ?? []).includes("hidden");
-    // `self` vê `other` se other não está escondido
+
     out[other.id] = !otherHidden;
   }
   return out;
 }
 
-/**
- * Spec 027 (M2 follow-up) — extrai walk speed em pés do JSONB do monster.
- * Espelha `MovementService.parseMonsterSpeed` (privado lá). RAW SRD: humanoides
- * 30ft, beasts variam, undead 25-30ft. Default 30 quando não parseável.
- */
+
 function parseMonsterSpeedFt(
   speed: Record<string, unknown> | null | undefined,
 ): number {

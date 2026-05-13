@@ -71,7 +71,7 @@ describe("EventEnvelopeFactory", () => {
   });
 
   it("descarta traceId malformado e cai pra CLS/regen", () => {
-    const traceId = "z".repeat(32); // invalid (not hex)
+    const traceId = "z".repeat(32);
     const factory = new EventEnvelopeFactory(
       makeCls({ traceId: "d".repeat(32) }),
     );

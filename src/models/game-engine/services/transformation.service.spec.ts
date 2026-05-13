@@ -1,14 +1,6 @@
 import { TransformationService } from "./transformation.service";
 
-/**
- * Spec 012 \u2014 TransformationService core.
- *
- * Cobertura:
- * - enterForm: snapshota state original + popula form do monster + muda displayName
- * - revertForm: restaura displayName + limpa transformation_state
- * - applyDamageToForm: absorbed/overflow + revert em hp zero + overflow vai pro PC
- * - idempot\u00eancia: revert em participant n\u00e3o-transformado \u00e9 no-op
- */
+
 describe("TransformationService (spec 012)", () => {
   function makeWolfMonster() {
     return {
@@ -113,7 +105,7 @@ describe("TransformationService (spec 012)", () => {
       expect(state.enteredAtRound).toBe(3);
       expect(state.original.currentHp).toBe(20);
       expect(state.original.displayName).toBe("Araxis");
-      // Spec 015 Eixo 4: displayName passa a ser só o formName (token representa a forma).
+
       expect(result.displayName).toBe("Wolf");
     });
 
@@ -219,7 +211,7 @@ describe("TransformationService (spec 012)", () => {
       expect(r.absorbedByForm).toBe(5);
       expect(r.overflowToOriginal).toBe(7);
       expect(r.reverted).toBe(true);
-      // stateSave chamado pra aplicar o overflow no char state
+
       expect(mocks.stateSave).toHaveBeenCalledTimes(1);
       const savedState = mocks.stateSave.mock.calls[0][0];
       expect(savedState.current_hp).toBe(20 - 7);
@@ -328,7 +320,7 @@ describe("TransformationService (spec 012)", () => {
       });
       const r = await svc.tickDurationOnTurnStart("p1");
       expect(r.events).toHaveLength(0);
-      // save com duration decrementado pra 4
+
       const saved = mocks.participantSave.mock.calls[0][0];
       expect(saved.transformationState.durationRoundsRemaining).toBe(4);
       expect(saved.transformationState).not.toBeNull();
@@ -361,7 +353,7 @@ describe("TransformationService (spec 012)", () => {
       expect(r.events[0].event_type).toBe("transformation_reverted");
       expect(r.events[0].data?.reason).toBe("duration-expired");
       expect(r.events[0].data?.source).toBe("wild-shape");
-      // displayName restaurado
+
       const saved = mocks.participantSave.mock.calls[0][0];
       expect(saved.displayName).toBe("Araxis");
       expect(saved.transformationState).toBeNull();
@@ -402,15 +394,15 @@ describe("TransformationService (spec 012)", () => {
       expect(r.events).toHaveLength(1);
       expect(r.events[0].event_type).toBe("true_polymorph_became_permanent");
       const saved = mocks.participantSave.mock.calls[0][0];
-      // Forma permanece
+
       expect(saved.transformationState).not.toBeNull();
-      // Concentration bind removido
+
       expect(saved.transformationState.sourceCasterParticipantId).toBeNull();
       expect(saved.transformationState.revertTriggers.concentrationBroken).toBe(
         false,
       );
       expect(saved.transformationState.revertTriggers.durationEnd).toBe(false);
-      // Duração zerada (sem prazo)
+
       expect(saved.transformationState.durationRoundsTotal).toBeNull();
       expect(saved.transformationState.durationRoundsRemaining).toBeNull();
     });

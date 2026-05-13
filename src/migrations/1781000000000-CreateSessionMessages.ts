@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 017 — chat history persistence.
- *
- * Histórico de mensagens narrativas da sessão de chat persistido server-side
- * pra hidratação cross-device. Antes desta tabela o histórico vivia só em
- * localStorage (device-local), perdendo cross-device sync e contexto após
- * fechar/reabrir o navegador.
- *
- * Sequência determinística via (session_id, sequence_number).
- * `client_id` opcional permite dedupe idempotente em retry POST.
- */
+
 export class CreateSessionMessages1781000000000 implements MigrationInterface {
   name = "CreateSessionMessages1781000000000";
 

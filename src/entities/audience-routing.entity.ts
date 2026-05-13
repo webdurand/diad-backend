@@ -6,13 +6,7 @@ import {
   Unique,
 } from "typeorm";
 
-/**
- * Spec 017 — Matriz default global (eventCategory, eventType) → defaultAudiences[].
- *
- * Seed inicial vem de contracts/audience-routing.json (migration). Campanhas
- * ajustam via campaign_audience_overrides — entries com `overrideable=false`
- * não permitem remoção (preserva Princípio X).
- */
+
 @Entity("audience_routing")
 @Unique("audience_routing_unique", ["eventCategory", "eventType"])
 export class AudienceRoutingEntity {

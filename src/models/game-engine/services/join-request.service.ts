@@ -75,7 +75,7 @@ export class JoinRequestService {
     private readonly dataSource: DataSource,
   ) {}
 
-  // ----- create ------------------------------------------------------------
+
 
   async createRequest(
     encounterId: string,
@@ -182,7 +182,7 @@ export class JoinRequestService {
     );
   }
 
-  // ----- list --------------------------------------------------------------
+
 
   async listByEncounter(
     encounterId: string,
@@ -228,7 +228,7 @@ export class JoinRequestService {
     });
   }
 
-  // ----- approve -----------------------------------------------------------
+
 
   async approve(
     encounterId: string,
@@ -260,7 +260,7 @@ export class JoinRequestService {
       });
     }
 
-    // Compute sheet and create participant.
+
     const sheet = await this.sheetService.computeSheet(
       character.userId,
       character.id,
@@ -285,9 +285,9 @@ export class JoinRequestService {
       faction: "ally",
     });
 
-    // Transaction: save participant + update encounter.turnOrder + resolve request.
-    // Use em.update for the encounter to avoid cascading the relations-loaded
-    // `participants` array back into save (which causes unique conflicts).
+
+
+
     let finalTurnOrder: string[] = [];
     try {
       await this.dataSource.transaction(async (em) => {
@@ -316,7 +316,7 @@ export class JoinRequestService {
       throw err;
     }
 
-    // Emit WS events.
+
     this.realtime.emitToRoom(
       `encounter:${encounterId}`,
       "encounter:participant_added",
@@ -374,7 +374,7 @@ export class JoinRequestService {
     };
   }
 
-  // ----- reject ------------------------------------------------------------
+
 
   async reject(
     encounterId: string,
@@ -410,7 +410,7 @@ export class JoinRequestService {
     };
   }
 
-  // ----- invites (R2) ------------------------------------------------------
+
 
   async createInvites(
     encounterId: string,
@@ -433,7 +433,7 @@ export class JoinRequestService {
     }
     const session = await this.sessionService.getById(encounter.sessionId);
 
-    // Only the DM of the campaign (or the solo session owner) can invite.
+
     if (!session.campaignId) {
       if (session.ownerId !== callerUserId) {
         throw new ForbiddenException({
@@ -455,7 +455,7 @@ export class JoinRequestService {
       }
     }
 
-    // Build the eligible set: CampaignPlayer active with a characterId.
+
     const players: CampaignPlayerEntity[] = session.campaignId
       ? await this.campaignService
           .getPlayers(session.campaignId)
@@ -533,7 +533,7 @@ export class JoinRequestService {
     };
   }
 
-  // ----- auto-reject pending requests when encounter completes -------------
+
 
   async autoRejectPendingOnEncounterEnd(encounterId: string): Promise<number> {
     const pending = await this.requestRepo.find({
@@ -557,7 +557,7 @@ export class JoinRequestService {
     return pending.length;
   }
 
-  // ----- helpers -----------------------------------------------------------
+
 
   private async loadEncounter(encounterId: string): Promise<EncounterEntity> {
     const encounter = await this.encounterRepo.findOne({
@@ -617,7 +617,7 @@ export class JoinRequestService {
     character: CharacterEntity,
     campaignId: string | undefined,
   ): Promise<void> {
-    if (!campaignId) return; // solo session: owner check already enforced
+    if (!campaignId) return;
     const players = await this.campaignService
       .getPlayers(campaignId)
       .catch(() => [] as CampaignPlayerEntity[]);

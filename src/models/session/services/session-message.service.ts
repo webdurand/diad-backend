@@ -45,20 +45,7 @@ export class SessionMessageService {
     private readonly dataSource: DataSource,
   ) {}
 
-  /**
-   * Spec 027 (M1) — append agora roda inteiro dentro de uma transação que
-   * adquire `pg_advisory_xact_lock(hashtext('session_msg:' || sessionId))`
-   * antes de calcular `MAX(seq)+1`. Garante que dois turns concorrentes na
-   * mesma sessão serializam, eliminando o race que gerava 409
-   * SESSION_LAST_MESSAGE_MISMATCH (D5 da spec 027).
-   *
-   * Idempotência por `clientId` também roda dentro do lock — sem isso, dois
-   * POST com mesmo clientId podiam passar pelo `findOne` antes de qualquer
-   * um persistir e gerar duplicate key na unique partial.
-   *
-   * `assertOwnership` roda FORA da transação (read-only, não muta estado)
-   * pra reduzir tempo segurando o lock.
-   */
+
   async append(dto: AppendMessageDto): Promise<SessionMessageEntity> {
     if (!VALID_KINDS.has(dto.kind)) {
       throw new NotFoundException(`Invalid message kind: ${dto.kind}`);
@@ -66,8 +53,8 @@ export class SessionMessageService {
     await this.assertOwnership(dto.sessionId, dto.userId);
 
     return this.dataSource.transaction(async (manager) => {
-      // pg_advisory_xact_lock libera automaticamente no commit/rollback.
-      // hashtext devolve int4 — assinatura `pg_advisory_xact_lock(int4)`.
+
+
       await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
         `session_msg:${dto.sessionId}`,
       ]);
@@ -172,11 +159,7 @@ export class SessionMessageService {
     });
   }
 
-  /**
-   * Spec 024 follow-up — exposto público pra ai-proxy emitir `session_sync`
-   * chunk no fim de cada turn (frontend ressincroniza `lastMessageIdRef`).
-   * Também consumido por session-resume.service no `serverLastMessageId`.
-   */
+
   async getMaxSequenceNumber(sessionId: string): Promise<number> {
     const result = await this.messageRepo
       .createQueryBuilder("m")
@@ -186,11 +169,7 @@ export class SessionMessageService {
     return parseInt(result?.max ?? "0", 10) || 0;
   }
 
-  /**
-   * Variante interna que usa o `EntityManager` da transação corrente — o
-   * MAX(seq) precisa ler o snapshot pós-lock pra ver inserts feitos por
-   * transações anteriores que já comitaram.
-   */
+
   private async computeNextSequence(
     manager: EntityManager,
     sessionId: string,

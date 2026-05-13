@@ -10,7 +10,7 @@ describe("stripTags", () => {
     expect(stripTags("Hello world")).toBe("Hello world");
   });
 
-  // Reference tags - extract display text
+
   describe("reference tags", () => {
     it("{@spell} with source", () => {
       expect(stripTags("{@spell Fireball|XPHB}")).toBe("Fireball");
@@ -89,7 +89,7 @@ describe("stripTags", () => {
     });
   });
 
-  // Formatting tags
+
   describe("formatting tags", () => {
     it("{@b text} -> **text**", () => {
       expect(stripTags("{@b some bold}")).toBe("**some bold**");
@@ -120,7 +120,7 @@ describe("stripTags", () => {
     });
   });
 
-  // Dice tags
+
   describe("dice tags", () => {
     it("{@damage 1d6}", () => {
       expect(stripTags("{@damage 1d6}")).toBe("1d6");
@@ -163,7 +163,7 @@ describe("stripTags", () => {
     });
   });
 
-  // Attack tags
+
   describe("attack tags", () => {
     it("{@atk mw}", () => {
       expect(stripTags("{@atk mw}")).toBe("Melee Weapon Attack");
@@ -182,7 +182,7 @@ describe("stripTags", () => {
     });
   });
 
-  // Hit/miss markers
+
   describe("hit/miss markers", () => {
     it("{@h} -> Hit:", () => {
       expect(stripTags("{@h}")).toBe("Hit: ");
@@ -193,7 +193,7 @@ describe("stripTags", () => {
     });
   });
 
-  // Book/filter/adventure references
+
   describe("reference/navigation tags", () => {
     it("{@filter}", () => {
       expect(stripTags("{@filter text|page|filters}")).toBe("text");
@@ -224,7 +224,7 @@ describe("stripTags", () => {
     });
   });
 
-  // Misc tags
+
   describe("misc tags", () => {
     it("{@sup}", () => {
       expect(stripTags("{@sup text}")).toBe("text");
@@ -247,7 +247,7 @@ describe("stripTags", () => {
     });
   });
 
-  // 2024 action tags
+
   describe("2024 action tags", () => {
     it("{@actSave str}", () => {
       expect(stripTags("{@actSave str}")).toBe("Strength Saving Throw:");
@@ -286,7 +286,7 @@ describe("stripTags", () => {
     });
   });
 
-  // Mixed text
+
   describe("mixed text with multiple tags", () => {
     it("handles text with inline tags", () => {
       const input =

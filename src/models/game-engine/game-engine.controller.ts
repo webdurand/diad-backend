@@ -76,7 +76,7 @@ import { CapstonesService } from "./services/capstones.service";
 import { AiTurnService } from "./services/ai-turn.service";
 import { EncounterSnapshotService } from "./services/encounter-snapshot.service";
 import { UpdateControlDto } from "./dto/update-control.dto";
-// Spec 004
+
 import { LegendaryActionDto } from "./dto/legendary-action.dto";
 import { GrappleEscapeDto } from "./dto/grapple-escape.dto";
 import { LairActionDto } from "./dto/lair-action.dto";
@@ -84,9 +84,9 @@ import { LegendaryActionService } from "./services/legendary-action.service";
 import { GrappleEscapeService } from "./services/grapple-escape.service";
 import { LairActionService } from "./services/lair-action.service";
 import { ConditionLifecycleService } from "./services/condition-lifecycle.service";
-// Spec 002 — join-request loop
+
 import { JoinRequestService } from "./services/join-request.service";
-// Spec 016 — Play Shell Foundation
+
 import { FateLadderService } from "./services/fate-ladder.service";
 import type {
   FateLadderTrigger,
@@ -95,7 +95,7 @@ import type {
 import { XpAwardService } from "./services/xp-award.service";
 import { DiceRollService } from "./services/dice-roll.service";
 import type { XpAwardSource } from "src/entities/xp-award-event.entity";
-// Spec 020 — Tool Surface Completion
+
 import { RevivifyCheckService } from "./services/revivify-check.service";
 import { DyingStateService } from "./services/dying-state.service";
 import type { DyingState, DyingReason } from "./services/dying-state.service";
@@ -106,7 +106,7 @@ import { MoveToLocationService } from "./services/move-to-location.service";
 import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
 import { DialogueActionService } from "./services/dialogue-action.service";
-// Spec 027 (M2 follow-up) — WS realtime substitui polling no frontend.
+
 import { RealtimeService } from "src/realtime/realtime.service";
 import { StartEncounterFromNarrativeDto } from "./dto/start-encounter-from-narrative.dto";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -114,7 +114,7 @@ import { Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { failure, GameErrorCode } from "./interfaces/result.type";
-// Spec 006 — response DTOs
+
 import { toEnrichedEncounterResponse } from "./dto/encounter-response.dto";
 import {
   toEventResponseDto,
@@ -177,25 +177,25 @@ export class GameEngineController {
     private readonly capstonesService: CapstonesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
-    // Spec 013 — Tile-effect resolver disparado em PATCH position pra harness/probe.
+
     private readonly persistentArea: PersistentAreaService,
-    // Spec 004
+
     private readonly legendaryActionService: LegendaryActionService,
     private readonly grappleEscapeService: GrappleEscapeService,
     private readonly lairActionService: LairActionService,
     private readonly conditionLifecycle: ConditionLifecycleService,
-    // Spec 002
+
     private readonly joinRequestService: JoinRequestService,
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
-    // Spec 016 — Play Shell Foundation
+
     private readonly fateLadderService: FateLadderService,
     private readonly xpAwardService: XpAwardService,
-    // Spec 016 M2 — Dice request lifecycle (active checks via SSE)
+
     private readonly diceRollService: DiceRollService,
-    // Spec 020 — Tool Surface Completion
+
     private readonly revivifyCheckService: RevivifyCheckService,
     private readonly dyingStateService: DyingStateService,
     private readonly lootRollService: LootRollService,
@@ -205,17 +205,12 @@ export class GameEngineController {
     private readonly travelTickService: TravelTickService,
     private readonly dialogueActionService: DialogueActionService,
     private readonly movementLockService: MovementLockService,
-    // Spec 027 (M2 follow-up) — WS realtime para invalidar cache do frontend
-    // após mutações de turno/encontro. Sala: encounter:<id>.
+
+
     private readonly realtime: RealtimeService,
   ) {}
 
-  /**
-   * Spec 027 (M2 follow-up) — emite invalidate WS pra que clientes refreshem.
-   * Não tenta diff incremental: mantém simples (refresh full do encounter no
-   * frontend). Frequência baixa (uma por mutação significativa). Erros
-   * silenciados — emit nunca quebra o response do endpoint.
-   */
+
   private emitEncounterInvalidate(encounterId: string, reason: string): void {
     try {
       this.realtime.emitToRoom(
@@ -224,16 +219,13 @@ export class GameEngineController {
         { encounterId, reason, at: new Date().toISOString() },
       );
     } catch {
-      /* noop */
+
     }
   }
 
-  // ==================== SPEC 020 — TOOL SURFACE COMPLETION ====================
 
-  /**
-   * Spec 020 — Revivify check (RAW pure, stateless).
-   * Body: { characterId, timeSinceDeathMin, hasDiamond300gp, casterCharacterId?, campaignId? }
-   */
+
+
   @Post("spells/revivify-check")
   async revivifyCheck(
     @Req() req: AuthRequest,
@@ -261,10 +253,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  /**
-   * Spec 020 — set_dying_state.
-   * PATCH /game/encounters/:id/participants/:pid/dying-state
-   */
+
   @Patch("encounters/:id/participants/:pid/dying-state")
   async setDyingState(
     @Req() req: AuthRequest,
@@ -290,10 +279,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  /**
-   * Spec 020 — roll_loot_table.
-   * POST /game/loot/roll
-   */
+
   @Post("loot/roll")
   async rollLootTable(
     @Req() req: AuthRequest,
@@ -312,14 +298,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  /**
-   * Spec 020 — start_encounter_from_narrative.
-   * POST /game/sessions/:sessionId/encounters/from-narrative
-   *
-   * Orquestra narrativa→combate: cria encounter, materializa NPCs hostis,
-   * posiciona tokens, inicia combate, opcionalmente aplica Surprised round.
-   * Emite EncounterEvent.encounter_started.
-   */
+
   @Post("sessions/:sessionId/encounters/from-narrative")
   async startEncounterFromNarrative(
     @Req() req: AuthRequest,
@@ -343,11 +322,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  /**
-   * Move PC pra location adjacente. Valida connection (existência, isLocked,
-   * requirements). Cria scene nova com locationId destino — emite scene_changed
-   * via SceneService.create. Idempotente quando target == current.
-   */
+
   @Post("sessions/:sessionId/move-to-location")
   async moveToLocation(
     @Param("sessionId") sessionId: string,
@@ -367,10 +342,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  /**
-   * Move dentro da location atual, entre POIs conhecidos. Não altera travel graph
-   * nem inicia viagem; cria uma nova cena ancorada no mesmo node.
-   */
+
   @Post("sessions/:sessionId/move-to-poi")
   async moveToPoi(
     @Param("sessionId") sessionId: string,
@@ -390,11 +362,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  /**
-   * Resolve destino textual/UUID contra o mundo conhecido antes de tentar mover.
-   * Retorna se a viagem é direta, exige primeiro trecho, está bloqueada,
-   * não tem rota conhecida, não foi encontrada ou já estamos lá.
-   */
+
   @Post("sessions/:sessionId/travel/resolve")
   async resolveTravel(
     @Param("sessionId") sessionId: string,
@@ -412,10 +380,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  /**
-   * Lista connections (saídas) da scene ativa, filtrando hidden.
-   * Frontend renderiza chips TIER 3 (1 chip por travel disponível).
-   */
+
   @Get("sessions/:sessionId/available-travels")
   async availableTravels(@Param("sessionId") sessionId: string) {
     const travels =
@@ -423,9 +388,7 @@ export class GameEngineController {
     return { ok: true as const, value: travels };
   }
 
-  /**
-   * Lista POIs conhecidos/desbloqueados do palco local atual.
-   */
+
   @Get("sessions/:sessionId/available-pois")
   async availablePois(@Param("sessionId") sessionId: string) {
     const pois = await this.moveToPoiService.listAvailablePois(sessionId);
@@ -482,7 +445,7 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
-  // ==================== SESSIONS ====================
+
 
   @Post("sessions")
   async createSession(@Req() req: AuthRequest, @Body() dto: CreateSessionDto) {
@@ -550,7 +513,7 @@ export class GameEngineController {
     return this.sessionService.removeCharacter(id, charId);
   }
 
-  // ==================== ENCOUNTERS ====================
+
 
   @Post("sessions/:sessionId/encounters")
   async createEncounter(
@@ -572,8 +535,8 @@ export class GameEngineController {
     return this.encounterService.listBySession(sessionId);
   }
 
-  // Spec 027 (M2 follow-up) — sem cache HTTP. Encounter muda a cada turno
-  // (action_used, hp, conditions) e ETag estável pode mascarar mudanças.
+
+
   @Get("encounters/:id")
   @Header("Cache-Control", "no-store, no-cache, must-revalidate")
   async getEncounter(@Param("id") id: string) {
@@ -623,7 +586,7 @@ export class GameEngineController {
     );
   }
 
-  // Spec 002 — Join-request loop ------------------------------------------
+
 
   @Post("encounters/:id/join-requests")
   async createJoinRequest(
@@ -736,18 +699,7 @@ export class GameEngineController {
     return result;
   }
 
-  /**
-   * Spec 016 P3 (M2) — Talk-down: tentativa narrativa pré-iniciativa.
-   * Player resolve um skill check (Persuasion/Deception/Intimidation/Insight)
-   * vs DC alto (default 18 T1). Sucesso → encounter ends sem combate (no XP);
-   * falha → caller proceeds para roll initiative com disadvantage NPCs.
-   *
-   * Body: { skill, dc, totalModifier, rawD20, advantage? }
-   * RawD20 vem do frontend (player rolagem visual). Server resolve verdict.
-   *
-   * NOTA M2: outcome 'talked_down' não persiste em status enum (evita migration).
-   * M3 adiciona CombatResolutionCard storage com outcome_kind explícito.
-   */
+
   @Post("encounters/:id/talk-down")
   async talkDownEncounter(
     @Req() req: AuthRequest,
@@ -773,9 +725,9 @@ export class GameEngineController {
     const succeeded =
       resolved.verdict === "success" || resolved.verdict === "crit_success";
 
-    // Spec 016 §7.1 / Task BG3 parity — sucesso narrativo concede XP igual
-    // ao kill (anti-grind). Compute amount = soma de XP de todos os monsters
-    // hostis do encounter. Award per-PC. Source 'combat_resolved_peacefully'.
+
+
+
     const xpAwards: Array<{
       characterId: string;
       awardedXp: number;
@@ -827,7 +779,7 @@ export class GameEngineController {
 
       if (encounter.status === "preparing") {
         await this.encounterService.endEncounter(id).catch(() => {
-          // endEncounter pode falhar com 0 monsters; ok pra talk-down narrativo
+
         });
       }
     }
@@ -851,13 +803,7 @@ export class GameEngineController {
     };
   }
 
-  /**
-   * Spec 016 M2 — Pre-combat briefing: dados pra UI renderizar
-   * `<PreCombatBriefingCard>` antes do roll initiative. Inclui talkDown
-   * eligibility (humanoid OR INT >= 8, sem condições enraged/summoned).
-   *
-   * talkDownDc = 10 + party_level (clamp 5-20).
-   */
+
   @Get("encounters/:id/pre-combat-briefing")
   async preCombatBriefing(@Param("id") encounterId: string) {
     const encounter = await this.encounterService.getById(encounterId);
@@ -888,15 +834,15 @@ export class GameEngineController {
       0,
     );
 
-    // Tier (DMG 2024): tier1 = lvl 1-4, tier2 = 5-10, tier3 = 11-16, tier4 = 17-20.
+
     const pcParticipants = (encounter.participants ?? []).filter(
       (p) => p.type === "pc" && p.characterId,
     );
     let partyLevel = 1;
     if (pcParticipants.length > 0) {
-      // Tenta usar enrichment (currentHp/maxHp setado em getById). Fallback a 1.
-      // Lookup de level real via CharacterClass somatório fica caro aqui;
-      // approximação por participants.length não-zero. Spec 016 M2 default = 1.
+
+
+
       const levels = pcParticipants
         .map((p) => Number((p as any).level ?? (p as any).characterLevel ?? 0))
         .filter((l) => l > 0);
@@ -915,8 +861,8 @@ export class GameEngineController {
             ? "tier2"
             : "tier1";
 
-    // Talk-down eligibility: monsters humanoid OR INT >= 8, sem 'enraged'
-    // ou 'summoned' status. linkedCasterParticipantId != null = summoned.
+
+
     const talkDownAvailable =
       monsterParticipants.length > 0 &&
       monsterParticipants.every((p) => {
@@ -946,19 +892,7 @@ export class GameEngineController {
     };
   }
 
-  /**
-   * Spec 027 (M2 follow-up) — fim de combate é decisão IA-only. Em DIAD solo
-   * o player nunca dispara este endpoint diretamente: ou todos NPCs hostis
-   * são derrotados (auto-end no backend), ou todos PCs caem (auto-end). Este
-   * handler ainda existe pra DM-led campaigns futuras (multiplayer V2).
-   *
-   * Gate: só roda se o caller é dono de algum PC do encounter (placeholder
-   * mínimo até multiplayer DM real). Em solo, player é dono do PC, então
-   * conserta exatamente o gap: player NÃO podia chamar isso por NPC.
-   *
-   * MonsterTurnAutoService chama este endpoint internamente como
-   * `service-side` skipando o guard (passa `internal: true`).
-   */
+
   @Post("encounters/:id/resolve")
   async resolveEncounter(
     @Req() req: AuthRequest,
@@ -966,10 +900,10 @@ export class GameEngineController {
     @Body() body: ResolveEncounterDto,
   ) {
     const userId = getUserId(req);
-    // Resolve via current turn participant — se for PC do user, autoriza;
-    // senão recusa. Em solo single-PC isso = "só o player pode resolver
-    // manual via UI"; quando IA encerra, ela usa a invocação interna do
-    // service (sem passar por este controller).
+
+
+
+
     const current = await this.combatService.getCurrentTurn(id);
     if (current.ok && current.value?.participantId) {
       await this.permissionResolver.resolveMutationOwner(
@@ -981,7 +915,7 @@ export class GameEngineController {
     return this.encounterService.resolveEncounter(id, body, userId);
   }
 
-  // ==================== COMBAT ====================
+
 
   @Get("encounters/:id/turn")
   @Header("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -1000,8 +934,8 @@ export class GameEngineController {
       affectedParticipantIds: string[];
     },
   ) {
-    // Spec 027 (M2 follow-up) — gate por dono do caster. Sem isso o player
-    // podia disparar AoE como se fosse NPC, controlando combate inteiro.
+
+
     const ownerUserId = await this.permissionResolver.resolveMutationOwner(
       body.casterParticipantId,
       getUserId(req),
@@ -1022,17 +956,17 @@ export class GameEngineController {
       attackerParticipantId: string;
       targetParticipantId?: string;
       targetParticipantIds?: string[];
-      /** Spec 003: breaking change — aceita apenas `actionSlug`. `actionName` antigo rejeitado. */
+
       actionSlug?: string;
-      /** @deprecated Shape pre-spec-003. Rejected with 400 MISSING_ACTION_SLUG. */
+
       actionName?: string;
-      /** Opções específicas da ação (ex: Unarmed Strike { mode: 'damage'|'grapple'|'shove' }). */
+
       options?: Record<string, unknown>;
       forceAdvantage?: boolean;
       forceDisadvantage?: boolean;
     },
   ) {
-    // Spec 003 breaking: só aceita actionSlug.
+
     if (!body.actionSlug) {
       return {
         ok: false,
@@ -1042,7 +976,7 @@ export class GameEngineController {
         hint: "Use actionSlug de GET /characters/:id/combat-actions ou GET /encounters/:id/participants/:pid/actions.",
       };
     }
-    // Shove/Grapple standalone foram removidos — viram sub-opções do Unarmed Strike.
+
     if (body.actionSlug === "shove" || body.actionSlug === "grapple") {
       return {
         ok: false,
@@ -1052,15 +986,15 @@ export class GameEngineController {
       };
     }
 
-    // Spec 027 (M2 follow-up) — gate de dono do attacker. PermissionResolver
-    // recusa quando o player tenta atacar usando NPC/monster (NPCs só DM
-    // controla; em DIAD solo, IA é DM, player não passa o gate).
+
+
+
     const ownerUserId = await this.permissionResolver.resolveMutationOwner(
       body.attackerParticipantId,
       getUserId(req),
       id,
     );
-    // Traduz slug → actionName interno para manter o fluxo de resolveAttack intacto.
+
     const translated = await this.combatService.translateSlugToActionName(
       id,
       body.attackerParticipantId,
@@ -1103,16 +1037,7 @@ export class GameEngineController {
     });
   }
 
-  /**
-   * Spec 027 (M2, AC2.6) — endpoint canônico para Hostile Action Arbiter
-   * + tool agno `apply_damage`. Path `apply-damage` é o nome contractual da
-   * spec; `damage` mantido como alias backward-compat (usado por code legacy
-   * do combat surface).
-   *
-   * Princípio XI: erros propagam via DiadException (CombatService já throws
-   * com codes estruturados). Body é o input runtime do tool — `targetParticipantId`
-   * resolve permissão antes do combat path mutar HP.
-   */
+
   @Post(["encounters/:id/apply-damage", "encounters/:id/damage"])
   async applyDamage(
     @Req() req: AuthRequest,
@@ -1161,10 +1086,10 @@ export class GameEngineController {
     return this.combatService.applyCondition(id, { ...body, ownerUserId });
   }
 
-  // Spec 027 (M2 follow-up) — desabilita cache HTTP/ETag.
-  // Express auto-gera ETag (W/...) que pode bater igual entre turns mesmo
-  // depois de initializeTurn ter resetado actionUsed/movementRemaining,
-  // causando 304 com body stale no client. `no-store` força sempre 200.
+
+
+
+
   @Get("encounters/:id/turn-actions/:participantId")
   @Header("Cache-Control", "no-store, no-cache, must-revalidate")
   @Header("Pragma", "no-cache")
@@ -1176,11 +1101,7 @@ export class GameEngineController {
     return this.combatService.getTurnActions(id, participantId, getUserId(req));
   }
 
-  /**
-   * Spec 003 — ActionDescriptor[] tipado do participant no encounter,
-   * com action economy corrente (turno ativo, actionUsed, attacksUsedThisTurn,
-   * reactionUsed) e rest state (feature_uses_used, spell_slots_used) aplicados.
-   */
+
   @Get("encounters/:id/participants/:participantId/actions")
   async getParticipantActions(
     @Req() req: AuthRequest,
@@ -1196,11 +1117,11 @@ export class GameEngineController {
 
   @Post("encounters/:id/end-turn")
   async endTurn(@Req() req: AuthRequest, @Param("id") id: string) {
-    // Spec 027 (M2 follow-up) — gate de dono do current turn participant.
-    // Antes qualquer user autenticado podia bater em /end-turn e avançar o
-    // turno do NPC pra fazer o NPC ficar idle (efetivamente "skip" do
-    // ataque). Resolver garante: só dono do PC ativo pode end-turn; turno
-    // de NPC é encerrado pelo MonsterTurnAutoService no backend, sem player.
+
+
+
+
+
     const current = await this.combatService.getCurrentTurn(id);
     if (current.ok && current.value?.participantId) {
       await this.permissionResolver.resolveMutationOwner(
@@ -1222,7 +1143,7 @@ export class GameEngineController {
     @Param("instanceId") instanceId: string,
   ) {
     void req;
-    // Localiza o participante que tem essa instância
+
     const participants = await this.participantRepo.find({
       where: { encounterId: id },
     });
@@ -1242,7 +1163,7 @@ export class GameEngineController {
     };
   }
 
-  // ==================== CONTROL TOGGLE (SPEC 003 US4) ====================
+
 
   @Patch("encounters/:id/participants/:participantId/control")
   async updateControlMode(
@@ -1260,7 +1181,7 @@ export class GameEngineController {
     );
   }
 
-  // ==================== AI TURN + SNAPSHOT (SPEC 003 US3) ====================
+
 
   @Post("encounters/:id/ai-turn")
   async executeAiTurn(
@@ -1284,7 +1205,7 @@ export class GameEngineController {
     return this.snapshotService.build(id, authUserId);
   }
 
-  // ==================== GENERIC ACTIONS (SPEC 003 US2) ====================
+
 
   @Post("encounters/:id/generic-action")
   async executeGenericAction(
@@ -1293,7 +1214,7 @@ export class GameEngineController {
     @Body() dto: GenericActionDto,
   ) {
     const authUserId = getUserId(req);
-    // Valida permissão: dono do PC ou DM da sessão
+
     await this.permissionResolver.resolveMutationOwner(
       dto.participantId,
       authUserId,
@@ -1302,16 +1223,7 @@ export class GameEngineController {
     return this.genericActionsService.execute(id, dto);
   }
 
-  /**
-   * Spec 003 Fatia 7/8 — endpoint unificado para invocar class features
-   * ativaveis (Second Wind, Action Surge, Reckless Attack, Lay on Hands,
-   * Cunning Action wrapper, Turn Undead/Channel Divinity, Rage, Wild Shape,
-   * Bardic Inspiration, Cunning Strike, Uncanny Dodge, Flurry of Blows,
-   * Metamagic, Pact of the Blade, Divine Sense, Steady Aim).
-   *
-   * Features FULL resolvem mecanica aqui (heal, flags, pool). Features
-   * STUB emitem evento `class_feature_invoked` que a Spec 4 consome.
-   */
+
   @Post("encounters/:id/class-feature")
   async invokeClassFeature(
     @Req() req: AuthRequest,
@@ -1354,7 +1266,7 @@ export class GameEngineController {
     return this.combatService.resolveDeathSave(id, participantId, ownerUserId);
   }
 
-  // ==================== SPELLCASTING ====================
+
 
   @Post("encounters/:id/cast-spell")
   async castSpellInCombat(
@@ -1366,13 +1278,13 @@ export class GameEngineController {
       spellSlug: string;
       slotLevel: number;
       targetParticipantIds?: string[];
-      /** Spec 003 Fatia 9 — cast como reaction (Shield, Counterspell, etc.). */
+
       asReaction?: boolean;
-      /** Evento que disparou a reaction (ex: attack_rolled). Obrigatorio se asReaction=true. */
+
       triggerEventId?: string;
-      /** Spec 012 Gap 1 — centro da AoE em coordenadas de grid (cells). */
+
       aoeOriginCell?: { x: number; y: number };
-      /** Spec 012 Sorcerer — Metamagic RAW 2024 (6 types). */
+
       metamagic?: {
         type:
           | "twinned"
@@ -1384,7 +1296,7 @@ export class GameEngineController {
         targetExtra?: string;
         heightenedTargetId?: string;
       };
-      /** Spec 012 Lote B — Polymorph: beast form slug (default 'brown-bear'). */
+
       polymorphBeastSlug?: string;
     },
   ) {
@@ -1403,9 +1315,9 @@ export class GameEngineController {
       metamagic: body.metamagic,
       polymorphBeastSlug: body.polymorphBeastSlug,
     });
-    // Spec 013 — persist events to timeline (controller-level emit). Pre-013
-    // a Spirit Guardians legacy não persistia eventos; agora ground-effect
-    // events precisam estar queryable via /events?type=tile_effect_*.
+
+
+
     if (result.ok && result.events && result.events.length > 0) {
       try {
         const enc = await this.encounterRepo.findOne({ where: { id } });
@@ -1413,7 +1325,7 @@ export class GameEngineController {
           await this.eventService.emit(enc.sessionId, id, result.events);
         }
       } catch {
-        // best-effort — falha de persistência não aborta o cast
+
       }
     }
     if (result.ok) {
@@ -1422,11 +1334,7 @@ export class GameEngineController {
     return result;
   }
 
-  /**
-   * Spec 015 Eixo 4 — Reverte transformação ativa (Wild Shape, Polymorph, etc).
-   * Idempotente: se participant não está transformado, retorna reverted=false.
-   * Permissão: owner do participant OU DM do encounter (resolveMutationOwner).
-   */
+
   @Post("encounters/:id/participants/:participantId/revert-transformation")
   async revertTransformation(
     @Req() req: AuthRequest,
@@ -1462,10 +1370,10 @@ export class GameEngineController {
     }
 
     const reason = body.reason ?? "manual";
-    // Spec 015 Eixo 4 RAW: reverter Wild Shape voluntariamente custa bonus
-    // action (XPHB 2024 p.303). Outras sources (Polymorph via caster dismiss)
-    // seguem regra da própria spell — não bloqueia aqui. Auto-revert (hp-zero,
-    // duration-expired, concentration-broken) é grátis.
+
+
+
+
     if (
       reason === "manual" &&
       before.transformationState.source === "wild-shape"
@@ -1527,9 +1435,7 @@ export class GameEngineController {
     };
   }
 
-  /**
-   * Spec 012 Lote D — Rogue L20 Stroke of Luck: arm 1/SR auto-hit OU d20=20.
-   */
+
   @Post("encounters/:id/participants/:participantId/stroke-of-luck/arm")
   async strokeOfLuckArm(
     @Req() req: AuthRequest,
@@ -1549,9 +1455,7 @@ export class GameEngineController {
     );
   }
 
-  /**
-   * Spec 012 Lote D — Paladin L20 Devotion Holy Nimbus: cast aura 30ft 1min.
-   */
+
   @Post("encounters/:id/participants/:participantId/holy-nimbus")
   async holyNimbus(
     @Req() req: AuthRequest,
@@ -1566,10 +1470,7 @@ export class GameEngineController {
     return this.capstonesService.holyNimbusCast(participant, userId);
   }
 
-  /**
-   * Spec 012 Lote C — Warlock L20 Eldritch Master.
-   * 1/LR meditação 1min regain all pact slots.
-   */
+
   @Post("encounters/:id/participants/:participantId/eldritch-master")
   async eldritchMaster(
     @Req() req: AuthRequest,
@@ -1586,13 +1487,7 @@ export class GameEngineController {
     return this.capstonesService.eldritchMaster(participant, userId);
   }
 
-  /**
-   * Spec 012 Lote B — Opportunity Attack (RAW 2024 XPHB).
-   *
-   * Disparado como reaction quando um participante sai da reach de um inimigo.
-   * Movement.service emite `opportunity_attack_available`; este endpoint
-   * executa a reação (1 weapon attack) e consome reactionsUsed.
-   */
+
   @Post("encounters/:id/opportunity-attack")
   async opportunityAttack(
     @Req() req: AuthRequest,
@@ -1615,14 +1510,7 @@ export class GameEngineController {
     });
   }
 
-  /**
-   * Spec 012 Lote B — Hunter's Mark / Hex transfer.
-   *
-   * RAW 2024 XPHB: quando o alvo marcado cai a 0 HP antes da spell expirar,
-   * o caster pode mover a mark para um novo alvo usando bonus action no
-   * turno subsequente, SEM gastar novo spell slot. A concentração continua
-   * ativa (só muda o alvo).
-   */
+
   @Post("encounters/:id/transfer-mark")
   async transferMark(
     @Req() req: AuthRequest,
@@ -1643,7 +1531,7 @@ export class GameEngineController {
     });
   }
 
-  // ==================== MOVEMENT ====================
+
 
   @Post("encounters/:id/move")
   async moveParticipant(
@@ -1658,9 +1546,9 @@ export class GameEngineController {
       body.targetY,
       getUserId(req),
     );
-    // Spec 013 — persist tile-effect events emitted durante movimento
-    // (resolveEntry, resolveMoveThrough). Sem persist, /events?type=tile_*
-    // retorna vazio.
+
+
+
     if (result.ok && result.events && result.events.length > 0) {
       try {
         const enc = await this.encounterRepo.findOne({ where: { id } });
@@ -1668,7 +1556,7 @@ export class GameEngineController {
           await this.eventService.emit(enc.sessionId, id, result.events);
         }
       } catch {
-        // best-effort
+
       }
     }
     return result;
@@ -1695,11 +1583,7 @@ export class GameEngineController {
     return this.movementService.disengageAction(id, body.participantId);
   }
 
-  /**
-   * Spec 012 Lote B — Setar difficult terrain cells no grid do encontro.
-   * Substitui o array inteiro; cada cell em `cells` custa 10ft ao mover
-   * (bypassed por Land's Stride).
-   */
+
   @Patch("encounters/:id/difficult-terrain")
   async setDifficultTerrain(
     @Param("id") id: string,
@@ -1735,13 +1619,13 @@ export class GameEngineController {
     );
   }
 
-  // ==================== MAP ====================
+
 
   @Post("encounters/:id/map/upload")
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+      limits: { fileSize: 10 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
         if (/\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname)) {
           cb(null, true);
@@ -1793,10 +1677,10 @@ export class GameEngineController {
     @Param("id") encounterId: string,
     @Body() body: { x: number; y: number },
   ) {
-    // Spec 013 — PATCH position é teleport DM-side, mas pra harness/probe
-    // funcionar ground effects precisam disparar mesmo via teleport.
-    // Captura fromX/fromY antes do save, depois resolve tile-effects no path
-    // Manhattan e persiste events. Aura relocation segue o caster.
+
+
+
+
     const participant =
       await this.encounterService.getParticipant(participantId);
     const fromX = participant.positionX ?? body.x;
@@ -1806,7 +1690,7 @@ export class GameEngineController {
       body.x,
       body.y,
     );
-    // Compute traversed cells (Manhattan: X primeiro, depois Y)
+
     const traversed: Array<{ x: number; y: number }> = [];
     let cx = fromX;
     let cy = fromY;
@@ -1840,7 +1724,7 @@ export class GameEngineController {
           y: body.y,
         });
       } catch {
-        // best-effort
+
       }
     }
     if (events.length > 0) {
@@ -1852,21 +1736,13 @@ export class GameEngineController {
           await this.eventService.emit(enc.sessionId, encounterId, events);
         }
       } catch {
-        // best-effort
+
       }
     }
     return updated;
   }
 
-  /**
-   * Spec 012 — Heroic Inspiration.
-   *  - `POST /arm-inspiration { arm: bool }`: player "arma" pra próximo d20 test.
-   *  - `POST /grant-inspiration { grant: bool }`: DM concede/remove inspiração.
-   *
-   * Autorização: owner-check happens dentro do service. DM flow usa same
-   * endpoint diferenciado pelo guard (futuro TODO — por enquanto qualquer
-   * authenticated user pode chamar grant, mas combat session é privado).
-   */
+
   @Post("encounters/:id/participants/:participantId/arm-inspiration")
   async armInspiration(
     @Param("participantId") participantId: string,
@@ -1883,10 +1759,7 @@ export class GameEngineController {
     return this.encounterService.grantInspiration(participantId, body.grant);
   }
 
-  /**
-   * Fighting Style Interception (RAW 2024) — reação reduz dano de aliado
-   * adjacente em 1d10+PB. Consome reaction.
-   */
+
   @Post(
     "encounters/:id/participants/:participantId/fighting-style/interception",
   )
@@ -1909,10 +1782,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Fighting Style Protection (RAW 2024) — reação impõe disadvantage no
-   * próximo attack contra aliado adjacente. Requer shield. Consome reaction.
-   */
+
   @Post("encounters/:id/participants/:participantId/fighting-style/protection")
   async fsProtection(
     @Req() req: AuthRequest,
@@ -1932,11 +1802,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Fighter L2 Tactical Mind (RAW 2024) — endpoint dedicado pra reroll de
-   * failed ability check. Input: total original + DC. Rola 1d10 + soma.
-   * Consome Second Wind use só se passou.
-   */
+
   @Post("encounters/:id/participants/:participantId/tactical-mind")
   async tacticalMind(
     @Req() req: AuthRequest,
@@ -1957,10 +1823,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Battle Master Trip Attack (RAW 2024) — hit → spend superiority die,
-   * target STR save, falha = Prone.
-   */
+
   @Post("encounters/:id/participants/:participantId/maneuver/trip-attack")
   async maneuverTripAttack(
     @Req() req: AuthRequest,
@@ -1980,10 +1843,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Battle Master Precision Attack (RAW 2024) — adiciona superiority die ao
-   * attack roll total. Chamado após attack falhar; backend retorna newTotal.
-   */
+
   @Post("encounters/:id/participants/:participantId/maneuver/precision-attack")
   async maneuverPrecisionAttack(
     @Req() req: AuthRequest,
@@ -2003,10 +1863,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Cleric L5 Sear Undead (RAW 2024) — CD + Magic action. Undead 30ft CON
-   * save DC 8+WIS+PB. Falha = 10+5×(L-5) radiant; sucesso half.
-   */
+
   @Post("encounters/:id/participants/:participantId/cleric/sear-undead")
   async clericSearUndead(
     @Req() req: AuthRequest,
@@ -2026,11 +1883,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Paladin L1 Divine Smite (RAW 2024) — spell Bonus Action pós hit melee/unarmed.
-   * Base 2d8 + (slotLevel-1)×1d8 radiant (cap 5d8 em slot 4+). +1d8 se Fiend/Undead.
-   * Crit dobra. freeCast=true usa Paladin's Smite L2 (sem slot).
-   */
+
   @Post("encounters/:id/participants/:participantId/paladin/divine-smite")
   async paladinDivineSmite(
     @Req() req: AuthRequest,
@@ -2061,9 +1914,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Paladin L11 Radiant Strikes (RAW 2024) — +1d8 radiant passive em melee/unarmed hit.
-   */
+
   @Post("encounters/:id/participants/:participantId/paladin/radiant-strikes")
   async paladinRadiantStrikes(
     @Req() req: AuthRequest,
@@ -2083,10 +1934,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Sorcerer L2+ Font of Magic — pool de Sorcery Points.
-   * GET retorna {total, used, remaining}.
-   */
+
   @Get("encounters/:id/participants/:participantId/sorcerer/sorcery-points")
   async sorcererGetSorceryPoints(
     @Req() req: AuthRequest,
@@ -2100,9 +1948,7 @@ export class GameEngineController {
     return { ok: true, value: state };
   }
 
-  /**
-   * Sorcerer L2+ Font of Magic — converte 1 spell slot em N SP (N = slotLevel).
-   */
+
   @Post(
     "encounters/:id/participants/:participantId/sorcerer/convert-slot-to-sp",
   )
@@ -2122,9 +1968,7 @@ export class GameEngineController {
     return { ok: true, value: result.value, events: result.events };
   }
 
-  /**
-   * Sorcerer L2+ Font of Magic — converte SP em 1 spell slot (RAW: L1=2/L2=3/L3=5/L4=6/L5=7).
-   */
+
   @Post(
     "encounters/:id/participants/:participantId/sorcerer/convert-sp-to-slot",
   )
@@ -2144,10 +1988,7 @@ export class GameEngineController {
     return { ok: true, value: result.value, events: result.events };
   }
 
-  /**
-   * Sorcerer L5+ Sorcerous Restoration — 1/LR uso em SR recupera
-   * floor(classLevel/2) SP.
-   */
+
   @Post(
     "encounters/:id/participants/:participantId/sorcerer/sorcerous-restoration",
   )
@@ -2165,10 +2006,7 @@ export class GameEngineController {
     return { ok: true, value: result.value, events: result.events };
   }
 
-  /**
-   * Paladin Devotion L3 Sacred Weapon (RAW 2024 CD) — arma +CHA attack + radiant
-   * damage + luz 20ft por 1 min (10 rounds).
-   */
+
   @Post("encounters/:id/participants/:participantId/paladin/sacred-weapon")
   async paladinSacredWeapon(
     @Req() req: AuthRequest,
@@ -2186,10 +2024,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Cleric Life Domain L3 Preserve Life (RAW 2024 CD) — distribui pool 5×level
-   * HP entre aliados 30ft, cap individual = pool/2.
-   */
+
   @Post("encounters/:id/participants/:participantId/cleric/preserve-life")
   async clericPreserveLife(
     @Req() req: AuthRequest,
@@ -2210,10 +2045,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Cleric L7 Blessed Strikes (RAW 2024) — 1/turn melee hit OR cantrip save-fail
-   * → +1d8 radiant (+2d8 em L14 Improved).
-   */
+
   @Post("encounters/:id/participants/:participantId/cleric/blessed-strikes")
   async clericBlessedStrikes(
     @Req() req: AuthRequest,
@@ -2238,10 +2070,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Cleric L10 Divine Intervention (RAW 2024) — Magic action, auto-sucesso.
-   * Cap slot L5 em L10-L19, L9 em L20 (Greater).
-   */
+
   @Post("encounters/:id/participants/:participantId/cleric/divine-intervention")
   async clericDivineIntervention(
     @Req() req: AuthRequest,
@@ -2262,10 +2091,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Berserker L3 Frenzy (RAW 2024) — primeiro hit do turno em rage+reckless
-   * ganha +Nd6 damage. Chamado após hit confirmado.
-   */
+
   @Post("encounters/:id/participants/:participantId/berserker/frenzy")
   async berserkerFrenzy(
     @Req() req: AuthRequest,
@@ -2285,10 +2111,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Berserker L10 Retaliation (RAW 2024) — reaction melee attack contra
-   * atacante adjacente que causou dano.
-   */
+
   @Post("encounters/:id/participants/:participantId/berserker/retaliation")
   async berserkerRetaliation(
     @Req() req: AuthRequest,
@@ -2308,10 +2131,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Berserker L14 Intimidating Presence (RAW 2024) — Bonus action, 30ft
-   * emanation, cada target WIS save DC 8+STR+PB. Falha = Frightened 1min.
-   */
+
   @Post(
     "encounters/:id/participants/:participantId/berserker/intimidating-presence",
   )
@@ -2333,10 +2153,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Barbarian L11 Relentless Rage (RAW 2024) — PC em rage caiu a 0 HP.
-   * CON save DC 10+5×uses. Passa: volta 1 HP + consome use.
-   */
+
   @Post("encounters/:id/participants/:participantId/relentless-rage")
   async barbarianRelentlessRage(
     @Req() req: AuthRequest,
@@ -2354,9 +2171,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Barbarian L18 Indomitable Might (RAW 2024) — STR check < score, usa score.
-   */
+
   @Post("encounters/:id/participants/:participantId/indomitable-might")
   async barbarianIndomitableMight(
     @Req() req: AuthRequest,
@@ -2381,10 +2196,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Barbarian L9 Brutal Strike (RAW 2024) — Forceful Blow: +Nd10 damage +
-   * target push 10ft + attacker move ½ speed. Exige Rage ativo.
-   */
+
   @Post(
     "encounters/:id/participants/:participantId/brutal-strike/forceful-blow",
   )
@@ -2406,10 +2218,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Barbarian L9 Brutal Strike (RAW 2024) — Hamstring Blow: +Nd10 damage +
-   * target speed -15ft até fim do próximo turno. Exige Rage ativo.
-   */
+
   @Post(
     "encounters/:id/participants/:participantId/brutal-strike/hamstring-blow",
   )
@@ -2431,10 +2240,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Fighter L9 Tactical Master (RAW 2024) — arma mastery alternativa
-   * (push/sap/slow) pro próximo attack. Combat.service consome o override.
-   */
+
   @Post("encounters/:id/participants/:participantId/tactical-master/arm")
   async tacticalMasterArm(
     @Req() req: AuthRequest,
@@ -2454,11 +2260,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  /**
-   * Premissa weapons-in-hand — Sacar/Guardar arma em combate.
-   * Consome 1× free object interaction por turno (RAW 2024). Delega pro
-   * inventory.service pra aplicar o swap + valida limite no participant.
-   */
+
   @Post("encounters/:id/participants/:participantId/swap-hand")
   async swapHand(
     @Req() req: AuthRequest,
@@ -2476,7 +2278,7 @@ export class GameEngineController {
     );
   }
 
-  // ==================== EVENTS ====================
+
 
   @Get("sessions/:id/events")
   async getSessionEvents(
@@ -2496,10 +2298,10 @@ export class GameEngineController {
     @Param("id") id: string,
     @Query() query: GetEventsQueryDto,
   ) {
-    // Validar tipos de evento se fornecidos.
-    // Spec 013 — aceita tanto camelCase ('tileEffectCreated') quanto
-    // snake_case ('tile_effect_created') pra compat com probes/harness.
-    // Normaliza pra camelCase antes de validar contra whitelist.
+
+
+
+
     let eventTypes: string[] | undefined;
     if (query.type) {
       const snakeToCamel = (s: string): string =>
@@ -2517,7 +2319,7 @@ export class GameEngineController {
           "INVALID_PAYLOAD" as GameErrorCode,
         );
       }
-      // Converter camelCase → snake_case para filtrar no DB
+
       eventTypes = normalizedTypes.map(camelToSnakeCase);
     }
 
@@ -2529,7 +2331,7 @@ export class GameEngineController {
         offset: query.offset ?? 0,
       });
 
-    // Buscar participants para popular actorName/targetName
+
     const encounter = await this.encounterService.getById(id);
     const participantsMap = buildParticipantsMap(encounter.participants ?? []);
 
@@ -2547,7 +2349,7 @@ export class GameEngineController {
     };
   }
 
-  // ==================== QUEST REWARDS ====================
+
 
   @Post("quests/:questId/resolve")
   async resolveQuest(
@@ -2567,10 +2369,10 @@ export class GameEngineController {
   ) {
     const userId = getUserId(req);
 
-    // Update quest status
+
     await this.questService.update(questId, { status: body.status });
 
-    // Apply XP
+
     const xpApplied: Array<{
       characterId: string;
       xp: number;
@@ -2594,7 +2396,7 @@ export class GameEngineController {
       } catch {}
     }
 
-    // Apply Gold
+
     const goldApplied: Array<{ characterId: string; gp: number }> = [];
     for (const reward of body.goldRewards) {
       if (reward.gp <= 0) continue;
@@ -2606,7 +2408,7 @@ export class GameEngineController {
       } catch {}
     }
 
-    // Apply Items
+
     const itemsApplied: Array<{ characterId: string; itemName: string }> = [];
     for (const reward of body.itemRewards) {
       try {
@@ -2639,7 +2441,7 @@ export class GameEngineController {
     return { xpApplied, goldApplied, itemsApplied };
   }
 
-  // ==================== ENCOUNTERS BY USER ====================
+
 
   @Get("encounters/mine")
   async listMyEncounters(@Req() req: AuthRequest) {
@@ -2652,17 +2454,14 @@ export class GameEngineController {
     return allEncounters;
   }
 
-  // ==================== DICE ====================
+
 
   @Post("dice/roll")
   async rollDice(@Body("expression") expression: string) {
     return this.diceService.rollExpression(expression);
   }
 
-  /**
-   * Spec 016 M2 — Resolve um active dice check.
-   * Body: { raw1: 1-20, raw2?: 1-20 }. raw2 ignorado se advantage='normal'.
-   */
+
   @Post("dice/:rollId/resolve")
   @HttpCode(HttpStatus.OK)
   async resolveDiceRoll(
@@ -2683,10 +2482,7 @@ export class GameEngineController {
     };
   }
 
-  /**
-   * Ativa seed determinístico no DiceService (spec 012).
-   * Admin-only, bloqueado em produção (exceto com ALLOW_TEST_ENDPOINTS=true).
-   */
+
   @Post("dice/seed")
   @HttpCode(HttpStatus.OK)
   @UseGuards(AdminGuard, NonProductionGuard)
@@ -2695,9 +2491,7 @@ export class GameEngineController {
     return { seedActive: true, value: dto.value };
   }
 
-  /**
-   * Desativa seed, volta a Math.random (spec 012).
-   */
+
   @Post("dice/seed/clear")
   @HttpCode(HttpStatus.OK)
   @UseGuards(AdminGuard, NonProductionGuard)
@@ -2706,7 +2500,7 @@ export class GameEngineController {
     return { seedActive: false };
   }
 
-  // ==================== SKILL CHECKS ====================
+
 
   @Post("skill-check")
   async rollSkillCheck(@Body() dto: SkillCheckDto, @Req() req: AuthRequest) {
@@ -2726,7 +2520,7 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  // ==================== SAVING THROWS ====================
+
 
   @Post("saving-throw")
   async rollSavingThrow(@Body() dto: SavingThrowDto, @Req() req: AuthRequest) {
@@ -2746,15 +2540,11 @@ export class GameEngineController {
     return { ok: true, value: result.value };
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Spec 012 — Transformation pipeline (Wild Shape + Polymorph + …)
-  // ─────────────────────────────────────────────────────────────────────
 
-  /**
-   * Druid Wild Shape (L2+) — entra em forma de besta.
-   * RAW 2024 XPHB: CR max = 1/4 L2 (no fly/swim), 1/2 L4 (no fly), 1 L8+ (any).
-   * Duração: 1h por uso (não concentração). HP separado. Reverte em HP 0.
-   */
+
+
+
+
   @Post("encounters/:id/participants/:participantId/wild-shape/enter")
   async wildShapeEnter(
     @Req() req: AuthRequest,
@@ -2764,8 +2554,8 @@ export class GameEngineController {
   ) {
     const userId = getUserId(req);
     try {
-      // RAW 2024 XPHB: Wild Shape \u00e9 bonus action, uses = PB/SR.
-      // Valida uses + bonus action antes de enterForm.
+
+
       const part = await this.encounterService.getParticipant(participantId);
       if (part.type !== "pc" || !part.characterId) {
         return {
@@ -2785,9 +2575,9 @@ export class GameEngineController {
         part.characterId,
       );
       const usesUsed = usesUsedMap?.["wild-shape"] ?? 0;
-      // PB-based uses: L2-4=2, L5-8=3, L9-12=4, L13-16=5, L17+=6
-      // (simplified; frontend can query state.feature_uses_used if needed)
-      // Use a reasonable cap of 6 as hard ceiling since we don't easily have the druid level here.
+
+
+
 
       const updated = await this.transformationService.enterForm(
         participantId,
@@ -2795,7 +2585,7 @@ export class GameEngineController {
           source: "wild-shape",
           monsterSlug: body.monsterSlug,
           formDisplayName: body.formDisplayName,
-          durationRoundsTotal: 600, // 1h RAW = 600 rounds (6 seg cada)
+          durationRoundsTotal: 600,
           retainedAbilities: ["mental-stats", "speech", "class-features"],
           equipmentHandling: "merge",
           revertTriggers: {
@@ -2807,7 +2597,7 @@ export class GameEngineController {
         },
       );
 
-      // Bonus action consumida pelo service. Incrementa uses na ficha.
+
       await this.stateService.incrementFeatureUses(
         part.characterId,
         "wild-shape",
@@ -2832,9 +2622,7 @@ export class GameEngineController {
     }
   }
 
-  /**
-   * Reverte transformação (Wild Shape, Polymorph, etc). Player dismiss manual.
-   */
+
   @Post("encounters/:id/participants/:participantId/wild-shape/revert")
   async wildShapeRevert(
     @Param("id") encounterId: string,
@@ -2854,9 +2642,9 @@ export class GameEngineController {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Spec 012 — Summoning pipeline (Summon Beast, Conjure Animals, Familiar, ...)
-  // ─────────────────────────────────────────────────────────────────────
+
+
+
 
   @Post("encounters/:id/participants/:participantId/summon/spawn")
   async summonSpawn(
@@ -2930,14 +2718,11 @@ export class GameEngineController {
     };
   }
 
-  // ──────────────────────────────────────────────────────────────────────
-  // Spec 016 — Play Shell Foundation
-  // ──────────────────────────────────────────────────────────────────────
 
-  /**
-   * Fate Ladder — abre modal narrativo ao 3º death save fail ou massive damage.
-   * Triggers válidos: three_failed_death_saves | massive_damage_2024 | instant_kill_effect.
-   */
+
+
+
+
   @Post("fate-ladder/:characterId/open")
   async openFateLadder(
     @Param("characterId") characterId: string,
@@ -2960,21 +2745,7 @@ export class GameEngineController {
     });
   }
 
-  /**
-   * Resolve opção do Fate Ladder. Retorna stateChanges descritivos pro
-   * Coordinator narrar via DM agent. Body: { ladderId, chosenOption,
-   * sacrificeDescription? }.
-   *
-   * Spec 027 (M2 follow-up): além de retornar stateChanges, também
-   *  (a) aplica os descritores que mapeiam pro DB (`pc_hp=1`,
-   *      `pc_status=*`) via `fateLadderService.applyResolution`, e
-   *  (b) emite evento `fate_ladder_resolved` em `game_events` com payload
-   *      estruturado pro AiProxy injetar em sceneContext na próxima
-   *      narrativa (`systemHint='post_fate_choice'`).
-   *
-   * Sem (a), narrativa do turno seguinte mente sobre o estado do PC.
-   * Sem (b), Coordinator não sabe qual opção foi escolhida.
-   */
+
   @Post("fate-ladder/:characterId/resolve")
   async resolveFateLadder(
     @Param("characterId") characterId: string,
@@ -2995,7 +2766,7 @@ export class GameEngineController {
 
     if (!result.ok) return result;
 
-    // (a) Aplica stateChanges no character_state.
+
     let applied: Awaited<
       ReturnType<typeof this.fateLadderService.applyResolution>
     > | null = null;
@@ -3005,8 +2776,8 @@ export class GameEngineController {
         result.value.stateChanges,
       );
     } catch (err: unknown) {
-      // Log + continue: a narrativa ainda pode rodar (com warning), mas
-      // sinalizamos no response pra debug.
+
+
       const msg = err instanceof Error ? err.message : String(err);
       return {
         ok: true as const,
@@ -3017,9 +2788,9 @@ export class GameEngineController {
       };
     }
 
-    // (b) Emit `fate_ladder_resolved` em `game_events` pra AiProxy injetar
-    // em sceneContext quando systemHint='post_fate_choice'. SessionId é
-    // opcional — se ausente, evento não é emitido (warning loga).
+
+
+
     if (body.sessionId) {
       try {
         await this.eventService.emit(body.sessionId, null, [
@@ -3038,8 +2809,8 @@ export class GameEngineController {
         ]);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        // Falha ao emitir não bloqueia response — Coordinator caí no
-        // fallback genérico (post_fate_choice sem evento).
+
+
         return {
           ok: true as const,
           value: {
@@ -3062,11 +2833,7 @@ export class GameEngineController {
     };
   }
 
-  /**
-   * Granular XP award. Source enum granular (combat_kill | quest_step | ...);
-   * respeita campaign.xp_mode (rules|milestone|hybrid). Audit log em
-   * `xp_award_events` consumido por Director memory L4.
-   */
+
   @Post("characters/:characterId/xp-award")
   async awardCharacterXp(
     @Req() req: AuthRequest,

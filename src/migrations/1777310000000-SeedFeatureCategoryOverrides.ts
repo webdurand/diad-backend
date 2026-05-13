@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 015 Eixo 1 — seed idempotente das ≥20 features-chave curadas com
- * categoria + narrative descriptor + tactical value + recharge rule RAW.
- *
- * Each entry é RAW-grounded (PHB 2014 / XPHB 2024). Onde a edição muda
- * recharge (ex: Bardic Inspiration 2014 long → 2024 short), prevalece
- * XPHB 2024 por ser o default do DIAD (spec 015 §Contexto).
- *
- * Re-executável: usa UPDATE com WHERE slug=... — se feature não existe
- * ainda (seed pendente de outra migration), o UPDATE 0 rows passa silent.
- */
+
 
 interface Override {
   slug: string;
@@ -22,7 +12,7 @@ interface Override {
 }
 
 const OVERRIDES: Override[] = [
-  // ── FIGHTER ─────────────────────────────────────────────────────────
+
   {
     slug: "action-surge",
     category: "resource",
@@ -55,7 +45,7 @@ const OVERRIDES: Override[] = [
     recharge: "none",
   },
 
-  // ── BARBARIAN ───────────────────────────────────────────────────────
+
   {
     slug: "rage",
     category: "resource",
@@ -79,7 +69,7 @@ const OVERRIDES: Override[] = [
     recharge: "short",
   },
 
-  // ── BARD ────────────────────────────────────────────────────────────
+
   {
     slug: "bardic-inspiration",
     category: "resource",
@@ -135,7 +125,7 @@ const OVERRIDES: Override[] = [
     recharge: "none",
   },
 
-  // ── CLERIC / PALADIN ────────────────────────────────────────────────
+
   {
     slug: "channel-divinity",
     category: "resource",
@@ -171,7 +161,7 @@ const OVERRIDES: Override[] = [
     recharge: "none",
   },
 
-  // ── DRUID ───────────────────────────────────────────────────────────
+
   {
     slug: "wild-shape",
     category: "resource",
@@ -197,7 +187,7 @@ const OVERRIDES: Override[] = [
     recharge: "none",
   },
 
-  // ── MONK ────────────────────────────────────────────────────────────
+
   {
     slug: "martial-arts",
     category: "passive",
@@ -224,7 +214,7 @@ const OVERRIDES: Override[] = [
     charges: { max: null, formula: "monkLevel" },
   },
 
-  // ── ROGUE ───────────────────────────────────────────────────────────
+
   {
     slug: "sneak-attack",
     category: "resource",
@@ -242,7 +232,7 @@ const OVERRIDES: Override[] = [
     recharge: "turn",
   },
 
-  // ── SORCERER ────────────────────────────────────────────────────────
+
   {
     slug: "font-of-magic",
     category: "resource",
@@ -252,7 +242,7 @@ const OVERRIDES: Override[] = [
     charges: { max: null, formula: "sorcererLevel" },
   },
 
-  // ── WIZARD ──────────────────────────────────────────────────────────
+
   {
     slug: "arcane-recovery",
     category: "resource",
@@ -286,11 +276,11 @@ export class SeedFeatureCategoryOverrides1777310000000 implements MigrationInter
         ],
       );
 
-      // Também popula variants XPHB 2024 com sufixo -<classe>-<level> que
-      // ainda apontam pro canonical. Ex: 'action-surge-fighter-2' existe
-      // mas é mesmo canonical. A classificação in-code já dedupa via alias,
-      // mas a aba Traços (que mostra TODAS as features do PC) beneficia
-      // do override aplicado a cada variant.
+
+
+
+
+
       await queryRunner.query(
         `UPDATE features
          SET category=$2,

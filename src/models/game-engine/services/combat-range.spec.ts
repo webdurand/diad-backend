@@ -5,14 +5,7 @@ import {
   type Position,
 } from "./combat-range";
 
-/**
- * Spec 012 #1 — backend range enforcement em resolveAttack.
- *
- * O backend aceitava Unarmed Strike a 130ft porque não havia validação de
- * range. Este helper parseia o formato que já circula pelo sistema
- * (`"5 ft"`, `"150/600 ft"`, `"Self"`, `"Touch"`) e compara contra Chebyshev
- * distance dos tokens no grid (cada cell = 5ft, diagonais = 1 cell, RAW 5e).
- */
+
 
 describe("parseRangeString", () => {
   it("parsa melee 5ft", () => {

@@ -73,7 +73,7 @@ describe("GameClockService", () => {
     const result = await svc.advanceTime(CAMPAIGN_ID, { hours: 4 });
 
     expect(result.previousTimeOfDay).toBe("morning");
-    // 12:00 = afternoon
+
     expect(result.timeOfDay).toBe("afternoon");
     expect(saveSpy).toHaveBeenCalled();
     expect(bus.publish).toHaveBeenCalled();

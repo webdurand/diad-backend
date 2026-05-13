@@ -1,13 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M1 — Bounded World + Closure Mechanics.
- *
- * Adiciona 10 colunas em `campaigns` que formalizam os pilares:
- * - P1 Bounded World: contentBudget + currentCounts (atomic UPDATE guards)
- * - P4 Closure: centralQuestion, arcState (Harmon Story Circle tracking)
- * - Tone: dmPersonality, tonalAnchor, chaosFactor (Mythic GME 1-9)
- */
+
 export class AddCampaignBoundedFields1778000000000 implements MigrationInterface {
   name = "AddCampaignBoundedFields1778000000000";
 

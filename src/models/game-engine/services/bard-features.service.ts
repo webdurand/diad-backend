@@ -11,18 +11,7 @@ import { CharacterSheetService } from "src/models/characters/services/character-
 import { EffectInstanceService } from "./effect-instance.service";
 import type { GameEventData } from "../interfaces/result.type";
 
-/**
- * Spec 012 \u2014 Bard core features (RAW 2024 XPHB).
- *
- * Servi\u00e7os implementados:
- * - **Bardic Inspiration**: concede 1 die ao aliado (d6 L1, d8 L5, d10 L10, d12 L15).
- *   Aliado pode gastar em attack/save/check em 10 min. Pool = CHA mod (min 1),
- *   recarrega LR. A partir de L5 (Font of Inspiration) tamb\u00e9m recarrega em SR.
- * - **Cutting Words (Lore L3)**: reaction, caster gasta 1 BI die pra REDUZIR
- *   o roll de ataque/dano/check de inimigo em ate 60ft que pode ouvir.
- * - **Countercharm (L5/L6)**: reaction, forca target em 30ft que falhou save
- *   vs Charmed/Frightened a re-rolar o save. RAW 2024 XPHB.
- */
+
 @Injectable()
 export class BardFeaturesService {
   private readonly logger = new Logger(BardFeaturesService.name);
@@ -34,10 +23,7 @@ export class BardFeaturesService {
     private readonly effects: EffectInstanceService,
   ) {}
 
-  /**
-   * Retorna tier do die do Bardic Inspiration baseado no level do Bard.
-   * L1-4=6, L5-9=8, L10-14=10, L15+=12. RAW 2024 XPHB.
-   */
+
   getBardicInspirationDie(bardLevel: number): 6 | 8 | 10 | 12 {
     if (bardLevel >= 15) return 12;
     if (bardLevel >= 10) return 10;
@@ -45,11 +31,7 @@ export class BardFeaturesService {
     return 6;
   }
 
-  /**
-   * Grant BI ao aliado. Cria EffectInstance 'bardic_inspiration' no target com
-   * payload.dieSize. Consumido no pr\u00f3ximo attack/save/check do target.
-   * bardLevel \u00e9 passado pelo caller (class-feature resolver tem via caster.classLevel).
-   */
+
   async grantBardicInspiration(
     casterParticipantId: string,
     targetParticipantId: string,
@@ -69,8 +51,8 @@ export class BardFeaturesService {
     }
     const dieSize = this.getBardicInspirationDie(bardLevel);
 
-    // Aplica EffectInstance no target. expiresAt='until_consumed' pra evitar
-    // que o effect rode em ticks de round (RAW: 10 min mas consome no 1\u00ba uso).
+
+
     const res = await this.effects.addEffect(target, {
       kind: "bardic_inspiration",
       sourceCasterParticipantId: caster.id,
@@ -102,10 +84,7 @@ export class BardFeaturesService {
     };
   }
 
-  /**
-   * Consume o BI die do target quando ele rola um d20 test. Retorna bonus rolado
-   * OU 0 se target n\u00e3o tinha BI.
-   */
+
   async consumeBardicInspirationIfPresent(
     targetParticipantId: string,
     context: "attack_roll" | "saving_throw" | "ability_check",
@@ -130,14 +109,14 @@ export class BardFeaturesService {
     const bonus = diceRoller(dieSize);
     const effectId = (biEffect as unknown as { id: string }).id;
 
-    // Remove o effect (consumido) diretamente no array pra evitar reload duplo
+
     target.effectInstances = (target.effectInstances ?? []).filter(
       (e) => (e as unknown as { id: string }).id !== effectId,
     );
     try {
       await this.participantRepo.save(target);
     } catch {
-      // save pode falhar em edge case; bonus j\u00e1 foi calculado, retorna
+
     }
 
     return {
@@ -154,13 +133,7 @@ export class BardFeaturesService {
     };
   }
 
-  /**
-   * Spec 015 — Cutting Words (Lore Bard L3).
-   * Aplica effect `cutting_words_penalty` no target. Consome 1 uso de BI.
-   * O debuff e consumido no proximo attack roll / ability check / damage
-   * roll do target (consumo real em roll handlers e plumbing futuro; MVP
-   * emite o evento e applies o effect com dieSize correto).
-   */
+
   async applyCuttingWords(
     casterParticipantId: string,
     targetParticipantId: string,
@@ -211,13 +184,7 @@ export class BardFeaturesService {
     };
   }
 
-  /**
-   * Spec 015 — Countercharm (Bard L5 XPHB / L6 PHB).
-   * Aplica effect `countercharm_reroll_available` no target (aliado ou self)
-   * que falhou save vs Charmed/Frightened. Re-roll do save consumido na
-   * proxima iteracao do save handler (plumbing futuro). MVP emite o evento
-   * e valida range 30ft.
-   */
+
   async applyCountercharm(
     casterParticipantId: string,
     targetParticipantId: string,

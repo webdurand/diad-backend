@@ -1,14 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 007 — Seed dos 9 backgrounds PHB 2014 ausentes.
- *
- * RAW PHB 2014 p.127-141. Os 4 backgrounds SRD (acolyte, criminal, sage, soldier)
- * já existem sem sufixo; estes recebem sufixo -phb para coexistir — padrão
- * consistente com classes (fighter vs fighter-phb).
- *
- * Idempotente via ON CONFLICT (slug) DO NOTHING.
- */
+
 export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
   name = "SeedPhb2014Backgrounds1776700000000";
 
@@ -179,7 +171,7 @@ export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
   ];
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Get PHB source_id
+
     const [phbSource] = await queryRunner.query(
       `SELECT id FROM comp_sources WHERE code = 'PHB' LIMIT 1`,
     );
@@ -189,7 +181,7 @@ export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
     }
     const sourceId = phbSource.id;
 
-    // Get proficiency IDs by slug
+
     const proficiencies = await queryRunner.query(
       `SELECT id, slug FROM proficiencies`,
     );
@@ -199,7 +191,7 @@ export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
     }
 
     for (const bg of this.backgrounds) {
-      // Insert background
+
       await queryRunner.query(
         `INSERT INTO backgrounds (id, slug, name, ability_scores, equipment_options, proficiency_choices, language_choices, feature, source_id, created_at, updated_at)
          VALUES (gen_random_uuid(), $1, $2, NULL, $3, NULL, $4, $5, $6, now(), now())
@@ -214,7 +206,7 @@ export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
         ],
       );
 
-      // Get the background ID (may already exist from previous run)
+
       const [bgRow] = await queryRunner.query(
         `SELECT id FROM backgrounds WHERE slug = $1`,
         [bg.slug],
@@ -222,7 +214,7 @@ export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
       if (!bgRow) continue;
       const bgId = bgRow.id;
 
-      // Insert skill proficiencies
+
       for (const skillSlug of bg.skills) {
         const profId = profMap.get(skillSlug);
         if (!profId) {
@@ -239,7 +231,7 @@ export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
         );
       }
 
-      // Insert tool proficiencies (if any)
+
       if (bg.toolProficiencies) {
         for (const toolSlug of bg.toolProficiencies) {
           const profId = profMap.get(toolSlug);
@@ -264,14 +256,14 @@ export class SeedPhb2014Backgrounds1776700000000 implements MigrationInterface {
     const slugs = this.backgrounds.map((bg) => bg.slug);
     const placeholders = slugs.map((_, i) => `$${i + 1}`).join(",");
 
-    // Delete junction first (cascade should handle, but explicit is safer)
+
     await queryRunner.query(
       `DELETE FROM background_proficiencies
        WHERE background_id IN (SELECT id FROM backgrounds WHERE slug IN (${placeholders}))`,
       slugs,
     );
 
-    // Delete backgrounds
+
     await queryRunner.query(
       `DELETE FROM backgrounds WHERE slug IN (${placeholders})`,
       slugs,

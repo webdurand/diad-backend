@@ -63,7 +63,7 @@ describe("SavingThrowService", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.ability).toBe("str");
-    expect(result.value.modifier).toBe(5); // STR save bonus (proficient)
+    expect(result.value.modifier).toBe(5);
     expect(result.value.dc).toBe(15);
     expect(result.value.roll).toBeGreaterThanOrEqual(1);
     expect(result.value.roll).toBeLessThanOrEqual(20);
@@ -125,7 +125,7 @@ describe("SavingThrowService", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // WIS is not STR/DEX, so paralyzed should not auto-fail it
+
     expect(result.value.roll).toBeGreaterThanOrEqual(1);
   });
 

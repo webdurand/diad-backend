@@ -13,39 +13,28 @@ import {
   InitiativeResult,
 } from "../interfaces/dice.interfaces";
 
-/**
- * Deterministic dice rolling service.
- * Uses seedable PRNG (mulberry32) for testing, crypto-random in production.
- */
+
 @Injectable()
 export class DiceService {
   private seededRng: (() => number) | null = null;
 
-  /**
-   * Set a seed for deterministic results (testing).
-   */
+
   setSeed(seed: number): void {
     this.seededRng = this.mulberry32(seed);
   }
 
-  /**
-   * Clear seed — revert to Math.random().
-   */
+
   clearSeed(): void {
     this.seededRng = null;
   }
 
-  /**
-   * Roll a single die with N sides. Returns 1-N.
-   */
+
   roll(sides: number): number {
     if (sides < 1) return 0;
     return Math.floor(this.random() * sides) + 1;
   }
 
-  /**
-   * Roll multiple dice. Returns array of individual results.
-   */
+
   rollMultiple(count: number, sides: number): number[] {
     const results: number[] = [];
     for (let i = 0; i < count; i++) {
@@ -54,15 +43,11 @@ export class DiceService {
     return results;
   }
 
-  /**
-   * Parse and roll a dice expression.
-   * Supports: "2d6", "2d6+3", "1d20-2", "4d6kh3" (keep highest 3), "2d20kl1" (keep lowest 1).
-   * Also accepts literal numerics like "1" or "5" (spells with flat damage).
-   */
+
   rollExpression(expr: string): DiceResult {
     const trimmed = expr.replace(/\s/g, "").toLowerCase();
 
-    // Literal numeric ("1", "5", "10") — fixed damage spells (Magic Missile base, Acid Splash 1 HP min).
+
     if (/^\d+$/.test(trimmed)) {
       const value = parseInt(trimmed, 10);
       return {
@@ -119,9 +104,7 @@ export class DiceService {
     };
   }
 
-  /**
-   * Roll 2d20, take the highest.
-   */
+
   rollWithAdvantage(): AdvantageResult {
     const roll1 = this.roll(20);
     const roll2 = this.roll(20);
@@ -130,9 +113,7 @@ export class DiceService {
     return { roll1, roll2, chosen, discarded };
   }
 
-  /**
-   * Roll 2d20, take the lowest.
-   */
+
   rollWithDisadvantage(): AdvantageResult {
     const roll1 = this.roll(20);
     const roll2 = this.roll(20);
@@ -141,15 +122,13 @@ export class DiceService {
     return { roll1, roll2, chosen, discarded };
   }
 
-  /**
-   * Roll initiative: 1d20 + modifier.
-   */
+
   rollInitiative(
     modifier: number,
     options?: { advantage?: boolean },
   ): InitiativeResult {
     let roll = this.roll(20);
-    // Barbarian L7 Feral Instinct (RAW 2024) — advantage em initiative
+
     if (options?.advantage) {
       const second = this.roll(20);
       if (second > roll) roll = second;
@@ -161,13 +140,7 @@ export class DiceService {
     };
   }
 
-  /**
-   * Spec 016 P2 — Build a DiceRollRequest payload pro frontend renderizar
-   * `<DiceRollCard>`. Pure: não emite SSE aqui (responsabilidade do gateway).
-   *
-   * targetD20 = max(2, dc - totalModifier). Min 2 = nat 1 sempre falha
-   * (RAW 2024 ability checks); 30 = impossível.
-   */
+
   buildDiceRollRequest(input: {
     kind: DiceRollKind;
     ability: DiceRollRequest["ability"];
@@ -197,20 +170,7 @@ export class DiceService {
     };
   }
 
-  /**
-   * Spec 016 P2 — Resolve um active dice check.
-   *
-   * Verdict rules:
-   *  - kind 'ability_check' / 'saving_throw' / 'death_save': nat 20
-   *    success automático? RAW 2024 NÃO — 5e 2024 removed auto-success em
-   *    skill checks (DMG 2024 p.2.2). Aqui mantemos: nat 20 = crit_success
-   *    flag, mas o success real é total ≥ dc.
-   *  - kind 'attack_roll': nat 20 hit + crit_success (dobra dados de dano);
-   *    nat 1 = miss + crit_failure.
-   *  - Cima do DC = success; abaixo = failure.
-   *  - rawD20 ∈ {1, 20} sempre dispara crit_* mesmo se total ≥ dc ou < dc
-   *    (preservar info pra UI ring + side-toast).
-   */
+
   resolveDiceRoll(input: {
     rollId: string;
     rawD20: number;
@@ -248,9 +208,7 @@ export class DiceService {
     };
   }
 
-  /**
-   * Internal random: seeded or Math.random().
-   */
+
   private random(): number {
     if (this.seededRng) {
       return this.seededRng();
@@ -258,9 +216,7 @@ export class DiceService {
     return Math.random();
   }
 
-  /**
-   * Mulberry32 — fast, deterministic 32-bit PRNG.
-   */
+
   private mulberry32(seed: number): () => number {
     let s = seed | 0;
     return () => {

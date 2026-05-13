@@ -1,17 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 Paladin — Fix data XPHB 2024:
- *
- * 1. Features 2014 REMOVIDAS em 2024 ainda linkadas no base paladin:
- *    - L11 `improved-divine-smite` (substituído por Radiant Strikes L11)
- *    - L14 `cleansing-touch` (substituído por Restoring Touch L14)
- *
- * 2. Devotion L15 Purity of Spirit é 2014; XPHB 2024 tem Smite of Protection
- *    (feature não presente no DB). Mantém o placeholder — harness valida MVP.
- *
- * Mesmo pattern da gotcha #21 (Barbarian Brutal Critical, Cleric Destroy Undead).
- */
+
 export class FixPaladinXphb1777110000000 implements MigrationInterface {
   name = "FixPaladinXphb1777110000000";
 

@@ -13,9 +13,9 @@ export function generateSlug(
 function toKebab(text: string): string {
   return text
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/['']/g, "") // remove apostrophes
-    .replace(/[^a-z0-9]+/g, "-") // non-alnum to hyphens
-    .replace(/^-+|-+$/g, ""); // trim leading/trailing hyphens
+    .replace(/['']/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }

@@ -37,13 +37,13 @@ export class NpcRelationshipEntity {
   targetFaction?: FactionEntity;
 
   @Column({ name: "relationship_type", type: "varchar" })
-  relationshipType: string; // family, friend, rival, employer, mentor, enemy, leader, member, agent, etc.
+  relationshipType: string;
 
   @Column({ type: "text", nullable: true })
   description?: string;
 
   @Column({ type: "int", default: 5 })
-  strength: number; // 1-10
+  strength: number;
 
   @Column({ name: "is_known_to_party", type: "boolean", default: false })
   isKnownToParty: boolean;

@@ -25,7 +25,7 @@ export interface MovementResult {
   toY: number;
   distanceFt: number;
   remainingMovement: number;
-  /** Participants that can make opportunity attacks during this move */
+
   opportunityAttacks: Array<{
     attackerParticipantId: string;
     attackerName: string;
@@ -59,10 +59,7 @@ export class MovementService {
     this.logger.setContext(MovementService.name);
   }
 
-  /**
-   * Get the base movement speed for a participant.
-   * PCs: from character sheet (race speed). Monsters: from monster.speed.walk.
-   */
+
   async getSpeed(
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
@@ -85,7 +82,7 @@ export class MovementService {
       baseSpeed = this.parseMonsterSpeed(participant.monster.speed);
     }
 
-    // Spec 012 Fase 0 — subtrai speed_reduction de effect instances (Slow mastery).
+
     const reductionTotal = (participant.effectInstances ?? [])
       .filter((e) => e.kind === "speed_reduction")
       .reduce(
@@ -93,7 +90,7 @@ export class MovementService {
         0,
       );
 
-    // Spec 012 Lote B — Exhaustion XPHB 2024: -5×level ft em speed (flat).
+
     let exhaustionSpeedPenalty = 0;
     if (participant.type === "pc" && participant.characterId && ownerUserId) {
       try {
@@ -108,20 +105,18 @@ export class MovementService {
             exhLevel,
             "2024_ten_levels",
           );
-          // mods.speedPenaltyFt é negativo (-5×level); somamos como redução.
+
           exhaustionSpeedPenalty = -(mods.speedPenaltyFt ?? 0);
         }
       } catch {
-        /* fallback 0 */
+
       }
     }
 
     return Math.max(0, baseSpeed - reductionTotal - exhaustionSpeedPenalty);
   }
 
-  /**
-   * Parse monster speed JSONB. E.g. { walk: "30 ft." } -> 30
-   */
+
   private parseMonsterSpeed(speed: Record<string, unknown>): number {
     if (!speed) return 30;
     const walk = speed.walk;
@@ -152,13 +147,7 @@ export class MovementService {
     });
   }
 
-  /**
-   * Move a participant to a target cell. Validates:
-   * - It's their turn
-   * - Enough remaining movement
-   * - Target cell is in bounds and not occupied
-   * - Detects opportunity attacks (leaving melee range without Disengage)
-   */
+
   async moveParticipant(
     encounterId: string,
     participantId: string,
@@ -172,7 +161,7 @@ export class MovementService {
     if (!encounter || encounter.status !== "active")
       return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
-    // Validate it's this participant's turn
+
     const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
     if (currentPid !== participantId)
       return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
@@ -185,7 +174,7 @@ export class MovementService {
     const fromX = participant.positionX ?? 0;
     const fromY = participant.positionY ?? 0;
 
-    // Validate bounds
+
     const gridCols =
       encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
     const gridRows =
@@ -201,7 +190,7 @@ export class MovementService {
         "POSITION_OUT_OF_BOUNDS",
       );
 
-    // Validate not occupied
+
     const occupant = await this.participantRepo
       .createQueryBuilder("p")
       .where("p.encounter_id = :encounterId", { encounterId })
@@ -216,10 +205,10 @@ export class MovementService {
         "POSITION_OCCUPIED",
       );
 
-    // Spec 012 Lote B — Difficult terrain + Land's Stride (RAW 2024 XPHB).
-    // Cells marcadas como difficult terrain custam 10ft em vez de 5ft. Land's
-    // Stride bypasses isso pra beast-aligned PCs (Druid L6 / Ranger L8+).
-    // Spec 013: merge overlay dinâmico (Grease/Web/Spike Growth/etc).
+
+
+
+
     const staticDifficult = new Set(
       (encounter.mapData?.difficultTerrainCells ?? []).map(
         (c) => `${c.x},${c.y}`,
@@ -239,14 +228,14 @@ export class MovementService {
         hasLandsStride = !!(sheet as { hasLandsStride?: boolean })
           .hasLandsStride;
       } catch {
-        /* fallback */
+
       }
     }
 
-    // Spec 027 (M2 follow-up) — Chebyshev RAW: diagonal conta como 1 cell.
-    // Antes: Manhattan (|dx|+|dy|) — inconsistente com combat-range.ts e
-    // movement_planner.py (agents); causava NPC parado em alvo longe diagonal
-    // (cost computado dobrado → MOVEMENT_INSUFFICIENT silencioso).
+
+
+
+
     const distanceCells = Math.max(
       Math.abs(targetX - fromX),
       Math.abs(targetY - fromY),
@@ -264,7 +253,7 @@ export class MovementService {
       hasLandsStride,
     );
 
-    // Initialize movement if not set
+
     const speed = await this.getSpeed(participant, ownerUserId);
     if (participant.movementRemaining == null) {
       participant.movementRemaining = speed;
@@ -276,7 +265,7 @@ export class MovementService {
         "OUT_OF_RANGE",
       );
 
-    // Check for opportunity attacks (if not disengaged)
+
     const opportunityAttacks = participant.hasDisengaged
       ? []
       : await this.checkOpportunityAttacks(
@@ -288,12 +277,12 @@ export class MovementService {
           encounterId,
         );
 
-    // Spec 013 — Tile-effect resolution per traversed cell:
-    //   on-enter (Grease/Web/Sleet Storm save+condition); on-move-through
-    //   (Spike Growth damage per cell). stopMovement (Web speedMultiplier=0
-    //   + save fail) interrompe o move e ancora o participant na cell atual.
-    // Damage events apenas — HP application = caller (alinhado com pattern
-    // legado de tickDamageFor; full HP wiring fica pra spec orchestrator).
+
+
+
+
+
+
     const tileEvents: GameEventData[] = [];
     let stopAtCell: { x: number; y: number } | null = null;
     let cellsConsumed = 0;
@@ -302,10 +291,10 @@ export class MovementService {
         participant,
         cell,
         encounterId,
-        // No save modifier injected nesta iteração — caller via API
-        // específica (cast-spell) fornece. Movement-triggered saves usam
-        // modifier=0 (DEX implícito do participant pode ser injetado em
-        // refator futuro). MVP: aceita save modifier=0.
+
+
+
+
       );
       tileEvents.push(...entryRes.events);
       cellsConsumed++;
@@ -322,12 +311,12 @@ export class MovementService {
     );
     tileEvents.push(...moveThroughRes.events);
 
-    // Apply movement (final position = stopAtCell se Web bloqueou).
+
     const finalX = stopAtCell?.x ?? targetX;
     const finalY = stopAtCell?.y ?? targetY;
     participant.positionX = finalX;
     participant.positionY = finalY;
-    // Cost proporcional: se parou cedo, debita só o que foi consumido.
+
     const finalCostFt = stopAtCell
       ? this.computeMoveCost(
           fromX,
@@ -341,7 +330,7 @@ export class MovementService {
     participant.movementRemaining -= finalCostFt;
     await this.participantRepo.save(participant);
 
-    // Spec 012 — mover auras (Spirit Guardians) junto com o caster.
+
     await this.persistentArea.relocateAurasByCaster(participant.id, {
       x: finalX,
       y: finalY,
@@ -366,7 +355,7 @@ export class MovementService {
           stoppedByTileEffect: stopAtCell != null,
         },
       },
-      // Spec 013 — tile-effect events (save/condition/damage/stop).
+
       ...tileEvents,
     ];
     if (difficultCellsCrossed > 0) {
@@ -381,9 +370,9 @@ export class MovementService {
       });
     }
 
-    // Spec 012 Lote B — emite 1 evento `opportunity_attack_available` por OA trigger.
-    // UI/harness usa pra prompt o player OA attacker a responder via
-    // POST /encounters/:id/opportunity-attack (OpportunityAttackService).
+
+
+
     for (const oa of opportunityAttacks) {
       events.push({
         event_type: "opportunity_attack_available",
@@ -415,15 +404,7 @@ export class MovementService {
     );
   }
 
-  /**
-   * Spec 012 Lote B — Custo de movimento considerando difficult terrain.
-   * Path Manhattan: anda primeiro X até alinhar, depois Y. Cada cell visitada
-   * (exceto origem) custa 5ft normal, 10ft se difficult (a menos que hasLandsStride).
-   *
-   * Spec 013: também retorna `traversedCells` pra que movement.service possa
-   * disparar `resolveEntry` (save-on-enter) e `resolveMoveThrough` (Spike Growth
-   * damage per cell).
-   */
+
   private computeMoveCost(
     fromX: number,
     fromY: number,
@@ -436,16 +417,16 @@ export class MovementService {
     difficultCellsCrossed: number;
     traversedCells: Array<{ x: number; y: number }>;
   } {
-    // Spec 027 (M2 follow-up) — RAW D&D 5e (PHB 2024 + DMG): cada cell = 5ft
-    // incluindo diagonais (Chebyshev). Antes esta função andava axis-by-axis
-    // (X até zerar, depois Y), cobrando 5ft por cell — equivalente a Manhattan,
-    // que dobra custo de movimentos diagonais. Resultado: NPC com speed 30ft
-    // (6 cells RAW) era recusado em alvos diagonais a >3 cells (cost 40+ft >
-    // 30ft) → step.move falhava silencioso → NPC parado.
-    //
-    // Fix: 1) walk diagonal até zerar um dos eixos (1 cell por step, 5ft cada),
-    //      2) walk axis remanescente. Espelha combat-range.ts:chebyshevDistanceFt
-    //      e agents movement_planner.py:chebyshev_distance.
+
+
+
+
+
+
+
+
+
+
     let cost = 0;
     let crossed = 0;
     const traversed: Array<{ x: number; y: number }> = [];
@@ -480,10 +461,7 @@ export class MovementService {
     };
   }
 
-  /**
-   * Dash action: doubles remaining movement by adding base speed.
-   * Consumes the participant's action.
-   */
+
   async dashAction(
     encounterId: string,
     participantId: string,
@@ -524,10 +502,7 @@ export class MovementService {
     });
   }
 
-  /**
-   * Disengage action: prevents opportunity attacks for the rest of the turn.
-   * Consumes the participant's action.
-   */
+
   async disengageAction(
     encounterId: string,
     participantId: string,
@@ -563,11 +538,7 @@ export class MovementService {
     });
   }
 
-  /**
-   * Check if moving from (fromX,fromY) triggers opportunity attacks.
-   * An opportunity attack can happen when a participant leaves the melee
-   * reach (adjacent cells) of an enemy who has their reaction available.
-   */
+
   private async checkOpportunityAttacks(
     mover: EncounterParticipantEntity,
     fromX: number,
@@ -576,7 +547,7 @@ export class MovementService {
     toY: number,
     encounterId: string,
   ): Promise<Array<{ attackerParticipantId: string; attackerName: string }>> {
-    // Get all non-defeated enemies
+
     const enemies = await this.participantRepo.find({
       where: { encounterId, isDefeated: false },
     });
@@ -587,11 +558,11 @@ export class MovementService {
     }> = [];
 
     for (const enemy of enemies) {
-      // Skip same faction, self, or enemies without position
+
       if (enemy.faction === mover.faction) continue;
       if (enemy.id === mover.id) continue;
       if (enemy.positionX == null || enemy.positionY == null) continue;
-      // Skip if reaction already used this round
+
       if (enemy.reactionsUsed > 0) continue;
 
       const wasAdjacent = this.isAdjacent(
@@ -607,7 +578,7 @@ export class MovementService {
         enemy.positionY,
       );
 
-      // Opportunity attack triggers when leaving melee range (adjacent -> not adjacent)
+
       if (wasAdjacent && !stillAdjacent) {
         results.push({
           attackerParticipantId: enemy.id,
@@ -619,15 +590,12 @@ export class MovementService {
     return results;
   }
 
-  /** Two cells are adjacent if Chebyshev distance <= 1 (includes diagonals). */
+
   private isAdjacent(x1: number, y1: number, x2: number, y2: number): boolean {
     return Math.abs(x1 - x2) <= 1 && Math.abs(y1 - y2) <= 1;
   }
 
-  /**
-   * Initialize movement for a participant at the start of their turn.
-   * Called by CombatService.endTurn() when advancing to the next participant.
-   */
+
   async initializeTurn(
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
@@ -648,27 +616,27 @@ export class MovementService {
     participant.hasDisengaged = false;
     participant.reactionsUsed = 0;
 
-    // Spec 003 Fatia 6 — Extra Attack counter.
+
     participant.attacksUsedThisTurn = 0;
     participant.attacksMaxThisTurn = await this.computeAttacksMaxThisTurn(
       participant,
       ownerUserId,
     );
 
-    // Spec 003 B-lite — Reckless Attack (Barbarian) expira no próprio turno.
+
     participant.recklessAttackActive = false;
 
-    // Premissa weapons-in-hand — free object interaction recarrega no início do turno.
+
     participant.freeObjectInteractionsUsed = 0;
 
-    // Weapon Mastery Tier B — Cleave / Nick recarregam 1× por turno.
+
     participant.cleaveUsedThisTurn = false;
     participant.nickUsedThisTurn = false;
 
-    // Rogue Sneak Attack — reset 1/turn flag
+
     participant.sneakAttackUsedThisTurn = false;
 
-    // Champion L10 Heroic Warrior (RAW 2024) + L18 Survivor — triggers start-turn.
+
     if (participant.type === "pc" && participant.characterId && ownerUserId) {
       await this.applyChampionStartTurnTriggers(participant, ownerUserId);
     }
@@ -676,11 +644,7 @@ export class MovementService {
     await this.participantRepo.save(participant);
   }
 
-  /**
-   * Champion (RAW 2024):
-   *  - Heroic Warrior L10: no start-turn, se não tem Heroic Inspiration, ganha 1.
-   *  - Survivor L18: no start-turn, se Bloodied (HP ≤ max/2) + HP > 0, regen 5+CON.
-   */
+
   private async applyChampionStartTurnTriggers(
     participant: EncounterParticipantEntity,
     ownerUserId: string,
@@ -702,17 +666,17 @@ export class MovementService {
       );
       const hasSurvivor = features.some((f) => f.slug.startsWith("survivor"));
 
-      // Heroic Warrior: se não tem inspiration, ganha.
+
       if (hasHeroicWarrior) {
         const stateResp = await this.stateService
           .setInspiration(participant.characterId!, true)
           .catch(() => null);
         if (stateResp?.inspiration === true) {
-          // inspiration armed disponível pro player
+
         }
       }
 
-      // Survivor: regen 5 + CON se Bloodied com > 0 HP.
+
       if (
         hasSurvivor &&
         sheet.currentHp > 0 &&
@@ -729,16 +693,11 @@ export class MovementService {
         participant.currentHp = hpRes.currentHp;
       }
     } catch {
-      // Silently swallow — triggers são best-effort, não podem quebrar start-turn.
+
     }
   }
 
-  /**
-   * Spec 003 — computa o máximo de weapon attacks por action para este turno.
-   * Regra XPHB: classes marciais com Extra Attack (Fighter L5/11/20, Monk L5,
-   * Paladin/Barb/Ranger L5) somam +1 attack. Default 1. Monstros usam 1 (multiattack
-   * é resolvido em fluxo separado).
-   */
+
   private async computeAttacksMaxThisTurn(
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
@@ -752,7 +711,7 @@ export class MovementService {
         const count = actions.summary?.attackCount;
         if (typeof count === "number" && count > 0) return count;
       } catch {
-        // fallthrough to default
+
       }
     }
     return 1;

@@ -66,11 +66,7 @@ const PERIOD_PT: Record<TimeOfDay, string> = {
   midnight: "madrugada",
 };
 
-/**
- * Spec 019 — agrega weather + clock + chaos + clocks visíveis em
- * `AmbiancePayload` consumido pelo agent (`get_ambiance`) e frontend
- * (`useAmbiancePill`).
- */
+
 @Injectable()
 export class AmbianceService {
   constructor(

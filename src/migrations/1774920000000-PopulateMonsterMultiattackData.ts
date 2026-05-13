@@ -1,15 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 import { parseMultiattackFromDescription } from "./utils/parse-multiattack";
 
-/**
- * Populates `monsters.multiattack` for every monster whose `actions` array
- * contains a "Multiattack" entry. Uses a regex-based parser over the free-text
- * `desc`. Monsters whose multiattack text cannot be parsed are left with
- * `multiattack = NULL` (the runtime falls back to "no multiattack available").
- *
- * Idempotent: re-running replaces previous values.
- * DOWN: clears all populated rows (preserves schema).
- */
+
 export class PopulateMonsterMultiattackData1774920000000 implements MigrationInterface {
   name = "PopulateMonsterMultiattackData1774920000000";
 

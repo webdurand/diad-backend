@@ -68,7 +68,7 @@ describe("parseMultiattackFromDescription", () => {
   it("falls back to title-cased label when action name is not in statblock", () => {
     const res = parseMultiattackFromDescription(
       "The chimera makes three attacks: one with its bite, one with its horns, and one with its claws.",
-      [], // no statblock actions — parser should still produce a sequence with labels
+      [],
     );
     expect(res).not.toBeNull();
     expect(res!.sequence.length).toBe(3);

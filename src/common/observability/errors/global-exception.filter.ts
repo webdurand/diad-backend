@@ -11,16 +11,7 @@ import { DiadException } from "./diad-exception";
 import { pickBodyOrSummary, sanitize } from "../http/request-body.interceptor";
 import type { ErrorEnvelope } from "../types/error-envelope.types";
 
-/**
- * Catch-all global filter — converte qualquer exception em envelope RFC 9457.
- *
- * Substitui GameErrorFilter (que só pegava HttpException). Princípio XI: nenhum
- * erro pode escapar como 500 cru.
- *
- * Loga também numa linha única o request body + envelope (truncados/sanitizados)
- * pra que copiando o log + colando numa IA dê pra responder direto:
- *   "que requisição falhou, com qual payload, qual o error.code, qual o detail."
- */
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   constructor(

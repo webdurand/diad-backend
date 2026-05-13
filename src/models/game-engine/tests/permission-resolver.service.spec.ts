@@ -6,10 +6,10 @@ function mockServices(
   encounter: any,
   session: any,
   campaignDmUserId?: string,
-  // Spec 027 (M2 follow-up) — `multiplayerHumanCount` controla a heurística
-  // "AI-DM solo" do PermissionResolver. Default 2 = comporta-se como antes
-  // (DM bypass ativo). Passar 1 simula DIAD solo (player == dmUserId mas
-  // sem outros humanos) → DM bypass desligado.
+
+
+
+
   multiplayerHumanCount: number = 2,
 ) {
   const encounterService: any = {
@@ -30,8 +30,8 @@ function mockServices(
         : { id: session.campaignId, dmUserId: "someone-else" },
     ),
   };
-  // Spec 027 (M2 follow-up) — mock do CampaignPlayerEntity repo. Apenas
-  // count() + createQueryBuilder().getRawOne() são consumidos pelo Resolver.
+
+
   const campaignPlayerRepo: any = {
     count: jest.fn(async () => multiplayerHumanCount),
     createQueryBuilder: jest.fn(() => ({

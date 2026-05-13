@@ -117,7 +117,7 @@ describe("SpellService", () => {
     });
 
     it("should reject when exceeding max prepared spells", async () => {
-      // Cleric level 5, WIS 16 (+3 mod): max = 5 + 3 = 8
+
       setupCaster({ classSlug: "cleric", level: 5, wis: 16 });
 
       const tooManySpells = Array.from({ length: 9 }, (_, i) =>
@@ -151,7 +151,7 @@ describe("SpellService", () => {
 
       expect(result.prepared).toHaveLength(2);
       expect(result.casterType).toBe("total_access");
-      expect(result.maxPrepared).toBe(8); // 5 + 3
+      expect(result.maxPrepared).toBe(8);
     });
 
     it("should reject spellbook spell not in wizard spellbook", async () => {
@@ -165,7 +165,7 @@ describe("SpellService", () => {
         existingSpells: existingSpellbook,
       });
 
-      // Request a spell that's not in the spellbook
+
       const notInBook = makeSpell("fireball", 3);
       repos.spell.find!.mockResolvedValue([notInBook]);
 
@@ -235,9 +235,9 @@ describe("SpellService", () => {
     });
 
     it("should compute maxPrepared for paladin as floor(level/2) + CHA mod (PHB 2014)", async () => {
-      // Paladin level 6, CHA 16 mod +3: floor(6/2) + 3 = 6
+
       setupCaster({ classSlug: "paladin", level: 6, cha: 16 });
-      // Source with PHB rules so paladin uses halfLevel+mod formula
+
       repos.character.findOne!.mockResolvedValue(
         makeCharacter({
           source: {
@@ -272,11 +272,11 @@ describe("SpellService", () => {
 
       expect(result.level).toBe(1);
       expect(result.used).toBe(2);
-      expect(result.total).toBe(4); // wizard 5: 4 first-level slots
+      expect(result.total).toBe(4);
     });
 
     it("should reject invalid slot level", async () => {
-      const cc = makeCharacterClass("fighter", 5); // no spell slots
+      const cc = makeCharacterClass("fighter", 5);
       const state = makeCharacterState();
 
       repos.character.findOne!.mockResolvedValue(makeCharacter());
@@ -289,7 +289,7 @@ describe("SpellService", () => {
     });
 
     it("should reject used > total", async () => {
-      const cc = makeCharacterClass("wizard", 1); // 2 first-level slots
+      const cc = makeCharacterClass("wizard", 1);
       const state = makeCharacterState();
 
       repos.character.findOne!.mockResolvedValue(makeCharacter());
@@ -346,7 +346,7 @@ describe("SpellService", () => {
           hitDiceToSpend: [{ classSlug: "fighter", count: 2 }],
         });
 
-        // Fighter d10, CON 14 mod +2: fixed heal per die = 5+1+2 = 8; 2 dice = 16
+
         expect(result.hpRestored).toBe(16);
       });
     });
@@ -373,7 +373,7 @@ describe("SpellService", () => {
 
         const result = await service.rest("user-1", "char-1", { type: "long" });
 
-        expect(result.currentHp).toBe(10); // maxHp = hit_die(10) + conMod(0) = 10
+        expect(result.currentHp).toBe(10);
         expect(result.type).toBe("long");
       });
 
@@ -404,7 +404,7 @@ describe("SpellService", () => {
         const state = makeCharacterState({
           current_hp: 50,
           spell_slots_used: {},
-          hit_dice_used: { fighter: 4 }, // 4 of 5 used
+          hit_dice_used: { fighter: 4 },
         });
 
         repos.character.findOne!.mockResolvedValue(makeCharacter());
@@ -418,7 +418,7 @@ describe("SpellService", () => {
 
         const result = await service.rest("user-1", "char-1", { type: "long" });
 
-        // floor(5/2) = 2 dice to recover, but only 4 used, so recovers min(4, 2) = 2
+
         expect(result.hitDiceRecovered).toBe(2);
       });
 
@@ -450,7 +450,7 @@ describe("SpellService", () => {
         const cc = makeCharacterClass("fighter", 5);
         const state = makeCharacterState({
           current_hp: 30,
-          // All these are rechargeOn: 'short' features in the catalog.
+
           feature_uses_used: {
             "second-wind": 1,
             "action-surge": 1,
@@ -465,7 +465,7 @@ describe("SpellService", () => {
 
         await service.rest("user-1", "char-1", { type: "short" });
 
-        // Both short-rest features should be zeroed (or removed).
+
         expect(state.feature_uses_used["second-wind"] ?? 0).toBe(0);
         expect(state.feature_uses_used["action-surge"] ?? 0).toBe(0);
       });
@@ -474,7 +474,7 @@ describe("SpellService", () => {
         const cc = makeCharacterClass("paladin", 3);
         const state = makeCharacterState({
           current_hp: 30,
-          // lay-on-hands has rechargeOn: 'long' — must survive short rest.
+
           feature_uses_used: {
             "lay-on-hands": 10,
             "divine-sense": 2,

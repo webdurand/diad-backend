@@ -147,7 +147,7 @@ export class CampaignService {
 
     const saved = await this.campaignRepo.save(campaign);
 
-    // Auto-add DM as player
+
     const dmPlayer = this.playerRepo.create({
       campaignId: saved.id,
       userId: dmUserId,
@@ -299,7 +299,7 @@ export class CampaignService {
       throw new NotFoundException("Campanha nao encontrada.");
     }
     if (CampaignService.UUID_REGEX.test(candidate)) {
-      // Já é UUID — confirma existência mas não precisa resolver.
+
       const exists = await this.campaignRepo.findOne({
         where: { id: candidate },
         select: { id: true },
@@ -511,7 +511,7 @@ export class CampaignService {
     const rows = this.normalizeQueryRows(raw);
 
     if (rows.length === 0) {
-      const campaign = await this.getById(campaignId); // throws NotFound se id inválido
+      const campaign = await this.getById(campaignId);
       throw new ConflictException({
         ok: false,
         error: `Orçamento da campanha para ${kind} foi atingido.`,

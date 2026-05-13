@@ -32,24 +32,12 @@ export class AiProxyService {
     return this.agentBaseUrl;
   }
 
-  /**
-   * Spec 026 Pillar 4 — service key compartilhada com diad-agents (header
-   * `X-Service-Key`). Controllers usam pra montar headers do pipeStream
-   * quando o agents endpoint exige auth service-to-service.
-   */
+
   getServiceKey(): string {
     return this.configService.get<string>("SERVICE_KEY") ?? "diad-internal-dev";
   }
 
-  /**
-   * Request JSON síncrono (não-stream) pro diad-agents. Usado quando
-   * services backend precisam invocar uma rota POST do agno e ler a resposta
-   * estruturada — distinto do `pipeStream` que faz passthrough SSE.
-   *
-   * Timeout default 8s — deve ser maior que o timeout do extractor LLM
-   * (~4s) com folga pra serialização. Erros viram exception (caller decide
-   * fallback).
-   */
+
   async postJsonToAgent<T = unknown>(
     path: string,
     body: Record<string, unknown>,
@@ -71,29 +59,7 @@ export class AiProxyService {
     });
   }
 
-  /**
-   * Pipes an SSE stream from the Python agent to the Express response.
-   * Uses raw http.request for reliable streaming (no fetch/undici issues).
-   *
-   * Princípio XI: outbound traceparent é injetado no header do request.
-   *
-   * IMPORTANT: This is a *full passthrough* — every chunk received from the
-   * agents service is forwarded to the client verbatim, with NO parsing,
-   * filtering, or whitelisting by event type. New SSE event types added on
-   * the agents side flow through automatically without backend changes.
-   *
-   * `onChunk`: callback opcional invocado com cada chunk recebido do upstream
-   * ANTES do passthrough — usado pelos endpoints solo pra acumular a
-   * narração via `SseNarrationCollector` e persistir server-side em
-   * `session_messages`. Não-bloqueante; exceções são engolidas pra não
-   * sabotar o stream.
-   *
-   * `onEnd`: callback opcional invocado APÓS o upstream finalizar e ANTES
-   * do `res.end()`. Aceita Promise — o response só fecha após o awaited
-   * resolver. Garante que persistência server-side termine antes do client
-   * receber EOF (sem isso, GET /sessions/:id/messages logo após o stream
-   * pode não ver a narração mais nova).
-   */
+
   pipeStream(
     path: string,
     body: Record<string, unknown>,
@@ -107,10 +73,10 @@ export class AiProxyService {
       const payload = JSON.stringify(body);
       const traceparent = this.buildOutboundTraceparent();
 
-      // C1 — telemetria de stream pra debug do bug "mensagem cortando no meio".
-      // Quando o SSE cai entre chunks, queremos saber: quantos bytes já saíram,
-      // quem cortou primeiro (client/upstream/network), e timing (firstChunk,
-      // lastChunk). Tudo isso vira log estruturado nos terminadores abaixo.
+
+
+
+
       const startedAt = Date.now();
       let chunkCount = 0;
       let bytesWritten = 0;
@@ -175,7 +141,7 @@ export class AiProxyService {
             return;
           }
 
-          // Pipe chunks directly — no buffering
+
           proxyRes.on("data", (chunk: Buffer) => {
             chunkCount += 1;
             bytesWritten += chunk.length;
@@ -187,12 +153,12 @@ export class AiProxyService {
               try {
                 onChunk(chunk);
               } catch {
-                // Side-channel collectors nunca podem derrubar o passthrough.
+
               }
             }
-            // Se o client já fechou, parar de tentar escrever (write no socket
-            // morto vira erro/eat-CPU). Drena upstream pra não vazar memória,
-            // mas não emite ao cliente.
+
+
+
             if (!clientClosed) {
               try {
                 res.write(chunk);
@@ -282,13 +248,7 @@ export class AiProxyService {
     });
   }
 
-  /**
-   * Makes a regular (non-streaming) request to the agent service.
-   *
-   * Princípio XI: usa OutboundFetch que injeta traceparent, captura erros
-   * upstream com code+detail+context.upstream preservados via UpstreamException.
-   * Não emite mais `throw new Error(...)` — esse era o caso motivador da spec 016.
-   */
+
   async requestAgent<T>(
     method: "GET" | "POST" | "DELETE",
     path: string,
@@ -304,11 +264,7 @@ export class AiProxyService {
     });
   }
 
-  /**
-   * Spec 003 T046 — chama `POST /monsters/decide` em `diad-agents` para que o
-   * motor de IA (rule-based/medium/LLM conforme INT+WIS do monstro) retorne o
-   * plano do turno. O `RemoteAgentExecutor` envolve este método.
-   */
+
   async decideMonsterTurn(payload: {
     snapshot: unknown;
     participantId: string;

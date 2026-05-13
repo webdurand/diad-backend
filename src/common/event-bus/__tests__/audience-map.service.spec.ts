@@ -118,7 +118,7 @@ describe("AudienceMapService", () => {
       "HUD",
       "CompanionAI",
     ]);
-    // Não deve sequer consultar override
+
     expect(overrideRepo.findOne).not.toHaveBeenCalled();
   });
 
@@ -236,7 +236,7 @@ describe("AudienceMapService", () => {
         audiences: ["HUD"],
       },
       {
-        // override em row não-overrideable é ignorado no resultado
+
         eventCategory: "EncounterEvent",
         eventType: "participant_died",
         audiences: ["HUD"],

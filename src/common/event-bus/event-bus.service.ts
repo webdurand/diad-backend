@@ -24,11 +24,7 @@ export class EventBusService {
     this.logger.setContext(EventBusService.name);
   }
 
-  /**
-   * Registra um listener pra uma categoria. Retorna função `unsubscribe()`
-   * que remove. Listener pode assinar múltiplas categorias chamando subscribe
-   * várias vezes (ou usando `categories[]` da interface).
-   */
+
   subscribe(category: EventCategory, listener: EventListener): () => void {
     let bucket = this.listeners.get(category);
     if (!bucket) {
@@ -42,10 +38,7 @@ export class EventBusService {
     };
   }
 
-  /**
-   * Atalho — registra listener pra todas as categorias declaradas em
-   * `listener.categories`. Retorna unsubscribe que remove de todas.
-   */
+
   registerListener(listener: EventListener): () => void {
     const unsubscribers = listener.categories.map((cat) =>
       this.subscribe(cat, listener),
@@ -55,13 +48,7 @@ export class EventBusService {
     };
   }
 
-  /**
-   * Publica um EventEnvelope. Validação + persistência (background) +
-   * dispatch sync para listeners da categoria.
-   *
-   * Errors:
-   *  - `EVENT_TYPE_NOT_REGISTERED` 422 — eventType não está no catálogo.
-   */
+
   async publish(envelope: EventEnvelope): Promise<EventEnvelope> {
     if (!isEventTypeRegistered(envelope.eventCategory, envelope.eventType)) {
       throw new DomainException(
@@ -103,7 +90,7 @@ export class EventBusService {
       try {
         await listener.handle(envelope);
       } catch (err) {
-        // Princípio XI — log estruturado com cause preservado.
+
         this.logger.error("event_bus.listener_failed", err, {
           "event.category": envelope.eventCategory,
           "event.type": envelope.eventType,
@@ -119,8 +106,8 @@ export class EventBusService {
     try {
       const sessionId = envelope.scope.sessionId;
       if (!sessionId) {
-        // Eventos sem sessionId (ex: campaign-level) ainda não persistem aqui;
-        // session_events.session_id é NOT NULL. Compat mantém legado funcionando.
+
+
         return;
       }
       await this.dataSource.transaction(async (manager) => {

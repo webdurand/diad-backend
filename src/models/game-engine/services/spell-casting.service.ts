@@ -49,7 +49,7 @@ import {
 } from "./tile-effect-catalog";
 import { TransformationService } from "./transformation.service";
 
-// --- Result interfaces ---
+
 
 export interface SpellCastResult {
   spellName: string;
@@ -85,7 +85,7 @@ export interface SpellCastResult {
   };
 }
 
-// --- DTOs ---
+
 
 export interface CastSpellDto {
   characterId: string;
@@ -96,9 +96,7 @@ export interface CastSpellDto {
   encounterId?: string;
   sessionId?: string;
   ownerUserId: string;
-  /** Spec 012 Lote D — Wizard L18 Spell Mastery / L20 Signature Spells.
-   * Skip slot consumption quando cast é free (Spell Mastery L1/L2 sempre,
-   * Signature Spells L3 com limit 1/SR por spell). Caller valida conditions. */
+
   _skipSlotConsumption?: boolean;
 }
 
@@ -109,25 +107,13 @@ export interface CastSpellInCombatDto {
   slotLevel: number;
   targetParticipantIds: string[];
   ownerUserId: string;
-  /** Spec 003 Fatia 9 — cast como reaction (Shield, Counterspell, etc.).
-   *  Skip validação de turno; consome reactionsUsed em vez de actionUsed;
-   *  exige casting_time da spell contendo 'reaction' + triggerEventId. */
+
   asReaction?: boolean;
-  /** Evento que disparou a reaction (ex: attack_rolled pro Shield). Obrigatório se asReaction=true. */
+
   triggerEventId?: string;
-  /** Spec 012 Gap 1 — centro da AoE em coordenadas de grid (cells). Usado
-   *  para resolver targets automaticamente em magias sphere/cube/cone/line
-   *  quando `targetParticipantIds` é vazio. */
+
   aoeOriginCell?: { x: number; y: number };
-  /** Spec 012 Sorcerer — Metamagic applied to this cast.
-   *   - twinned: adiciona targetExtra (2 alvos), custa slotLevel SP (cantrip=1).
-   *   - quickened: cast vira bonus action, custa 2 SP.
-   *   - distant: dobra o range da spell (ou touch→30ft), custa 1 SP.
-   *   - heightened: target do save rola com disadvantage, custa 3 SP.
-   *   - extended: dobra a duração (effect instances + concentration), custa 1 SP.
-   *   - subtle: cast sem componentes V/S (documented-only hoje — DIAD não valida components), custa 1 SP.
-   *   Metamagic exige Sorcerer L2+ (hasMetamagic flag).
-   */
+
   metamagic?: {
     type:
       | "twinned"
@@ -136,14 +122,12 @@ export interface CastSpellInCombatDto {
       | "heightened"
       | "extended"
       | "subtle";
-    /** Segundo alvo pro Twinned Spell. */
+
     targetExtra?: string;
-    /** Target do save com disadvantage pro Heightened Spell. */
+
     heightenedTargetId?: string;
   };
-  /** Spec 012 Lote B — Polymorph: slug do monster (beast form) escolhido
-   *  pelo caster para transformar o alvo. RAW 2024: beast com CR ≤ target's
-   *  CR/level. Se omitido, default 'brown-bear' (CR 1). */
+
   polymorphBeastSlug?: string;
 }
 
@@ -183,12 +167,7 @@ export class SpellCastingService {
     private readonly transformation: TransformationService,
   ) {}
 
-  /**
-   * Spec 012 \u2014 spell slug \u2192 catalog de summons (beast de CR apropriada).
-   * RAW 2024 XPHB: spells de summon convocam 1 criatura espirituosa com
-   * stats escaladas pelo slot level. MVP: escolhemos uma besta fixa por slot
-   * pra validar o pipeline. V2: UI picker pro player escolher a besta.
-   */
+
   private getSummonMonsterForSpell(
     spellSlug: string,
     slotLevel: number,
@@ -198,7 +177,7 @@ export class SpellCastingService {
       "conjure-animals": { 3: "wolf", 4: "wolf", 5: "brown-bear" },
       "conjure-woodland-beings": { 4: "giant-spider" },
       "find-familiar": { 1: "giant-owl" },
-      "spiritual-weapon": { 2: "giant-badger" }, // proxy: n\u00e3o tem monster "weapon", usar besta pequena
+      "spiritual-weapon": { 2: "giant-badger" },
     };
     return (
       map[spellSlug]?.[slotLevel] ??
@@ -212,7 +191,7 @@ export class SpellCastingService {
   }
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
-    // 1. Get character sheet to verify spell access and slots
+
     const sheet = await this.sheetService.computeSheet(
       dto.userId,
       dto.characterId,
@@ -221,7 +200,7 @@ export class SpellCastingService {
       return failure("Personagem nao encontrado.", "INVALID_PARTICIPANT");
     }
 
-    // 2. Check character knows/has the spell prepared
+
     const charSpellRef = sheet.spells.find(
       (s) =>
         s.slug === dto.spellSlug ||
@@ -234,7 +213,7 @@ export class SpellCastingService {
       );
     }
 
-    // 3. Fetch full spell data from DB (has damage, concentration, components, etc.)
+
     const spell = await this.spellRepo.findOne({
       where: { slug: charSpellRef.slug },
     });
@@ -245,12 +224,12 @@ export class SpellCastingService {
       );
     }
 
-    // 4. Cantrips don't consume slots
+
     const isCantrip = spell.level === 0;
     let resourceDelta: SpellCastResult["resourceDelta"] | undefined;
 
     if (!isCantrip) {
-      // 5. Check slot availability
+
       if (dto.slotLevel < spell.level) {
         return failure(
           `Slot nivel ${dto.slotLevel} insuficiente para magia nivel ${spell.level}.`,
@@ -258,9 +237,9 @@ export class SpellCastingService {
         );
       }
 
-      // Spec 012 #3 — prefer standard slot match; fallback pra pact se warlock
-      // só tem pact slot naquele nível. Pact slots têm kind='pact' e são
-      // chaveados por 'pact' (level=-1 convention) em updateSpellSlots.
+
+
+
       const slotBlock =
         sheet.spellSlots.find(
           (s) =>
@@ -278,8 +257,8 @@ export class SpellCastingService {
         );
       }
 
-      // 6. Consume the slot — pact usa level=-1 convention no updateSpellSlots.
-      // Spec 012 Lote D — skip consumption quando Wizard cast free (Spell Mastery/Signature).
+
+
       if (!dto._skipSlotConsumption) {
         const level = slotBlock.kind === "pact" ? -1 : dto.slotLevel;
         await this.spellService.updateSpellSlots(dto.userId, dto.characterId, {
@@ -299,15 +278,15 @@ export class SpellCastingService {
       }
     }
 
-    // 7. Handle concentration
+
     let previousConcentration: string | undefined;
     const isConcentration = spell.concentration ?? false;
 
-    // Note: concentration tracking is managed by the combat service's
-    // EncounterParticipantEntity.isConcentrating/concentratingOn fields.
-    // The DM agent handles breaking previous concentration narratively.
 
-    // 8. Build result
+
+
+
+
     const events: GameEventData[] = [];
     const result: SpellCastResult = {
       spellName: spell.name,
@@ -318,9 +297,9 @@ export class SpellCastingService {
       ...(resourceDelta ? { resourceDelta } : {}),
     };
 
-    // 9. Resolve damage if applicable.
-    // Spec 005 Addendum: spell-damage-catalog como fonte primária (seed não tem
-    // damage_at_slot_level). Fallback para DB spell.damage quando catálogo miss.
+
+
+
     const catalogDmg = getSpellDamage(
       spell.slug,
       dto.slotLevel,
@@ -365,8 +344,8 @@ export class SpellCastingService {
 
       if (expression) {
         const rollResult = this.diceService.rollExpression(expression);
-        // Spell data tem duas shapes: SRD JSON usa {damage_type: {name}}, transform-spells (5eTools)
-        // grava como string[]. Aceita ambos pra não cair em 'magical' genérico.
+
+
         const rawDt = damageInfo?.damage_type as unknown;
         const damageType =
           (typeof rawDt === "object" && rawDt !== null && "name" in rawDt
@@ -394,11 +373,11 @@ export class SpellCastingService {
       }
     }
 
-    // 10. Resolve healing if applicable
-    // Spec 012: transform-spells.ts hardcoda heal_at_slot_level=null no seed,
-    // então toda heal spell quebrava silenciosamente (consumia slot, cura=0).
-    // Primária agora é o catálogo spell-healing-catalog.ts (mesmo padrão do
-    // damage-catalog). Fallback legado pro DB se catálogo miss.
+
+
+
+
+
     const catalogHeal = getSpellHealing(dto.spellSlug, dto.slotLevel);
     const healTemplate =
       catalogHeal?.expression ??
@@ -445,14 +424,14 @@ export class SpellCastingService {
   async castSpellInCombat(
     dto: CastSpellInCombatDto,
   ): Promise<GameResult<CombatSpellResult>> {
-    // 1. Validate encounter is active
+
     const encounter = await this.encounterRepo.findOne({
       where: { id: dto.encounterId },
     });
     if (!encounter || encounter.status !== "active")
       return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
-    // 2. Validate it's this participant's turn — SKIP se asReaction=true (Spec 003 Fatia 9).
+
     if (!dto.asReaction) {
       const currentPid = encounter.turnOrder[encounter.currentTurnIndex];
       if (currentPid !== dto.participantId)
@@ -464,9 +443,9 @@ export class SpellCastingService {
       );
     }
 
-    // Spec 012 Gap 1 — normalizar targetParticipantIds. Undefined/null crashava
-    // o for-of loops abaixo ("Cannot read properties of undefined").
-    // Fireball/AoE sem targets explícitos cai em resolve-by-origin abaixo.
+
+
+
     const requestedTargetIds = Array.isArray(dto.targetParticipantIds)
       ? dto.targetParticipantIds
       : [];
@@ -486,12 +465,12 @@ export class SpellCastingService {
         "INVALID_PARTICIPANT",
       );
 
-    // 3. Get the spell to determine casting time
+
     const spell = await this.spellRepo.findOne({
       where: { slug: dto.spellSlug },
     });
     if (!spell) {
-      // Try by name
+
       const byName = await this.spellRepo.findOne({
         where: { name: dto.spellSlug },
       });
@@ -506,16 +485,16 @@ export class SpellCastingService {
       spell ??
       (await this.spellRepo.findOne({ where: { slug: dto.spellSlug } }))!;
 
-    // 3.5 Spec 012 Gap 1 — resolver targets AoE via aoeOriginCell.
-    // Se spell tem shape (sphere/cube/cone/line/cylinder) + caller passou
-    // aoeOriginCell + targets vazios, buscamos participants do encounter
-    // dentro da área.
+
+
+
+
     let effectiveTargetIds = [...requestedTargetIds];
     const aoeShape = getAoeShape(spellData);
 
-    // Fallback inteligente: AoE com range="Self" (Burning Hands, Thunderwave,
-    // Cone of Cold) usa posição do caster como origin automático quando
-    // aoeOriginCell não é fornecido.
+
+
+
     let effectiveOriginCell = dto.aoeOriginCell;
     if (
       aoeShape &&
@@ -535,11 +514,11 @@ export class SpellCastingService {
       const allParticipants = await this.participantRepo.find({
         where: { encounterId: dto.encounterId },
       });
-      // RAW 2024: spells com range="Self" (Burning Hands, Thunderwave, Cone
-      // of Cold, Earthquake) emanam DO caster — caster está AT origin, não
-      // DENTRO da área. Excluímos caster de auto-resolve Self-range AoE.
-      // Spells com origin ≠ caster (Fireball, Cloudkill) mantêm caster se
-      // ele estiver dentro do raio (RAW: caster afetado pela própria AoE).
+
+
+
+
+
       const isSelfRangeSpell =
         typeof spellData.range === "string" &&
         spellData.range.trim().toLowerCase() === "self";
@@ -560,11 +539,11 @@ export class SpellCastingService {
         .map((p) => p.id);
     }
 
-    // 3.6 Spec 005 US14 — validar número de alvos:
-    //   - AoE (area_of_effect != null): aceita N >= 1 (forma define).
-    //   - Multi-target não-AoE curada (Magic Missile, Eldritch Blast, Scorching Ray):
-    //     aceita N até o limite do spell/slot/nível.
-    //   - Single-target default: rejeita length > 1 com SPELL_NOT_AOE.
+
+
+
+
+
     const targetCount = effectiveTargetIds.length;
     if (targetCount > 1 && !isAoeSpell(spellData)) {
       let casterLevel = 0;
@@ -581,11 +560,11 @@ export class SpellCastingService {
       }
     }
 
-    // Spec 012 Gap 2 — Magic Missile / Scorching Ray / Eldritch Blast:
-    // se caller passou menos alvos que o max permitido pelo spell/slot
-    // (caso comum: 1 target), auto-distribui todos os darts/rays/beams
-    // no primeiro alvo (RAW: caster pode escolher concentrar tudo em 1).
-    // Preserva semântica old-code: single-target cast = full spell damage.
+
+
+
+
+
     if (effectiveTargetIds.length >= 1 && isMultiTargetNonAoeSpell(spellData)) {
       const sheet = await this.sheetService.computeSheet(
         dto.ownerUserId,
@@ -604,13 +583,13 @@ export class SpellCastingService {
       }
     }
 
-    // 3.65 Spec 015 Eixo 2 — desambigua range="Self".
-    // Pré-015: Produce Flame (range="Self" + attack_type="ranged") aceitava
-    // só o caster como alvo (parseRangeString("Self") = 0ft → mesma cell).
-    // Resultado: druida lançava em si mesmo e levava 4d8 fire.
-    // Pós-015: `getSpellEffectiveRange` detecta self-origin-attack e
-    //   (a) rejeita caster como alvo (rejectSelfAsTarget=true)
-    //   (b) valida range real do attack (30ft ranged, 5ft melee).
+
+
+
+
+
+
+
     const effectiveRange = getSpellEffectiveRange(spellData);
     if (
       effectiveRange.kind === "self-origin-attack" &&
@@ -622,24 +601,24 @@ export class SpellCastingService {
       );
     }
 
-    // 3.7 Spec 012 Gap 3 — range check compartilhado com /attack.
-    // Casta com targets individuais OU AoE com aoeOriginCell: valida distância
-    // caster → alvo/origem. Skip se position null em qualquer lado (PC sem grid).
-    //
-    // Spec 012 Metamagic Distant — se dto.metamagic?.type === 'distant',
-    // multiplica range normal. Touch (5ft) → 30ft = 6×. Outros → 2×.
-    // Observação: o cost SP e a validação formal do Distant ocorrem no bloco
-    // metamagic mais abaixo (action economy); aqui só aplicamos o multiplier
-    // pra que o range check não rejeite falsamente.
+
+
+
+
+
+
+
+
+
     const distantRangeMultiplier =
       dto.metamagic?.type === "distant"
         ? (spellData.range ?? "").trim().toLowerCase() === "touch"
           ? 6
           : 2
         : 1;
-    // Spec 015 Eixo 2 — quando self-origin-attack, force range check usando
-    // attackRangeFt do helper (parseRangeString("Self") retornaria 0, skipando
-    // a validação inteira).
+
+
+
     const parsedRange =
       effectiveRange.kind === "self-origin-attack"
         ? { normal: effectiveRange.attackRangeFt }
@@ -650,7 +629,7 @@ export class SpellCastingService {
           ? { x: participant.positionX, y: participant.positionY }
           : null;
 
-      // AoE: check origin (shape define alcance do efeito a partir do origin)
+
       if (aoeShape && effectiveOriginCell && casterPos) {
         const dist = chebyshevDistanceFt(casterPos, effectiveOriginCell);
         const maxFt =
@@ -663,7 +642,7 @@ export class SpellCastingService {
         }
       }
 
-      // Single/multi-target: check cada target individualmente
+
       if (!aoeShape && effectiveTargetIds.length > 0 && casterPos) {
         for (const tid of effectiveTargetIds) {
           const t = await this.encounterService
@@ -686,14 +665,14 @@ export class SpellCastingService {
       }
     }
 
-    // 4. Check action economy based on casting time
+
     const castingTime = (spellData.casting_time ?? "action").toLowerCase();
     const baseIsBonusAction = castingTime.includes("bonus");
     const isReactionSpell = castingTime.includes("reaction");
 
-    // Spec 012 Sorcerer — Metamagic Quickened: cast como bonus action em vez
-    // de action (RAW: custa 2 SP). Preserva o flag `isBonusAction` final pra
-    // action economy check abaixo. Metamagic Twinned adiciona targetExtra.
+
+
+
     let metamagicSpCost = 0;
     let metamagicAppliedType:
       | "twinned"
@@ -703,10 +682,10 @@ export class SpellCastingService {
       | "extended"
       | "subtle"
       | null = null;
-    // Heightened target id (save disadvantage) passado do DTO.
+
     let heightenedTargetIdForSave: string | null = null;
     if (dto.metamagic) {
-      // Valida caster é Sorcerer L2+ com Metamagic flag
+
       const sheet = await this.sheetService.computeSheet(
         dto.ownerUserId,
         participant.characterId,
@@ -719,8 +698,8 @@ export class SpellCastingService {
       }
 
       if (dto.metamagic.type === "twinned") {
-        // RAW 2024: Twinned Spell custa SP = slotLevel (ou 1 se cantrip).
-        // Requer spell single-target (max 1 alvo normalmente).
+
+
         if (isAoeSpell(spellData) || isMultiTargetNonAoeSpell(spellData)) {
           return failure(
             "Twinned Spell requer spell de alvo único (não AoE, não multi-target).",
@@ -743,7 +722,7 @@ export class SpellCastingService {
         metamagicAppliedType = "twinned";
         effectiveTargetIds.push(dto.metamagic.targetExtra);
       } else if (dto.metamagic.type === "quickened") {
-        // RAW 2024: Quickened custa 2 SP, cast vira bonus action.
+
         if (isReactionSpell) {
           return failure(
             "Quickened Spell não pode ser aplicado em reaction spells.",
@@ -759,8 +738,8 @@ export class SpellCastingService {
         metamagicSpCost = 2;
         metamagicAppliedType = "quickened";
       } else if (dto.metamagic.type === "distant") {
-        // RAW 2024: Distant Spell custa 1 SP. Dobra range (ranged), ou touch→30ft.
-        // Multiplier aplicado no range check (bloco acima) via distantRangeMultiplier.
+
+
         const rangeStr = (spellData.range ?? "").trim().toLowerCase();
         if (rangeStr === "self") {
           return failure(
@@ -771,7 +750,7 @@ export class SpellCastingService {
         metamagicSpCost = 1;
         metamagicAppliedType = "distant";
       } else if (dto.metamagic.type === "heightened") {
-        // RAW 2024: Heightened Spell custa 3 SP. 1 target rola save com disadvantage.
+
         if (!spellData.dc) {
           return failure(
             "Heightened Spell requer spell com saving throw.",
@@ -788,10 +767,10 @@ export class SpellCastingService {
         metamagicAppliedType = "heightened";
         heightenedTargetIdForSave = dto.metamagic.heightenedTargetId;
       } else if (dto.metamagic.type === "extended") {
-        // RAW 2024: Extended Spell custa 1 SP. Dobra duração (1 min ou mais).
-        // Spells "Instantaneous" ou "1 round" não podem receber Extended.
-        // MVP: documented-only (event + SP cost). Duration × 2 em effect-instance/
-        // condition-lifecycle é V2 (exige thread-through em vários pontos).
+
+
+
+
         const durationStr = (spellData.duration ?? "").trim().toLowerCase();
         if (
           durationStr === "instantaneous" ||
@@ -806,14 +785,14 @@ export class SpellCastingService {
         metamagicSpCost = 1;
         metamagicAppliedType = "extended";
       } else if (dto.metamagic.type === "subtle") {
-        // RAW 2024: Subtle Spell custa 1 SP. Sem componentes V/S (não pode ser
-        // Counterspelled via "ver cast"). DIAD MVP: documented-only porque não
-        // valida components atualmente — cost é debitado + flag no event.
+
+
+
         metamagicSpCost = 1;
         metamagicAppliedType = "subtle";
       }
 
-      // Valida SP disponível (pool = classLevel)
+
       const spTotal = sorcClass.level;
       const spUsed = participant.sorceryPointsUsed ?? 0;
       const spRemaining = spTotal - spUsed;
@@ -825,11 +804,11 @@ export class SpellCastingService {
       }
     }
 
-    // Action economy final: Quickened força bonus action.
+
     const isBonusAction =
       baseIsBonusAction || metamagicAppliedType === "quickened";
 
-    // Spec 003 Fatia 9 — asReaction requer spell.casting_time contendo 'reaction'.
+
     if (dto.asReaction && !isReactionSpell) {
       return failure(
         `A magia '${dto.spellSlug}' nao e castavel como reaction (casting_time='${spellData.casting_time}').`,
@@ -851,7 +830,7 @@ export class SpellCastingService {
         return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
 
-    // 4.5 Spec 004 — pre-conditions mecanicas (ex: Mage Armor exige alvo sem armadura).
+
     const targetMeta: TargetMetadata[] = [];
     for (const tid of effectiveTargetIds) {
       const t = await this.encounterService
@@ -869,8 +848,8 @@ export class SpellCastingService {
       return failure(precondFail.message, precondFail.code as any);
     }
 
-    // 5. Cast the spell (validates slots, components, etc.)
-    // Spec 012 Lote D — Wizard Spell Mastery (L18, L1/L2 free) + Signature Spells (L20, L3 1/SR each).
+
+
     let skipSlotConsumption = false;
     let spellMasteryApplied = false;
     let signatureSpellApplied = false;
@@ -896,7 +875,7 @@ export class SpellCastingService {
         dto.slotLevel === 3 &&
         spellData.level <= 3
       ) {
-        // 1/SR por spell específica. Marker kind='signature_spell_used_this_rest' payload.slug.
+
         const usedMarkers = (participant.effectInstances ?? []).filter(
           (e) =>
             (e as unknown as { kind?: string }).kind ===
@@ -911,7 +890,7 @@ export class SpellCastingService {
         }
       }
     } catch {
-      // fallback: no skip
+
     }
 
     const castResult = await this.castSpell({
@@ -929,7 +908,7 @@ export class SpellCastingService {
 
     const spellResult = castResult.value;
 
-    // Spec 012 Lote D — marcar Signature Spell consumed (1/SR por spell).
+
     if (signatureSpellApplied) {
       participant.effectInstances = [
         ...(participant.effectInstances ?? []),
@@ -948,7 +927,7 @@ export class SpellCastingService {
       ];
     }
 
-    // 6. Mark action used (Spec 003 Fatia 9: asReaction consome reaction em vez).
+
     if (dto.asReaction) {
       participant.reactionsUsed = participant.reactionsUsed + 1;
     } else if (isBonusAction) {
@@ -957,16 +936,16 @@ export class SpellCastingService {
       participant.actionUsed = true;
     }
 
-    // Spec 012 Sorcerer — debitar SP do metamagic aplicado.
+
     if (metamagicAppliedType && metamagicSpCost > 0) {
       participant.sorceryPointsUsed =
         (participant.sorceryPointsUsed ?? 0) + metamagicSpCost;
     }
 
-    // 7. Handle concentration
-    // Spec 012: concentratingOn é exposto como `spellSlug` no API response
-    // (encounter-response.dto.ts). Persistimos o slug canônico — era spell.name
-    // (i18n-sensitive, quebra comparação invariant-driven).
+
+
+
+
     if (spellResult.concentration) {
       if (participant.isConcentrating) {
         spellResult.previousConcentration =
@@ -978,8 +957,8 @@ export class SpellCastingService {
 
     await this.participantRepo.save(participant);
 
-    // Spec 012 \u2014 hook summon spells. Se o spell \u00e9 de summon, spawna no grid.
-    // summonEvents inicia separado e \u00e9 merged em events ap\u00f3s declara\u00e7\u00e3o abaixo.
+
+
     const summonEvents: import("../interfaces/result.type").GameEventData[] =
       [];
     const summonMonsterSlug = this.getSummonMonsterForSpell(
@@ -1021,7 +1000,7 @@ export class SpellCastingService {
           },
         });
       } catch (err) {
-        // N\u00e3o aborta o cast em caso de erro do summon (spell j\u00e1 foi paga).
+
         const msg = err instanceof Error ? err.message : String(err);
         summonEvents.push({
           event_type: "summon_error",
@@ -1031,11 +1010,11 @@ export class SpellCastingService {
       }
     }
 
-    // 8. Apply effects to targets
+
     const targetsHit: CombatSpellResult["targetsHit"] = [];
     const events = [...(castResult.events ?? []), ...summonEvents];
 
-    // Spec 012 Sorcerer — emitir evento metamagic_applied (histórico + UI).
+
     if (metamagicAppliedType) {
       events.push({
         event_type: "metamagic_applied",
@@ -1056,10 +1035,10 @@ export class SpellCastingService {
       });
     }
 
-    // Spec 012 Gap 2 — Magic Missile/Scorching Ray/Eldritch Blast: cada entry
-    // em effectiveTargetIds = 1 dart/ray/beam. Rolamos damage FRESH por hit
-    // (não compartilhado como AoE). Se múltiplas entries do mesmo target, cada
-    // uma contribui damage separado, que é exatamente a semântica RAW.
+
+
+
+
     const sheetForPerHit = isMultiTargetNonAoeSpell(spellData)
       ? await this.sheetService.computeSheet(
           dto.ownerUserId,
@@ -1081,8 +1060,8 @@ export class SpellCastingService {
         displayName: target.displayName,
       };
 
-      // Apply damage — per-hit rola aqui (multi-target non-AoE); AoE usa o
-      // roll agregado de castSpell.
+
+
       let damageThisHit = 0;
       let damageType = spellResult.damage?.type ?? "force";
       if (perHitBase) {
@@ -1097,8 +1076,8 @@ export class SpellCastingService {
       if (damageThisHit > 0) {
         let finalDamage = damageThisHit;
 
-        // Saving throw for half damage — só em AoE/save-based spells; per-hit
-        // (scorching ray = attack roll, magic missile = auto) não usa save aqui.
+
+
         if (spellData.dc && !perHitBase) {
           const dcInfo = spellData.dc as Record<string, any>;
           const rawAbility = Array.isArray(dcInfo.dc_type)
@@ -1114,7 +1093,7 @@ export class SpellCastingService {
           );
           const spellSaveDc = casterClass?.spellSaveDc ?? 13;
 
-          // Metamagic Heightened — disadvantage só no target apontado.
+
           const heightenedDisadvantage =
             metamagicAppliedType === "heightened" &&
             heightenedTargetIdForSave === targetId;
@@ -1152,7 +1131,7 @@ export class SpellCastingService {
         }
       }
 
-      // Apply healing
+
       if (spellResult.healing && spellResult.healing.total > 0) {
         await this.combatService.applyHealing(dto.encounterId, {
           targetParticipantId: targetId,
@@ -1162,7 +1141,7 @@ export class SpellCastingService {
         targetResult.healingApplied = spellResult.healing.total;
       }
 
-      // Spec 005 Addendum — apply condition from spell-condition-catalog
+
       const condEntry = getSpellCondition(dto.spellSlug);
       if (condEntry && target.id !== participant.id) {
         const sheet = await this.sheetService.computeSheet(
@@ -1209,7 +1188,7 @@ export class SpellCastingService {
       targetsHit.push(targetResult);
     }
 
-    // 9. Spec 004 — materializar EffectInstance (catalogo de spells conhecidas).
+
     const casterDex =
       spellResult && (spellResult as any).casterDex != null
         ? (spellResult as any).casterDex
@@ -1232,12 +1211,12 @@ export class SpellCastingService {
       events.push(...effectEvents);
     }
 
-    // Spec 013 — Tile-effect spawn via catalog (OCP-aligned).
-    // Cobre Grease, Web, Spike Growth, Wall of Fire, Cloud of Daggers,
-    // Sleet Storm, Spirit Guardians (refactor de hardcode pré-013).
-    // Adicionar magia futura = nova entry no tile-effect-catalog.ts. ZERO
-    // edit aqui. Princípio X: snapshot tactical metadata + narrativeDescriptor
-    // na entity, consumido por CombatAgent (L2/L3) e Narrator (3 camada).
+
+
+
+
+
+
     const slugNorm = dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, "");
     const tileDef = TILE_EFFECT_CATALOG[slugNorm as TileEffectKind];
     if (
@@ -1245,8 +1224,8 @@ export class SpellCastingService {
       participant.positionX != null &&
       participant.positionY != null
     ) {
-      // Origin: aoeOriginCell quando fornecido (Wall of Fire/Grease/Web/Sleet);
-      // posição do caster (Spirit Guardians + auras que seguem).
+
+
       const originCell = tileDef.auraFollowsCaster
         ? { x: participant.positionX, y: participant.positionY }
         : (dto.aoeOriginCell ?? {
@@ -1254,8 +1233,8 @@ export class SpellCastingService {
             y: participant.positionY,
           });
 
-      // Save DC do caster (RAW: spell save DC = 8 + prof + spellcasting mod).
-      let saveDc = 13; // fallback razoável (DC L5 caster)
+
+      let saveDc = 13;
       if (participant.type === "pc" && participant.characterId) {
         try {
           const s = await this.sheetService.computeSheet(
@@ -1268,7 +1247,7 @@ export class SpellCastingService {
           if (casterClass?.spellSaveDc != null)
             saveDc = casterClass.spellSaveDc;
         } catch {
-          /* fallback DC=13 */
+
         }
       }
 
@@ -1301,9 +1280,9 @@ export class SpellCastingService {
         },
       });
 
-      // Resolve `on-cast` triggers — Grease save em adjacents dentro da área,
-      // Wall of Fire 5d8 fire (DEX half) em participants no path,
-      // Cloud of Daggers 4d4 slashing (RAW 2024 mudança).
+
+
+
       const allParticipants = await this.participantRepo.find({
         where: { encounterId: dto.encounterId, isDefeated: false },
       });
@@ -1316,30 +1295,30 @@ export class SpellCastingService {
       const onCastRes = await this.persistentArea.resolveOnCast(
         area,
         inArea,
-        // Save modifier: usa rollMonsterOrPcSave-style. MVP: modifier=0 fallback.
-        // Refator futuro injeta saveModifier real do target sheet.
+
+
         async () => ({ modifier: 0 }),
       );
       events.push(...onCastRes.events);
 
-      // Concentration cascade: tile-effects com sourceConcentration=true são
-      // cleaned-up automaticamente por ConcentrationService.break() via query
-      // direta `where: { casterParticipantId, sourceConcentration: true }`.
-      // (Cascade extension feita em concentration.service.ts; sem dependency
-      // injection aqui pra evitar ciclo.)
+
+
+
+
+
     }
 
-    // Spec 012 Lote B — Polymorph wire (RAW 2024 XPHB).
-    // Target faz WIS save; se falha, TransformationService.enterForm swap
-    // pro monster escolhido (beast form). Concentração 1h = 600 rounds.
-    // durationRoundsTotal=600, revertTriggers: hpZero|concentrationBroken|dismiss.
+
+
+
+
     if (slugNorm === "polymorph") {
       const encounterRound =
         (await this.encounterRepo.findOne({ where: { id: dto.encounterId } }))
           ?.currentRound ?? 0;
       const beastSlug = dto.polymorphBeastSlug ?? "brown-bear";
 
-      // Save DC do caster
+
       const casterSheet = await this.sheetService
         .computeSheet(dto.ownerUserId, participant.characterId)
         .catch(() => null as any);
@@ -1349,14 +1328,14 @@ export class SpellCastingService {
       const spellSaveDc: number = casterClass?.spellSaveDc ?? 13;
 
       for (const targetId of effectiveTargetIds) {
-        // Ignorar self (Polymorph RAW aceita self, mas aí sem save)
+
         const isSelf = targetId === participant.id;
         const target = await this.encounterService
           .getParticipant(targetId)
           .catch(() => null);
         if (!target) continue;
 
-        // Se target já está transformado, recusar (idempotência, previne conflito)
+
         if (target.transformationState) {
           events.push({
             event_type: "polymorph_rejected",
@@ -1397,7 +1376,7 @@ export class SpellCastingService {
           await this.transformation.enterForm(targetId, {
             source: "polymorph-spell",
             monsterSlug: beastSlug,
-            durationRoundsTotal: 600, // 1 hour
+            durationRoundsTotal: 600,
             revertTriggers: {
               hpZero: true,
               concentrationBroken: true,
@@ -1425,8 +1404,8 @@ export class SpellCastingService {
       }
     }
 
-    // 10. Spec 004 — Shield retroativa: se cast com triggerEventId, re-avalia
-    // o attack trigger com novo AC efetivo. Se virava miss, reverte damage.
+
+
     let retroactiveReview: any = undefined;
     if (
       dto.asReaction &&
@@ -1478,11 +1457,7 @@ export class SpellCastingService {
     );
   }
 
-  /**
-   * Spec 004 — Shield reaction retroativa. Lê o evento attack_roll original,
-   * soma +5 no targetAc, re-avalia hit. Se passa a miss, reverte o damage
-   * aplicado (via applyHealing no target).
-   */
+
   private async recomputeShieldTrigger(
     encounterId: string,
     triggerEventId: string,
@@ -1522,9 +1497,9 @@ export class SpellCastingService {
 
     let damageReverted = 0;
     if (prevHit && !newHit) {
-      // Reverte damage: acha o proximo damage_applied/hp_change que seguiu o
-      // attack (mesmo target). Event shape: data.damage.finalDamage ou
-      // data.damage ou data.amount dependendo do emitter.
+
+
+
       const hpChange = await this.gameEventRepo
         .createQueryBuilder("e")
         .where("e.encounterId = :encId", { encId: encounterId })
@@ -1545,7 +1520,7 @@ export class SpellCastingService {
           d?.amount ??
           0;
         if (dmg > 0) {
-          // Apply healing equivalente no target (delegando a combat.service)
+
           await this.combatService.applyHealing(encounterId, {
             targetParticipantId: trigger.targetParticipantId!,
             amount: dmg,
@@ -1568,12 +1543,7 @@ export class SpellCastingService {
     };
   }
 
-  /**
-   * Detecta se o participant tem armor equipada (armor base > 0).
-   * - PC: inspeciona sheet.equipment e busca peca nao-escudo com ac.base > 0.
-   * - Monster: true se AC aparenta vir de natural armor (nao-leather).
-   * Heuristica simples — refinada em spec futura.
-   */
+
   private async isTargetWearingArmor(
     participant: EncounterParticipantEntity,
     ownerUserId: string,
@@ -1598,11 +1568,11 @@ export class SpellCastingService {
         return false;
       }
     }
-    // Monsters: quase sempre tem natural armor — Mage Armor RAW nao se aplica.
+
     return participant.type === "monster";
   }
 
-  /** Retorna DEX modifier do caster (PC via sheet, monster via statblock). */
+
   private async getCasterDexModifier(
     participant: EncounterParticipantEntity,
     ownerUserId: string,
@@ -1622,11 +1592,7 @@ export class SpellCastingService {
     return getAbilityModifier(dex);
   }
 
-  /**
-   * Monster caster branch. Reads `monster.spellcasting` for DC/attack bonus,
-   * debits slots/uses via `MonsterSpellcastingService`, then applies damage
-   * (with saves) or healing to each target.
-   */
+
   private async castMonsterSpellInCombat(
     dto: CastSpellInCombatDto,
     participant: EncounterParticipantEntity,
@@ -1672,7 +1638,7 @@ export class SpellCastingService {
         return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
 
-    // Damage from spell.damage JSON (damage_at_slot_level keyed by slot number).
+
     const damageInfo: any = (spell as any).damage ?? {};
     const rawDt = damageInfo?.damage_type as unknown;
     const damageType: string =
@@ -1757,7 +1723,7 @@ export class SpellCastingService {
     else participant.actionUsed = true;
 
     if (concentration) {
-      // Spec 012: persistir slug (consistência com encounter-response.spellSlug).
+
       participant.isConcentrating = true;
       participant.concentratingOn = spell.slug;
     }
@@ -1790,17 +1756,13 @@ export class SpellCastingService {
     return ability.toLowerCase().substring(0, 3);
   }
 
-  /**
-   * Spec 005 Addendum — Roll saving throw for target (monster or PC).
-   * For PCs delegates to SavingThrowService; for monsters computes inline
-   * from ability score + proficiency (if present in proficiencies).
-   */
+
   private async rollMonsterOrPcSave(
     target: EncounterParticipantEntity,
     ability: string,
     dc: number,
     ownerUserId: string,
-    /** Spec 012 Metamagic Heightened — rola 2d20 e usa o menor (disadvantage). */
+
     withDisadvantage: boolean = false,
   ): Promise<{ success: boolean; roll: number; total: number; dc: number }> {
     if (target.type === "pc" && target.characterId) {
@@ -1809,7 +1771,7 @@ export class SpellCastingService {
         ability,
         dc,
         userId: ownerUserId,
-        // SavingThrowService tem suporte nativo a disadvantage (Spec 004).
+
         forceDisadvantage: withDisadvantage || undefined,
       } as any);
       if (saveResult.ok && saveResult.value) {
@@ -1822,7 +1784,7 @@ export class SpellCastingService {
       }
     }
 
-    // Monster: compute from entity abilities
+
     const monster =
       target.monster ??
       (target.monsterId

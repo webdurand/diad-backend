@@ -28,13 +28,13 @@ import {
   MonsterEntity,
   EquipmentEntity,
   MagicItemEntity,
-  // Spec 019
+
   WeatherEntity,
   GameClockEntity,
   ClockEntity,
   SceneEntity,
   SceneNpcEntity,
-  // Adventure-scope split
+
   GameSessionEntity,
   SessionNpcStateEntity,
   SessionFactionStateEntity,
@@ -59,7 +59,7 @@ import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
 import { StoryArcService } from "./services/story-arc.service";
 import { NpcRelationshipService } from "./services/npc-relationship.service";
-// Spec 019 — Living World & Ambiance
+
 import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService } from "./services/weather.service";
 import { GameClockService } from "./services/game-clock.service";
@@ -100,7 +100,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       MonsterEntity,
       EquipmentEntity,
       MagicItemEntity,
-      // Spec 019
+
       WeatherEntity,
       GameClockEntity,
       ClockEntity,
@@ -135,18 +135,18 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     QuestService,
     StoryArcService,
     NpcRelationshipService,
-    // Spec 019 — Living World & Ambiance
+
     AmbianceService,
     WeatherService,
     GameClockService,
     ChaosFactorService,
-    // Adventure-scope split
+
     SessionNpcStateService,
     SessionFactionStateService,
     SessionStoryArcStateService,
     NpcWealthService,
     CompanionTemplateService,
-    // Spec 027 D3 — slug→UUID pipe pra `/campaigns/:id/*`
+
     CampaignIdPipe,
     QuestDefeatListener,
     GainReputationListener,
@@ -161,12 +161,12 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     QuestService,
     StoryArcService,
     NpcRelationshipService,
-    // Spec 019
+
     AmbianceService,
     WeatherService,
     GameClockService,
     ChaosFactorService,
-    // Adventure-scope split
+
     SessionNpcStateService,
     SessionFactionStateService,
     SessionStoryArcStateService,

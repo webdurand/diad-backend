@@ -1,23 +1,11 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 004 — Encounter RAW Completeness.
- *
- * Adiciona infraestrutura para:
- * - ConditionInstance (substitui `conditions: string[]` mantendo legacy por 1 release)
- * - Concentração com rastreio de duração e appliedEffects (cascata atómica)
- * - Pool de pontos lendários por monstro
- * - Recharge de habilidades (d6 no início do turno)
- * - Vínculo de grapple (alvo → agarrador)
- * - Flag inLair no encontro
- * - Lair actions e mapa de custo de lendárias no monster
- * - Tabela nova `persistent_area_effects` para áreas tipo Spirit Guardians, Wall of Fire
- */
+
 export class AddRawCombatCompleteness1776000000000 implements MigrationInterface {
   name = "AddRawCombatCompleteness1776000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // --- EncounterParticipant ---
+
     await queryRunner.query(`
       ALTER TABLE encounter_participants
       ADD COLUMN IF NOT EXISTS condition_instances jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -30,7 +18,7 @@ export class AddRawCombatCompleteness1776000000000 implements MigrationInterface
       ADD COLUMN IF NOT EXISTS grappled_by_participant_id varchar(36) NULL
     `);
 
-    // Backfill: cada slug em conditions[] vira ConditionInstance com defaults
+
     await queryRunner.query(`
       UPDATE encounter_participants ep
       SET condition_instances = COALESCE(
@@ -56,7 +44,7 @@ export class AddRawCombatCompleteness1776000000000 implements MigrationInterface
         AND COALESCE(jsonb_array_length(ep.conditions), 0) > 0
     `);
 
-    // Inicializa legendary_points para monstros lendários existentes (heurística: se monster.legendary_actions tem qualquer entry → 3 pontos)
+
     await queryRunner.query(`
       UPDATE encounter_participants ep
       SET legendary_points_available = 3, legendary_points_max = 3
@@ -67,20 +55,20 @@ export class AddRawCombatCompleteness1776000000000 implements MigrationInterface
         AND ep.legendary_points_available IS NULL
     `);
 
-    // --- Encounter ---
+
     await queryRunner.query(`
       ALTER TABLE encounters
       ADD COLUMN IF NOT EXISTS in_lair boolean NOT NULL DEFAULT false
     `);
 
-    // --- Monster ---
+
     await queryRunner.query(`
       ALTER TABLE monsters
       ADD COLUMN IF NOT EXISTS lair_actions jsonb NULL,
       ADD COLUMN IF NOT EXISTS legendary_action_cost_map jsonb NULL
     `);
 
-    // --- PersistentAreaEffect (nova tabela) ---
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS persistent_area_effects (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

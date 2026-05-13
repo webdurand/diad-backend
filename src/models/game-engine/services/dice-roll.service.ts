@@ -11,20 +11,7 @@ import {
   DiceVerdict,
 } from "../interfaces/dice.interfaces";
 
-/**
- * Spec 016 M2 — Dice request lifecycle service.
- *
- * Encapsula o fluxo de active dice checks (chat-driven SSE):
- *   1. requestRoll(): cria um RequestState + payload pro frontend renderizar
- *      `<DiceRollCard>`. Storage in-memory por enquanto (TTL 1h) — não exige
- *      migration. M3 promove pra entity persistida quando precisar replay.
- *   2. resolveRoll(): consome rawD20 do frontend, computa verdict, marca
- *      como resolved.
- *   3. passiveCheck(): mesmo cálculo verdict mas SEM emitir SSE / sem persist.
- *
- * Targeting (`targetD20 = max(2, dc - totalModifier)`) delegado ao
- * DiceService.buildDiceRollRequest pra manter SRP.
- */
+
 
 interface RequestState {
   rollId: string;
@@ -41,7 +28,7 @@ interface RequestState {
   resolved?: DiceRollResolved;
 }
 
-const TTL_MS = 60 * 60 * 1000; // 1h — declared in spec as MVP retention
+const TTL_MS = 60 * 60 * 1000;
 
 export interface RequestRollInput {
   characterId?: string;
@@ -83,10 +70,7 @@ export class DiceRollService {
 
   constructor(private readonly diceService: DiceService) {}
 
-  /**
-   * Cria um active dice check. Retorna rollId pro frontend renderizar
-   * `<DiceRollCard>` + payload pro SSE event chunk.
-   */
+
   requestRoll(input: RequestRollInput): RequestRollResult {
     this.purgeExpired();
 
@@ -124,12 +108,7 @@ export class DiceRollService {
     };
   }
 
-  /**
-   * Resolve um active dice check.
-   * - advantage='advantage': escolhe max(raw1, raw2)
-   * - advantage='disadvantage': escolhe min(raw1, raw2)
-   * - advantage='normal': usa raw1 (raw2 ignorado)
-   */
+
   resolveRoll(rollId: string, raw1: number, raw2?: number): ResolveRollResult {
     this.purgeExpired();
     const state = this.store.get(rollId);
@@ -176,19 +155,14 @@ export class DiceRollService {
     };
   }
 
-  /**
-   * Passive check (Perception, Investigation, Insight). Mesmo verdict
-   * compute do active check, mas sem emitir SSE event e sem armazenar
-   * RequestState. Usado por triggers de exploração (perceive secret door,
-   * notice ambush, sense lie).
-   */
+
   passiveCheck(input: PassiveCheckInput): {
     success: boolean;
     verdict: DiceVerdict;
     total: number;
     rollId: string;
   } {
-    // Passive: rawD20 = 10 (RAW PHB 2024 — passive score = 10 + modifiers).
+
     const rollId = randomUUID();
     const resolved = this.diceService.resolveDiceRoll({
       rollId,
@@ -207,9 +181,7 @@ export class DiceRollService {
     };
   }
 
-  /**
-   * Útil em testes / probes. Não exposto via HTTP.
-   */
+
   getRequestState(rollId: string): RequestState | undefined {
     return this.store.get(rollId);
   }

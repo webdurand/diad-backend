@@ -24,13 +24,7 @@ export type SessionMessageKind =
   | "rewards"
   | "turn_outcome";
 
-/**
- * Histórico de mensagens narrativas da sessão de chat — fonte-de-verdade
- * pra hidratação cross-device e recap quando o jogador retoma sessão.
- *
- * Sequencia determinística por (sessionId, sequenceNumber).
- * `clientId` opcional permite dedupe idempotente em retry de POST.
- */
+
 @Entity("session_messages")
 @Index(["sessionId", "sequenceNumber"], { unique: true })
 @Index(["sessionId", "clientId"], {
@@ -63,11 +57,7 @@ export class SessionMessageEntity {
   @Column({ type: "varchar" })
   kind: SessionMessageKind;
 
-  /**
-   * Markdown bruto (kinds narration|player_action|system|recap) ou JSON
-   * serializado (kinds xp|rest_done|morning_briefing|combat_resolution|
-   * dice_roll|choices|rewards|turn_outcome). Frontend conhece o shape via `kind`.
-   */
+
   @Column({ type: "text" })
   content: string;
 

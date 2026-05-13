@@ -1,12 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 003: adiciona flag `controlled_by` ('human'|'ai'|'dm') + estados de ações
- * genéricas (Dodge/Help/Ready) + cache de idempotência para `/ai-turn`.
- *
- * Backfill: monstros e NPCs passam a ser controlados pelo DM (`controlled_by='dm'`);
- * PCs ficam com o default `'human'`. Encontros em andamento não quebram.
- */
+
 export class AddControlAndReactionsToParticipant1775000000000 implements MigrationInterface {
   name = "AddControlAndReactionsToParticipant1775000000000";
 
@@ -29,7 +23,7 @@ export class AddControlAndReactionsToParticipant1775000000000 implements Migrati
         CHECK (controlled_by IN ('human', 'ai', 'dm'))
     `);
 
-    // Backfill: monstros e NPCs sob controle do DM por default.
+
     await queryRunner.query(`
       UPDATE encounter_participants
          SET controlled_by = 'dm'

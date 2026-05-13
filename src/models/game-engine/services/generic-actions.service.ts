@@ -20,22 +20,7 @@ import type {
 } from "../interfaces/combat.interfaces";
 import type { GenericActionDto } from "../dto/generic-action.dto";
 
-/**
- * Spec 003 T030 — executor das 8 ações genéricas PHB (cap. 9 "Actions in Combat").
- *
- * Cada handler segue o contrato:
- *   - Valida pré-requisitos (turno, action economy, condições).
- *   - Aplica mutação na EncounterParticipantEntity (flags, conditions, HP).
- *   - Emite eventos de log.
- *   - Retorna `ActionStep` com o que foi feito.
- *
- * Regras específicas:
- *   - Dodge/Help/Hide/Ready setam flags na entity (campos `dodging*`, `helping*`, `readiedAction`).
- *   - Search/Use Object não criam flag — só emitem evento + side-effect (revelação, inventário).
- *   - Dash/Disengage reusam lógica já existente em combat.service.
- *   - Use Object tem integração pendente com InventoryService — hoje aplica só stub
- *     para poções de cura por slug conhecido. Integração completa fica pra 004.
- */
+
 @Injectable()
 export class GenericActionsService {
   constructor(
@@ -63,18 +48,18 @@ export class GenericActionsService {
     });
     if (!participant) return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
 
-    // É o turno dele?
+
     if (encounter.turnOrder[encounter.currentTurnIndex] !== participant.id)
       return failure(GameErrorCode.NOT_YOUR_TURN);
 
-    // Condições que impedem ação (incapacitated/stunned/...) — só bloqueia as
-    // que requerem ação real. Dash/Disengage/Hide/Help/Ready/Search/UseObject
-    // são todas ações ou bonus actions.
+
+
+
     if (!this.conditionEffects.canTakeAction(participant.conditions ?? [])) {
       return failure(GameErrorCode.CONDITION_PREVENTS_ACTION);
     }
 
-    // Ação já usada? Bonus actions seguem economia separada (bonusActionUsed).
+
     const asBonus = dto.asBonusAction === true;
     if (asBonus) {
       if (participant.bonusActionUsed) {
@@ -114,7 +99,7 @@ export class GenericActionsService {
     }
   }
 
-  // --- Handlers ---
+
 
   private async handleDodge(
     p: EncounterParticipantEntity,
@@ -155,9 +140,9 @@ export class GenericActionsService {
     }
     p.hasDashed = true;
     this.consumeAction(p, asBonus);
-    // Dobra o movimento restante — a speed base vem de MovementService
-    // no caller de turn-actions; aqui só marcamos a flag e o combat.service
-    // consulta hasDashed ao calcular remainingMovement.
+
+
+
     if (p.movementRemaining != null) {
       p.movementRemaining = p.movementRemaining * 2;
     }
@@ -262,10 +247,10 @@ export class GenericActionsService {
     p: EncounterParticipantEntity,
     asBonus: boolean = false,
   ): Promise<GameResult<ExecuteResult>> {
-    // Stealth do ator (DEX + proficiência — aqui usamos modificador simples da entity;
-    // cálculo RAW completo com proficiências de skill fica em 004).
-    // Usa 10 como Passive Perception default pra inimigos — modelo simplificado
-    // descrito em research.md D11. Sight system completo é 005.
+
+
+
+
     const stealthRoll = this.diceService.rollExpression("1d20").total;
     const stealthMod = 3;
     const stealthTotal = stealthRoll + stealthMod;
@@ -319,8 +304,8 @@ export class GenericActionsService {
     if (!dto.trigger || !dto.readiedAction) {
       return failure(GameErrorCode.INVALID_READY_TRIGGER);
     }
-    // Validação adicional dos campos condicionais (class-validator cobre, mas
-    // dupla checagem pra variantes).
+
+
     const trigger = dto.trigger as ReadyTrigger;
     if (
       trigger.kind === "enemy_enters_range" &&
@@ -375,7 +360,7 @@ export class GenericActionsService {
     dto: GenericActionDto,
   ): Promise<GameResult<ExecuteResult>> {
     const ability = dto.ability ?? "perception";
-    // Modificador simples (RAW usa skill proficiency — integração em 004).
+
     const roll = this.diceService.rollExpression("1d20").total;
     const mod = ability === "perception" ? 2 : 1;
     const total = roll + mod;
@@ -413,8 +398,8 @@ export class GenericActionsService {
   ): Promise<GameResult<ExecuteResult>> {
     if (!dto.objectRef) return failure(GameErrorCode.INVALID_PAYLOAD);
 
-    // Integração completa com InventoryService fica pra 004. Aqui cobrimos o
-    // caso comum (poção de cura) via slug; outros itens retornam NOT_USABLE.
+
+
     const slug = dto.objectRef.slug;
     let appliedSummary: string;
     const events: Array<{ type: string; [k: string]: unknown }> = [];
@@ -448,7 +433,7 @@ export class GenericActionsService {
     ]);
   }
 
-  // --- Helpers ---
+
 
   private snapshotState(p: EncounterParticipantEntity) {
     return {

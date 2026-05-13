@@ -3,11 +3,7 @@ import { SessionMessageService } from "../session-message.service";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 
-/**
- * Spec 024 follow-up — `getMaxSequenceNumber` é o helper público consumido
- * pelo ai-proxy controller para emitir o chunk SSE `session_sync` com o
- * `lastSequenceNumber` server-authoritative ao final de cada turn.
- */
+
 describe("SessionMessageService.getMaxSequenceNumber", () => {
   function makeQueryBuilder(rawResult: { max: string | null } | null) {
     return {
@@ -31,7 +27,7 @@ describe("SessionMessageService.getMaxSequenceNumber", () => {
     const service = buildService(qb);
     const result = await service.getMaxSequenceNumber("session-uuid");
     expect(result).toBe(0);
-    // Confirma uso do mesmo SQL que session-resume usava inline (DRY).
+
     expect(qb.select).toHaveBeenCalledWith(
       "COALESCE(MAX(m.sequence_number), 0)",
       "max",
@@ -141,16 +137,7 @@ describe("SessionMessageService.listBySession", () => {
   });
 });
 
-/**
- * Spec 027 (M1, AC1.11) — `append` precisa rodar inteiro dentro de uma
- * transação que adquire pg_advisory_xact_lock por sessionId. Sem o lock,
- * dois turns concorrentes liam o mesmo MAX(seq), persistiam o mesmo
- * `sequenceNumber` e o cliente via 409 SESSION_LAST_MESSAGE_MISMATCH.
- *
- * Estes testes são unitários (mocks); o caminho integrado via Postgres real
- * fica documentado no smoke da spec 027 — montar testcontainer aqui passa
- * de 30min de infra e o lock em si é testado pelo PG.
- */
+
 describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
   const SESSION_ID = "00000000-0000-4000-8000-000000000001";
   const USER_ID = "00000000-0000-4000-8000-000000000002";
@@ -195,7 +182,7 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
     } as unknown as EntityManager;
 
     const transactionFn = jest.fn(async (cb: (m: EntityManager) => any) => {
-      // Roda o callback exatamente como TypeORM faria — em sequência.
+
       return cb(txManager);
     });
 
@@ -239,15 +226,15 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
       content: "ok",
     });
 
-    // Lock SQL é a primeira query dentro da transação.
+
     expect(ctx.queries[0]).toContain("pg_advisory_xact_lock");
     expect(ctx.queries[0]).toContain("hashtext");
-    // Lock invocado com o sessionId scopado.
+
     expect(ctx.txManager.query).toHaveBeenCalledWith(
       expect.stringContaining("pg_advisory_xact_lock"),
       [`session_msg:${SESSION_ID}`],
     );
-    // sequenceNumber = MAX(4) + 1 = 5.
+
     expect(result.sequenceNumber).toBe(5);
     expect(ctx.transactionFn).toHaveBeenCalledTimes(1);
   });
@@ -269,7 +256,7 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
       clientId: "entry-3",
     });
 
-    // Lock primeiro, depois findOne, NÃO chega no save.
+
     expect(ctx.queries[0]).toContain("pg_advisory_xact_lock");
     expect(ctx.findOneCalls[0]).toEqual({
       where: { sessionId: SESSION_ID, clientId: "entry-3" },
@@ -305,12 +292,7 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
   });
 
   it("10 chamadas concorrentes geram sequences contíguas 1..10 (mock simulando lock real)", async () => {
-    /**
-     * Como `dataSource.transaction(cb)` aqui é um mock, simulamos a
-     * serialização que o lock advisory faria no Postgres real: cada call
-     * a `transaction` aguarda a anterior antes de executar o callback. O
-     * MAX(seq) lê o estado atual do "DB" simulado (variável local).
-     */
+
     let currentMax = 0;
     let chain: Promise<unknown> = Promise.resolve();
 
@@ -333,7 +315,7 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
 
     const dataSource = {
       transaction: jest.fn((cb: (m: EntityManager) => any) => {
-        // Serializa: encadeia os callbacks pra simular o advisory lock.
+
         const next = chain.then(() => cb(txManager));
         chain = next.catch(() => undefined);
         return next;

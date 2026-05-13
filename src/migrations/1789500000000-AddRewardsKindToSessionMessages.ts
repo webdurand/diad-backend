@@ -1,10 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Adiciona `rewards` ao CHECK de session_messages.kind. Enum TS
- * (SessionMessageKind) já incluía mas o constraint do Postgres não foi
- * atualizado, causando 23514 ao postar entries de loot/currency.
- */
+
 export class AddRewardsKindToSessionMessages1789500000000 implements MigrationInterface {
   name = "AddRewardsKindToSessionMessages1789500000000";
 

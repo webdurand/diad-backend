@@ -40,11 +40,11 @@ export class EncounterTemplateEntity {
   @Column({ type: "varchar", default: "medium" })
   difficulty: string;
 
-  // [{ monster_id: uuid, count: number, notes?: string }]
+
   @Column({ type: "jsonb", default: [] })
   monsters: Array<{ monster_id: string; count: number; notes?: string }>;
 
-  // [{ npc_id: uuid, side: 'enemy'|'ally' }]
+
   @Column({ name: "npc_combatants", type: "jsonb", default: [] })
   npcCombatants: Array<{ npc_id: string; side: string }>;
 

@@ -52,9 +52,9 @@ describe("spell-targeting", () => {
     it("excludes cells outside sphere radius", () => {
       const shape = { kind: "sphere" as const, radiusCells: 4, sizeFt: 20 };
       expect(cellInAoe({ x: 5, y: 0 }, { x: 0, y: 0 }, shape)).toBe(false);
-      // sqrt(18) ≈ 4.24 > 4 radius → excluded
+
       expect(cellInAoe({ x: 3, y: 3 }, { x: 0, y: 0 }, shape)).toBe(false);
-      // sqrt(8) ≈ 2.83 ≤ 4 radius → included
+
       expect(cellInAoe({ x: 2, y: 2 }, { x: 0, y: 0 }, shape)).toBe(true);
     });
 

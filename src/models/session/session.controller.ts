@@ -50,13 +50,9 @@ export class SessionController {
     private readonly sessionMessageService: SessionMessageService,
   ) {}
 
-  // ==================== CHAT MESSAGES (Spec 017) ====================
 
-  /**
-   * Histórico de mensagens narrativas da sessão. Hidratação cross-device:
-   * frontend chama esse GET ao montar a tela de chat e re-popula entries
-   * antes de qualquer fallback localStorage.
-   */
+
+
   @Get(":sessionId/messages")
   async listMessages(
     @Req() req: AuthRequest,
@@ -112,7 +108,7 @@ export class SessionController {
     };
   }
 
-  // ==================== SESSION FINALIZE (Spec 014 M2.C) ====================
+
 
   @Post(":sessionId/finalize")
   async finalizeSession(
@@ -139,7 +135,7 @@ export class SessionController {
     };
   }
 
-  // ==================== SCENES ====================
+
 
   @Post(":sessionId/scenes")
   async createScene(
@@ -184,7 +180,7 @@ export class SessionController {
     return this.sceneService.removeNpcFromScene(sceneId, npcId);
   }
 
-  // ==================== EVENTS ====================
+
 
   @Get(":sessionId/events")
   async getSessionEvents(
@@ -207,18 +203,11 @@ export class SessionController {
     return this.eventLogService.logEvent({ ...body, sessionId });
   }
 
-  // ──────────────────────────────────────────────────────────────────────
-  // Spec 016 — Play Shell Foundation (M5)
-  // ──────────────────────────────────────────────────────────────────────
 
-  /**
-   * Slash command audit endpoint. Frontend dispatcher (PlayShell sidebar)
-   * já mapeia: short, long, hp-adjust, xp-award, level-up, save, clear,
-   * pray, me. Este endpoint apenas loga o comando + retorna ack — comandos
-   * mutáveis (HP/XP/rest) chamam endpoints dedicados em paralelo.
-   *
-   * Ver `specs/016-play-shell-foundation/spec.md` §8.5.
-   */
+
+
+
+
   @Post(":sessionId/command")
   async logCommand(
     @Param("sessionId") sessionId: string,
@@ -248,7 +237,7 @@ export class SessionController {
     return { ok: true, cmd: body.cmd };
   }
 
-  // ==================== CONTEXT (for AI) ====================
+
 
   @Get(":sessionId/context")
   async getSceneContext(@Param("sessionId") sessionId: string) {
@@ -265,7 +254,7 @@ export class SessionController {
     return this.sceneContextService.assembleContext(scene.id);
   }
 
-  // ==================== CHRONICLES ====================
+
 
   @Get("campaigns/:campaignId/chronicle")
   async getChronicles(
@@ -288,7 +277,7 @@ export class SessionController {
     return this.chronicleService.createChronicle({ ...body, campaignId });
   }
 
-  // ==================== KNOWLEDGE ====================
+
 
   @Get("campaigns/:campaignId/knowledge")
   async getKnowledge(@Param("campaignId") campaignId: string) {

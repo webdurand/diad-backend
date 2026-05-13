@@ -53,7 +53,7 @@ describe("WeatherService", () => {
     const factory = new EventEnvelopeFactory(undefined);
     const svc = new WeatherService(repo, bus, factory);
 
-    // Mock Math.random pra forçar storm em 'plains' (storm prob = 15, range 50..65)
+
     const spy = jest.spyOn(Math, "random").mockReturnValue(0.6);
     try {
       const w = await svc.rollWeather(CAMPAIGN_ID, "plains");
@@ -72,7 +72,7 @@ describe("WeatherService", () => {
     const { repo } = makeRepo();
     const factory = new EventEnvelopeFactory(undefined);
     const svc = new WeatherService(repo, makeBus(), factory);
-    const spy = jest.spyOn(Math, "random").mockReturnValue(0.7); // mountain snow range
+    const spy = jest.spyOn(Math, "random").mockReturnValue(0.7);
     try {
       const w = await svc.rollWeather(CAMPAIGN_ID, "mountain");
       if (w.precipitation === "snow") {
@@ -87,7 +87,7 @@ describe("WeatherService", () => {
     const { repo } = makeRepo();
     const factory = new EventEnvelopeFactory(undefined);
     const svc = new WeatherService(repo, makeBus(), factory);
-    // desert magical = 20%, posicionado no fim → r > 0.80
+
     const spy = jest.spyOn(Math, "random").mockReturnValue(0.95);
     try {
       const w = await svc.rollWeather(CAMPAIGN_ID, "desert");

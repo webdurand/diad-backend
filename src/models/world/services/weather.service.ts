@@ -16,10 +16,7 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
 export type Biome = "forest" | "plains" | "mountain" | "swamp" | "desert";
 
-/**
- * Probabilidades por biome em pontos percentuais (somam 100).
- * Calibrado per spec 019 §7.4 — ajustar pós-playtest.
- */
+
 const WEATHER_PROBABILITIES: Record<
   Biome,
   Record<WeatherPrecipitation, number>
@@ -31,10 +28,7 @@ const WEATHER_PROBABILITIES: Record<
   desert: { clear: 70, rain: 2, storm: 5, snow: 0, fog: 3, magical: 20 },
 };
 
-/**
- * Modifiers RAW DMG pp 109-112 + house derivations da spec 019 §4.5.
- * Lookup table determinística — CombatAgent L1 lê direto sem mock.
- */
+
 function deriveAffectsChecks(
   precip: WeatherPrecipitation,
   visibility: WeatherVisibility,
@@ -49,7 +43,7 @@ function deriveAffectsChecks(
     out.speedMultiplier = 0.5;
   }
   if (precip === "rain") {
-    out.stealth = 1; // ruído ambiente ajuda stealth (sutil)
+    out.stealth = 1;
   }
   if (visibility === "obscured" || visibility === "dark") {
     out.perception = (out.perception ?? 0) - 5;
@@ -124,15 +118,7 @@ function pickSeed(precip: WeatherPrecipitation): string {
   return opts[Math.floor(Math.random() * opts.length)];
 }
 
-/**
- * Spec 019 — WeatherService.
- *
- * Roll de clima por (campaign, biome) usando tabela seedada (§7.4) →
- * persiste row em `weather` e emite `WorldEvent.weather_changed`.
- *
- * Idempotency: `roll` overrides row default-da-campanha (sceneId NULL) OU
- * cria override por scene (sceneId fornecido).
- */
+
 @Injectable()
 export class WeatherService {
   constructor(
@@ -142,10 +128,7 @@ export class WeatherService {
     private readonly factory: EventEnvelopeFactory,
   ) {}
 
-  /**
-   * Recupera weather efetivo: scene override se existir, senão default
-   * da campanha, senão null.
-   */
+
   async getEffective(
     campaignId: string,
     sceneId?: string | null,
@@ -194,7 +177,7 @@ export class WeatherService {
       windStrength,
     );
 
-    // Upsert por (campaign_id, scene_id).
+
     let row = await this.weatherRepo.findOne({
       where: { campaignId, sceneId: sceneId ?? IsNull() },
     });
@@ -235,7 +218,7 @@ export class WeatherService {
     try {
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort */
+
     }
 
     return saved;

@@ -26,7 +26,7 @@ export class AuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthRequest>();
 
-    // Internal service-to-service calls (Python agent → NestJS)
+
     const incomingServiceKey = request.headers["x-service-key"] as
       | string
       | undefined;
@@ -41,7 +41,7 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    // Normal cookie-based auth (web) with Bearer fallback (mobile)
+
     const cookieName = this.authService.getCookieName();
     const cookieToken = request.cookies?.[cookieName];
     const authHeader = request.headers.authorization;

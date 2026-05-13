@@ -23,8 +23,8 @@ import {
 
 const PERSONA_FIELDS = ["trait", "ideal", "bond", "flaw", "backstory"] as const;
 
-// RFC 4122 v1-v5 — usado pra distinguir UUID real de nome de PC quando tools
-// agno chamam `get_pc_persona(character_id="goma")` (alucinação de LLM).
+
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -41,21 +41,7 @@ const VALID_ALIGNMENTS = new Set<PCPersonaAlignment>([
   "unaligned",
 ]);
 
-/**
- * Spec 018 — assemblePersona(characterId).
- *
- * Monta o bloco enxuto de persona consumido pelo DM Agent (Director/Narrator)
- * e injetado em `SceneContext.playerCharacter`. Lê apenas o necessário —
- * race/class/level/background/alignment do origin, personality jsonb (tolera
- * chaves canônicas + customs), HP percent + conditions ativas, e top-5
- * itens narrativos (arma equipada + armadura + atunidos).
- *
- * NÃO retorna a ficha completa — pra mecânica detalhada o agente segue
- * usando `get_character_sheet`/`get_available_actions`.
- *
- * Princípio X v1.4.0 — primeiro consumo direto da cláusula "PC personality
- * é cross-domain capability" via injeção em scene context base.
- */
+
 @Injectable()
 export class PcPersonaService {
   constructor(
@@ -77,20 +63,16 @@ export class PcPersonaService {
     private readonly charOriginRepo: Repository<CharacterOriginEntity>,
   ) {}
 
-  /**
-   * Resolve persona pra um character. Faz ownership check via userId quando
-   * fornecido. `userId=null` permite acesso interno (SceneContext expansion
-   * em fluxo já autenticado pelo SessionController guard).
-   */
+
   async assemblePersona(
     characterIdOrName: string,
     userId: string | null,
   ): Promise<PCPersona> {
-    // Defensive: tools agno (Spec 020) ocasionalmente passam o NOME do PC
-    // ao invés do UUID — LLM enxerga `playerCharacter.name` no prompt e
-    // alucina como identificador. Antes desta resolução, Postgres rejeitava
-    // com `invalid input syntax for type uuid` (500). Aceita UUID OU nome
-    // (case-sensitive — character names já são únicos por user).
+
+
+
+
+
     const isUuid = UUID_RE.test(characterIdOrName);
     const where = userId
       ? isUuid
@@ -103,8 +85,8 @@ export class PcPersonaService {
     if (!character) {
       throw new NotFoundException("Personagem nao encontrado.");
     }
-    // FK queries abaixo precisam do UUID real — se entrada foi nome, usa
-    // o resolvido (caso contrário PG falha com mesma uuid parse error).
+
+
     const characterId = character.id;
 
     const [
@@ -229,7 +211,7 @@ function mapPersonality(
       out[key as keyof PCPersonaPersonality] = trimmed;
       continue;
     }
-    // Customs preservados como additionalProperties (schema permite).
+
     out[key] = trimmed;
   }
   return out;

@@ -61,10 +61,7 @@ class PublishEventScopeDto {
   encounterId?: string;
 }
 
-/**
- * DTO usado pelo POST /events/publish. Envelopes parciais — factory completa
- * eventId/timestamp/traceId, AudienceMapService resolve audiences se ausente.
- */
+
 export class PublishEventDto {
   @IsIn(EVENT_CATEGORIES as readonly string[])
   eventCategory: EventCategory;
@@ -113,10 +110,7 @@ export class PublishEventDto {
   @IsUUID()
   eventId?: string;
 
-  /**
-   * ISO-8601 UTC opcional. Quando omitido, factory usa now(). Cliente Python
-   * (Pydantic envelope) emite timestamp obrigatório no shape — DTO aceita.
-   */
+
   @IsOptional()
   @IsString()
   timestamp?: string;

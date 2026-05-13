@@ -1,23 +1,4 @@
-/**
- * Spec 020 — set_dying_state.
- *
- * Marca participant como `none|dying|stable|dead|captured`. RAW (PHB 2014/2024)
- * cobre os 4 primeiros estados; `captured` é extensão DIAD para narrativas
- * de rendição/captura (HP ≥ 1, mas removido do turn order).
- *
- * Matriz de transições válidas:
- *   - none → dying (PC cai a 0 HP)
- *   - dying → stable (death save success x3, ou Spare the Dying)
- *   - dying → dead (death save fail x3 ou massive damage)
- *   - dying → none (cura ≥ 1HP)
- *   - stable → none (apply_healing primeiro; service exige hp > 0)
- *   - stable → dying (novo dano direto)
- *   - * → captured (extensão narrativa — sempre permitido)
- *   - * → dead (massive damage / executed)
- *   - dead → none (Revivify) — retorna 1HP automaticamente fora desta tool
- *
- * Emite EncounterEvent.dying_state_changed.
- */
+
 
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -109,7 +90,7 @@ export class DyingStateService {
       );
     }
 
-    // RAW: stable → none requer HP > 0
+
     if (previous === "stable" && next === "none") {
       const currentHp = participant.currentHp ?? 0;
       if (currentHp <= 0) {
@@ -121,18 +102,18 @@ export class DyingStateService {
       }
     }
 
-    // captured nunca pode ser estado inicial sem narrativa explícita.
-    // A spec deixa essa validação para Spec 021 intent_validator (LLM-side).
+
+
 
     participant.dyingState = next as "none" | "dying" | "stable" | "dead";
-    // captured stored as "captured" string — varchar(16) holds it; type assertion
+
     if (next === "captured") {
       (participant as unknown as { dyingState: string }).dyingState =
         "captured";
     }
 
-    // Death saves persistem na character-state (PC), não no participant.
-    // Subscribers de dying_state_changed (ex: cleanup listener) podem resetar.
+
+
     const deathSavesReset = previous === "dying" && next !== "dying";
 
     await this.partRepo.save(participant);
@@ -162,7 +143,7 @@ export class DyingStateService {
         });
         await this.eventBus.publish(envelope);
       } catch {
-        /* best-effort */
+
       }
     }
 

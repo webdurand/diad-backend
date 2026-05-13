@@ -27,7 +27,7 @@ export type ParticipantKind = "npc" | "pc";
 
 export interface ParticipantRef {
   kind: ParticipantKind;
-  /** sessionNpcStateId pra npc, characterId pra pc. */
+
   id: string;
 }
 
@@ -53,7 +53,7 @@ export type TransferOp = CurrencyTransferOp | ItemTransferOp;
 export interface TransferResult {
   ok: true;
   ops: TransferOp[];
-  /** snapshot pós-transferência pra cada parte. */
+
   states: Array<{
     kind: ParticipantKind;
     id: string;
@@ -61,19 +61,7 @@ export interface TransferResult {
   }>;
 }
 
-/**
- * NpcWealthService — transferências atômicas de currency/itens entre PCs e NPCs.
- *
- * Validação: cada `from` precisa ter saldo/qty suficiente. Falha = exception
- * BadRequestException com code `INSUFFICIENT_FUNDS` ou `ITEM_NOT_AVAILABLE`,
- * que vira string `Erro [...]` na tool wrapper → MutationRejected →
- * Narrator narra impossibilidade diegeticamente.
- *
- * API genérica desenhada pra suportar:
- * - Theft: transferCurrency / transferItem unilateral
- * - Comércio: tradeAtomic([pc paga gp, npc dá item]) numa transaction
- * - Gift: transferItem unilateral PC↔NPC
- */
+
 @Injectable()
 export class NpcWealthService {
   private readonly logger = new Logger(NpcWealthService.name);
@@ -86,7 +74,7 @@ export class NpcWealthService {
     private readonly dataSource: DataSource,
   ) {}
 
-  // ─────────── helpers ───────────
+
 
   private static normalizeAmount(amount: CurrencyDelta): {
     cp: number;
@@ -162,12 +150,9 @@ export class NpcWealthService {
     await manager.save(charState);
   }
 
-  // ─────────── currency transfer ───────────
 
-  /**
-   * Move currency de `from` pra `to`. Atômico (transaction).
-   * Rejeita BadRequest se `from` não tem saldo suficiente em qualquer denom.
-   */
+
+
   async transferCurrency(op: CurrencyTransferOp): Promise<TransferResult> {
     if (NpcWealthService.totalAmount(op.amount) <= 0) {
       throw new BadRequestException({
@@ -188,7 +173,7 @@ export class NpcWealthService {
     const fromBalance = await this.loadParticipantCurrency(manager, op.from);
     const toBalance = await this.loadParticipantCurrency(manager, op.to);
 
-    // Validação: from precisa ter saldo em cada denom solicitado.
+
     for (const denom of ["cp", "sp", "gp", "pp"] as const) {
       if (amount[denom] <= 0) continue;
       if (fromBalance[denom] < amount[denom]) {
@@ -238,15 +223,9 @@ export class NpcWealthService {
     };
   }
 
-  // ─────────── item transfer (NPC treasure side) ───────────
 
-  /**
-   * Move item entre treasures de NPCs (NPC ↔ NPC) ou de NPC pra PC inventory.
-   * Pra PC ↔ NPC, a parte do PC é tratada via InventoryService externamente
-   * — este service só toca SessionNpcState.treasure.
-   *
-   * Rejeita se NPC source não tem o item ou tem qty < quantity solicitada.
-   */
+
+
   async transferItemFromNpcTreasure(
     sessionNpcStateId: string,
     itemId: string,
@@ -313,10 +292,7 @@ export class NpcWealthService {
     });
   }
 
-  /**
-   * Adiciona item ao treasure do NPC (PC dá item ao NPC, ou loot retornando).
-   * Não valida quantidade — só agrega.
-   */
+
   async addItemToNpcTreasure(
     sessionNpcStateId: string,
     item: TreasureItem,
@@ -352,12 +328,7 @@ export class NpcWealthService {
     });
   }
 
-  /**
-   * Atomic multi-op (comércio: PC paga gp, NPC dá item, tudo ou nada).
-   * Cada op aplicada em sequência na mesma transaction; se uma falha,
-   * todas revertem. Items via NPC treasure são geridos aqui; items via
-   * PC inventory ficam fora deste service (caller orquestra).
-   */
+
   async tradeAtomic(ops: TransferOp[]): Promise<TransferResult> {
     if (!ops || ops.length === 0) {
       throw new BadRequestException({
@@ -372,8 +343,8 @@ export class NpcWealthService {
           const r = await this.applyCurrencyTransferTx(manager, op);
           results.push(...r.states);
         } else {
-          // Item ops envolvendo NPC treasure são tratados aqui;
-          // PC-side é responsabilidade do caller (InventoryService).
+
+
           if (op.from.kind === "npc") {
             const removed = await manager.findOne(SessionNpcStateEntity, {
               where: { id: op.from.id },

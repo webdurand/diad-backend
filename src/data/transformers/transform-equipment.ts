@@ -8,9 +8,9 @@ import {
   WEAPON_PROPERTY_MAP,
 } from "./code-maps";
 
-// ────────────────────────────────────────────────────────────────
-// Types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsBaseItem {
   name: string;
@@ -65,9 +65,9 @@ export interface TransformedEquipment {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function convertCost(valueCp: number): { quantity: number; unit: string } {
   if (valueCp >= 100)
@@ -77,7 +77,7 @@ function convertCost(valueCp: number): { quantity: number; unit: string } {
 }
 
 function extractTypeCode(type: string): string {
-  // 5etools uses "M|XPHB", "HA|XPHB" — extract the code before the pipe
+
   return type.split("|")[0];
 }
 
@@ -98,7 +98,7 @@ function parseArmorClass(
 ): TransformedEquipment["armor_class"] {
   if (item.ac == null) return null;
   const typeCode = item.type ? extractTypeCode(item.type) : "";
-  // Light armor: +full DEX, Medium: +DEX (max 2), Heavy: no DEX, Shield: +2
+
   if (typeCode === "LA") {
     return { base: item.ac, dex_bonus: true };
   }
@@ -161,7 +161,7 @@ function getCategorySlugs(item: FiveToolsBaseItem): string[] {
   return slugs;
 }
 
-// D&D 5e armor don/doff times by category
+
 const ARMOR_DON_DOFF: Record<string, { don: string; doff: string }> = {
   LA: { don: "1 minute", doff: "1 minute" },
   MA: { don: "5 minutes", doff: "1 minute" },
@@ -178,9 +178,9 @@ function getDescription(item: FiveToolsBaseItem): string {
   return parseEntriesAsText(allEntries as any[]);
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main transformer
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function transformItem(item: FiveToolsBaseItem): TransformedEquipment {
   const slug = generateSlug(item.name, item.source, item.srd52);
@@ -217,7 +217,7 @@ function transformItem(item: FiveToolsBaseItem): TransformedEquipment {
 }
 
 export function transformEquipment(): TransformedEquipment[] {
-  // ── Source 1: items-base.json (baseitems) ──
+
   const baseFilePath = path.resolve(
     process.cwd(),
     "../5etools-src/data/items-base.json",
@@ -225,7 +225,7 @@ export function transformEquipment(): TransformedEquipment[] {
   const baseData = JSON.parse(fs.readFileSync(baseFilePath, "utf-8"));
   const baseItems: FiveToolsBaseItem[] = baseData.baseitem ?? [];
 
-  // ── Source 2: items.json (mundane items with rarity "none") ──
+
   const itemsFilePath = path.resolve(
     process.cwd(),
     "../5etools-src/data/items.json",
@@ -234,20 +234,20 @@ export function transformEquipment(): TransformedEquipment[] {
   const allItems: FiveToolsBaseItem[] = itemsData.item ?? [];
   const mundaneItems = allItems.filter((i) => i.rarity === "none" && i.srd52);
 
-  // ── Merge and deduplicate ──
+
   const seen = new Map<string, TransformedEquipment>();
 
-  // Process base items first
+
   for (const item of baseItems) {
     const transformed = transformItem(item);
     const existing = seen.get(transformed.slug);
-    // Prefer XPHB/SRD52 version
+
     if (!existing || item.srd52 || item.source === "XPHB") {
       seen.set(transformed.slug, transformed);
     }
   }
 
-  // Add mundane items from items.json that aren't already covered
+
   for (const item of mundaneItems) {
     const transformed = transformItem(item);
     if (!seen.has(transformed.slug)) {

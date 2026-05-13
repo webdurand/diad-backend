@@ -1,13 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 004 — Data migration.
- * Varre `monsters.actions` e `monsters.special_abilities` procurando entradas
- * com "(Recharge 5–6)" ou "(Recharge 6)" no nome ou descrição. Garante que o
- * JSON tenha campo `recharge` explícito para ser consumido pelo motor.
- *
- * Idempotente: só seta o campo quando ainda não existe.
- */
+
 export class PopulateRechargeAbilities1776000300000 implements MigrationInterface {
   name = "PopulateRechargeAbilities1776000300000";
 
@@ -69,7 +62,7 @@ export class PopulateRechargeAbilities1776000300000 implements MigrationInterfac
   }
 
   public async down(_queryRunner: QueryRunner): Promise<void> {
-    // Sem revert — o campo `recharge` enriquecido é benigno; rollback de
-    // dados específico não compensa o risco.
+
+
   }
 }

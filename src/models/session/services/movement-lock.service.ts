@@ -295,7 +295,7 @@ export class MovementLockService {
       });
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort HUD sync; lock state itself is already persisted */
+
     }
   }
 }

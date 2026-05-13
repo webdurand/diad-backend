@@ -12,15 +12,15 @@ import { EventEnvelopeFactory } from "../event-envelope.factory";
 import { EventCategory, EventEnvelope } from "../event-envelope.types";
 
 const GUARD_DISPATCH_CONFIG = {
-  // Quantos guards spawnam por nível de severity (1=witness leve, 3=morte/lethal).
+
   countBySeverity: { 1: 1, 2: 2, 3: 3 } as Record<number, number>,
-  // Atraso em turns até guards chegarem na cena.
+
   delayTurnsBySeverity: { 1: 2, 2: 2, 3: 1 } as Record<number, number>,
-  // Slugs de monstros que contam como "guard authority" disponíveis.
+
   monsterSlugs: ["guard", "veteran", "knight"] as const,
-  // Slug primário usado quando precisa spawnar do template.
+
   primarySpawnSlug: "guard" as const,
-  // Pool de nomes próprios pros guards auto-spawnados.
+
   spawnNamePool: [
     "Marek",
     "Telon",
@@ -31,7 +31,7 @@ const GUARD_DISPATCH_CONFIG = {
     "Korin",
     "Mira",
   ] as const,
-  // Disposição inicial dos guards spawnados.
+
   initialDisposition: "hostile" as const,
   provenance: "auto-materialized" as const,
   tags: ["auto-spawned-guard", "crime-response"] as const,
@@ -79,7 +79,7 @@ export class GuardDispatchListener implements EventListener {
 
     const sessionId = envelope.scope.sessionId;
     if (!sessionId) {
-      // Sem sessionId não tem session_npc_state pra plotar guards na location.
+
       await this.markProcessed(envelope.eventId);
       return;
     }

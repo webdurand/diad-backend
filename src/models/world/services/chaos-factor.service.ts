@@ -9,11 +9,7 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
 export type ChaosSource = "player" | "director" | "event";
 
-/**
- * Spec 019 — chaos factor é DM-controlled (Director agent ou consequência
- * narrativa). Após split mundo↔aventura, chaos vive em game_sessions
- * (estado da aventura) e não em campaigns.
- */
+
 @Injectable()
 export class ChaosFactorService {
   constructor(
@@ -77,7 +73,7 @@ export class ChaosFactorService {
       try {
         await this.eventBus.publish(envelope);
       } catch {
-        /* best-effort */
+
       }
     }
 

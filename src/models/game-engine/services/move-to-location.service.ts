@@ -523,7 +523,7 @@ export class MoveToLocationService {
     try {
       await this.eventBus.publish(envelope);
     } catch {
-      /* swallow */
+
     }
 
     this.logger.info("🚶 travel_started", {

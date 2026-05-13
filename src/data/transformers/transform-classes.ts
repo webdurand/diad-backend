@@ -4,9 +4,9 @@ import { generateSlug } from "./slug-generator";
 import { stripTags } from "./tag-stripper";
 import { ABILITY_MAP } from "./code-maps";
 
-// ────────────────────────────────────────────────────────────────
-// 5etools input types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsClass {
   name: string;
@@ -72,9 +72,9 @@ interface FiveToolsClassFeature {
   [key: string]: unknown;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Output types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface ClassFeatureLevel1 {
   slug: string;
@@ -109,9 +109,9 @@ export interface TransformedClass {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const CORE_CLASSES = new Set([
   "barbarian",
@@ -143,9 +143,9 @@ const CLASS_FILES = [
   "class-wizard.json",
 ];
 
-// ────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function loadClassFile(filename: string): {
   class: FiveToolsClass[];
@@ -240,27 +240,18 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/**
- * Resolve the number of prepared/known spells at level 1.
- *
- * XPHB (2024): uses preparedSpellsProgression (fixed table).
- * PHB  (2014): two cases:
- *   - Classes with formula (Wizard, Cleric, Druid, Paladin): preparedSpells
- *     = "<$level$> + <$mod$>". At level 1 with +0 mod the minimum is 1.
- *   - Spells-known classes (Bard, Ranger, Sorcerer, Warlock):
- *     spellsKnownProgression gives the fixed count per level.
- */
+
 function resolveSpellsPreparedCount(cls: FiveToolsClass): number {
-  // XPHB: fixed progression table
+
   if (cls.preparedSpellsProgression?.[0] != null) {
     return cls.preparedSpellsProgression[0];
   }
-  // PHB spells-known classes (Bard, Ranger, Sorcerer, Warlock)
+
   if (cls.spellsKnownProgression?.[0] != null) {
     return cls.spellsKnownProgression[0];
   }
-  // PHB formula-based classes (Cleric, Druid, Paladin, Wizard)
-  // At level 1 with ability mod 0 the minimum is 1
+
+
   if (cls.preparedSpells) {
     return 1;
   }
@@ -329,7 +320,7 @@ function resolveLevel1Features(
 ): ClassFeatureLevel1[] | null {
   if (!cls.classFeatures) return null;
 
-  // Collect level 1 feature names from class definition
+
   const level1Refs: string[] = [];
   for (const cf of cls.classFeatures) {
     const str = typeof cf === "string" ? cf : cf.classFeature;
@@ -340,7 +331,7 @@ function resolveLevel1Features(
 
   if (level1Refs.length === 0) return null;
 
-  // Find matching feature entries from 5etools data
+
   const featureMap = new Map<string, FiveToolsClassFeature>();
   for (const feat of classFeatures) {
     if (
@@ -360,7 +351,7 @@ function resolveLevel1Features(
     const slug = toSlug(featName);
     const desc = feat ? extractFirstText(feat.entries) : undefined;
 
-    // Determine feature type and enrich
+
     const enriched = enrichFeature(
       classKey,
       slug,
@@ -383,7 +374,7 @@ function enrichFeature(
   feat: FiveToolsClassFeature | undefined,
   allFeatures: FiveToolsClassFeature[],
 ): ClassFeatureLevel1 {
-  // Fighting Style (Fighter) — feat_choice type
+
   if (name === "Fighting Style" && classKey === "fighter") {
     return {
       slug,
@@ -396,7 +387,7 @@ function enrichFeature(
     };
   }
 
-  // Divine Order (Cleric) — choice with sub-options
+
   if (name === "Divine Order" && classKey === "cleric") {
     return {
       slug,
@@ -406,7 +397,7 @@ function enrichFeature(
     };
   }
 
-  // Primal Order (Druid) — choice with sub-options
+
   if (name === "Primal Order" && classKey === "druid") {
     return {
       slug,
@@ -416,7 +407,7 @@ function enrichFeature(
     };
   }
 
-  // Eldritch Invocations (Warlock) — choice with invocation_count
+
   if (name === "Eldritch Invocations" && classKey === "warlock") {
     return {
       slug,
@@ -429,7 +420,7 @@ function enrichFeature(
     };
   }
 
-  // Expertise (Rogue) — choice
+
   if (slug === "expertise" && classKey === "rogue") {
     return {
       slug,
@@ -441,7 +432,7 @@ function enrichFeature(
     };
   }
 
-  // Thieves' Cant (Rogue)
+
   if (slug === "thieves-cant") {
     return {
       slug,
@@ -453,12 +444,12 @@ function enrichFeature(
     };
   }
 
-  // Weapon Mastery — choice
+
   if (name === "Weapon Mastery") {
     return { slug, name, type: "choice", description };
   }
 
-  // Everything else is passive
+
   return { slug, name, type: "passive", description };
 }
 
@@ -468,7 +459,7 @@ function resolveSubChoices(
 ): { slug: string; name: string; description: string }[] {
   if (!feat?.entries) return [];
 
-  // Find refClassFeature references in entries
+
   const refs: string[] = [];
   findRefs(feat.entries, refs);
 
@@ -476,7 +467,7 @@ function resolveSubChoices(
   for (const ref of refs) {
     const parts = ref.split("|");
     const choiceName = parts[0];
-    // Find the matching feature entry
+
     const choiceFeat = allFeatures.find(
       (f) =>
         f.name === choiceName &&
@@ -561,7 +552,7 @@ function resolveWeaponMastery(cls: FiveToolsClass): {
   const wm = cls.weaponMasteries;
   if (wm && wm > 0) return { count: wm, restriction: null };
 
-  // Fallback: some XPHB classes define mastery via feature but not the field
+
   const classKey = cls.name.toLowerCase();
   const MASTERY_DEFAULTS: Record<
     string,
@@ -576,9 +567,9 @@ function resolveWeaponMastery(cls: FiveToolsClass): {
   return MASTERY_DEFAULTS[classKey] ?? { count: 0, restriction: null };
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main function
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export function transformClasses(): TransformedClass[] {
   const results: TransformedClass[] = [];

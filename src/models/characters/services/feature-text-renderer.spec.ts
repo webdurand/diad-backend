@@ -200,7 +200,7 @@ describe("extractNarrativeDescriptor", () => {
     const out = extractNarrativeDescriptor(raw, 40);
     expect(out.length).toBeLessThanOrEqual(40);
     expect(out.endsWith("…")).toBe(true);
-    // Corte respeita fronteira de palavra: última palavra antes do '…' existe completa.
+
     const beforeEllipsis = out.slice(0, -1);
     expect(raw.p.startsWith(beforeEllipsis)).toBe(true);
   });

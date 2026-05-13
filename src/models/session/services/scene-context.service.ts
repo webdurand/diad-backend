@@ -28,12 +28,9 @@ import {
 import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
 import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 
-/**
- * Assembles the 5-tier context for AI integration.
- * This is the single entry point the AI Narrator will call.
- */
+
 export interface SceneContext {
-  // Tier 1: Current scene
+
   scene: {
     id?: string;
     title?: string;
@@ -55,12 +52,7 @@ export interface SceneContext {
     };
   };
   npcsPresent: Array<{
-    /**
-     * Spec 026 Pillar 1+4 — UUID do NpcEntity. Sem `id`, PreFlightOracle
-     * Camada 0 não conseguia resolver targets de ataque e caía pra Haiku
-     * silenciosamente; ataques a NPCs neutros viravam diálogo dramático
-     * em vez de combate (RAW: declaração hostil = encounter sempre).
-     */
+
     id: string;
     name: string;
     title?: string;
@@ -75,39 +67,39 @@ export interface SceneContext {
     dialogueStyle?: string;
   }>;
 
-  // Tier 2: Recent session events
+
   recentEvents: Array<{
     eventType: string;
     summary: string;
     sequence: number;
   }>;
 
-  // Tier 3: Party knowledge (filtered by relevance)
+
   partyKnowledge: Array<{
     entityType: string;
     knowledgeKey: string;
     knowledgeValue?: string;
   }>;
 
-  // Tier 4: World lore
+
   locationChain: Array<{ name: string; type: string; description?: string }>;
   worldLore?: string;
 
-  // Tier 5: Chronicle
+
   recentChronicles: Array<{
     title: string;
     content: string;
     significance: number;
   }>;
 
-  // Story arc pacing
+
   storyArc?: {
     name: string;
     currentPhase: string;
     phaseNotes: Record<string, string>;
   };
 
-  // Spec 018 — PC Persona block. Null em sessions multi-PC ou sem PC resolvido.
+
   playerCharacter?: PCPersona | null;
 
   availableLocations: Array<{
@@ -223,7 +215,7 @@ export class SceneContextService {
   private async assembleContextUncached(
     sceneId: string,
   ): Promise<SceneContext> {
-    // Onda A — sequencial, early return se cena some.
+
     const scene = await this.sceneRepo.findOne({
       where: { id: sceneId },
       relations: ["location", "session", "poi", "currentInterlocutorNpc"],
@@ -236,7 +228,7 @@ export class SceneContextService {
     const locationId = scene.locationId;
     const campaignId = scene.location?.campaignId;
 
-    // Onda B — paralelo, todos independentes uns dos outros (apenas dependem de scene/sessionId/campaignId/locationId).
+
     const [
       session,
       sceneNpcs,
@@ -293,7 +285,7 @@ export class SceneContextService {
     const allSceneNpcIds = sceneNpcs.map((sn) => sn.npcId);
     const characterIds = session?.characterIds ?? [];
 
-    // Onda C — depende dos outputs B (npcIds, arc.id, characterIds).
+
     const [npcStates, partyKnowledgeRaw, arcState, playerCharacter] =
       await Promise.all([
         presentNpcIds.length > 0
@@ -509,8 +501,8 @@ export class SceneContextService {
   ): Promise<Array<{ name: string; type: string; description?: string }>> {
     if (!locationId) return [];
 
-    // Recursive CTE — uma query única ao invés de N findOne sequenciais.
-    // Ordem: raiz primeiro (depth DESC), bate o unshift do loop antigo.
+
+
     const rows: Array<{
       name: string;
       type: string;

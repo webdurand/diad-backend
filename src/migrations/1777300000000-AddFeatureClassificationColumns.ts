@@ -1,21 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 015 Eixo 1 — enriquecimento do FeatureBlock (Princípio X: AI-Legible Mechanics).
- *
- * 6 colunas em `features` que permitem ao sheet + ActionBar + aba Traços
- * exibir cada feature com semântica rica, sem heurística no frontend:
- *
- * - `category` ∈ {active, passive, capstone, resource} — classificação UX.
- * - `display_text` — texto renderizado da `description` JSONB (legível, ≤ 400 chars).
- * - `narrative_descriptor` — frase curta (≤120 chars) pro card/tooltip.
- * - `tactical_value` — int 0-10 opcional pra AI DM/rankings.
- * - `resource_charges` — jsonb {current?, max, formula?} pro chip N/M.
- * - `recharge_rule` ∈ {short, long, turn, none} — quando recarrega a resource.
- *
- * Populadas via seed idempotente (`SeedFeatureCategoryOverrides`).
- * Fallback continua em `classifyFeatureForActions` (regex) quando NULL.
- */
+
 export class AddFeatureClassificationColumns1777300000000 implements MigrationInterface {
   name = "AddFeatureClassificationColumns1777300000000";
 

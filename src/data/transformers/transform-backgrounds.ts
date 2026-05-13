@@ -51,7 +51,7 @@ function resolveCopy(
     }
   }
 
-  // Apply _mod.entries replacements if present
+
   if (bg._copy._mod?.entries && resolved.entries) {
     const mods = Array.isArray(bg._copy._mod.entries)
       ? bg._copy._mod.entries
@@ -152,11 +152,11 @@ function parseFeatReference(feats?: Record<string, boolean>[]): string | null {
   const key = Object.keys(first)[0];
   if (!key) return null;
 
-  // Format: "feat name|source" or "feat name; variant|source"
+
   const [nameWithVariant, source] = key.split("|");
   if (!nameWithVariant || !source) return null;
 
-  // Remove variant info (e.g., "magic initiate; cleric" -> "magic initiate")
+
   const baseName = nameWithVariant.split(";")[0].trim();
   return generateSlug(baseName, source);
 }
@@ -228,8 +228,8 @@ function convertEquipment(
 
   const entry = equip[0];
 
-  // 2024 format: { A: [...], B: [...] }
-  // Classic format: { _: [...] } or { a: [...], b: [...] }
+
+
   const groups: Record<string, unknown[]> = {};
 
   for (const [key, items] of Object.entries(entry)) {

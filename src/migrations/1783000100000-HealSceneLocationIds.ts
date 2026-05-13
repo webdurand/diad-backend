@@ -1,14 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Healing one-shot. Preenche `scenes.location_id` em rows legacy NULL
- * usando, em ordem:
- *   1. location_id da scene anterior (menor sceneNumber) na mesma session
- *   2. campaigns.starting_location_id quando session.campaign_id existe
- *
- * Idempotente. Roda uma vez em produção pra alinhar dados existentes
- * com o novo fallback determinístico do SceneService.
- */
+
 export class HealSceneLocationIds1783000100000 implements MigrationInterface {
   name = "HealSceneLocationIds1783000100000";
 
@@ -38,7 +30,7 @@ export class HealSceneLocationIds1783000100000 implements MigrationInterface {
   }
 
   async down(): Promise<void> {
-    // Sem reversão: healing one-shot não rastreia quais rows ele tocou.
-    // Down() é no-op intencional.
+
+
   }
 }

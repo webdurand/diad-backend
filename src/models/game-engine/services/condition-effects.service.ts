@@ -7,8 +7,7 @@ import {
   HelpingState,
 } from "../interfaces/combat.interfaces";
 
-/** Forma mínima de participant consumida pelos modificadores reativos (spec 003).
- * Definida localmente pra evitar coupling com a entity completa. */
+
 export interface ReactiveParticipant {
   id: string;
   conditions: string[];
@@ -18,20 +17,13 @@ export interface ReactiveParticipant {
 export interface ReactiveAttackModifiers {
   advantage: boolean;
   disadvantage: boolean;
-  /** True quando o ataque consumiu um Help ativo — combat.service deve limpar a tríade no ajudante. */
+
   consumedHelp?: boolean;
-  /** Id do ajudante cujo Help foi consumido. */
+
   helpingAllyParticipantId?: string;
 }
 
-/**
- * Encodes mechanical effects of the 15 SRD conditions.
- * Pure logic — no DB, no side effects.
- *
- * Conditions: blinded, charmed, deafened, exhaustion, frightened,
- * grappled, incapacitated, invisible, paralyzed, petrified,
- * poisoned, prone, restrained, stunned, unconscious
- */
+
 @Injectable()
 export class ConditionEffectsService {
   private static readonly INCAPACITATED_CONDITIONS = [
@@ -51,9 +43,7 @@ export class ConditionEffectsService {
     "unconscious",
   ];
 
-  /**
-   * How conditions affect the attacker's rolls.
-   */
+
   getAttackModifiers(conditions: string[]): AttackModifiers {
     const set = new Set(conditions);
     return {
@@ -74,9 +64,7 @@ export class ConditionEffectsService {
     };
   }
 
-  /**
-   * How conditions on the defender affect incoming attacks.
-   */
+
   getDefenseModifiers(conditions: string[]): DefenseModifiers {
     const set = new Set(conditions);
     return {
@@ -93,9 +81,7 @@ export class ConditionEffectsService {
     };
   }
 
-  /**
-   * How conditions affect saving throws.
-   */
+
   getSavingThrowModifiers(
     conditions: string[],
     ability: string,
@@ -114,36 +100,26 @@ export class ConditionEffectsService {
     };
   }
 
-  /**
-   * Can the creature take actions?
-   */
+
   canTakeAction(conditions: string[]): boolean {
     return !conditions.some((c) =>
       ConditionEffectsService.INCAPACITATED_CONDITIONS.includes(c),
     );
   }
 
-  /**
-   * Can the creature take reactions?
-   */
+
   canTakeReaction(conditions: string[]): boolean {
     return this.canTakeAction(conditions);
   }
 
-  /**
-   * Can the creature move?
-   */
+
   canMove(conditions: string[]): boolean {
     return !conditions.some((c) =>
       ConditionEffectsService.NO_MOVE_CONDITIONS.includes(c),
     );
   }
 
-  /**
-   * Speed multiplier from conditions.
-   * Prone: standing costs half movement (handled by movement system, not multiplier).
-   * Exhaustion level effects are handled separately via exhaustion_level field.
-   */
+
   getSpeedMultiplier(conditions: string[]): number {
     if (
       conditions.some((c) =>
@@ -155,9 +131,7 @@ export class ConditionEffectsService {
     return 1;
   }
 
-  /**
-   * Effects that trigger at the start of a creature's turn.
-   */
+
   getStartOfTurnEffects(conditions: string[]): ConditionTurnEffect[] {
     const effects: ConditionTurnEffect[] = [];
     const set = new Set(conditions);
@@ -174,9 +148,7 @@ export class ConditionEffectsService {
     return effects;
   }
 
-  /**
-   * Effects that trigger at the end of a creature's turn.
-   */
+
   getEndOfTurnEffects(conditions: string[]): ConditionTurnEffect[] {
     const effects: ConditionTurnEffect[] = [];
     const set = new Set(conditions);
@@ -218,33 +190,17 @@ export class ConditionEffectsService {
     return effects;
   }
 
-  /**
-   * Check if the creature is blinded.
-   */
+
   isBlinded(conditions: string[]): boolean {
     return conditions.includes("blinded");
   }
 
-  /**
-   * Check if the creature is charmed.
-   */
+
   isCharmed(conditions: string[]): boolean {
     return conditions.includes("charmed");
   }
 
-  /**
-   * Spec 003 — resolve os modificadores reativos (Dodge, Help, Hidden) que
-   * dependem do estado completo dos participantes, não só de `conditions[]`.
-   *
-   * Consumido por `combat.service.resolveAttack` antes de rolar o ataque.
-   * Os efeitos das condições clássicas continuam vindo de `getAttackModifiers` /
-   * `getDefenseModifiers`; este método só cobre os estados novos.
-   *
-   * RAW (PHB cap. 9):
-   *  - Dodge: atacantes que enxergam o alvo e podem agir têm desvantagem.
-   *  - Hidden: atacar quem não te vê → vantagem; ser atacado por quem não te vê → desvantagem.
-   *  - Help: próximo ataque do aliado contra o alvo escolhido tem vantagem (consumido após 1 uso).
-   */
+
   getReactiveAttackModifiers(
     attacker: ReactiveParticipant,
     target: ReactiveParticipant,
@@ -255,10 +211,10 @@ export class ConditionEffectsService {
       disadvantage: false,
     };
 
-    // Dodge: só vale contra atacantes capazes e que enxergam.
-    // Modelo simples de visibilidade nesta spec: atacante vê alvo se não está
-    // em condições que zeram percepção (blinded/unconscious/petrified). Sight
-    // system completo fica pra spec 005.
+
+
+
+
     const attackerBlinded =
       attacker.conditions.includes("blinded") ||
       attacker.conditions.includes("unconscious") ||
@@ -278,7 +234,7 @@ export class ConditionEffectsService {
       out.disadvantage = true;
     }
 
-    // Hidden — atacante escondido tem vantagem; alvo escondido dá desvantagem ao ataque.
+
     if (attacker.conditions.includes("hidden")) {
       out.advantage = true;
     }
@@ -286,7 +242,7 @@ export class ConditionEffectsService {
       out.disadvantage = true;
     }
 
-    // Help — atacante é o ally do Help ativo, e o alvo bate.
+
     const help = ctx?.helpingAgainst;
     if (
       help &&
@@ -301,9 +257,7 @@ export class ConditionEffectsService {
     return out;
   }
 
-  /**
-   * Get a human-readable summary of all active condition effects.
-   */
+
   getConditionSummary(conditions: string[]): string[] {
     const summaries: string[] = [];
     const set = new Set(conditions);

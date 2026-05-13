@@ -84,9 +84,9 @@ export class CharactersController {
     private readonly inventoryService: InventoryService,
     private readonly actionsService: ActionsService,
     private readonly combatActionRegistry: CombatActionRegistry,
-    // Spec 016 — Play Shell Foundation
+
     private readonly reactionPrefsService: ReactionPrefsService,
-    // Spec 018 — PC Persona Injection
+
     private readonly pcPersonaService: PcPersonaService,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
@@ -113,10 +113,7 @@ export class CharactersController {
     return this.sheetService.computeSheet(userId, id);
   }
 
-  /**
-   * Spec 018 — bloco enxuto de persona consumido pelo DM Agent
-   * (Director/Narrator) e injetado em SceneContext.playerCharacter.
-   */
+
   @Get(":id/persona")
   async getPersona(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
@@ -185,12 +182,7 @@ export class CharactersController {
     return this.actionsService.getActions(userId, id);
   }
 
-  /**
-   * Spec 003 — lista tipada (`ActionDescriptor[]`) de ações disponíveis ao PC,
-   * consultando o `CombatActionRegistry` (weapon + unarmed + generic + class-feature).
-   * Out-of-encounter: ignora action economy (always available se o PC tem a ação),
-   * mas respeita rest state (feature_uses_used, slots, equipment equipado).
-   */
+
   @Get(":id/combat-actions")
   async getCombatActions(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
@@ -236,7 +228,7 @@ export class CharactersController {
       conditions: sheet.conditions,
       featureUsesUsed,
       sheet: sheetSlice,
-      // out-of-encounter: sem action economy → resolvers tratam available só por rest state
+
     };
 
     return this.combatActionRegistry.listActions(ctx);
@@ -256,20 +248,14 @@ export class CharactersController {
   ) {
     const userId = getUserId(req);
 
-    // Spec 016 M4 — gate level-up durante o turn ativo do char em combate.
-    // Permitido entre turns (turn de outro participant) ou fora de combate.
+
+
     await this.ensureNotPcOwnTurn(id);
 
     return this.levelUpService.execute(userId, id, body);
   }
 
-  /**
-   * Spec 016 M4 — bloqueia operações se o char tem participant no encounter
-   * ativo da sessão E é o turno dele agora.
-   *
-   * Encounters órfãos/stale podem ficar com status "active" depois que a sessão
-   * já limpou activeEncounterId; eles não devem bloquear level-up pós-combate.
-   */
+
   private async ensureNotPcOwnTurn(characterId: string): Promise<void> {
     const participants = await this.participantRepo.find({
       where: { characterId, type: "pc" },
@@ -372,7 +358,7 @@ export class CharactersController {
     return this.stateService.updateKiPoints(userId, id, body);
   }
 
-  // ---- Conditions, Exhaustion, Inspiration ----
+
 
   @Patch(":id/conditions")
   async updateConditions(
@@ -404,7 +390,7 @@ export class CharactersController {
     return this.stateService.updateInspiration(userId, id, body);
   }
 
-  // ---- Inventory ----
+
 
   @Get(":id/inventory")
   async getInventory(@Req() req: AuthRequest, @Param("id") id: string) {
@@ -463,7 +449,7 @@ export class CharactersController {
     return this.inventoryService.updateGold(userId, id, body);
   }
 
-  // ---- Equip / Attune ----
+
 
   @Patch(":id/equipment/:itemId/equip")
   async toggleEquip(
@@ -476,15 +462,7 @@ export class CharactersController {
     return this.inventoryService.toggleEquip(userId, id, itemId, body);
   }
 
-  /**
-   * RAW 2024 — empunhar/guardar arma ou escudo. `body.hand`:
-   *  - 'main': mão principal
-   *  - 'off': mão secundária (light OU shield)
-   *  - null: guarda (stow)
-   * Sheet-level (fora de combate é livre). Dentro do encontro a UI deve
-   * disparar esta rota + a `draw-weapon`/`stow-weapon` do encounter pra
-   * consumir free object interaction.
-   */
+
   @Patch(":id/equipment/:itemId/hand")
   async setHand(
     @Req() req: AuthRequest,
@@ -496,7 +474,7 @@ export class CharactersController {
     return this.inventoryService.setHand(userId, id, itemId, body);
   }
 
-  // ---- Magic Items ----
+
 
   @Post(":id/magic-items")
   async addMagicItem(
@@ -529,23 +507,18 @@ export class CharactersController {
     return this.inventoryService.toggleAttune(userId, id, itemId, body);
   }
 
-  // ──────────────────────────────────────────────────────────────────────
-  // Spec 016 — Play Shell Foundation (M5)
-  // ──────────────────────────────────────────────────────────────────────
 
-  /**
-   * Lista reaction prefs (defaults da classe + overrides do PC).
-   * Cada entry: { reactionName, state, consumesSpellSlot, source }.
-   */
+
+
+
+
   @Get(":id/reactions")
   async getReactions(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
     return this.reactionPrefsService.getPrefs(userId, id);
   }
 
-  /**
-   * Atualiza override de uma reaction. Body: { mode: 'auto'|'ask'|'off' }.
-   */
+
   @Patch(":id/reactions/:reactionName")
   async setReactionPref(
     @Req() req: AuthRequest,
@@ -562,17 +535,11 @@ export class CharactersController {
     );
   }
 
-  /**
-   * Drop concentration RAW free action — limpa concentratingOn no(s)
-   * participant(s) ativo(s) do PC. Out-of-encounter retorna no-op idempotent.
-   *
-   * Não emite event aqui (concentration service trata cascade quando há
-   * dano ou sleep; drop voluntário é silencioso pelo flow do jogo).
-   */
+
   @Post(":id/drop-concentration")
   async dropConcentration(@Req() req: AuthRequest, @Param("id") id: string) {
     const userId = getUserId(req);
-    // Ownership check (lança 403/404 se não pertence ao user).
+
     await this.charactersService.getById(userId, id);
     const participants = await this.participantRepo.find({
       where: {

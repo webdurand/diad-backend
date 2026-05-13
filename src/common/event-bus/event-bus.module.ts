@@ -20,20 +20,7 @@ import { GuardDispatchListener } from "./listeners/guard-dispatch.listener";
 import { GuardArrivalListener } from "./listeners/guard-arrival.listener";
 import { AdminMetricsListener } from "./listeners/admin-metrics.listener";
 
-/**
- * Spec 017 — EventBus Foundation Module (Global).
- *
- * Expõe `EventBusService` (publish/subscribe), `AudienceMapService`
- * (resolve com cache TTL 60s), `EventEnvelopeFactory` (gera eventId/timestamp/
- * traceId via CLS).
- *
- * Listeners default registrados via `OnModuleInit` — HUDListener (M1 stub).
- * Listeners cross-domain reais (Narrator/CombatAgent/Director/CompanionAI)
- * ficam pras specs filhas 018-022 (cada uma registra o seu via
- * `EventBusService.registerListener` no seu módulo de domínio).
- *
- * Importado em `AppModule` — providers e factory disponíveis em todo backend.
- */
+
 @Global()
 @Module({
   imports: [

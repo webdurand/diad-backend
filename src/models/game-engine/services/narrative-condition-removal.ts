@@ -1,15 +1,6 @@
 import type { ConditionSlug } from "../interfaces/combat.interfaces";
 
-/**
- * Spec 015 Eixo 3 — helper puro que retorna narrativeDescriptor pra remoção
- * de condição. Sabor RAW-grounded, PT-BR, curto (≤120 chars).
- *
- * Usado em `condition_removed` events pra observabilidade + AI DM consumível
- * + feedback UI (toast + badge tooltip).
- *
- * Tabela curada cobre as condições + reasons mais comuns. Fallback genérico
- * "{condition} termina." garante que o campo nunca sai vazio.
- */
+
 
 export type RemovalReason =
   | "hp_restored"
@@ -100,10 +91,7 @@ const CURATED: Record<string, Partial<Record<RemovalReason, string>>> = {
   },
 };
 
-/**
- * Retorna texto RAW-grounded descrevendo a remoção. Sempre retorna string
- * não-vazia (fallback genérico).
- */
+
 export function narrativeForConditionRemoval(
   slug: ConditionSlug | string,
   reason: RemovalReason | string,

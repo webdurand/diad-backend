@@ -116,7 +116,7 @@ export class QuestService {
       });
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort */
+
     }
   }
 

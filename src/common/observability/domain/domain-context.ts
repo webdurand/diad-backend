@@ -1,13 +1,4 @@
-/**
- * Helpers de parse/serialize do header `X-Diad-Domain`.
- *
- * Formato (texto, RFC-7230-friendly):
- *   X-Diad-Domain: campaign.id=<id>;session.id=<id>;pc.id=<id>;turn.id=<id>;...
- *
- * Whitelist fixa de chaves (evita injeção/log spam). Valores truncados a 64 chars.
- * Naming OTel-shaped (ponto separador) pra match com `trace.id`/`span.id` já
- * usados em DiadLogger / structlog binding nos agents.
- */
+
 
 export const DOMAIN_HEADER = "x-diad-domain";
 
@@ -31,10 +22,7 @@ export type DomainContext = Partial<Record<DomainKey, string>>;
 const ALLOWED = new Set<string>(DOMAIN_KEYS);
 const MAX_VALUE_LEN = 64;
 
-/**
- * Parseia header `X-Diad-Domain` em DomainContext. Ignora chaves fora da whitelist
- * e valores vazios. Trunca valores longos. Sem-throw — input inválido vira `{}`.
- */
+
 export function parseDomainHeader(
   header: string | string[] | undefined,
 ): DomainContext {
@@ -55,10 +43,7 @@ export function parseDomainHeader(
   return out;
 }
 
-/**
- * Serializa DomainContext em string pro header. Mantém ordem da whitelist
- * pra hash estável. Skipa chaves vazias/undefined.
- */
+
 export function serializeDomainHeader(ctx: DomainContext): string {
   const pairs: string[] = [];
   for (const key of DOMAIN_KEYS) {

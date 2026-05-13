@@ -1,12 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Drop vows table — conceito de vow (Ironsworn close-roll) deprecated.
- * Main quest cobre o papel de spine narrativo único; vow virou redundância
- * sem UI nem judge dedicado.
- *
- * Down() recria minimamente caso precise reverter — sem dados.
- */
+
 export class DropVowsTable1789400000000 implements MigrationInterface {
   name = "DropVowsTable1789400000000";
 

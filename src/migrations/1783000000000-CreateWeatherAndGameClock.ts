@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 019 — Living World & Ambiance.
- *
- * Cria tabelas:
- *  - `weather` — state per (campaign_id, scene_id NULLS NOT DISTINCT). NULL =
- *    default da campanha; preenchido = override de cena específica.
- *  - `game_clocks` — relógio in-game 1:1 com campaign. timeOfDay é DERIVADO
- *    via pure function (não persistido).
- *
- * Down() simétrico (drops em ordem reversa).
- */
+
 export class CreateWeatherAndGameClock1783000000000 implements MigrationInterface {
   name = "CreateWeatherAndGameClock1783000000000";
 
@@ -44,7 +34,7 @@ export class CreateWeatherAndGameClock1783000000000 implements MigrationInterfac
       )
     `);
 
-    // 1 row per (campaign, scene). NULLS NOT DISTINCT garante 1 default por campanha.
+
     await queryRunner.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uq_weather_campaign_scene
         ON weather(campaign_id, scene_id) NULLS NOT DISTINCT

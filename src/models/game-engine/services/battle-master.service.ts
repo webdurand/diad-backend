@@ -15,17 +15,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Fighter Battle Master (RAW 2024) — Combat Superiority.
- *
- * Pool de Superiority Dice: 4 @ L3, 5 @ L7, 6 @ L15. Die size: d8 / d10 (L10) / d12 (L18).
- * Maneuvers (21 RAW; MVP cobre 2 signature):
- *  - Trip Attack: hit → gasta die + target STR save DC = 8+PB+STR. Falha = Prone.
- *  - Precision Attack: before attack roll → gasta die, adiciona ao attack roll.
- *
- * Outros maneuvers (deferred pra V2):
- *  Riposte, Disarming, Menacing, Commander's Strike, etc.
- */
+
 @Injectable()
 export class BattleMasterService {
   constructor(
@@ -40,7 +30,7 @@ export class BattleMasterService {
     private readonly conditionLifecycle: ConditionLifecycleService,
   ) {}
 
-  /** Retorna max uses + die size baseado no Fighter level. */
+
   computeDicePool(fighterLevel: number): { max: number; dieSize: 8 | 10 | 12 } {
     const max = fighterLevel >= 15 ? 6 : fighterLevel >= 7 ? 5 : 4;
     const dieSize: 8 | 10 | 12 =
@@ -48,11 +38,7 @@ export class BattleMasterService {
     return { max, dieSize };
   }
 
-  /**
-   * Trip Attack (RAW 2024): após hit com weapon, gasta 1 die + target faz STR
-   * save (DC = 8 + PB + STR mod). Falha = condição Prone.
-   * Input: originalHit (bool) + targetParticipantId. Backend só valida+aplica.
-   */
+
   async tripAttack(
     userId: string,
     encounterId: string,
@@ -102,14 +88,14 @@ export class BattleMasterService {
       return failure("Sem Superiority Dice restantes.", "NO_USES_REMAINING");
     }
 
-    // Rola die + save roll do target
+
     const diceRoll = this.dice.roll(dieSize);
     const strAbility = sheet.abilityScores.find((a) => a.slug === "str");
     const strMod = strAbility?.modifier ?? 0;
     const pb = sheet.proficiencyBonus ?? 2;
     const saveDc = 8 + pb + strMod;
 
-    // Target STR save. Monster: usa save mod do statblock; PC: sheet
+
     const targetSaveMod = this.getSaveModifier(target, "str");
     const saveRoll = this.dice.roll(20);
     const saveTotal = saveRoll + targetSaveMod;
@@ -120,7 +106,7 @@ export class BattleMasterService {
 
     let proneApplied = false;
     if (!passed) {
-      // Aplica Prone
+
       await this.conditionLifecycle.applyCondition(target, {
         slug: "prone",
         appliedBy: fighter.id,
@@ -157,11 +143,7 @@ export class BattleMasterService {
     );
   }
 
-  /**
-   * Precision Attack (RAW 2024): before attack roll, gasta 1 die + add ao
-   * attack roll. Endpoint chamado DEPOIS do attack pra aplicar o roll ao total.
-   * Input: originalTotal (attack roll total). Output: newTotal incluindo die.
-   */
+
   async precisionAttack(
     userId: string,
     encounterId: string,
@@ -238,7 +220,7 @@ export class BattleMasterService {
     p: EncounterParticipantEntity,
     abilitySlug: string,
   ): number {
-    // Monster: lê de statblock via monster relation
+
     if (
       p.type === "monster" &&
       (p as unknown as { monster?: { saving_throws?: Record<string, number> } })
@@ -249,7 +231,7 @@ export class BattleMasterService {
       ).monster.saving_throws;
       return throws[abilitySlug] ?? 0;
     }
-    // Fallback conservador
+
     return 0;
   }
 }

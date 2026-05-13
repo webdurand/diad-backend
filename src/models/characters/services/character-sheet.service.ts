@@ -44,7 +44,7 @@ import {
   extractNarrativeDescriptor,
 } from "./feature-text-renderer";
 
-// ---- Response DTOs ----
+
 
 export interface AbilityScoreBlock {
   slug: string;
@@ -93,13 +93,7 @@ export interface SpellSlotBlock {
   level: number;
   total: number;
   used: number;
-  /**
-   * Spec 012 #3 — distingue slot Pact Magic (Warlock) de slot padrão.
-   * Pact slot é chaveado por 'pact' em charState.spell_slots_used,
-   * enquanto standard slot é chaveado pelo nível numérico. Consumidores
-   * (spell-casting.service) precisam dessa info pra invocar
-   * updateSpellSlots com level=-1 convention.
-   */
+
   kind?: "standard" | "pact";
 }
 
@@ -110,16 +104,7 @@ interface ProficiencyBlock {
   source: string;
 }
 
-/**
- * Spec 015 Eixo 1 — FeatureBlock enriquecido (Princípio X: AI-Legible Mechanics).
- *
- * Campos `category`, `displayText`, `narrativeDescriptor`, `tacticalValue`,
- * `resourceCharges`, `recharge` são opcionais: populados via override curado
- * no DB (migration `SeedFeatureCategoryOverrides`) OU via fallback heurístico
- * em `classifyFeatureForActions` + `extractNarrativeDescriptor`.
- *
- * `isPassive` é derivado: `category ∈ {passive, capstone}` OR classificação hide.
- */
+
 interface FeatureBlock {
   slug: string;
   name: string;
@@ -147,9 +132,9 @@ export interface EquipmentBlock {
   weight: number;
   quantity: number;
   equipped: boolean;
-  /** RAW 2024 weapons-in-hand — arma/escudo empunhado na mão principal. */
+
   mainHand?: boolean;
-  /** RAW 2024 weapons-in-hand — arma light ou escudo na mão secundária. */
+
   offHand?: boolean;
   source: string;
   proficient?: boolean | null;
@@ -176,7 +161,7 @@ export interface CharacterSheet {
   id: string;
   name: string;
 
-  // Origin
+
   race: { slug: string; name: string };
   subrace?: { slug: string; name: string };
   background: { slug: string; name: string };
@@ -188,15 +173,15 @@ export interface CharacterSheet {
   speciesSize?: string;
   abilityScoreMethod?: string;
 
-  // Classes
+
   classes: ClassBlock[];
   totalLevel: number;
   proficiencyBonus: number;
 
-  // Ability scores
+
   abilityScores: AbilityScoreBlock[];
 
-  // Combat
+
   maxHp: number;
   currentHp: number;
   tempHp: number;
@@ -206,30 +191,30 @@ export interface CharacterSheet {
   hitDice: Array<{ die: number; total: number; used: number }>;
   carryingCapacity: number;
 
-  // Death saves
+
   deathSaves: { successes: number; failures: number };
 
-  // Skills
+
   skills: SkillBlock[];
   passivePerception: number;
 
-  // Saving throws
+
   savingThrows: SavingThrowBlock[];
 
-  // Proficiencies
+
   proficiencies: ProficiencyBlock[];
 
-  // Features
+
   features: FeatureBlock[];
 
-  // Spells
+
   spells: SpellBlock[];
   spellSlots: SpellSlotBlock[];
 
-  // Ki (Monk)
+
   kiPoints?: { total: number; used: number };
 
-  // State
+
   xp: number;
   nextLevelXp: number | null;
   levelUpAvailable: boolean;
@@ -237,228 +222,210 @@ export interface CharacterSheet {
   conditions: string[];
   exhaustionLevel: number;
   inspiration: boolean;
-  /** Fighting Style Blind Fighting (RAW 2024) — blindsight 10ft passiva. */
+
   hasBlindsight10ft?: boolean;
-  /**
-   * Champion L3 Remarkable Athlete (RAW 2024) — advantage em STR (Athletics).
-   * Pós-crit: move ½ speed sem OA (rider).
-   */
+
   hasRemarkableAthlete?: boolean;
-  /**
-   * Champion L10 Heroic Warrior (RAW 2024) — start-turn sem inspiration ganha 1.
-   */
+
   hasHeroicWarrior?: boolean;
-  /**
-   * Champion L18 Survivor (RAW 2024) — death save advantage (18-20 auto success)
-   * + regen 5+CON se Bloodied com > 0 HP no start-turn.
-   */
+
   hasSurvivor?: boolean;
 
-  /** Barbarian L2 Danger Sense (RAW 2024) — advantage em DEX save vs effects visíveis (não Incapacitated). */
+
   hasDangerSense?: boolean;
-  /** Barbarian L3 Primal Knowledge (RAW 2024) — pode usar STR pra checks que usariam outra ability. */
+
   hasPrimalKnowledge?: boolean;
-  /** Barbarian L5 Fast Movement (RAW 2024) — +10ft speed quando não usa Heavy Armor. */
+
   hasFastMovement?: boolean;
-  /** Barbarian L7 Feral Instinct (RAW 2024) — advantage initiative + não Surprised se pode agir. */
+
   hasFeralInstinct?: boolean;
-  /** Barbarian L7 Instinctive Pounce (RAW 2024) — ao ativar Rage via BA, move ½ speed grátis. */
+
   hasInstinctivePounce?: boolean;
-  /** Barbarian L9 Brutal Strike (RAW 2024) — abrir mão da adv do Reckless → +1d10 + option. L13+: 2 options, L17+: 2d10. */
+
   hasBrutalStrike?: boolean;
-  /** Barbarian L11 Relentless Rage (RAW 2024) — 0 HP com Rage ativo → CON save DC 10 (+5 cada vez) volta 1 HP. */
+
   hasRelentlessRage?: boolean;
-  /** Barbarian L15 Persistent Rage (RAW 2024) — Rage só termina se Incapacitated OU voluntário. */
+
   hasPersistentRage?: boolean;
-  /** Barbarian L18 Indomitable Might (RAW 2024) — STR check/save floor = STR score. */
+
   hasIndomitableMight?: boolean;
-  /** Barbarian L20 Primal Champion (RAW 2024) — STR/CON +4 com cap 25. */
+
   hasPrimalChampion?: boolean;
 
-  /** Berserker L3 Frenzy (RAW 2024) — Reckless+Rage primeiro hit → +Nd6 bonus damage. */
+
   hasFrenzy?: boolean;
-  /** Berserker L6 Mindless Rage (RAW 2024) — immune Charmed/Frightened while raging. */
+
   hasMindlessRage?: boolean;
-  /** Berserker L10 Retaliation (RAW 2024) — reaction ao tomar dano 5ft, melee attack free. */
+
   hasRetaliation?: boolean;
-  /** Berserker L14 Intimidating Presence (RAW 2024) — Bonus action 30ft emanation, WIS save → Frightened 1min. */
+
   hasIntimidatingPresence?: boolean;
 
-  /** Cleric L1 Divine Order (RAW 2024) — escolha Protector (heavy+martial) OR Thaumaturge (+cantrip+religion). Flag existência; choice fica em originDetails. */
+
   hasDivineOrder?: boolean;
-  /** Cleric L2 Channel Divinity (RAW 2024) — pool reset short rest. Uses: 1 (L2), 2 (L6), 3 (L18). */
+
   hasChannelDivinity?: boolean;
-  /** Cleric L2 Turn Undead (RAW 2024) — CD option universal. Magic action 30ft WIS save → Frightened 1min. */
+
   hasTurnUndead?: boolean;
-  /** Cleric L5 Sear Undead (RAW 2024, substitui Destroy Undead 2014) — CD scaling damage 10+5×(level-5) radiant, CON save half. */
+
   hasSearUndead?: boolean;
-  /** Cleric L7 Blessed Strikes (RAW 2024, substitui Divine Strike/Potent Spellcasting 2014) — 1/turn melee hit OR cantrip save → +1d8 radiant. */
+
   hasBlessedStrikes?: boolean;
-  /** Cleric L14 Improved Blessed Strikes (RAW 2024) — +2d8 radiant. */
+
   hasImprovedBlessedStrikes?: boolean;
-  /** Cleric L10 Divine Intervention (RAW 2024) — Magic action, cast spell via divindade, auto-sucesso, cap nível do slot gasto. */
+
   hasDivineIntervention?: boolean;
-  /** Cleric L20 Greater Divine Intervention (RAW 2024) — sem CD cost, recharge 2d4 long rests. */
+
   hasGreaterDivineIntervention?: boolean;
 
-  /** Cleric Life Domain L1 Disciple of Life — cura spells +2+slot HP. */
+
   hasDiscipleOfLife?: boolean;
-  /** Cleric Life Domain L2 Preserve Life — CD pool 5×level HP dividido entre aliados 30ft. */
+
   hasPreserveLife?: boolean;
-  /** Cleric Life Domain L6 Blessed Healer — heal others → self heal 2+slot. */
+
   hasBlessedHealer?: boolean;
-  /** Cleric Life Domain L17 Supreme Healing — max dice heals (em vez de roll). */
+
   hasSupremeHealing?: boolean;
-  /** Cleric Light Domain L3 Warding Flare — reaction disadvantage WIS/LR. */
+
   hasWardingFlare?: boolean;
-  /** Cleric Light Domain L3 Radiance of the Dawn — CD 30ft nova radiant. */
+
   hasRadianceOfTheDawn?: boolean;
-  /** Cleric Trickery Domain L3 Invoke Duplicity — CD illusion duplicate 1min. */
+
   hasInvokeDuplicity?: boolean;
-  /** Cleric War Domain L3 War Priest — Attack action → Bonus extra attack. */
+
   hasWarPriest?: boolean;
-  /** Cleric War Domain L3 Guided Strike — CD +10 attack bonus after seeing d20. */
+
   hasGuidedStrike?: boolean;
 
-  /** Paladin L1 Divine Sense — Magic action detect Celestial/Fiend/Undead 60ft. */
+
   hasDivineSense?: boolean;
-  /** Paladin L2 Divine Smite (RAW 2024) — spell Bonus Action L1, 2d8+upcast radiant após melee/unarmed hit. */
+
   hasDivineSmite?: boolean;
-  /** Paladin L2 Paladin's Smite — 1 cast grátis de Divine Smite/long rest (sem slot). */
+
   hasPaladinsSmite?: boolean;
-  /** Paladin L5 Faithful Steed — Find Steed sempre preparado + 1 cast grátis/LR. */
+
   hasFaithfulSteed?: boolean;
-  /** Paladin L6 Aura of Protection — self + aliados 10ft +CHA mod em saves. 30ft L18. */
+
   hasAuraOfProtection?: boolean;
-  /** Paladin L10 Aura of Courage — self + aliados na aura immune Frightened. */
+
   hasAuraOfCourage?: boolean;
-  /** Paladin L11 Radiant Strikes (RAW 2024, substitui Improved Divine Smite 2014) — +1d8 radiant passive em melee/unarmed hit. */
+
   hasRadiantStrikes?: boolean;
-  /** Paladin L14 Restoring Touch (RAW 2024, substitui Cleansing Touch 2014) — Lay on Hands remove Blinded/Charmed/Deafened/Frightened/Paralyzed/Stunned (5 HP each). */
+
   hasRestoringTouch?: boolean;
-  /** Paladin L18 Aura Expansion — auras 10ft → 30ft. */
+
   hasAuraExpansion?: boolean;
 
-  /** Paladin Devotion L3 Sacred Weapon — CD arma +CHA attack + Radiant + luz 20ft. */
+
   hasSacredWeapon?: boolean;
-  /** Paladin Devotion L7 Aura of Devotion — immune Charm aliados na aura. */
+
   hasAuraOfDevotion?: boolean;
-  /** Paladin Devotion L20 Holy Nimbus — sunlight + radiant retaliation 10 min. */
+
   hasHolyNimbus?: boolean;
 
-  /** Wizard L1 Arcane Recovery — recupera slots em short rest (total níveis = wizard/2 rounded up). */
+
   hasArcaneRecovery?: boolean;
-  /** Wizard L1 Ritual Adept (RAW 2024) — pode castar ritual spells do spellbook sem prepará-las. */
+
   hasRitualAdept?: boolean;
-  /** Wizard L2 Scholar (RAW 2024) — ganha expertise em 1 skill INT. */
+
   hasScholar?: boolean;
-  /** Wizard L5 Memorize Spell (RAW 2024) — troca 1 spell prepared sem long rest. */
+
   hasMemorizeSpell?: boolean;
-  /** Wizard L18 Spell Mastery — pode castar 1 spell L1 e 1 spell L2 sem gastar slot. */
+
   hasSpellMastery?: boolean;
-  /** Wizard L20 Signature Spells — pode castar 2 spells L3 sem slot, 1×/SR each. */
+
   hasSignatureSpells?: boolean;
-  /** Wizard Evocation L2 Evocation Savant — aprende 2 evocation spells sem custo. */
+
   hasEvocationSavant?: boolean;
-  /** Wizard Evocation L2 Sculpt Spells — AoE próprio exclui até INT+1 aliados. */
+
   hasSculptSpells?: boolean;
-  /** Wizard Evocation L6 Potent Cantrip — target em save success ainda sofre half damage. */
+
   hasPotentCantrip?: boolean;
-  /** Wizard Evocation L10 Empowered Evocation — +INT mod em damage de 1 evocation spell/turn. */
+
   hasEmpoweredEvocation?: boolean;
-  /** Wizard Evocation L14 Overchannel — max damage L1-L5 spell 1/LR, depois self-damage recursivo. */
+
   hasOverchannel?: boolean;
 
-  /** Sorcerer L1 Innate Sorcery (RAW 2024) — Bonus Action 1 min: advantage em sorcerer spell attacks + DC +1 dos saves. 2/LR. */
+
   hasInnateSorcery?: boolean;
-  /** Sorcerer L2 Font of Magic — Sorcery Points pool (= sorcerer level). Convert SP ↔ spell slots. */
+
   hasFontOfMagic?: boolean;
-  /** Sorcerer L2 Metamagic (RAW 2024, era L3) — escolhe 2 metamagic options, +1 em L10, +1 em L17. */
+
   hasMetamagic?: boolean;
-  /** Sorcerer L5 Sorcerous Restoration (RAW 2024, era L20) — 1/LR recupera metade do SP máx em short rest. */
+
   hasSorcerousRestoration?: boolean;
-  /** Sorcerer L7 Sorcery Incarnate (RAW 2024 NEW) — 1/LR Bonus Action: 1 min, pode aplicar 2 metamagics num único cast. */
+
   hasSorceryIncarnate?: boolean;
-  /** Sorcerer L20 Arcane Apotheosis (RAW 2024 NEW) — 1/turn ao castar spell L1+, aplica 1 metamagic sem SP cost. */
+
   hasArcaneApotheosis?: boolean;
 
-  /** Sorcerer Draconic L3 Draconic Resilience — HP +1/level + unarmored AC = 13 + DEX. */
+
   hasDraconicResilience?: boolean;
-  /** Sorcerer Draconic L3 Dragon Ancestor — 1 elemental type (fire/cold/lightning/etc). Draconic language + CHA +PB em interação com dragons. */
+
   hasDragonAncestor?: boolean;
-  /** Sorcerer Draconic L6 Elemental Affinity — +CHA damage + resistance do elemento (1 hr custa 1 SP). */
+
   hasElementalAffinity?: boolean;
-  /** Sorcerer Draconic L14 Dragon Wings — bonus action wings 60ft fly 1 hr. */
+
   hasDragonWings?: boolean;
-  /** Sorcerer Draconic L18 Draconic Presence — 5 SP, aura 60ft Frightened/Charmed WIS save 1 min. */
+
   hasDraconicPresence?: boolean;
 
-  /** Sorcerer Wild Magic L3 Wild Magic Surge — 1/LR (2014) ou cast trigger (2024) rola d100 efeito aleatório. */
+
   hasWildMagicSurge?: boolean;
-  /** Sorcerer Wild Magic L3 Tides of Chaos — advantage 1 attack/save/check; próximo cast L1+ triggera Surge. */
+
   hasTidesOfChaos?: boolean;
 
-  /** Druid Land L6 Land's Stride (RAW 2024) — ignora difficult terrain + vantagem save vs plant-based movement. Blocked on difficult-terrain modeling. */
+
   hasLandsStride?: boolean;
-  /** Druid Land L14 Nature's Sanctuary (RAW 2024) — beast/plant precisa WIS save DC 8+PB+WIS antes de atacar. Falha = cannot attack. */
+
   hasNaturesSanctuary?: boolean;
 
-  // Spec 012 Lote C — Capstones L18-L20 (RAW 2024 XPHB) — flags + wires por classe.
-  /** Monk L18 Empty Body — 4 Focus Points → invisibility 1min + resistance all except force. */
+
+
   hasEmptyBody?: boolean;
-  /** Monk L18 Superior Defense — 3 FP → 1 round resistance all non-force damage. */
+
   hasSuperiorDefense?: boolean;
-  /** Monk L20 Body and Mind — +4 DEX + +4 WIS (cap 25). */
+
   hasBodyAndMind?: boolean;
-  /** Monk L20 Perfect Self — start-combat sem FP ganha 4. */
+
   hasPerfectSelf?: boolean;
-  /** Rogue L18 Elusive — attacks contra você não têm advantage (enquanto não Incapacitated). */
+
   hasElusive?: boolean;
-  /** Rogue L20 Stroke of Luck — 1/SR pool pra auto-hit OU d20=20 em ability check. */
+
   hasStrokeOfLuck?: boolean;
-  /** Ranger L18 Feral Senses — 30ft blindsight (RAW 2024 XPHB). */
+
   hasFeralSenses?: boolean;
-  /** Ranger L20 Foe Slayer — 1/turn +WIS em attack OR damage. */
+
   hasFoeSlayer?: boolean;
-  /** Warlock L20 Eldritch Master — 1/LR meditação regain all pact slots. */
+
   hasEldritchMaster?: boolean;
-  /** Druid L18 Beast Spells — casta spells enquanto Wild Shape. */
+
   hasBeastSpells?: boolean;
-  /** Druid L20 Archdruid — Wild Shape uses ilimitadas + idade suspensa. */
+
   hasArchdruid?: boolean;
-  /** Bard L18 Superior Inspiration — start-combat sem BI uses ganha 1 use. */
+
   hasSuperiorInspiration?: boolean;
-  /** Bard L20 Words of Creation — ganha Power Word Heal + Power Word Kill extra. */
+
   hasWordsOfCreation?: boolean;
 
-  // Equipment & Inventory
+
   equipment: EquipmentBlock[];
   magicItems: MagicItemBlock[];
   totalWeight: number;
   encumbered: boolean;
   attunementSlots: { used: number; max: number };
 
-  // Origin metadata
+
   originDetails: Record<string, unknown>;
 
-  // Source / Ruleset
+
   source?: { code: string; name: string };
 
   createdAt: string;
   updatedAt: string;
 }
 
-/**
- * Spec 015 Eixo 1 — merge puro de FeatureEntity + uses consumidos + fallback.
- *
- * Ordem de precedência em cada campo:
- *   1. Override curado (coluna populada em `features`).
- *   2. Classificação in-code (`classifyFeatureForActions`).
- *   3. Fallback heurístico (extrai 1ª frase de `description`, categoria `active`).
- *
- * `resourceCharges.current = max - used` quando ambos são literais; caso
- * contrário deixa `current` undefined e frontend decide fallback.
- */
+
 function buildFeatureBlock(
   cf: CharacterFeatureEntity,
   featureUsesUsed: Record<string, number>,
@@ -568,7 +535,7 @@ export class CharacterSheetService {
       this.partyMemberRepo,
     );
 
-    // Load all related data in parallel
+
     const [
       charClasses,
       charAbilities,
@@ -613,11 +580,11 @@ export class CharacterSheetService {
       );
     }
 
-    // Total level & proficiency bonus
+
     const totalLevel = charClasses.reduce((sum, cc) => sum + cc.class_level, 0);
     const profBonus = PROF_BONUS_BY_LEVEL[Math.min(totalLevel, 20)] ?? 2;
 
-    // Ability scores
+
     const abilityMap = new Map<
       string,
       { score: number; slug: string; name: string }
@@ -654,7 +621,7 @@ export class CharacterSheetService {
       };
     });
 
-    // Max HP
+
     const primaryClass = charClasses[0];
     const conMod = mod("con");
     let maxHp = primaryClass
@@ -665,13 +632,13 @@ export class CharacterSheetService {
     }
     maxHp += charState?.max_hp_bonus ?? 0;
 
-    // Speed (from race) + Barbarian Fast Movement L5 rider
+
     let speed = charOrigin.race?.speed ?? 30;
     const hasFastMovementFeat = charFeatures.some((cf) =>
       (cf.feature?.slug ?? "").startsWith("fast-movement"),
     );
     if (hasFastMovementFeat) {
-      // RAW 2024: Fast Movement +10ft enquanto não usa Heavy Armor.
+
       const heavyArmorSlugs = new Set([
         "chain-mail",
         "splint",
@@ -686,12 +653,12 @@ export class CharacterSheetService {
       if (!heavyArmorEquipped) speed += 10;
     }
 
-    // AC calculation
+
     const dexMod = mod("dex");
 
-    // Step 1: Determine armor AC and whether shield is equipped.
-    // Shield é identificado por slug/name (SRD o marca como armor com base=2),
-    // não por base=0 — senão o shield sobrescreve o armor equipado.
+
+
+
     let armorAc: number | null = null;
     let hasShield = false;
     for (const eq of charEquip) {
@@ -719,7 +686,7 @@ export class CharacterSheetService {
       }
     }
 
-    // Step 2: Determine base AC (armor, unarmored defense, or default)
+
     const classSlugs = charClasses.map((cc) =>
       cc.class.slug.replace(/-phb$/, ""),
     );
@@ -727,21 +694,21 @@ export class CharacterSheetService {
     let armorClass: number;
 
     if (armorAc !== null) {
-      // Wearing armor — use armor AC
+
       armorClass = armorAc;
     } else {
-      // Not wearing armor — check Unarmored Defense
+
       if (classSlugs.includes("barbarian")) {
-        // Barbarian Unarmored Defense: 10 + DEX + CON (can use shield)
+
         armorClass = 10 + dexMod + conMod;
       } else if (classSlugs.includes("monk")) {
-        // Monk Unarmored Defense: 10 + DEX + WIS
+
         const wisMod = mod("wis");
         armorClass = 10 + dexMod + wisMod;
-        // 2014: Unarmored Defense doesn't work with shields (lose WIS, keep base)
-        // 2024: Unarmored Defense works with shields
+
+
         if (hasShield && editionRules?.hasWeaponMastery === false) {
-          // 2014 edition — shield breaks Unarmored Defense
+
           armorClass = 10 + dexMod;
         }
       } else {
@@ -749,21 +716,21 @@ export class CharacterSheetService {
       }
     }
 
-    // Step 3: Add shield bonus (+2)
+
     if (hasShield) {
       armorClass += 2;
     }
 
-    // Spec 012 Fase 0 — Fighting Style: Defense dá +1 AC se usando armadura
-    // (qualquer armor; RAW só exige "armor", inclui light/medium/heavy).
+
+
     if (charOrigin.fighting_style_index === "defense" && armorAc !== null) {
       armorClass += 1;
     }
 
-    // Initiative
+
     const initiative = dexMod;
 
-    // Saving throws
+
     const classSavingThrows = await this.getClassSavingThrows(charClasses);
     const savingThrows: SavingThrowBlock[] = [
       "str",
@@ -782,8 +749,8 @@ export class CharacterSheetService {
       };
     });
 
-    // Skills: catalog has 2 rows per skill (PHB 2014 + XPHB/SRD52 2024).
-    // Dedupe by name preferring 2024 row with ability_score defined.
+
+
     const allSkillRows = await this.skillRepo.find({
       relations: ["ability_score", "source"],
       order: { name: "ASC" },
@@ -803,8 +770,8 @@ export class CharacterSheetService {
       a.name.localeCompare(b.name),
     );
 
-    // Resolve proficiencies by skill name so legacy character_skills rows
-    // pointing to either edition still mark the canonical entry.
+
+
     const skillNameById = new Map(allSkillRows.map((s) => [s.id, s.name]));
     const proficientSkillNames = new Set(
       charSkills
@@ -836,7 +803,7 @@ export class CharacterSheetService {
       };
     });
 
-    // Passive Perception
+
     const perceptionSkill = charSkills.find(
       (s) => s.skill.slug === "perception",
     );
@@ -848,7 +815,7 @@ export class CharacterSheetService {
       (perceptionProficient ? profBonus : 0) +
       (perceptionExpertise ? profBonus : 0);
 
-    // Hit dice
+
     const hitDice = charClasses.map((cc) => ({
       die: cc.class.hit_die,
       total: cc.class_level,
@@ -857,7 +824,7 @@ export class CharacterSheetService {
         0,
     }));
 
-    // Carrying capacity & weight
+
     const strScore = abilityMap.get("str")?.score ?? 10;
     const carryingCapacity = strScore * 15;
 
@@ -867,7 +834,7 @@ export class CharacterSheetService {
     }, 0);
     const encumbered = totalWeight > carryingCapacity;
 
-    // Classes block with spellcasting
+
     const classes: ClassBlock[] = charClasses.map((cc) => {
       const classSlug = cc.class.slug;
       const scAbility = getSpellcastingAbility(classSlug);
@@ -888,7 +855,7 @@ export class CharacterSheetService {
       return block;
     });
 
-    // Spells
+
     const spells: SpellBlock[] = charSpells.map((cs) => ({
       slug: cs.spell.slug,
       name: cs.spell.name,
@@ -898,10 +865,10 @@ export class CharacterSheetService {
       alwaysPrepared: cs.always_prepared,
     }));
 
-    // Spell slots
+
     const spellSlots = this.computeSpellSlots(charClasses, charState);
 
-    // Proficiencies (character-level + class-level)
+
     const proficiencies: ProficiencyBlock[] = charProfs.map((cp) => ({
       slug: cp.proficiency.slug,
       name: cp.proficiency.name,
@@ -909,7 +876,7 @@ export class CharacterSheetService {
       source: cp.source,
     }));
 
-    // Add class proficiencies that aren't already in character_proficiencies
+
     const existingProfSlugs = new Set(proficiencies.map((p) => p.slug));
     const classIds = charClasses.map((cc) => cc.class_id);
     if (classIds.length > 0) {
@@ -931,7 +898,7 @@ export class CharacterSheetService {
       }
     }
 
-    // Features — Spec 015 Eixo 1 enrichment
+
     const featureUsesUsed =
       (charState as unknown as { feature_uses_used?: Record<string, number> })
         ?.feature_uses_used ?? {};
@@ -940,7 +907,7 @@ export class CharacterSheetService {
       buildFeatureBlock(cf, featureUsesUsed),
     );
 
-    // Origin details (misc creation metadata)
+
     const raceTraitChoices = charOrigin.race_trait_choices ?? [];
     const draconicChoice = raceTraitChoices.find(
       (c) => DRACONIC_ANCESTRY_MAP[c],
@@ -970,7 +937,7 @@ export class CharacterSheetService {
       classToolProficiency: charOrigin.class_tool_proficiency,
     };
 
-    // Equipment blocks — resolve proficiency per item
+
     const equipIds = charEquip.map((ce) => ce.equipment_id);
     const equipCatMap = new Map<string, Set<string>>();
     if (equipIds.length > 0) {
@@ -988,7 +955,7 @@ export class CharacterSheetService {
       }
     }
 
-    // Build proficiency slugs from character profs + class profs (reuse already-loaded data)
+
     const profSlugs = new Set(
       proficiencies
         .filter(
@@ -1031,7 +998,7 @@ export class CharacterSheetService {
       };
     });
 
-    // Magic item blocks
+
     const attunedCount = charMagicItems.filter((mi) => mi.attuned).length;
     const magicItems: MagicItemBlock[] = charMagicItems.map((cmi) => ({
       id: cmi.id,
@@ -1365,7 +1332,7 @@ export class CharacterSheetService {
       ),
       hasLandsStride: charFeatures.some((cf) => {
         const slug = cf.feature?.slug ?? "";
-        // Aceita slugs: 'lands-stride-*', 'land-s-stride-*', 'druid-lands-stride', 'ranger-lands-stride'.
+
         return slug.includes("lands-stride") || slug.includes("land-s-stride");
       }),
       hasNaturesSanctuary: charFeatures.some(
@@ -1374,7 +1341,7 @@ export class CharacterSheetService {
           (cf.feature?.slug ?? "").startsWith("nature-s-sanctuary"),
       ),
 
-      // Spec 012 Lote C — Capstones L18-L20 (RAW 2024 XPHB)
+
       hasEmptyBody: charFeatures.some((cf) =>
         (cf.feature?.slug ?? "").startsWith("empty-body"),
       ),
@@ -1435,7 +1402,7 @@ export class CharacterSheetService {
   private async getClassSavingThrows(
     charClasses: CharacterClassEntity[],
   ): Promise<Set<string>> {
-    // D&D 5e: multiclass only grants saving throw proficiency from the FIRST class
+
     const primaryClass = charClasses[0];
     if (!primaryClass) return new Set();
 
@@ -1468,7 +1435,7 @@ export class CharacterSheetService {
 
     const result: SpellSlotBlock[] = [];
 
-    // Standard spell slots (multiclass formula)
+
     const effectiveCasterLevel =
       fullCasterLevels + Math.floor(halfCasterLevels / 2);
 
@@ -1486,7 +1453,7 @@ export class CharacterSheetService {
       }
     }
 
-    // Warlock pact slots (separate tracking)
+
     if (warlockLevel > 0) {
       const pact = WARLOCK_SLOTS[warlockLevel - 1];
       if (pact) {

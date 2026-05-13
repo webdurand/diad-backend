@@ -5,9 +5,9 @@ import { parseEntries } from "./entries-parser";
 import { stripTags } from "./tag-stripper";
 import { SIZE_MAP, ALIGNMENT_MAP } from "./code-maps";
 
-// ────────────────────────────────────────────────────────────────
-// CR → XP lookup
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const CR_XP_MAP: Record<string, number> = {
   "0": 10,
@@ -46,7 +46,7 @@ const CR_XP_MAP: Record<string, number> = {
   "30": 155000,
 };
 
-// CR → Proficiency Bonus
+
 const CR_PROF_BONUS: Record<string, number> = {
   "0": 2,
   "1/8": 2,
@@ -84,9 +84,9 @@ const CR_PROF_BONUS: Record<string, number> = {
   "30": 9,
 };
 
-// ────────────────────────────────────────────────────────────────
-// 5etools input types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsMonster {
   name: string;
@@ -151,9 +151,9 @@ interface FiveToolsMonster {
   [key: string]: unknown;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Output type
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TransformedMonster {
   slug: string;
@@ -193,9 +193,9 @@ export interface TransformedMonster {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Conversion helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function convertSize(size?: string[]): string {
   if (!size || size.length === 0) return "Medium";
@@ -271,7 +271,7 @@ function convertHp(hp?: FiveToolsMonster["hp"]): {
     };
   }
   const formula = hp.formula ?? "";
-  // Extract dice portion (e.g. "18d10" from "18d10 + 36")
+
   const diceMatch = formula.match(/^\d+d\d+/);
   return {
     hit_points: hp.average ?? 0,
@@ -466,9 +466,9 @@ function ordinalSuffix(n: number): string {
   return s[(v - 20) % 10] || s[v] || s[0];
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main transformer
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const BESTIARY_DIR = path.resolve(
   __dirname,
@@ -501,7 +501,7 @@ function transformOneMonster(monster: FiveToolsMonster): TransformedMonster {
   const { hit_points, hit_dice, hit_points_roll } = convertHp(monster.hp);
   const { crNumeric, xp, profBonus } = convertCr(monster.cr);
 
-  // Merge spellcasting into special_abilities
+
   const traits = convertEntryBlock(monster.trait) as
     | { name: string; desc: string }[]
     | null;

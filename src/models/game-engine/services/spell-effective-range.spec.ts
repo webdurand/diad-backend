@@ -3,16 +3,7 @@ import {
   type SpellEffectiveRange,
 } from "./spell-effective-range";
 
-/**
- * Spec 015 Eixo 2 — desambigua semântica de `spell.range` quando "Self" pode
- * significar 3 coisas diferentes:
- *   1. Buff no caster (Mage Armor, Shield of Faith).
- *   2. Emanação AoE do caster (Burning Hands, Thunderwave).
- *   3. Origem de attack ranged/melee contra outra criatura (Produce Flame, Flame Blade).
- *
- * Pré-015: `parseRangeString("Self")` → `{normal: 0}` tratava todas as 3 como
- * "target = caster na mesma cell", causando auto-damage em Produce Flame.
- */
+
 
 type SpellShape = {
   slug: string;

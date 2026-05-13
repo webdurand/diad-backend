@@ -1,24 +1,14 @@
 import { EventEmitter } from "events";
 import { AiProxyService } from "./ai-proxy.service";
 
-// Mock estável do `http` Node nativo. O serviço usa `http.request(...)`
-// e nós substituímos por uma factory controlada pelos testes.
+
+
 const mockHttpRequestFn: jest.Mock = jest.fn();
 jest.mock("http", () => ({
   request: (...args: unknown[]) => mockHttpRequestFn(...args),
 }));
 
-/**
- * Spec 014 (M2/M3) — AI proxy SSE passthrough.
- *
- * Garante que `pipeStream` encaminha 100% dos chunks SSE recebidos do
- * serviço de agents (Python/FastAPI) para o response do client SEM
- * parsear, filtrar ou whitelist-ar por event type.
- *
- * Eventos novos como `state_delta`, `dice_roll_request` e
- * `dice_roll_resolved` (Spec 014) DEVEM atravessar sem qualquer
- * intervenção do backend NestJS.
- */
+
 describe("AiProxyService.pipeStream — SSE passthrough", () => {
   function makeConfig(): any {
     return { get: () => "http://localhost:9003" };
@@ -63,8 +53,8 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
         ended = true;
       }),
       flush: jest.fn(),
-      // C1 — pipeStream registra `res.on('close', ...)` pra detectar
-      // client disconnect mid-stream. Mock simples só armazena.
+
+
       on: jest.fn((event: string, cb: () => void) => {
         if (event === "close") closeListeners.push(cb);
         return res;
@@ -87,10 +77,7 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
     };
   }
 
-  /**
-   * Cria um fake `http.request` que entrega `chunks` em sequência via
-   * o callback `(proxyRes) => …` e finaliza o stream.
-   */
+
   function mockHttpRequest(opts: { statusCode?: number; chunks: string[] }) {
     const proxyRes: any = new EventEmitter();
     proxyRes.statusCode = opts.statusCode ?? 200;
@@ -100,7 +87,7 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
     clientReq.end = jest.fn();
 
     mockHttpRequestFn.mockImplementation((_options: any, cb?: any): any => {
-      // Chama o callback no próximo tick, depois emite chunks/end.
+
       setImmediate(() => {
         cb(proxyRes);
         for (const c of opts.chunks) {
@@ -147,7 +134,7 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
 
     await svc.pipeStream("/solo/abc/message", { message: "hi" }, fake.res);
 
-    // Cada chunk vira EXATAMENTE uma chamada a res.write — sem merge, sem split.
+
     expect(fake.res.write).toHaveBeenCalledTimes(4);
 
     const output = fake.joinedOutput();
@@ -156,7 +143,7 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
     expect(output).toContain(diceResolvedChunk);
     expect(output).toContain(narrativeChunk);
 
-    // Ordem preservada.
+
     const idxState = output.indexOf(stateDeltaChunk);
     const idxReq = output.indexOf(diceRequestChunk);
     const idxResolved = output.indexOf(diceResolvedChunk);

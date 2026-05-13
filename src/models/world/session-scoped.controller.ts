@@ -56,13 +56,7 @@ function getUserId(req: AuthRequest): string {
   return id;
 }
 
-/**
- * Endpoints session-scoped: tudo que é estado de aventura (quests, NPCs auto,
- * NPC state mergeado, faction state, story arc phase).
- *
- * Identidade canônica do mundo (NPCs manual, factions, locations, story arc
- * templates) continua em `/campaigns/:id/...` no WorldController.
- */
+
 @Controller("sessions")
 @UseGuards(AuthGuard)
 export class SessionScopedWorldController {
@@ -88,7 +82,7 @@ export class SessionScopedWorldController {
     return { campaignId: session.campaignId };
   }
 
-  // ==================== NPCs (visão de aventura) ====================
+
 
   @Get(":sessionId/npcs")
   async listSessionNpcs(
@@ -144,7 +138,7 @@ export class SessionScopedWorldController {
     return this.npcService.moveNpc(sessionId, npcId, locationId);
   }
 
-  // ==================== Faction state (por aventura) ====================
+
 
   @Patch(":sessionId/factions/:factionId/state")
   async upsertFactionState(
@@ -166,7 +160,7 @@ export class SessionScopedWorldController {
     return this.factionStateService.listBySession(sessionId);
   }
 
-  // ==================== Story arc progress (por aventura) ====================
+
 
   @Patch(":sessionId/story-arcs/:arcId/state")
   async upsertArcState(
@@ -199,13 +193,9 @@ export class SessionScopedWorldController {
     return this.arcStateService.listBySession(sessionId);
   }
 
-  // ==================== Chaos factor (session-scoped) ====================
 
-  /**
-   * Spec 019 — DM-only chaos factor (Mythic GME 1-9). `source` ∈
-   * {director, event}. Player não ajusta — chaos é decidido pelo mundo
-   * (Director agent ou consequência narrativa).
-   */
+
+
   @Patch(":sessionId/chaos")
   async setChaos(
     @Req() req: AuthRequest,
@@ -223,7 +213,7 @@ export class SessionScopedWorldController {
     );
   }
 
-  // ==================== Quests (session-scoped) ====================
+
 
   @Post(":sessionId/quests")
   async createQuest(

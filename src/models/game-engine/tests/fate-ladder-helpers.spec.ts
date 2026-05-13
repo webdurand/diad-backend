@@ -1,9 +1,4 @@
-/**
- * fate-ladder-helpers — Spec 016 P4 (M3) tests.
- *
- * Pure helpers: priceTable seleção, sacrifice validation, resurrection
- * eligibility, pay-price outcome.
- */
+
 import {
   DEFAULT_PRICE_TABLE,
   FORBIDDEN_COSTS,

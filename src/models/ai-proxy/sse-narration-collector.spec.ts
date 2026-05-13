@@ -116,10 +116,10 @@ describe("SseNarrationCollector", () => {
     expect(c.finalize()).toBe("OK");
   });
 
-  // ════════════════════════════════════════════
-  // dice_roll capture (request + resolved + preflight)
-  // Garante que skill checks sobrevivem ao reload.
-  // ════════════════════════════════════════════
+
+
+
+
 
   it("captura dice_roll_request + dice_roll_resolved fundindo num único roll", () => {
     const c = new SseNarrationCollector();
@@ -188,7 +188,7 @@ describe("SseNarrationCollector", () => {
     expect(rolls).toHaveLength(2);
     expect(rolls[0].skill).toBe("Insight");
     expect(rolls[0].resolved?.verdict).toBe("success");
-    // nat 1 vira crit_failure mesmo que success=false
+
     expect(rolls[1].skill).toBe("Investigation");
     expect(rolls[1].resolved?.verdict).toBe("crit_failure");
     expect(rolls[1].resolved?.rawD20).toBe(1);

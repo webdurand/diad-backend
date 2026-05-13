@@ -9,16 +9,7 @@ import {
 } from "typeorm";
 import { CharacterEntity } from "./character.entity";
 
-/**
- * Spec 016 M4 — XP award audit log.
- *
- * Cada concessão de XP gera um evento aqui. Granularidade RAW 2024 + paridade
- * BG3 (encounter resolvido pacificamente paga XP igual ao kill). Permite UI
- * timeline mostrar "+500 XP — Quest Step Concluído" e Director memory L4
- * citar awards passados ("recompensei você no rest anterior").
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §7.1.
- */
+
 export type XpAwardSource =
   | "combat_kill"
   | "combat_resolved_peacefully"

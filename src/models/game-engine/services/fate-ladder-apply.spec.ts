@@ -1,15 +1,6 @@
 import { FateLadderService } from "./fate-ladder.service";
 
-/**
- * Spec 027 (M2 follow-up) — applyResolution traduz `stateChanges`
- * descritivos do `resolveLadder` em mutações reais no `character_state`.
- *
- * Sem isso, narrativa do turno seguinte mente sobre estado do PC
- * (ex: "você desperta com HP=1" mas current_hp=0 no DB).
- *
- * Tests cobrem cada string descritor mapeada e a sincronização de
- * `participant.dyingState` quando há encounter ativo.
- */
+
 describe("FateLadderService.applyResolution (spec 027)", () => {
   function setup(
     overrides: Partial<{
@@ -78,11 +69,11 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
     expect(stateRow.conditions).not.toContain("dying");
     expect(stateRepo.save).toHaveBeenCalledTimes(1);
 
-    // Participant.dyingState sincroniza com unconscious → stable.
+
     expect(activeParticipant!.dyingState).toBe("stable");
     expect(participantRepo.save).toHaveBeenCalledTimes(1);
 
-    // appliedChanges marca quais strings foram aplicadas.
+
     expect(
       result.appliedChanges.find((a) => a.change === "pc_hp=1")?.applied,
     ).toBe(true);
@@ -91,7 +82,7 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
         (a) => a.change === "pc_status=stable_unconscious",
       )?.applied,
     ).toBe(true);
-    // Descritores narrativos: applied=false (consumo via Coordinator).
+
     expect(
       result.appliedChanges.find((a) => a.change === "wakes_next_round")
         ?.applied,

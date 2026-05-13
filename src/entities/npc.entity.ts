@@ -31,11 +31,7 @@ export class NpcEntity {
   @JoinColumn({ name: "campaign_id" })
   campaign: CampaignEntity;
 
-  /**
-   * NULL = NPC canônico do mundo (criado no setup pelo dono).
-   * Setado = NPC instanciado por uma aventura específica (auto-materializado pelo Archivist).
-   * Auto-materializados morrem com a sessão (cascade).
-   */
+
   @Index()
   @Column({ name: "game_session_id", type: "uuid", nullable: true })
   gameSessionId?: string;

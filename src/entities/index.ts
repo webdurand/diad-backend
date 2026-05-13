@@ -93,24 +93,24 @@ import { LoreEntryEntity } from "./lore-entry.entity";
 import { EndingSlideEntity } from "./ending-slide.entity";
 import { VoiceProfileEntity } from "./voice-profile.entity";
 import { AiUsageLogEntity } from "./ai-usage-log.entity";
-// Spec 016 — Play Shell Foundation
+
 import { RestSessionEntity } from "./rest-session.entity";
 import { RestEventTemplateEntity } from "./rest-event-template.entity";
 import { ReactionDefaultEntity } from "./reaction-default.entity";
 import { XpAwardEventEntity } from "./xp-award-event.entity";
-// Spec 017 — World–Encounter–Narrative Bridge Foundation
+
 import { AudienceRoutingEntity } from "./audience-routing.entity";
 import { CampaignAudienceOverrideEntity } from "./campaign-audience-override.entity";
 import { EventSubscriberEntity } from "./event-subscriber.entity";
 import { EventListenerProcessedEntity } from "./event-listener-processed.entity";
-// Spec 019 — Living World & Ambiance
+
 import { WeatherEntity } from "./weather.entity";
 import { GameClockEntity } from "./game-clock.entity";
-// Adventure-scope split
+
 import { SessionNpcStateEntity } from "./session-npc-state.entity";
 import { SessionFactionStateEntity } from "./session-faction-state.entity";
 import { SessionStoryArcStateEntity } from "./session-story-arc-state.entity";
-// Admin business metrics
+
 import { AdminAuditLogEntity } from "./admin-audit-log.entity";
 
 export {

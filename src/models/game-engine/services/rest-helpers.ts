@@ -1,19 +1,4 @@
-/**
- * Spec 016 P5 (M4) — Rest helpers (pure).
- *
- * RAW 2024 short/long rest mechanics. Pure: state in → delta out.
- * Caller persiste no DB.
- *
- * RAW 2024 KEY DIFFS vs 2014:
- *  - Short rest: HD spend ainda válido, MAS PC precisa ter HP ≥ 1 (PHB 2024
- *    p.103). PC dying não pode short-rest (anti-exploit).
- *  - Long rest: 100% HP + 100% HD recovery (em 2014 era half HD). 24h gate
- *    entre long rests RAW.
- *  - Exhaustion: removida 1 nível por long rest (tanto 2014 quanto 2024).
- *
- * Camp events: Director seleciona max 1 por long rest (M4+ via
- * RestEventTemplateEntity weighted roll).
- */
+
 
 export type HitDieType = "d6" | "d8" | "d10" | "d12";
 
@@ -22,20 +7,20 @@ export type ExhaustionLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export interface CharacterRestSnapshot {
   hp: number;
   hpMax: number;
-  /** HD disponíveis pra spend, por die size. Ex: { d8: 3, d10: 2 }. */
+
   hitDiceAvailable: Partial<Record<HitDieType, number>>;
-  /** HD máximos (= level por classe). */
+
   hitDiceMax: Partial<Record<HitDieType, number>>;
   exhaustionLevel: ExhaustionLevel;
-  /** CON modifier para HD heal calc. */
+
   conModifier: number;
-  /** Spell slots atuais por nível. Ex: { 1: 2, 2: 1 }. */
+
   spellSlotsCurrent: Record<string, number>;
-  /** Spell slots máximos por nível. */
+
   spellSlotsMax: Record<string, number>;
-  /** Features SR-restored (ex: Channel Divinity, Action Surge). */
+
   shortRestFeatures: string[];
-  /** Features LR-restored (ex: Wild Shape pool, slots). */
+
   longRestFeatures: string[];
 }
 
@@ -49,7 +34,7 @@ export interface ShortRestDelta {
 
 export interface LongRestDelta {
   hpDelta: number;
-  /** HD restaurados (RAW 2024: 100%). */
+
   hdRestored: Partial<Record<HitDieType, number>>;
   slotsDelta: Record<string, number>;
   exhaustionFrom: ExhaustionLevel;
@@ -58,11 +43,7 @@ export interface LongRestDelta {
   errors: string[];
 }
 
-/**
- * Validation: pode short-rest?
- *   - HP must be >= 1 (RAW 2024)
- *   - encontrou local seguro (caller responsability)
- */
+
 export function validateShortRestEligibility(
   snapshot: Pick<CharacterRestSnapshot, "hp">,
 ): { ok: boolean; reason?: string } {
@@ -83,12 +64,7 @@ const HD_SIZES: Record<HitDieType, number> = {
   d12: 12,
 };
 
-/**
- * Computa heal de short rest gastando os HD escolhidos. RNG injetável.
- *
- * Cada HD: roll d{N} + CON modifier (clamped a 1 mínimo). Cap no hpMax.
- * Não permite spend mais HD do que disponível.
- */
+
 export function computeShortRestDelta(
   snapshot: CharacterRestSnapshot,
   hdToSpend: Partial<Record<HitDieType, number>>,
@@ -131,7 +107,7 @@ export function computeShortRestDelta(
     }
   }
 
-  // Cap heal at hpMax.
+
   const hpRoom = snapshot.hpMax - snapshot.hp;
   const hpDelta = Math.min(totalHeal, hpRoom);
 
@@ -144,16 +120,7 @@ export function computeShortRestDelta(
   };
 }
 
-/**
- * RAW 2024 long rest:
- *  - HP → hpMax (full)
- *  - HD → hitDiceMax (full restore — diff vs 2014 que era half)
- *  - Spell slots → max
- *  - Exhaustion -1
- *  - Features LR-restored
- *
- * 24h gate validation é responsabilidade do caller (lookup last RestSession).
- */
+
 export function computeLongRestDelta(
   snapshot: CharacterRestSnapshot,
 ): LongRestDelta {
@@ -190,14 +157,11 @@ export function computeLongRestDelta(
   };
 }
 
-/**
- * 24h gate. Caller passa a timestamp da última long rest; helper
- * compara com agora.
- */
+
 export function validateLongRestGate(input: {
   lastLongRestAt?: Date | null;
   now?: Date;
-  /** Override do gate em horas (default 24). */
+
   minHoursBetween?: number;
 }): { ok: boolean; hoursSinceLast?: number; reason?: string } {
   const now = input.now ?? new Date();

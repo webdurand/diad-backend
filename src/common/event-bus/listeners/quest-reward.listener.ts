@@ -22,19 +22,7 @@ interface QuestRewards {
   reputation?: Record<string, number>;
 }
 
-/**
- * Aplica rewards declarados em `quest.rewards` quando a quest completa:
- *   - `xp`: distribuído integralmente a cada PC da sessão via XpAwardService
- *     (source `quest_completion`).
- *   - `gold`: somado a `character_state.gp` de cada PC (split inteiro).
- *   - `reputation`: por faction name → `applyDelta` no SessionFactionStateService
- *     (que por sua vez emite `reputation_shift` — pode encadear em outra quest).
- *   - `items`: V2; por enquanto só log.
- *
- * Idempotente via `event_listener_processed` (mesma quest auto-completada
- * 2× via race não credita 2×). Best-effort por character: erro num PC não
- * bloqueia os demais.
- */
+
 @Injectable()
 export class QuestRewardListener implements EventListener {
   readonly name = "QuestRewardListener";

@@ -6,20 +6,7 @@ import { RealtimeService } from "./realtime.service";
 import { RoomAuthorizerRegistry } from "./room-authorizer.registry";
 import { ROOM_AUTHORIZER } from "./room-authorizer.interface";
 
-/**
- * Reusable realtime module. Other domains contribute room authorizers by
- * providing the same-instance binding via multi-provider on ROOM_AUTHORIZER:
- *
- *   providers: [
- *     EncounterRoomAuthorizer,
- *     {
- *       provide: ROOM_AUTHORIZER,
- *       useFactory: (a: EncounterRoomAuthorizer) => a,
- *       inject: [EncounterRoomAuthorizer],
- *       multi: true,
- *     },
- *   ]
- */
+
 @Module({
   imports: [AuthModule],
   providers: [

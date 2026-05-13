@@ -8,16 +8,7 @@ import type {
   ResolverSheetSlice,
 } from "../../interfaces/combat-action.interfaces";
 
-/**
- * Spec 003 — WeaponActionResolver.
- *
- * Lista `kind: 'attack'` por cada equipment `.equipped=true` com `damage` definido.
- * Slug canônico = `<equipment-slug>-attack` (ex: `longsword-attack`, `shortbow-attack`,
- * `dagger-attack`). Disabled se não-equipped (não listado) ou action economy bloqueia.
- *
- * MVP: usa STR como ability mod implícito. A resolução real (choice STR vs DEX via
- * finesse, attack roll bonus, damage) fica no `/attack` endpoint (Fatia 3).
- */
+
 @Injectable()
 export class WeaponActionResolver implements ActionResolver {
   readonly kind: ActionKind = "attack";
@@ -77,7 +68,7 @@ export class WeaponActionResolver implements ActionResolver {
       available,
       disabledReason,
       targetShape: "single-creature",
-      targetRange: isRanged ? 60 : 5, // placeholder — Fatia 3 refina com range.normal/long
+      targetRange: isRanged ? 60 : 5,
       metadata: {
         damageDice: damageInfo?.dice,
         damageType: damageInfo?.type,

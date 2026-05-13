@@ -82,7 +82,7 @@ export class FactionService {
     factionAId: string,
     dto: SetFactionRelationDto,
   ): Promise<FactionRelationEntity> {
-    // Normalize order: smaller UUID first
+
     const [a, b] =
       factionAId < dto.factionBId
         ? [factionAId, dto.factionBId]

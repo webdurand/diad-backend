@@ -1,14 +1,7 @@
 import { ConditionEffectsService } from "../condition-effects.service";
 import type { HelpingState } from "../../interfaces/combat.interfaces";
 
-/**
- * Spec 003 T010 — testa extensão do ConditionEffectsService para cobrir os
- * estados reativos introduzidos nesta spec: Dodge, Help, Hidden.
- *
- * Os métodos antigos `getAttackModifiers(conditions: string[])` continuam
- * funcionando; esta spec adiciona `getReactiveAttackModifiers` que recebe
- * os dois participantes completos e um contexto opcional de Help.
- */
+
 
 type P = {
   id: string;
@@ -45,7 +38,7 @@ describe("ConditionEffectsService — reactive states (dodge / help / hidden)", 
       const attacker = mk({ id: "a" });
       const target = mk({
         id: "t",
-        dodgingUntilTurnOfParticipantId: "other", // flag inconsistente, já expirada
+        dodgingUntilTurnOfParticipantId: "other",
       });
       const mods = svc.getReactiveAttackModifiers(attacker, target);
       expect(mods.disadvantage).toBe(false);

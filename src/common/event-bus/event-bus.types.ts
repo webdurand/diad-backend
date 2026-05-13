@@ -1,29 +1,13 @@
 import type { EventCategory, EventEnvelope } from "./event-envelope.types";
 
-/**
- * Spec 017 — Interface de listener cross-domain.
- *
- * Cada listener declara nome único (idempotência por listener_name + event_id),
- * categorias que assina, e implementa `handle(envelope)` async. Bus chama
- * `handle` com try/catch — falha NÃO rollback do publish (best-effort).
- *
- * Listeners DEVEM ser idempotentes — usar `event_listener_processed` table
- * via guard antes de side-effect (ADR-017 prática 4).
- */
+
 export interface EventListener {
   readonly name: string;
   readonly categories: readonly EventCategory[];
   handle(envelope: EventEnvelope): Promise<void>;
 }
 
-/**
- * Catálogo formal de eventTypes por categoria — espelha
- * specs/017-world-encounter-bridge/contracts/event-categories.json.
- *
- * Manter sincronizado é responsabilidade do reviewer; PR a ambos arquivos
- * cresce o catálogo. Bus rejeita publish() com type fora desta lista
- * (EVENT_TYPE_NOT_REGISTERED).
- */
+
 const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
   EncounterEvent: new Set([
     "damage_applied",
@@ -75,7 +59,7 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "clock_progressed",
     "clock_filled",
     "clock_resolved",
-    // Spec 027 (M2, AC2.5)
+
     "npc_witnessed_event",
     "guard_dispatched",
   ]),
@@ -101,7 +85,7 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "hp_lost_narrative",
     "theft_from_pc",
     "theft_from_npc",
-    // Spec 027 (M2, AC2.5)
+
     "reputation_tag_added",
     "crime_committed",
   ]),

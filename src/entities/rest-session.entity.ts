@@ -11,15 +11,7 @@ import { CampaignEntity } from "./campaign.entity";
 import { CharacterEntity } from "./character.entity";
 import { GameSessionEntity } from "./game-session.entity";
 
-/**
- * Spec 016 — RestSession audit + state delta + event triggered.
- *
- * Persistido em todo short/long rest pra: auditoria, memory L4
- * (Director pode citar "no rest anterior, sonhou com X"), event picker
- * history (não disparar mesmo evento 2× seguidos).
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §6 + contract `rest-session.json`.
- */
+
 export type RestKind = "short" | "long";
 export type RestEventTriggered =
   | "npc_dialog_pending"

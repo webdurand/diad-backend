@@ -12,7 +12,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-// --- Result interfaces ---
+
 
 export interface SkillCheckResult {
   ability: string;
@@ -27,7 +27,7 @@ export interface SkillCheckResult {
   advantage?: { roll1: number; roll2: number; used: number };
 }
 
-// --- DTOs ---
+
 
 export interface SkillCheckDto {
   characterId: string;
@@ -39,7 +39,7 @@ export interface SkillCheckDto {
   disadvantage?: boolean;
   sessionId?: string;
   encounterId?: string;
-  /** Spec 012 — quando informado, `inspirationArmed` do participant dá advantage + consome. */
+
   participantId?: string;
 }
 
@@ -65,7 +65,7 @@ export class SkillCheckService {
       return failure("Personagem nao encontrado.", "INVALID_PARTICIPANT");
     }
 
-    // Find the ability modifier
+
     const abilityScore = sheet.abilityScores.find(
       (a) =>
         a.slug === dto.ability ||
@@ -82,7 +82,7 @@ export class SkillCheckService {
     let proficient = false;
     let expertise = false;
 
-    // If a skill is specified, use the skill modifier instead
+
     if (dto.skill) {
       const skillBlock = sheet.skills.find(
         (s) =>
@@ -96,12 +96,12 @@ export class SkillCheckService {
       }
     }
 
-    // Check condition effects on ability checks
+
     const conditions = sheet.conditions ?? [];
     const condMods = this.getAbilityCheckModifiers(conditions);
 
-    // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em todos d20 tests.
-    // Pra 2024_ten_levels, não há disadvantage — é flat d20 penalty.
+
+
     const exhLevel =
       (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
     const exhMods =
@@ -110,13 +110,13 @@ export class SkillCheckService {
         : null;
     const exhaustionD20Penalty = exhMods?.d20Penalty ?? 0;
 
-    // Determine advantage/disadvantage
+
     let hasAdvantage = dto.advantage ?? false;
     let hasDisadvantage = dto.disadvantage ?? false;
 
     if (condMods.hasDisadvantage) hasDisadvantage = true;
 
-    // Spec 012 — Heroic Inspiration
+
     let inspirationEvent: GameEventData | null = null;
     if (dto.participantId) {
       const inspResult = await this.inspirationService.consumeIfArmed(
@@ -145,7 +145,7 @@ export class SkillCheckService {
       );
     }
 
-    // Roll the d20
+
     let roll: number;
     let advantageResult:
       | { roll1: number; roll2: number; used: number }
@@ -200,8 +200,8 @@ export class SkillCheckService {
   private getAbilityCheckModifiers(conditions: string[]) {
     const set = new Set(conditions);
     return {
-      // Spec 012 Lote B — exhaustion 2024 é flat d20 penalty, não disadvantage.
-      // Só poisoned/frightened seguem RAW 2024 com disadvantage.
+
+
       hasDisadvantage: set.has("poisoned") || set.has("frightened"),
       autoFail:
         set.has("incapacitated") ||

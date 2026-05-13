@@ -7,17 +7,7 @@ import type {
   ParticipantContext,
 } from "../../interfaces/combat-action.interfaces";
 
-/**
- * Spec 003 — Unarmed Strike (XPHB 2024).
- *
- * Sempre disponível para todo PC. 3 modes via `options.mode`:
- *  - `damage`  → 1 + STR mod bludgeoning (RAW XPHB)
- *  - `grapple` → alvo Large ou menor; STR save DC 8+prof+STR
- *  - `shove`   → STR save; falha = push 5ft OU prone
- *
- * Disponibilidade respeita action economy. Monstros **não** recebem via este resolver
- * (monstros usam statblock actions); NPCs sim.
- */
+
 @Injectable()
 export class UnarmedStrikeResolver implements ActionResolver {
   readonly kind: ActionKind = "attack";
@@ -85,9 +75,9 @@ export class UnarmedStrikeResolver implements ActionResolver {
       "stunned",
       "unconscious",
       "petrified",
-      "grappled", // can't attack grappler with ranged; still allow in MVP? RAW: grappled doesn't prevent attack
+      "grappled",
     ]);
-    // RAW: grappled não bloqueia attack. Remover.
+
     blocking.delete("grappled");
     return ctx.conditions.some((c) => blocking.has(c.toLowerCase()));
   }

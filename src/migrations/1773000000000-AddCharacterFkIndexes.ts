@@ -4,7 +4,7 @@ export class AddCharacterFkIndexes1773000000000 implements MigrationInterface {
   name = "AddCharacterFkIndexes1773000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Indexes on character_id foreign keys for query performance
+
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "IDX_character_classes_character_id" ON "character_classes" ("character_id")`,
     );
@@ -33,7 +33,7 @@ export class AddCharacterFkIndexes1773000000000 implements MigrationInterface {
       `CREATE INDEX IF NOT EXISTS "IDX_character_features_character_id" ON "character_features" ("character_id")`,
     );
 
-    // Index on characters.user_id for listByUser queries
+
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "IDX_characters_user_id" ON "characters" ("user_id")`,
     );

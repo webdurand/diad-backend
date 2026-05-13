@@ -33,13 +33,7 @@ export type SupportedClassSlug = (typeof SUPPORTED_CLASS_SLUGS)[number];
 const SUPPORTED_LEVELS = [1, 3, 9, 10, 11, 13, 15, 20] as const;
 export type SupportedLevel = (typeof SUPPORTED_LEVELS)[number];
 
-/**
- * Payload do `POST /admin/seed-character` (spec 012).
- *
- * Materializa um PC canônico para o harness de validação. Defaults por classe
- * são deterministicos (standard array 15/14/13/12/10/8 alocado pela ability
- * primária). Caller pode sobrescrever via `abilityArray` ou `name`.
- */
+
 export class SeedCharacterDto {
   @IsIn(SUPPORTED_CLASS_SLUGS as unknown as string[])
   classSlug!: SupportedClassSlug;
@@ -54,10 +48,7 @@ export class SeedCharacterDto {
   @IsIn(["XPHB"])
   edition!: "XPHB";
 
-  /**
-   * [STR, DEX, CON, INT, WIS, CHA]. Se omitido, standard array alocado pela
-   * ability primária da classe.
-   */
+
   @IsOptional()
   @IsArray()
   @ArrayMinSize(6)
@@ -76,45 +67,24 @@ export class SeedCharacterDto {
   @IsUUID()
   ownerUserId?: string;
 
-  /**
-   * Spec 012 Fase 0 — armas (slugs) que o personagem domina (weapon_mastery_choices).
-   * Só tem efeito em classes com weapon_mastery_count > 0 (Barbarian, Fighter, Monk,
-   * Paladin, Ranger, Rogue). Undefined/empty → sem mastery disponível.
-   */
+
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   weaponMasteryChoices?: string[];
 
-  /**
-   * Spec 012 Fase 0 — slugs adicionais de equipment (armas/armaduras) a inserir
-   * no inventário do char APÓS o starter pack. Útil pra testes que precisam
-   * de uma arma XPHB específica não incluída no pacote "A" da classe
-   * (ex: greatsword XPHB, maul, rapier). Empty/undefined → só starter pack.
-   */
+
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   additionalEquipmentSlugs?: string[];
 
-  /**
-   * Spec 012 Fase 0 — Fighting Style slug (archery, defense, dueling, etc.).
-   * Salvo em character_origin.fighting_style_index. Afeta classes com feat
-   * de Fighting Style (Fighter L1, Paladin L2, Ranger L2).
-   */
+
   @IsOptional()
   @IsString()
   fightingStyleSlug?: string;
 
-  /**
-   * Premissa weapons-in-hand — slugs de armas/escudo a empunhar via main/off hand
-   * imediatamente após seed. ActionBar filtra só items in-hand. Weapon deve
-   * existir no starter pack OU em `additionalEquipmentSlugs`.
-   *
-   *  - `mainHandSlug`: arma na mão principal
-   *  - `offHandSlug`: arma light (dual-wield) ou escudo na mão secundária
-   *  - 2H weapon em mainHandSlug ocupa ambas — offHandSlug deve ficar undefined
-   */
+
   @IsOptional()
   @IsString()
   mainHandSlug?: string;

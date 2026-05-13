@@ -1,10 +1,7 @@
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 
-/**
- * Spec 006 — Response DTO para GET /encounters/:id.
- * Enriquece a entity com campos computados e derivados.
- */
+
 
 export interface EnrichedParticipantResponse {
   id: string;
@@ -36,12 +33,7 @@ export interface EnrichedParticipantResponse {
   hasDashed: boolean;
   hasDisengaged: boolean;
 
-  /**
-   * Spec 012 — Heroic Inspiration flags.
-   * `hasInspiration`: persistente na ficha (DM concede via /grant-inspiration).
-   * `inspirationArmed`: encounter-scoped; player setou via /arm-inspiration
-   * que o próximo d20 test terá advantage. Consumido no primeiro roll.
-   */
+
   hasInspiration?: boolean;
   inspirationArmed: boolean;
   helping: boolean;
@@ -56,11 +48,7 @@ export interface EnrichedParticipantResponse {
 
   grappledBy: string | null;
 
-  /**
-   * Spec 012 — slots de magia expostos no snapshot do encounter (PCs apenas).
-   * Shape: `[{ level, total, used }]`. Monsters usam `spellSlotsUsed` internamente.
-   * Necessário pro harness validar slot-consumed invariants sem round-trip ao /sheet.
-   */
+
   spellSlots: Array<{ level: number; total: number; used: number }>;
 
   effectInstances: unknown[];
@@ -82,11 +70,7 @@ export interface EnrichedParticipantResponse {
   legendaryPointsAvailable: number | null;
   legendaryPointsMax: number | null;
 
-  /**
-   * Spec 012 Lote B — Transformation ativa (Wild Shape, Polymorph, Form of
-   * Dread, etc). Null quando não transformado. UI usa pra mostrar formName
-   * no token e badge de revert.
-   */
+
   transformationState: {
     source: string;
     sourceCasterParticipantId?: string | null;
@@ -133,15 +117,13 @@ export interface EnrichedEncounterResponse {
   updatedAt: string;
 }
 
-/**
- * Mapeia um participant entity (já enriquecido pelo enrichPcParticipants) para DTO.
- */
+
 function mapParticipant(
   p: EncounterParticipantEntity,
 ): EnrichedParticipantResponse {
   const pAny = p as any;
 
-  // Normalize controlledBy (safety: pre-migration rows might still have 'human')
+
   let controlledBy: "pc" | "ai" | "dm" = p.controlledBy;
   if ((controlledBy as string) === "human") controlledBy = "pc";
 
@@ -154,7 +136,7 @@ function mapParticipant(
     displayName: p.displayName,
     faction: p.faction,
 
-    // HP/AC/Speed — enriched from sheet for PCs, from entity for monsters
+
     currentHp: pAny.currentHp ?? p.currentHp ?? 0,
     maxHp: pAny.maxHp ?? p.maxHp ?? 0,
     tempHp: p.tempHp ?? 0,
@@ -172,20 +154,20 @@ function mapParticipant(
     attacksUsedThisTurn: p.attacksUsedThisTurn ?? 0,
     attacksMaxThisTurn: p.attacksMaxThisTurn ?? 1,
 
-    // Derived booleans
+
     dodging: p.dodgingUntilTurnOfParticipantId != null,
     hasDashed: p.hasDashed ?? false,
     hasDisengaged: p.hasDisengaged ?? false,
 
-    // Spec 012 — Inspiration; hasInspiration vem do sheet enrichment, armed
-    // vem direto do participant.
+
+
     hasInspiration: pAny.hasInspiration,
     inspirationArmed: p.inspirationArmed ?? false,
     helping: p.helpingAllyParticipantId != null,
     helpingAlly: p.helpingAllyParticipantId ?? null,
     helpingAgainst: p.helpingTargetParticipantId ?? null,
 
-    // Concentration object
+
     concentration:
       p.isConcentrating && p.concentratingOn
         ? {
@@ -197,7 +179,7 @@ function mapParticipant(
 
     grappledBy: p.grappledByParticipantId ?? null,
 
-    // Spec 012: `spellSlots` injetado por enrichPcParticipants a partir do sheet.
+
     spellSlots: pAny.spellSlots ?? [],
 
     effectInstances: p.effectInstances ?? [],
@@ -244,9 +226,7 @@ function mapParticipant(
   };
 }
 
-/**
- * Mapeia um encounter entity (com participants enriquecidos) para response DTO.
- */
+
 export function toEnrichedEncounterResponse(
   encounter: EncounterEntity,
 ): EnrichedEncounterResponse {

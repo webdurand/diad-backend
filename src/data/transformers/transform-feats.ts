@@ -91,7 +91,7 @@ function convertAbilityOptions(
         count: choose.count ?? 1,
       });
     } else {
-      // Direct bonuses like { "cha": 1 }
+
       const bonuses: { ability: string; bonus: number }[] = [];
       for (const [key, val] of Object.entries(ab)) {
         if (key === "hidden") continue;

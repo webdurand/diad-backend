@@ -91,8 +91,8 @@ describe("SeedCharacterService", () => {
       await service.seed(validDto);
       const createCall = charactersService.create.mock.calls[0][0];
       const abilityScores = createCall.data.abilityScores;
-      expect(abilityScores.int).toBe(15); // primary
-      expect(abilityScores.con).toBe(14); // sempre CON secund\u00e1rio
+      expect(abilityScores.int).toBe(15);
+      expect(abilityScores.con).toBe(14);
     });
 
     it("aloca 15 na STR pra Fighter", async () => {
@@ -151,8 +151,8 @@ describe("SeedCharacterService", () => {
       await service.seed(validDto);
       const createCall = charactersService.create.mock.calls[0][0];
       expect(createCall.data.sourceCode).toBe("XPHB");
-      // Spec 012: agora usa classEquipmentChoices ['A'] (materializa starter pack)
-      // em vez de classStartingGold (que deixava fighter/ranger sem armas).
+
+
       expect(createCall.data.classEquipmentChoices).toEqual(["A"]);
     });
   });
@@ -195,7 +195,7 @@ describe("SeedCharacterService", () => {
       subclassRepo.findOneBy = jest.fn().mockResolvedValue({
         id: "sub-berserker",
         slug: "berserker",
-        class_id: "class-barbarian", // n\u00e3o bate com wizard
+        class_id: "class-barbarian",
       });
       await expect(service.seed(validDto)).rejects.toThrow(BadRequestException);
     });

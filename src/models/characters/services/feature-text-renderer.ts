@@ -1,13 +1,4 @@
-/**
- * Spec 015 Eixo 1 — renderizador puro de descrição SRD em texto plano.
- *
- * Features do SRD vêm com `description` em JSONB com shape recursivo
- * `{ text: [{p: "..."}, {list: {items: [...]}}, {table: {rows: [...]}}] }`.
- * A UI precisa de uma string legível (não o JSON cru).
- *
- * Este helper é puro (zero IO), 100% testável, e cobre todos os shapes
- * observados em `5e-SRD-Features.json` e `5e-SRD-Spells.json`.
- */
+
 
 export type SrdText =
   | string
@@ -18,10 +9,7 @@ export type SrdText =
   | { bullet?: string | SrdText }
   | Record<string, unknown>;
 
-/**
- * Converte `description` do SRD num string legível. Shapes desconhecidos
- * retornam `''` (nunca `undefined`); objeto raw bem-formado não quebra.
- */
+
 export function renderFeatureDescription(raw: unknown): string {
   if (raw == null) return "";
   if (typeof raw === "string") return raw.trim();
@@ -85,7 +73,7 @@ export function renderFeatureDescription(raw: unknown): string {
       return renderFeatureDescription(obj.paragraphs);
     }
 
-    // Shape desconhecido — colecta chaves de texto conhecidas
+
     const known = ["summary", "body", "content", "value", "description"];
     for (const k of known) {
       if (k in obj) return renderFeatureDescription(obj[k]);
@@ -96,11 +84,7 @@ export function renderFeatureDescription(raw: unknown): string {
   return "";
 }
 
-/**
- * Extrai uma descrição curta (≤ maxChars) pro `narrativeDescriptor`. Pega
- * a primeira frase do texto renderizado; se for maior que maxChars, trunca
- * em limite de palavra e adiciona reticências.
- */
+
 export function extractNarrativeDescriptor(
   description: unknown,
   maxChars = 120,

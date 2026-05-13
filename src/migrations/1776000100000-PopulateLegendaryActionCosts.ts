@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 004 — Data migration.
- * Varre `monsters.legendary_actions` e infere o custo de cada ação lendária
- * via heurística simples no texto da descrição:
- * - "(Costs 2 Actions)" → cost 2
- * - "(Costs 3 Actions)" → cost 3
- * - default → cost 1
- *
- * Grava em `monsters.legendary_action_cost_map = {actionName: cost}`.
- * Idempotente (recria o mapa a cada execução).
- */
+
 export class PopulateLegendaryActionCosts1776000100000 implements MigrationInterface {
   name = "PopulateLegendaryActionCosts1776000100000";
 

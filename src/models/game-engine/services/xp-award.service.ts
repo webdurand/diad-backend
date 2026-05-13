@@ -10,24 +10,7 @@ import type { XpAwardSource } from "src/entities/xp-award-event.entity";
 import { CharacterStateService } from "../../characters/services/character-state.service";
 import { GameResult, failure, success } from "../interfaces/result.type";
 
-/**
- * Spec 016 M4 — XP Award service granular.
- *
- * RAW 2024 default + flag `campaign.xp_mode` ('rules' | 'milestone' | 'hybrid').
- * Paridade BG3: persuasion/stealth resolvendo encounter dá XP igual ao kill
- * (anti-grind). Audit log em `xp_award_events` permite Director memory L4
- * citar awards passados.
- *
- * Modes:
- *  - rules:     amount cru aplicado.
- *  - milestone: ignora amount, só passa em quest_completion (amount fixo
- *               do threshold do próximo nível) ou quest_step (½ threshold).
- *  - hybrid:    combat_kill + skill_challenge + combat_resolved_peacefully
- *               passam cru; roleplay/exploration ignorados (story XP só em
- *               quest milestones).
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §7.1.
- */
+
 export interface XpAwardRequest {
   characterId: string;
   amount: number;
@@ -36,9 +19,9 @@ export interface XpAwardRequest {
   encounterId?: string;
   questStepId?: string;
   narrativeJustification?: string;
-  /** Required: userId pra ownership check em updateXp. */
+
   ownerUserId: string;
-  /** Optional: campaignId pra resolver xp_mode. Default 'rules' se não informado. */
+
   campaignId?: string;
 }
 
@@ -88,7 +71,7 @@ export class XpAwardService {
     const adjusted = this.adjustForMode(request.amount, request.source, mode);
 
     if (adjusted === 0) {
-      // Mode bloqueia este tipo de award. Ainda registra evento (audit) com 0.
+
       const evt = await this.xpEventRepo.save(
         this.xpEventRepo.create({
           characterId: request.characterId,
@@ -171,12 +154,12 @@ export class XpAwardService {
   ): number {
     if (mode === "rules") return amount;
     if (mode === "milestone") {
-      // Só quest_step e quest_completion contam. Outros skip.
+
       return source === "quest_step" || source === "quest_completion"
         ? amount
         : 0;
     }
-    // hybrid: combat + skill_challenge passam; roleplay/exploration skip.
+
     if (
       source === "combat_kill" ||
       source === "combat_resolved_peacefully" ||

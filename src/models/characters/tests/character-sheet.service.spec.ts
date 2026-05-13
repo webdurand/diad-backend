@@ -169,7 +169,7 @@ describe("CharacterSheetService", () => {
         makeLevelUp("fighter", 3, 6),
       ]);
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.maxHp).toBe(10 + 6 + 6); // hit_die + levelups
+      expect(sheet.maxHp).toBe(10 + 6 + 6);
     });
 
     it("should include max_hp_bonus from state", async () => {
@@ -178,7 +178,7 @@ describe("CharacterSheetService", () => {
         makeCharacterState({ current_hp: 15, max_hp_bonus: 5 }),
       );
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.maxHp).toBe(15); // 10 + 5 bonus
+      expect(sheet.maxHp).toBe(15);
     });
   });
 
@@ -186,7 +186,7 @@ describe("CharacterSheetService", () => {
     it("no armor: 10 + DEX mod", async () => {
       setupBasicSheet("fighter", 1, { dex: 14 });
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.armorClass).toBe(12); // 10 + 2
+      expect(sheet.armorClass).toBe(12);
     });
 
     it("light armor (AC base 11): 11 + DEX mod", async () => {
@@ -202,7 +202,7 @@ describe("CharacterSheetService", () => {
         ]);
       });
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.armorClass).toBe(13); // 11 + 2
+      expect(sheet.armorClass).toBe(13);
     });
 
     it("medium armor (AC base 13): 13 + min(DEX mod, 2)", async () => {
@@ -218,7 +218,7 @@ describe("CharacterSheetService", () => {
         ]);
       });
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.armorClass).toBe(15); // 13 + min(4, 2) = 15
+      expect(sheet.armorClass).toBe(15);
     });
 
     it("heavy armor (AC base 16): ignores DEX", async () => {
@@ -250,7 +250,7 @@ describe("CharacterSheetService", () => {
         ]);
       });
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.armorClass).toBe(14); // 10 + 2(dex) + 2(shield)
+      expect(sheet.armorClass).toBe(14);
     });
   });
 
@@ -266,8 +266,8 @@ describe("CharacterSheetService", () => {
       setupBasicSheet("paladin", 5, { cha: 16 });
       const sheet = await service.computeSheet("user-1", "char-1");
       const slotLevels = sheet.spellSlots.map((s) => s.total);
-      // Service uses multiclass formula: floor(5/2) = 2 effective caster level
-      // FULL_CASTER_SLOTS[2] = [3]
+
+
       expect(slotLevels).toEqual([3]);
     });
 
@@ -302,7 +302,7 @@ describe("CharacterSheetService", () => {
       });
       const sheet = await service.computeSheet("user-1", "char-1");
       const stealth = sheet.skills.find((s) => s.slug === "stealth");
-      expect(stealth?.bonus).toBe(4); // dexMod(2) + prof(2)
+      expect(stealth?.bonus).toBe(4);
     });
 
     it("expertise skill: base mod + 2x proficiency bonus", async () => {
@@ -320,7 +320,7 @@ describe("CharacterSheetService", () => {
       });
       const sheet = await service.computeSheet("user-1", "char-1");
       const stealth = sheet.skills.find((s) => s.slug === "stealth");
-      expect(stealth?.bonus).toBe(7); // dexMod(3) + prof(2) + expertise(2)
+      expect(stealth?.bonus).toBe(7);
     });
   });
 
@@ -328,7 +328,7 @@ describe("CharacterSheetService", () => {
     it("non-proficient: 10 + WIS mod", async () => {
       setupBasicSheet("fighter", 1, { wis: 14 });
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.passivePerception).toBe(12); // 10 + 2
+      expect(sheet.passivePerception).toBe(12);
     });
 
     it("proficient: 10 + WIS mod + proficiency bonus", async () => {
@@ -338,7 +338,7 @@ describe("CharacterSheetService", () => {
         ]);
       });
       const sheet = await service.computeSheet("user-1", "char-1");
-      expect(sheet.passivePerception).toBe(14); // 10 + 2 + 2
+      expect(sheet.passivePerception).toBe(14);
     });
   });
 

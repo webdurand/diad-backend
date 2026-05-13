@@ -1,19 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 Cleric — Fix data XPHB 2024:
- *
- * 1. Destroy Undead (features 2014 REMOVIDAS em 2024):
- *    L5 destroy-undead-cr-1-2-or-below, L8 destroy-undead-cr-1-or-below,
- *    L11 destroy-undead-cr-2-or-below, L14 destroy-undead-cr-3-or-below,
- *    L17 destroy-undead-cr-4-or-below. 2024 substituiu por Sear Undead
- *    (CR-independent, scaling damage). Desvincula do cleric base.
- *
- * 2. Divine Intervention Improvement (feature 2014) em L20: substituída por
- *    Greater Divine Intervention em 2024 (que já está linked).
- *
- * Escopo similar ao migration 1777050000000 (Barbarian Brutal Critical).
- */
+
 export class FixClericXphb1777080000000 implements MigrationInterface {
   name = "FixClericXphb1777080000000";
 

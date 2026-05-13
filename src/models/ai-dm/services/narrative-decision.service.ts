@@ -187,7 +187,7 @@ export class NarrativeDecisionService {
         candidate,
       );
       if (npc) return npc.id;
-      // Materializa stub na sessão atual.
+
       const stub = await this.npcService.materializeStubFromName(
         sessionId,
         candidate,

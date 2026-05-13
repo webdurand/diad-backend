@@ -1,17 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 Sorcerer — Data gap: subclasses alternativas `sorcerer-wild-magic`,
- * `sorcerer-clockwork`, `sorcerer-aberrant` têm features em `features` mas
- * NÃO têm rows em `levels` (só `draconic` tem L3/L6/L14/L18 linkados).
- *
- * Cria L3 row pra cada + linka features XPHB L3 signature.
- *
- * Features XPHB L3 esperadas:
- *  - Wild Magic: tides-of-chaos + wild-magic-sorcery + wild-magic-surge
- *  - Clockwork Soul: clockwork-sorcery + clockwork-spells + restore-balance
- *  - Aberrant Sorcery: aberrant-sorcery + psionic-spells + telepathic-speech
- */
+
 export class SeedSorcererSubclassLevels1777150000000 implements MigrationInterface {
   name = "SeedSorcererSubclassLevels1777150000000";
 

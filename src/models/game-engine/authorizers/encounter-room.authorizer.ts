@@ -10,11 +10,7 @@ import {
 import { CampaignService } from "src/models/world/services/campaign.service";
 import { SessionService } from "../services/session.service";
 
-/**
- * Authorizes WS joins to `encounter:<encounterId>` rooms.
- * Allowed: the DM of the encounter's campaign, or any active CampaignPlayer
- * of that campaign. Solo sessions (no campaignId) allow only the session owner.
- */
+
 @Injectable()
 export class EncounterRoomAuthorizer implements RoomAuthorizer {
   readonly prefix = "encounter";
@@ -43,7 +39,7 @@ export class EncounterRoomAuthorizer implements RoomAuthorizer {
     if (!session) return false;
 
     if (!session.campaignId) {
-      // Solo/unaffiliated session: only the owner can watch.
+
       return session.ownerId === userId;
     }
 

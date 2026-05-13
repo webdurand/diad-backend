@@ -1,14 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M1 — Ironsworn Vow + close-roll mechanic.
- *
- * progress ∈ [0..10] com frações. Ao fulfill, rola 2d10 (challenge dice),
- * compara com floor(progress/2). Momentum ignorado (Ironsworn).
- *   progress ≥ ambos → strong_hit
- *   progress ≥ 1     → weak_hit
- *   progress < ambos → miss
- */
+
 export class CreateVow1778030000000 implements MigrationInterface {
   name = "CreateVow1778030000000";
 

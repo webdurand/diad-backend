@@ -1,18 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Fix equipment_options dos backgrounds PHB 2014.
- *
- * A migration 1776700000000 gravou equipment_options como:
- *   { starting: ['crowbar', ...], gold: 15 }
- *
- * O frontend (StepBackground.tsx) espera:
- *   - key `_` = lista fixa sem escolha A/B
- *   - items como objetos `{ name, slug }` (string crua vira item.name undefined -> fallback "Item")
- *
- * Esta migration normaliza os 9 backgrounds -phb para o formato correto:
- *   { _: [{ name: 'Crowbar', slug: 'crowbar' }, ...], gold: 15 }
- */
+
 export class FixPhb2014BackgroundEquipment1776800000000 implements MigrationInterface {
   name = "FixPhb2014BackgroundEquipment1776800000000";
 

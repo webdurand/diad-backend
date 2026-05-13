@@ -14,14 +14,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Cleric features (RAW 2024 XPHB):
- *  - L5 Sear Undead: Channel Divinity + Magic action. Undead 30ft see/hear
- *    → CON save DC 8+WIS+PB. Falha = `10 + 5×(level-5)` radiant; sucesso half.
- *  - L10 Divine Intervention: Magic action invocando divindade. Spell-like
- *    efeito do nível do slot gasto (cap L5 em L10). Auto-sucesso XPHB 2024
- *    (era 1d100 em 2014). 1 uso /long rest (L10), depois L20 recharge 2d4 LR.
- */
+
 @Injectable()
 export class ClericFeaturesService {
   constructor(
@@ -35,10 +28,7 @@ export class ClericFeaturesService {
     private readonly eventService: EventService,
   ) {}
 
-  /**
-   * Sear Undead (Cleric L5+): RAW 2024 XPHB scaling. Targets = lista explícita
-   * de undead que veem/ouvem o caster em 30ft (harness passa os IDs).
-   */
+
   async searUndead(
     userId: string,
     encounterId: string,
@@ -130,15 +120,7 @@ export class ClericFeaturesService {
     return success({ damageOnFail, saveDc, results }, [event]);
   }
 
-  /**
-   * Divine Intervention (Cleric L10+): Magic action. Auto-sucesso (XPHB 2024).
-   * Cliente passa spellSlug + slotLevel (cap=5 em L10, cap=9 em L20 via Greater).
-   * Backend valida e retorna descritor; cast é delegado ao resolve combat
-   * normal via outro endpoint (simplified).
-   *
-   * Consome 1 uso /long rest no L10-L19; L20 Greater tem recharge 2d4 LR.
-   * MVP: só marca consumido + returns descriptor (actual cast via /cast-spell).
-   */
+
   async divineIntervention(
     userId: string,
     encounterId: string,
@@ -175,7 +157,7 @@ export class ClericFeaturesService {
       );
     }
 
-    // Cap: L10-L19 = 5; L20 Greater = 9
+
     const hasGreater =
       (sheet as unknown as { hasGreaterDivineIntervention?: boolean })
         .hasGreaterDivineIntervention === true;
@@ -216,12 +198,7 @@ export class ClericFeaturesService {
     );
   }
 
-  /**
-   * Preserve Life (Life Domain L3, RAW 2024 — Channel Divinity option):
-   * Magic action. Pool = 5 × cleric level HP a distribuir entre aliados em
-   * 30ft. Cap por ally = `5×level ÷ 2` HP. Não afeta Undead/Constructs.
-   * MVP: aceita allocation list `[{ targetId, hp }]`, valida soma ≤ pool + cap individual.
-   */
+
   async preserveLife(
     userId: string,
     encounterId: string,
@@ -320,11 +297,7 @@ export class ClericFeaturesService {
     );
   }
 
-  /**
-   * Blessed Strikes (Cleric L7+, RAW 2024): 1/turn, no melee weapon hit OU
-   * cantrip que force save, adiciona +1d8 radiant (+2d8 em L14 Improved).
-   * MVP: endpoint chamado após hit/save-fail confirmado; aplica damage direto.
-   */
+
   async blessedStrikes(
     userId: string,
     encounterId: string,

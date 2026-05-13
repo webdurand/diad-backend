@@ -1,14 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Fix da migration 1777020000000: features XPHB Champion estão registradas
- * na tabela `features` com `subclass_id = 'fighter-champion'` (id distinto da
- * subclass `champion` canonical usada pelo harness). Migration anterior JOIN
- * por slug da subclass do feature, não achando match.
- *
- * Esta versão usa CROSS JOIN: linka level.subclass=champion com feature pelo
- * slug do feature direto, sem exigir match de subclass_id.
- */
+
 export class LinkChampionXphbFeaturesFix1777020001000 implements MigrationInterface {
   name = "LinkChampionXphbFeaturesFix1777020001000";
 

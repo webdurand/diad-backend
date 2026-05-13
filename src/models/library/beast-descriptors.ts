@@ -1,14 +1,4 @@
-/**
- * Spec 015 — Eixo 4 (Polymorph/Wild Shape).
- *
- * Helpers puros que derivam de um MonsterEntity os descriptors Princípio X
- * usados no picker de Wild Shape/Polymorph:
- *   - tacticalSummary (camada 2, ≤140 chars): números que importam pro jogador
- *   - narrativeDescriptor (camada 3, ≤120 chars): flavor curto pra token/log
- *
- * Design: fallbacks heurísticos porque só 18/87 beasts do SRD têm `description`
- * populada. Determinístico por slug — sem aleatoriedade.
- */
+
 import type { MonsterEntity } from "src/entities/monster.entity";
 
 const TACTICAL_MAX = 140;
@@ -119,9 +109,7 @@ function speedSummary(speed: BeastSummary["speed"]): string {
   return parts.join(" / ");
 }
 
-/**
- * Truncate no último espaço antes do limite, preservando pontuação quando possível.
- */
+
 export function truncateSoft(text: string, max: number): string {
   const trimmed = text.trim();
   if (trimmed.length <= max) return trimmed;

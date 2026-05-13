@@ -1,10 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { RoomAuthorizer, parseRoomKey } from "../room-authorizer.interface";
 
-/**
- * Built-in authorizer for `user:<userId>` rooms. A user can only join
- * their own personal room.
- */
+
 @Injectable()
 export class UserRoomAuthorizer implements RoomAuthorizer {
   readonly prefix = "user";

@@ -1,15 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 import { parseSpellcastingFromSpecialAbilities } from "./utils/parse-spellcasting";
 
-/**
- * Populates `monsters.spellcasting` for every monster whose `special_abilities`
- * contain a Spellcasting or Innate Spellcasting block. Uses a regex parser
- * over the free-text `desc`. Monsters without a parseable block keep
- * `spellcasting = NULL` (runtime treats them as non-casters).
- *
- * Idempotent: re-running replaces previous values.
- * DOWN: clears all populated rows (preserves schema).
- */
+
 export class PopulateMonsterSpellcastingData1774930000000 implements MigrationInterface {
   name = "PopulateMonsterSpellcastingData1774930000000";
 

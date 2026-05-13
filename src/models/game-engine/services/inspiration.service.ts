@@ -5,19 +5,7 @@ import { EncounterParticipantEntity } from "src/entities/encounter-participant.e
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
 import { GameEventData } from "../interfaces/result.type";
 
-/**
- * Spec 012 — Heroic Inspiration.
- *
- * Encapsula a leitura + consumo do flag `inspirationArmed` pra qualquer
- * roll-site (attack / save / skill-check). Mantém o RAW 2024 consistente:
- *   - Se armed=true, roll tem advantage.
- *   - Ao consumir, reset EncounterParticipant.inspirationArmed + CharacterState.inspiration.
- *   - Emite evento `inspiration_used` com o context do caller.
- *
- * Uso típico:
- *   const consumed = await inspirationService.consumeIfArmed(participantId, 'attack_roll');
- *   if (consumed) hasAdvantage = true;
- */
+
 @Injectable()
 export class InspirationService {
   constructor(
@@ -26,10 +14,7 @@ export class InspirationService {
     private readonly stateService: CharacterStateService,
   ) {}
 
-  /**
-   * Lê `inspirationArmed` do participant. Não consome — usar `consumeIfArmed`
-   * pra fazer leitura + reset em uma call.
-   */
+
   async isArmed(participantId: string): Promise<boolean> {
     const p = await this.participantRepo.findOne({
       where: { id: participantId },
@@ -38,12 +23,7 @@ export class InspirationService {
     return p?.inspirationArmed === true;
   }
 
-  /**
-   * Se `inspirationArmed=true`, reseta flag do encounter + `character_state.inspiration`
-   * e retorna true (caller deve aplicar advantage + emitir evento). Caso contrário false.
-   *
-   * **Idempotente**: chamar duas vezes na mesma roll só consome 1 carga.
-   */
+
   async consumeIfArmed(
     participantId: string,
     context: "attack_roll" | "saving_throw" | "ability_check",

@@ -29,26 +29,7 @@ function deriveTier(level: number): PartyTier {
   return "4";
 }
 
-/**
- * Spec 027 (M2 follow-up) — auto-detecta fim de combate em DIAD solo.
- *
- * Premissa de design (alinhada à conversa do usuário):
- *  - Em DIAD solo a IA é o DM. Player não controla NPC nem encerra combate.
- *  - Em multiplayer DM-led o DM humano clica "encerrar combate" manualmente
- *    quando narrativa exige (PCs renderem, NPC fugiu sem morrer, etc).
- *
- * Por isso `tryAutoEnd` é GATEADO por `isSoloCampaign`. Multiplayer não é
- * afetado — comportamento atual preservado integralmente.
- *
- * Heurística "solo": campaign tem ≤1 user_id distinto em campaign_players
- * (espelha PermissionResolver.isCampaignDm). Se há 2+ humanos é multiplayer
- * — desativa auto-end.
- *
- * Outcomes:
- *  - Todos hostis (type ∈ {monster,npc} + faction='enemy') derrotados → victory
- *  - Todos PCs caídos (HP≤0 ou dyingState='dead') → defeat
- *  - Senão: null (combate continua)
- */
+
 @Injectable()
 export class EncounterEndDetectorService {
   private readonly logger = new Logger(EncounterEndDetectorService.name);
@@ -68,17 +49,7 @@ export class EncounterEndDetectorService {
     private readonly lootRollService: LootRollService,
   ) {}
 
-  /**
-   * Verifica + resolve, idempotente. Retorna outcome aplicado, ou null se:
-   *  - Encounter ainda em andamento (alvo vivo dos dois lados)
-   *  - Encounter já não está 'active' (resolveEncounter idempotente, mas log skip)
-   *  - Campanha é multiplayer (DM humano resolve)
-   *  - Erro de lookup (best-effort, log warn)
-   *
-   * Em vitória: calcula XP somando `monster.xp` dos hostis derrotados, rola
-   * loot transient via `LootRollService` por CR band do hostil mais forte,
-   * e injeta `xpRewards` + `goldRewards` no payload do `resolveEncounter`.
-   */
+
   async tryAutoEnd(encounterId: string): Promise<"victory" | "defeat" | null> {
     try {
       const encounter = await this.encounterRepo.findOne({
@@ -147,10 +118,7 @@ export class EncounterEndDetectorService {
     }
   }
 
-  /**
-   * Soma XP + rola loot transient para vitória solo. Best-effort: erros
-   * em loot-roll não invalidam XP. Retorna estrutura plana pra `tryAutoEnd`.
-   */
+
   private async computeVictoryRewards(
     encounterId: string,
     campaignId: string | undefined,
@@ -296,24 +264,7 @@ export class EncounterEndDetectorService {
     return c.cp > 0 || c.sp > 0 || c.gp > 0 || c.pp > 0;
   }
 
-  /**
-   * Detecção pura — sem mutar nada. Útil pra diagnostics e tests.
-   *
-   * Regra (DIAD solo): "live tokens DM-hostis === 0 → finaliza combate"
-   *
-   * Filtros:
-   *   - DM tokens = controlledBy='ai' AND faction='enemy'
-   *     - 'ai' alone pegaria companion AI / summons (faction='ally'),
-   *       que NÃO devem contar como hostil.
-   *     - 'enemy' alone pegaria NPCs estáticos sem `controlledBy='ai'`
-   *       (multiplayer DM ainda manual).
-   *   - "Down" pra DM token: isDefeated OU hp≤0 (monsters não fazem death save)
-   *   - "Down" pra PC: dyingState='dead' APENAS. RAW 5e: PC com hp=0 está
-   *     `dying`, faz death saves, combate continua. Só morte real = defeat.
-   *     Antes a checagem era `dyingState='dead' || hp≤0` — disparava defeat
-   *     prematuro no primeiro hit que zerasse o PC, sem dar chance pro
-   *     player jogar (bug reportado).
-   */
+
   async detectOutcome(
     encounterId: string,
   ): Promise<"victory" | "defeat" | null> {
@@ -327,7 +278,7 @@ export class EncounterEndDetectorService {
     );
     const pcs = participants.filter((p) => p.type === "pc");
 
-    // Encounter sem tokens DM hostis = não era combate; sem PCs = nada pra vencer
+
     if (dmTokens.length === 0 || pcs.length === 0) return null;
 
     const allDmTokensDown = dmTokens.every(
@@ -335,21 +286,15 @@ export class EncounterEndDetectorService {
     );
     if (allDmTokensDown) return "victory";
 
-    // RAW 5e: PC só está fora do combate quando dyingState='dead' (3 death
-    // save fails ou massive damage). hp=0 + dying = combate continua.
+
+
     const allPcsDead = pcs.every((p) => p.dyingState === "dead");
     if (allPcsDead) return "defeat";
 
     return null;
   }
 
-  /**
-   * Solo = campanha sem DM humano. Espelha PermissionResolver.isCampaignDm.
-   * Multiplayer (≥2 user_ids distintos em campaign_players) = NÃO solo.
-   *
-   * Retorna `campaignId` junto pro caller poder usar em LootRollService /
-   * XpAwardService sem segunda query.
-   */
+
   private async isSoloCampaign(
     sessionId: string,
   ): Promise<{ isSolo: boolean; campaignId?: string }> {

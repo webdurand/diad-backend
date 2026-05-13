@@ -1,28 +1,20 @@
 import type { AddEffectInput } from "./effect-instance.service";
 import type { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 
-/**
- * Spec 004 — mapeamento de spellSlug → EffectInstance[] a materializar.
- *
- * Iterativo: comeca com Mage Armor (checkpoint 2). Proximos checkpoints
- * adicionam Bless, Guiding Bolt, Shield, etc.
- *
- * Spells fora do catalogo retornam [] — o cast continua funcionando (slot
- * consumido, evento emitido), apenas sem materializar EffectInstance.
- */
+
 
 export interface MaterializeContext {
-  /** Caster participant id. */
+
   casterParticipantId: string;
-  /** Target participant ids do cast. */
+
   targetParticipantIds: string[];
-  /** Spec usada — 'PHB 2014' ou 'XPHB 2024' (reservado para divergencias futuras). */
+
   editionCode?: string;
-  /** Spell slot usado. */
+
   slotLevel: number;
-  /** DEX modifier do caster (usado por Mage Armor). */
+
   casterDexModifier?: number;
-  /** Se caster ja estava concentrando quando cast; usado para saber se vai substituir. */
+
   wasConcentrating?: boolean;
 }
 
@@ -31,14 +23,10 @@ export interface SpellEffectMaterialization {
   input: AddEffectInput;
 }
 
-/**
- * Metadata per-target usada pelas pre-conditions (Mage Armor requer alvo sem
- * armadura, etc). Callers (spell-casting.service) precisam preencher isso
- * antes de chamar `checkPreconditions` ou `materializeSpellEffects`.
- */
+
 export interface TargetMetadata {
   id: string;
-  /** True se o alvo tem armor equipada (armor base>0). Monstros: true se AC vem de natural armor. */
+
   isWearingArmor: boolean;
   participant?: EncounterParticipantEntity;
 }
@@ -49,10 +37,7 @@ export interface PreconditionFailure {
   targetId?: string;
 }
 
-/**
- * Valida pre-conditions mecanicas da spell. Retorna null se OK, ou um
- * PreconditionFailure descritivo para retornar 409 ao caller.
- */
+
 export function checkSpellPreconditions(
   spellSlug: string,
   targets: TargetMetadata[],
@@ -60,7 +45,7 @@ export function checkSpellPreconditions(
   const slug = spellSlug.toLowerCase();
 
   if (slug === "mage-armor") {
-    // RAW: "You touch a willing creature who isn't wearing armor."
+
     const armored = targets.find((t) => t.isWearingArmor);
     if (armored) {
       return {
@@ -75,10 +60,7 @@ export function checkSpellPreconditions(
   return null;
 }
 
-/**
- * Retorna os effects a materializar no cast. Array vazio se a spell
- * nao tem mapping (nao bloqueia o cast).
- */
+
 export function materializeSpellEffects(
   spellSlug: string,
   ctx: MaterializeContext,
@@ -87,9 +69,9 @@ export function materializeSpellEffects(
 
   switch (slug) {
     case "shield": {
-      // RAW Shield: "+5 bonus to AC, including against the triggering attack,
-      //  until the start of your next turn."
-      // Self-target (caster). Reaction.
+
+
+
       return [
         {
           targetParticipantId: ctx.casterParticipantId,
@@ -105,8 +87,8 @@ export function materializeSpellEffects(
       ];
     }
     case "bless": {
-      // RAW Bless: escolhe até 3 alvos. Por 1 min (concentration), +1d4 em
-      // attack rolls e saving throws.
+
+
       const out: SpellEffectMaterialization[] = [];
       for (const tid of ctx.targetParticipantIds.slice(0, 3)) {
         out.push({
@@ -135,10 +117,10 @@ export function materializeSpellEffects(
       return out;
     }
     case "bane": {
-      // RAW Bane: até 3 alvos (CHA save na cast; falha → -1d4 em attack/save por 1 min,
-      // concentration). Materialização aplica a TODOS os alvos — o save é resolvido
-      // pela spell-casting.service ANTES de chamar materialize. Aqui só materializamos
-      // quem falhou (catálogo delega seleção ao caller; MVP aplica em todos os targetIds).
+
+
+
+
       const out: SpellEffectMaterialization[] = [];
       for (const tid of ctx.targetParticipantIds.slice(0, 3)) {
         out.push({
@@ -167,11 +149,11 @@ export function materializeSpellEffects(
       return out;
     }
     case "guiding-bolt": {
-      // RAW: "Make a ranged spell attack against the creature" — on hit, 4d6 radiant
-      // + "until the end of your next turn, the next attack roll made against
-      //   this target by an attacker other than you has advantage."
-      // Simplificacao MVP: assume hit (o damage resolver da spell-casting.service
-      // ainda aplica damage sem attack roll; spec 005 adiciona attack roll).
+
+
+
+
+
       const target = ctx.targetParticipantIds[0];
       if (!target) return [];
       return [
@@ -189,11 +171,11 @@ export function materializeSpellEffects(
       ];
     }
     case "mage-armor": {
-      // RAW: "Until the spell ends, the target's base AC becomes 13 + DEX mod."
-      // Simplificacao: assume alvo unarmored (caso contrario, spell nao se aplica).
-      // Base AC sem armor = 10 + DEX. Apos Mage Armor = 13 + DEX. Delta = +3.
-      // Target: self (targetParticipantIds[0] === caster em 99% dos casos, mas
-      // a spec permite "a willing creature") → usar o primeiro target.
+
+
+
+
+
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
@@ -203,18 +185,18 @@ export function materializeSpellEffects(
             sourceSpellSlug: "mage-armor",
             sourceCasterParticipantId: ctx.casterParticipantId,
             payload: { amount: 3 },
-            // Mage Armor duracao: 8 horas = 4800 rounds (6s/round). Usamos
-            // 'end_of_encounter' na pratica, ja que combate nunca dura 8h.
+
+
             expiresAt: { kind: "end_of_encounter" },
             requiresConcentration: false,
           },
         },
       ];
     }
-    // ── Spec 005 Addendum — Concentration buffs ────────────────────
+
 
     case "blur": {
-      // RAW: Attackers have disadvantage on attack rolls vs you. Concentration, 1 min.
+
       return [
         {
           targetParticipantId: ctx.casterParticipantId,
@@ -231,8 +213,8 @@ export function materializeSpellEffects(
     }
 
     case "invisibility": {
-      // RAW: Target invisible. Attacks against have disadvantage, attacks by have advantage.
-      // Concentration, 1 hour. Breaking on attack/spell not tracked mechanically in MVP.
+
+
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
@@ -261,7 +243,7 @@ export function materializeSpellEffects(
     }
 
     case "greater-invisibility": {
-      // RAW: Same as invisibility but doesn't end on attack/spell.
+
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
@@ -290,7 +272,7 @@ export function materializeSpellEffects(
     }
 
     case "haste": {
-      // RAW: +2 AC, doubled speed, extra action (limited). Concentration, 1 min.
+
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
@@ -330,7 +312,7 @@ export function materializeSpellEffects(
     }
 
     case "fly": {
-      // RAW: Target gains 60 ft flying speed. Concentration, 10 min.
+
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
@@ -348,8 +330,8 @@ export function materializeSpellEffects(
     }
 
     case "fire-shield": {
-      // RAW: Resistance fire or cold (caster choice), retaliatory damage.
-      // No concentration. Duration 10 min = 100 rounds.
+
+
       return [
         {
           targetParticipantId: ctx.casterParticipantId,
@@ -366,7 +348,7 @@ export function materializeSpellEffects(
     }
 
     case "globe-of-invulnerability": {
-      // RAW: Immune to spells of 5th level or lower. Concentration, 1 min.
+
       return [
         {
           targetParticipantId: ctx.casterParticipantId,
@@ -383,7 +365,7 @@ export function materializeSpellEffects(
     }
 
     case "true-seeing": {
-      // RAW: Truesight 120 ft. No concentration. Duration 1 hour = 600 rounds.
+
       const target = ctx.targetParticipantIds[0] ?? ctx.casterParticipantId;
       return [
         {
@@ -401,9 +383,9 @@ export function materializeSpellEffects(
     }
 
     case "hex": {
-      // RAW 2024 XPHB Hex: 1 target, concentração 1h. Attacker deals extra 1d6 necrotic
-      // em qualquer weapon attack que hit no target enquanto hex mantém.
-      // Bonus action cast. Damage type: necrotic. Target ability check disadvantage (one chosen).
+
+
+
       const target = ctx.targetParticipantIds[0];
       if (!target) return [];
       return [
@@ -422,9 +404,9 @@ export function materializeSpellEffects(
     }
     case "hunters-mark":
     case "hunter-mark": {
-      // RAW 2024 XPHB Hunter's Mark: 1 target, concentração 1h. Attacker deals
-      // extra 1d6 em cada weapon attack hit no target enquanto marca mantém.
-      // Bonus action cast. No damage type increase (damage type do weapon).
+
+
+
       const target = ctx.targetParticipantIds[0];
       if (!target) return [];
       return [

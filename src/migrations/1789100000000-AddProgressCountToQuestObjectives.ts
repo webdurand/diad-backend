@@ -1,11 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * `progress_count` em quest_objectives — contador cumulativo pra objetivos
- * que exigem múltiplas ocorrências (ex: "matar 10 goblins"). Listeners
- * incrementam a cada match, comparam com `completion_conditions.amount`,
- * marcam completed quando atinge.
- */
+
 export class AddProgressCountToQuestObjectives1789100000000 implements MigrationInterface {
   name = "AddProgressCountToQuestObjectives1789100000000";
 

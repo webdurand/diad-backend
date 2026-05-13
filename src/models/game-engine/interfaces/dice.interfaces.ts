@@ -19,11 +19,7 @@ export interface InitiativeResult {
   total: number;
 }
 
-/**
- * Spec 016 P2 — Active dice check exposto ao frontend (SSE chunk).
- * targetD20 = max(2, dc - totalModifier). Mín 2 (always-fail nat 1),
- * máx 30 (impossível). Passive checks NUNCA emitem este payload.
- */
+
 export type DiceRollKind =
   | "ability_check"
   | "saving_throw"

@@ -1,13 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M1 — BG3/PoE pattern epilogue slides.
- *
- * Renderizadas no final da campanha: top-5 NarrativeDecisions guiam
- * condition matching. Dentro de cada category, slide com maior priority
- * vence (wins-by-priority). Template text interpola {subject.name},
- * {decision.text}, {consequence} etc.
- */
+
 export class CreateEndingSlide1778060000000 implements MigrationInterface {
   name = "CreateEndingSlide1778060000000";
 

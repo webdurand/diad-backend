@@ -4,9 +4,9 @@ import { generateSlug } from "./slug-generator";
 import { parseEntries } from "./entries-parser";
 import { SIZE_MAP, ABILITY_MAP } from "./code-maps";
 
-// ────────────────────────────────────────────────────────────────
-// 5etools input types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsRace {
   name: string;
@@ -67,9 +67,9 @@ interface FiveToolsSubrace {
   [key: string]: unknown;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Output types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TransformedAbilityBonus {
   ability_score: { slug: string; name: string };
@@ -109,9 +109,9 @@ export interface RaceTraitEntry {
   description: string[];
 }
 
-// ────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function resolveSpeed(speed: FiveToolsRace["speed"]): number {
   if (typeof speed === "number") return speed;
@@ -166,8 +166,8 @@ function resolveAbilityBonusOptions(
   return null;
 }
 
-// 2024 races don't have languageProficiencies in 5etools data;
-// map their secondary racial languages manually per SRD 5.2.1
+
+
 const RACE_LANGUAGES_2024: Record<string, string[]> = {
   dragonborn: ["common", "draconic"],
   dwarf: ["common", "dwarvish"],
@@ -175,7 +175,7 @@ const RACE_LANGUAGES_2024: Record<string, string[]> = {
   gnome: ["common", "gnomish"],
   goliath: ["common", "giant"],
   halfling: ["common", "halfling"],
-  human: ["common"], // + 1 choice
+  human: ["common"],
   orc: ["common", "orc"],
   tiefling: ["common", "infernal"],
 };
@@ -185,7 +185,7 @@ function resolveLanguages(
   raceName?: string,
 ): { slugs: string[]; desc: string; options: Record<string, unknown> | null } {
   if (!langProfs || langProfs.length === 0) {
-    // Try 2024 manual mapping
+
     const raceKey = raceName?.toLowerCase();
     if (raceKey && RACE_LANGUAGES_2024[raceKey]) {
       const slugs = RACE_LANGUAGES_2024[raceKey];
@@ -193,7 +193,7 @@ function resolveLanguages(
         (s) => s.charAt(0).toUpperCase() + s.slice(1),
       );
       const desc = `You can speak, read, and write ${langNames.join(" and ")}.`;
-      // Human gets 1 extra choice
+
       const options =
         raceKey === "human" ? { choose: 1, type: "languages" } : null;
       return { slugs, desc, options };
@@ -256,9 +256,9 @@ export function extractTraitEntries(entries?: unknown[]): RaceTraitEntry[] {
   return traits;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main functions
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function loadRacesJson(): {
   race: FiveToolsRace[];
@@ -272,7 +272,7 @@ function loadRacesJson(): {
 }
 
 function isImportableRace(race: FiveToolsRace): boolean {
-  // Skip races that are just copies without entries (can't resolve without deep merging)
+
   if (race._copy && !race.entries) return false;
   return true;
 }

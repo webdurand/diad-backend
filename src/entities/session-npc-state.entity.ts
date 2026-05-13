@@ -56,11 +56,7 @@ export class SessionNpcStateEntity {
   @JoinColumn({ name: "current_poi_id" })
   currentPoi?: LocationPoiEntity;
 
-  /**
-   * Tier de riqueza pra NPCs anônimos (commoner/guard/etc) — substitui
-   * inventário detalhado quando treasure[]=[]. Usado pra derivar pool
-   * genérica de loot quando PC rouba/saqueia. Defaults RAW DMG 2024.
-   */
+
   @Column({
     name: "wealth_tier",
     type: "varchar",
@@ -69,10 +65,7 @@ export class SessionNpcStateEntity {
   })
   wealthTier: "destitute" | "poor" | "modest" | "wealthy" | "noble";
 
-  /**
-   * Inventário concreto pros NPCs nomeados/importantes. Schema simples:
-   * [{itemId, name, quantity, value_gp}]. Vazio = derive de wealthTier.
-   */
+
   @Column({ type: "jsonb", default: () => "'[]'::jsonb" })
   treasure: Array<{
     itemId: string;
@@ -81,11 +74,7 @@ export class SessionNpcStateEntity {
     value_gp?: number;
   }>;
 
-  /**
-   * Moedas que o NPC carrega. Preenchido sob demanda quando theft/transfer
-   * acontece. Defaults zeros — getEffectiveCurrency consulta wealthTier
-   * pra derivar pool quando saldo < threshold.
-   */
+
   @Column({
     type: "jsonb",
     default: () => '\'{"cp":0,"sp":0,"gp":0,"pp":0}\'::jsonb',

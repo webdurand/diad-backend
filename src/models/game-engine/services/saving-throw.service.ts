@@ -17,7 +17,7 @@ import {
 import { SavingThrowResult } from "../interfaces/combat.interfaces";
 import { AdvantageResult } from "../interfaces/dice.interfaces";
 
-// --- DTOs ---
+
 
 export interface SavingThrowDto {
   characterId: string;
@@ -28,11 +28,7 @@ export interface SavingThrowDto {
   disadvantage?: boolean;
   sessionId?: string;
   encounterId?: string;
-  /**
-   * Spec 012 — se informado, leitura+consumo de `inspirationArmed` do
-   * participant adiciona advantage + zera flag encounter e ficha. Only
-   * applies quando caller conhece o participant (caminho combate/encounter).
-   */
+
   participantId?: string;
 }
 
@@ -60,7 +56,7 @@ export class SavingThrowService {
       return failure("Personagem nao encontrado.", "INVALID_PARTICIPANT");
     }
 
-    // Find saving throw bonus from computed sheet
+
     const saveBlock = sheet.savingThrows.find(
       (s) =>
         s.slug === dto.ability ||
@@ -75,7 +71,7 @@ export class SavingThrowService {
 
     const modifier = saveBlock.bonus;
 
-    // Check condition effects on saving throws
+
     const conditions = sheet.conditions ?? [];
     const condMods = this.conditionEffects.getSavingThrowModifiers(
       conditions,
@@ -94,14 +90,14 @@ export class SavingThrowService {
       return success(result, this.buildEvents(dto, 0, modifier, 0, false));
     }
 
-    // Determine advantage/disadvantage
+
     let hasAdvantage = dto.advantage ?? false;
     let hasDisadvantage = dto.disadvantage ?? false;
 
     if (condMods.hasAdvantage) hasAdvantage = true;
     if (condMods.hasDisadvantage) hasDisadvantage = true;
 
-    // Spec 012 — Heroic Inspiration: se armed, consome e aplica advantage.
+
     let inspirationEvent: GameEventData | null = null;
     if (dto.participantId) {
       const inspResult = await this.inspirationService.consumeIfArmed(
@@ -114,7 +110,7 @@ export class SavingThrowService {
       }
     }
 
-    // Roll the d20
+
     let roll: number;
     let advantageResult: AdvantageResult | undefined;
 
@@ -140,9 +136,9 @@ export class SavingThrowService {
       roll = this.diceService.roll(20);
     }
 
-    // Spec 012 Paladin — Aura of Protection L6 (+CHA save em aliados 10ft) +
-    // Aura Expansion L18 (10 → 30ft). Busca PC ally Paladin L6+ com flag
-    // hasAuraOfProtection dentro de 10/30ft do subject. Usa maior CHA mod.
+
+
+
     let auraBonus = 0;
     let auraSourceName: string | null = null;
     if (dto.participantId) {
@@ -154,8 +150,8 @@ export class SavingThrowService {
       auraSourceName = auraResult.sourceName;
     }
 
-    // Spec 004/012 — somar save_bonus/save_penalty dos EffectInstance do participant
-    // (Bless +1d4, Bane -1d4). Só quando conhecemos o participant.
+
+
     let effectBonusSum = 0;
     const rolledEffectBonuses: Array<{
       source: string;
@@ -187,7 +183,7 @@ export class SavingThrowService {
       }
     }
 
-    // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em saving throws (flat).
+
     const exhLevel =
       (sheet as { exhaustionLevel?: number }).exhaustionLevel ?? 0;
     const exhMods =
@@ -200,8 +196,8 @@ export class SavingThrowService {
       roll + modifier + auraBonus + effectBonusSum + exhaustionD20Penalty;
     let passed = total >= dto.dc;
 
-    // Fighter L9 Indomitable (RAW 2024) — se save falhou e o participant armou
-    // Indomitable, rerola d20 + bonus fighter level. Novo resultado substitui.
+
+
     let indomitableEvent: GameEventData | null = null;
     let indomitableReroll:
       | { originalRoll: number; newRoll: number; fighterLevel: number }
@@ -283,12 +279,7 @@ export class SavingThrowService {
     return success(result, events);
   }
 
-  /**
-   * Spec 012 Paladin Aura of Protection (L6+, expande 10→30ft em L18).
-   * Busca PCs Paladin L6+ vivos dentro de 10/30ft (2/6 cells) do subject
-   * + que tenham hasAuraOfProtection flag. Retorna o maior CHA mod encontrado
-   * (RAW: auras não stackam — pegamos a mais forte). Aplica em self + PC aliados.
-   */
+
   private async computeAuraOfProtectionBonus(
     subjectParticipantId: string,
     userId: string,
@@ -330,7 +321,7 @@ export class SavingThrowService {
       );
       if (!paladinClass || paladinClass.level < 6) continue;
       const auraExpansion = Boolean((sheet as any).hasAuraExpansion);
-      const reachCells = auraExpansion ? 6 : 2; // 30ft ou 10ft
+      const reachCells = auraExpansion ? 6 : 2;
 
       const dx = Math.abs(ally.positionX - subject.positionX);
       const dy = Math.abs(ally.positionY - subject.positionY);
@@ -341,7 +332,7 @@ export class SavingThrowService {
         (a) => a.slug === "cha" || a.slug === "charisma",
       );
       const chaMod = chaBlock?.modifier ?? 0;
-      const bonus = Math.max(chaMod, 1); // RAW: mínimo +1
+      const bonus = Math.max(chaMod, 1);
       if (bonus > bestBonus) {
         bestBonus = bonus;
         bestSource = (ally.displayName as string | undefined) ?? ally.id;
@@ -350,11 +341,7 @@ export class SavingThrowService {
     return { bonus: bestBonus, sourceName: bestSource };
   }
 
-  /**
-   * Fighter L9 Indomitable — se `indomitable_armed`, consome flag + retorna
-   * fighterLevel (pra somar ao novo d20). Callers chamam DEPOIS de saber que
-   * save falhou. Use/consumo já foi feito em `handleIndomitable` (arm).
-   */
+
   private async consumeIndomitableIfArmed(
     participantId: string,
     sheet: { classes?: Array<{ slug: string; level: number }> },
@@ -369,8 +356,8 @@ export class SavingThrowService {
     );
     const fighterLevel = fighterClass?.level ?? 0;
     if (fighterLevel < 9) {
-      // Feature requer L9+; se não tem, não-op (não reroll, mantém flag — mas
-      // na prática nunca chega aqui porque o arm exige L9).
+
+
       return null;
     }
 

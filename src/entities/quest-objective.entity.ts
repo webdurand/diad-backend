@@ -25,7 +25,7 @@ export class QuestObjectiveEntity {
   @Column({ type: "varchar", default: "locked" })
   status: "locked" | "active" | "completed" | "failed" | "optional";
 
-  // Objectives with same path_group are alternative paths
+
   @Column({ name: "path_group", type: "varchar", nullable: true })
   pathGroup?: string;
 

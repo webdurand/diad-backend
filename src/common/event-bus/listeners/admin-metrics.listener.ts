@@ -10,13 +10,7 @@ import {
   EventEnvelope,
 } from "../event-envelope.types";
 
-/**
- * Observabilidade-only: assina todos eventos pra trail estruturado em log e
- * tabela de idempotência. Agregação real vive em mv_admin_features_daily,
- * refreshado por cron 5min — listener não escreve métrica row-a-row pra evitar
- * write amplification em Postgres puro. Quando volume justificar realtime,
- * trocar pra incremental update via pg_ivm (gate documentado no ADR-0008).
- */
+
 @Injectable()
 export class AdminMetricsListener implements EventListener {
   readonly name = "AdminMetricsListener";

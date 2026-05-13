@@ -39,7 +39,7 @@ describe("class-availability (spec 012 canonical-first)", () => {
       expect(getCanonicalSubclassSlugs("paladin")).toEqual(["devotion"]);
       expect(getCanonicalSubclassSlugs("wizard")).toEqual(["evocation"]);
       expect(getCanonicalSubclassSlugs("sorcerer")).toEqual(["draconic"]);
-      // Druid tem 2 slugs can\u00f4nicos (duplica\u00e7\u00e3o DB 'druid-land' vs 'land')
+
       expect(getCanonicalSubclassSlugs("druid")).toEqual([
         "druid-land",
         "land",

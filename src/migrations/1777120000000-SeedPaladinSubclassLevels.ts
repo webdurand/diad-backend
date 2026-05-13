@@ -1,17 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 Paladin — Data gap: subclasses alternativas `paladin-ancients`,
- * `paladin-glory`, `paladin-vengeance` existem em `subclasses` mas NÃO têm
- * rows em `levels`. Só `devotion` tem 5 features linkadas (L3/L7/L15/L20).
- *
- * Cria L3 row pra cada + linka features XPHB L3 signature da subclass.
- *
- * Features XPHB L3 esperadas:
- *  - Ancients: channel-divinity-natures-wrath
- *  - Glory: channel-divinity-peerless-athlete + inspiring-smite
- *  - Vengeance: channel-divinity-vow-of-enmity
- */
+
 export class SeedPaladinSubclassLevels1777120000000 implements MigrationInterface {
   name = "SeedPaladinSubclassLevels1777120000000";
 

@@ -22,18 +22,7 @@ export interface AddEffectInput {
   requiresConcentration: boolean;
 }
 
-/**
- * Spec 004 — Effect Resolution Engine.
- *
- * Helpers para CRUD de EffectInstance em encounter_participant.effectInstances.
- * Mantem o invariante de concentracao: quando requiresConcentration=true, o
- * caster ganha um AppliedEffect { kind: 'effect-instance', refId } para que
- * ConcentrationService.break() cascade-remove em ambos os lados.
- *
- * Note: este service eh a porta de entrada p/ TODOS os callers que aplicam
- * effect mecanico. Callers diretos ao `target.effectInstances.push(...)` sao
- * proibidos (quebram a invariante de concentracao).
- */
+
 @Injectable()
 export class EffectInstanceService {
   constructor(
@@ -41,10 +30,7 @@ export class EffectInstanceService {
     private readonly participants: Repository<EncounterParticipantEntity>,
   ) {}
 
-  /**
-   * Aplica um EffectInstance em `target`. Se requiresConcentration=true,
-   * tambem grava tracker em caster.appliedEffects para cascade de quebra.
-   */
+
   async addEffect(
     target: EncounterParticipantEntity,
     input: AddEffectInput,
@@ -81,7 +67,7 @@ export class EffectInstanceService {
       },
     ];
 
-    // Cascade tracker no caster: quando ele quebra concentracao, effect some.
+
     if (input.requiresConcentration) {
       const caster = await this.participants.findOne({
         where: { id: input.sourceCasterParticipantId },
@@ -101,7 +87,7 @@ export class EffectInstanceService {
     return { effect, events };
   }
 
-  /** Remove effect por id; retorna events pra stream downstream. */
+
   async removeEffect(
     target: EncounterParticipantEntity,
     effectId: string,
@@ -118,7 +104,7 @@ export class EffectInstanceService {
     target.effectInstances = before.filter((e) => e.id !== effectId);
     await this.participants.save(target);
 
-    // Remover tracker no caster (se existia)
+
     if (removed.requiresConcentration) {
       const caster = await this.participants.findOne({
         where: { id: removed.sourceCasterParticipantId },
@@ -143,11 +129,7 @@ export class EffectInstanceService {
     };
   }
 
-  /**
-   * Remove em cascata todos os effects (em qualquer participant) cujo
-   * sourceCasterParticipantId === casterId E requiresConcentration === true.
-   * Chamado pelo ConcentrationService.break().
-   */
+
   async removeAllByConcentrationBreak(
     encounterId: string,
     casterId: string,
@@ -186,11 +168,7 @@ export class EffectInstanceService {
     return { events };
   }
 
-  /**
-   * Tick de durações no end-turn do participant.
-   * Decrementa `expiresAt.value` de effects com kind='rounds'|'turns'|'until_caster_turn';
-   * remove quando chega a 0.
-   */
+
   async tickAtEndOfTurn(participant: EncounterParticipantEntity): Promise<{
     events: GameEventData[];
     ticked: Array<{ effectId: string; newValue: number }>;

@@ -16,7 +16,7 @@ function extractDisplay(inner: string): string {
 
 function handleTag(tag: string, inner: string): string {
   switch (tag) {
-    // Formatting tags
+
     case "b":
     case "bold":
       return `**${extractDisplay(inner)}**`;
@@ -29,7 +29,7 @@ function handleTag(tag: string, inner: string): string {
     case "u":
       return extractDisplay(inner);
 
-    // Dice / numeric tags
+
     case "damage":
     case "dice":
       return extractDisplay(inner);
@@ -49,17 +49,17 @@ function handleTag(tag: string, inner: string): string {
       return val === "6" ? "(Recharge 6)" : `(Recharge ${val}-6)`;
     }
 
-    // Hit/miss markers
+
     case "h":
       return "Hit: ";
     case "m":
       return "Miss: ";
 
-    // Attack type codes
+
     case "atk":
       return ATTACK_TYPE_MAP[inner.trim()] ?? inner;
 
-    // Reference tags - extract display text before first pipe
+
     case "spell":
     case "item":
     case "creature":
@@ -92,12 +92,12 @@ function handleTag(tag: string, inner: string): string {
     case "itemMastery":
       return extractDisplay(inner);
 
-    // Class/subclass features - extract first part (name)
+
     case "classFeature":
     case "subclassFeature":
       return extractDisplay(inner);
 
-    // Book/adventure references - extract display text
+
     case "filter":
     case "book":
     case "adventure":
@@ -107,7 +107,7 @@ function handleTag(tag: string, inner: string): string {
     case "quickref":
       return extractDisplay(inner);
 
-    // Superscript / subscript / code / color - just text
+
     case "sup":
     case "sub":
     case "code":
@@ -116,7 +116,7 @@ function handleTag(tag: string, inner: string): string {
     case "highlight":
       return extractDisplay(inner);
 
-    // 2024 action tags
+
     case "actSave": {
       const ability = inner.trim().toLowerCase();
       return (
@@ -154,7 +154,7 @@ export function stripTags(text: string): string {
   let result = text;
   let previous = "";
 
-  // Iterate until no more tags (handles nested tags)
+
   while (result !== previous) {
     previous = result;
     result = result.replace(TAG_REGEX, (_match, tag: string, inner: string) => {

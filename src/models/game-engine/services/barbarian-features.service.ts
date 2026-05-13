@@ -15,15 +15,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Barbarian upper-tier features (RAW 2024 XPHB):
- *  - Relentless Rage L11: quando PC barbarian em rage cai a 0 HP, rola CON save
- *    DC 10 + 5×uses. Passa: volta pra 1 HP (dying state limpo). Reset: long rest.
- *  - Indomitable Might L18: STR check, se total < score, usa score.
- *  - Persistent Rage L15: flag sheet (computed). Rage só acaba se Incapacitated
- *    ou voluntariamente. Enforcement em V2 (rage-end hook).
- *  - Primal Champion L20: STR/CON +4 com cap 25. Wire em level-up (ability cap).
- */
+
 @Injectable()
 export class BarbarianFeaturesService {
   constructor(
@@ -38,12 +30,7 @@ export class BarbarianFeaturesService {
     private readonly eventService: EventService,
   ) {}
 
-  /**
-   * Relentless Rage (Barbarian L11, RAW 2024).
-   * Trigger: PC barbarian raging foi pra 0 HP.
-   * Rola CON save DC = 10 + 5 × (uses já consumidos).
-   * Success: heal pra 1 HP + marca uso. Failure: no-op (dying state preserva).
-   */
+
   async relentlessRage(
     userId: string,
     encounterId: string,
@@ -81,8 +68,8 @@ export class BarbarianFeaturesService {
     if (!(barbarian.conditions ?? []).includes("raging")) {
       return failure("Relentless Rage exige Rage ativo.", "RAGE_REQUIRED");
     }
-    // PCs vivem HP em character_state. Use dyingState como trigger (combat.service
-    // marca 'dying' quando hpAfter=0). Participant.currentHp pode estar stale.
+
+
     if (barbarian.dyingState !== "dying" && (barbarian.currentHp ?? 1) > 0) {
       return failure(
         "Trigger é 0 HP. HP atual > 0 e não dying.",
@@ -100,7 +87,7 @@ export class BarbarianFeaturesService {
 
     let newHp = barbarian.currentHp ?? 0;
     if (passed) {
-      // heal pra 1 HP
+
       const hpResult = await this.stateService.updateHp(
         userId,
         barbarian.characterId,
@@ -109,7 +96,7 @@ export class BarbarianFeaturesService {
         },
       );
       newHp = hpResult.currentHp;
-      // Limpa dying state
+
       barbarian.dyingState = "none";
       barbarian.isDefeated = false;
       barbarian.currentHp = newHp;
@@ -153,11 +140,7 @@ export class BarbarianFeaturesService {
     );
   }
 
-  /**
-   * Indomitable Might (Barbarian L18, RAW 2024). Check STR: se total < STR score,
-   * usa STR score como resultado. Endpoint recebe rawCheckTotal + abilitySlug.
-   * Backend retorna effectiveTotal (max(rawTotal, strScore) se ability='str').
-   */
+
   async indomitableMight(
     userId: string,
     encounterId: string,
@@ -195,7 +178,7 @@ export class BarbarianFeaturesService {
 
     const ability = sheet.abilityScores.find((a) => a.slug === abilitySlug);
     const abilityScore = ability?.score ?? 0;
-    // Só aplica pra STR (RAW 2024 XPHB: especifica STR check/save)
+
     const applicable = abilitySlug === "str";
     const effectiveTotal =
       applicable && rawCheckTotal < abilityScore ? abilityScore : rawCheckTotal;

@@ -1,8 +1,4 @@
-/**
- * Domains plug into the realtime gateway by providing a RoomAuthorizer
- * for a given room-key prefix. Gateway has no domain knowledge; it just
- * delegates authorization to the registered authorizer.
- */
+
 export interface RoomAuthorizer {
   readonly prefix: string;
   canJoin(userId: string, roomKey: string): Promise<boolean>;

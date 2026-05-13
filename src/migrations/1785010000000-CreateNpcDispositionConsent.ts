@@ -1,27 +1,11 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 027 (M2, AC2.2) — disposition + consent dual-axis state pro NPC.
- *
- * Hoje `npcs.disposition` é uma string global ("neutral"/"hostile"/"friendly")
- * e não cobre nem (a) consent state ortogonal — Padre Anselmo é friendly mas
- * pode estar refusing pra Charm Person — nem (b) escopo per-campaign quando o
- * NPC tem dispositions diferentes em campanhas distintas.
- *
- * Esta migration adiciona uma tabela relacional `npc_disposition` (npc × campaign)
- * + tabela filha `npc_consented_actions` com TTL. Foundry VTT 4-valor enum
- * pra disposition + PoE2-style consent enum + tags categóricas.
- *
- * `npcs.disposition` permanece (compat com código legacy) mas vira default
- * fallback — services novos consultam `npc_disposition` primeiro.
- *
- * Down() simétrico (cascade child antes do parent).
- */
+
 export class CreateNpcDispositionConsent1785010000000 implements MigrationInterface {
   name = "CreateNpcDispositionConsent1785010000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    // ─────────── npc_disposition ───────────
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "npc_disposition" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -56,9 +40,9 @@ export class CreateNpcDispositionConsent1785010000000 implements MigrationInterf
       `CREATE INDEX IF NOT EXISTS "IDX_npc_disp_campaign" ON "npc_disposition" ("campaign_id")`,
     );
 
-    // ─────────── npc_consented_actions ───────────
-    // Linha por ação consentida — TTL via `expires_at` (NULL = permanente).
-    // Lookup do Arbiter: WHERE npc_disposition_id = ? AND (expires_at IS NULL OR expires_at > now()).
+
+
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "npc_consented_actions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -78,9 +62,9 @@ export class CreateNpcDispositionConsent1785010000000 implements MigrationInterf
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "IDX_npc_consent_disp" ON "npc_consented_actions" ("npc_disposition_id")`,
     );
-    // Index parcial pra hot-path do Arbiter — só rows ativas. Postgres 14+
-    // suporta now() em predicate via IMMUTABLE wrapper, mas mais simples manter
-    // o filtro de expires_at no SQL do service. Index full cobre lookup por NPC.
+
+
+
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "IDX_npc_consent_action" ON "npc_consented_actions" ("npc_disposition_id", "action_ref")`,
     );

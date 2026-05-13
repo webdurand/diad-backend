@@ -4,7 +4,7 @@ export class CreateGameEngineTables1774000000000 implements MigrationInterface {
   name = "CreateGameEngineTables1774000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // --- game_sessions ---
+
     await queryRunner.query(`
       CREATE TABLE "game_sessions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -26,7 +26,7 @@ export class CreateGameEngineTables1774000000000 implements MigrationInterface {
       `CREATE INDEX "IDX_game_sessions_owner" ON "game_sessions" ("owner_id")`,
     );
 
-    // --- encounters ---
+
     await queryRunner.query(`
       CREATE TABLE "encounters" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -48,7 +48,7 @@ export class CreateGameEngineTables1774000000000 implements MigrationInterface {
       `CREATE INDEX "IDX_encounters_session" ON "encounters" ("session_id")`,
     );
 
-    // --- encounter_participants ---
+
     await queryRunner.query(`
       CREATE TABLE "encounter_participants" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -83,7 +83,7 @@ export class CreateGameEngineTables1774000000000 implements MigrationInterface {
       `CREATE INDEX "IDX_ep_encounter" ON "encounter_participants" ("encounter_id")`,
     );
 
-    // --- game_events ---
+
     await queryRunner.query(`
       CREATE TABLE "game_events" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),

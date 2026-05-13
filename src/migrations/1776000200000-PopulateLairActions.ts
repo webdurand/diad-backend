@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 004 — Data migration.
- * Popula `monsters.lair_actions` para uma lista curada de monstros lendários
- * do SRD que aparecem em covis (lairs).
- *
- * O conjunto v1 cobre os dragões adultos+ (cromáticos e metálicos) e ícones
- * clássicos (Lich, Vampire, Beholder, Mind Flayer Arcanist, Kraken, Tarrasque).
- * Outros monstros podem ser adicionados em data migrations futuras.
- *
- * Idempotente: UPSERT por slug.
- */
+
 export class PopulateLairActions1776000200000 implements MigrationInterface {
   name = "PopulateLairActions1776000200000";
 

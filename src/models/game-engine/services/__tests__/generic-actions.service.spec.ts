@@ -1,13 +1,4 @@
-/**
- * Spec 003 — testes consolidados do GenericActionsService (T022-T027).
- *
- * Cobre os 7 handlers (dodge, dash, disengage, help, hide, ready, search,
- * use-object — use-object limitado a poções hoje) com foco em invariantes
- * observáveis: flags na entity, eventos gerados, respeitar action economy.
- *
- * Usa mocks de repositories (padrão 002) ao invés de DB real — GenericActionsService
- * é puro em relação a HTTP/DB exceto nos `.save()`.
- */
+
 
 import { GenericActionsService } from "../generic-actions.service";
 import { ConditionEffectsService } from "../condition-effects.service";
@@ -172,7 +163,7 @@ describe("GenericActionsService", () => {
     it("adiciona hidden às conditions quando passa o check", async () => {
       const actor = makeParticipant("a");
       const { svc } = makeService(makeEncounter(["a"]), { a: actor });
-      // Força roll alto via mock
+
       const spy = jest
         .spyOn(DiceService.prototype, "rollExpression")
         .mockReturnValue({

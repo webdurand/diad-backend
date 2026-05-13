@@ -3,9 +3,9 @@ import * as path from "path";
 import { generateSlug } from "./slug-generator";
 import { parseEntries } from "./entries-parser";
 
-// ────────────────────────────────────────────────────────────────
-// 5etools input types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsSubclass {
   name: string;
@@ -25,9 +25,9 @@ interface FiveToolsSubclass {
   [key: string]: unknown;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Output types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TransformedSubclass {
   slug: string;
@@ -41,9 +41,9 @@ export interface TransformedSubclass {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const CORE_CLASSES = new Set([
   "barbarian",
@@ -75,9 +75,9 @@ const CLASS_FILES = [
   "class-wizard.json",
 ];
 
-// ────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function loadClassFile(filename: string): {
   subclass: FiveToolsSubclass[];
@@ -91,9 +91,9 @@ function loadClassFile(filename: string): {
 }
 
 function isImportable(sub: FiveToolsSubclass): boolean {
-  // Skip _copy entries (cross-edition duplicates without original data)
+
   if (sub._copy) return false;
-  // Only import subclasses for core classes
+
   if (!CORE_CLASSES.has(sub.className.toLowerCase())) return false;
   return true;
 }
@@ -116,13 +116,13 @@ function resolveDescription(entries?: unknown[]): string[] {
 }
 
 function resolveFlavorText(sub: FiveToolsSubclass): string {
-  // Use the subclass name as a basic flavor if no dedicated flavor field exists
+
   return `${sub.className}: ${sub.name}`;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main function
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export function transformSubclasses(): TransformedSubclass[] {
   const results: TransformedSubclass[] = [];

@@ -15,23 +15,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Paladin features (RAW 2024 XPHB):
- *
- *  - L1 Divine Smite: spell L1 (Evocation), Bonus Action imediatamente após
- *    hit com melee weapon OU unarmed. Base 2d8 radiant + (slotLevel-1)×1d8
- *    (cap 5d8 em slot 4+). +1d8 adicional se target é Fiend ou Undead.
- *    Crit dobra os dice. NÃO aplica em ranged/spell attacks.
- *
- *  - L2 Paladin's Smite: 1 cast grátis de Divine Smite /long rest (sem slot).
- *    Endpoint aceita `freeCast: true` pra bypass slot consumption.
- *
- *  - L11 Radiant Strikes (substitui Improved Divine Smite 2014): passive rider
- *    +1d8 radiant em hit melee/unarmed. Stacka com Divine Smite.
- *
- *  - Devotion L3 Sacred Weapon (CD): bônus CHA em attack rolls + arma emite
- *    radiant damage + luz 20ft por 1 min. 1 use CD.
- */
+
 @Injectable()
 export class PaladinFeaturesService {
   constructor(
@@ -46,15 +30,7 @@ export class PaladinFeaturesService {
     private readonly effectInstances: EffectInstanceService,
   ) {}
 
-  /**
-   * Divine Smite (RAW 2024 XPHB): chamado após hit confirmado com melee/unarmed.
-   * Backend calcula damage + aplica. Cliente envia:
-   *  - targetParticipantId
-   *  - slotLevel (1-9; 0/null se freeCast via Paladin's Smite)
-   *  - hitWasCritical (boolean — dobra dice)
-   *  - targetType ('fiend'|'undead'|null — +1d8 adicional se fiend/undead)
-   *  - freeCast (boolean — Paladin's Smite L2, não consome slot)
-   */
+
   async divineSmite(
     userId: string,
     encounterId: string,
@@ -96,7 +72,7 @@ export class PaladinFeaturesService {
       );
     }
 
-    // Paladin's Smite L2 necessário pra free cast
+
     if (freeCast) {
       const hasFreeSmite =
         (sheet as unknown as { hasPaladinsSmite?: boolean })
@@ -113,10 +89,10 @@ export class PaladinFeaturesService {
       }
     }
 
-    // RAW 2024: base 2d8 + (slotLevel-1)×1d8, cap slot 4+ = 5d8
-    // Fiend/Undead bonus: +1d8 adicional.
+
+
     const effectiveSlot = freeCast ? 1 : Math.min(slotLevel, 4);
-    const baseDice = 2 + (effectiveSlot - 1); // 2d8, 3d8, 4d8, 5d8
+    const baseDice = 2 + (effectiveSlot - 1);
     const fiendUndeadBonus = targetType === "fiend" || targetType === "undead";
     const bonusDice = fiendUndeadBonus ? 1 : 0;
     let totalDice = baseDice + bonusDice;
@@ -131,9 +107,9 @@ export class PaladinFeaturesService {
     target.currentHp = Math.max(0, prevHp - damage);
     await this.participantRepo.save(target);
 
-    // MVP: freeCast não consome slot. slot consumption de slot normal é
-    // responsabilidade do cast spell flow (harness controla via /cast-spell
-    // do game-engine; esse endpoint assume slot já consumido upstream).
+
+
+
     const slotConsumed = !freeCast;
 
     const event: GameEventData = {
@@ -177,10 +153,7 @@ export class PaladinFeaturesService {
     );
   }
 
-  /**
-   * Radiant Strikes (Paladin L11+, RAW 2024): passive +1d8 radiant em hit
-   * melee/unarmed. Endpoint chamado pós hit confirmado, stacka com Divine Smite.
-   */
+
   async radiantStrikes(
     userId: string,
     encounterId: string,
@@ -243,10 +216,7 @@ export class PaladinFeaturesService {
     );
   }
 
-  /**
-   * Sacred Weapon (Paladin Devotion L3 CD): arma +CHA em attack rolls + radiant
-   * damage + luz 20ft por 1 min. MVP: aplica effect marker (buff) no paladin.
-   */
+
   async sacredWeapon(
     userId: string,
     encounterId: string,
@@ -278,13 +248,13 @@ export class PaladinFeaturesService {
     const chaAbility = sheet.abilityScores.find((a) => a.slug === "cha");
     const chaBonus = chaAbility?.modifier ?? 0;
 
-    // Effect: damage_bonus em melee attacks + buff marker visible
+
     await this.effectInstances.addEffect(paladin, {
       kind: "damage_bonus",
       sourceFeatureSlug: "sacred-weapon",
       sourceCasterParticipantId: paladin.id,
       payload: { amount: chaBonus, scope: "melee" },
-      expiresAt: { kind: "rounds", value: 10 }, // 1 min = 10 rounds
+      expiresAt: { kind: "rounds", value: 10 },
       requiresConcentration: false,
     });
 

@@ -2,9 +2,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { generateSlug } from "./slug-generator";
 
-// ────────────────────────────────────────────────────────────────
-// 5etools input types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsClass {
   name: string;
@@ -27,9 +27,9 @@ interface ClassTableGroup {
   rowsSpellProgression?: number[][];
 }
 
-// ────────────────────────────────────────────────────────────────
-// Output types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TransformedLevel {
   slug: string;
@@ -44,9 +44,9 @@ export interface TransformedLevel {
   raw: Record<string, unknown>;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const CORE_CLASSES = new Set([
   "barbarian",
@@ -101,9 +101,9 @@ const PROF_BONUS_TABLE: Record<number, number> = {
   20: 6,
 };
 
-// ────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function loadClassFile(filename: string): {
   class: FiveToolsClass[];
@@ -203,9 +203,9 @@ function resolveSpellSlotProgression(
   return null;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main function
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export function transformLevels(): TransformedLevel[] {
   const results: TransformedLevel[] = [];

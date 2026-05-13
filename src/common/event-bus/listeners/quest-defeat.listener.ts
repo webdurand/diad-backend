@@ -12,18 +12,7 @@ import { EventCategory, EventEnvelope } from "../event-envelope.types";
 import { QuestService } from "src/models/world/services/quest.service";
 import { slugifyFuzzy } from "../../text/slugify-fuzzy";
 
-/**
- * Quando um participant morre em encounter, avança objetivos active de kinds:
- *   - `defeat_monster`: só conta se `participant.type === "monster"`. Counter
- *     cumulativo via `progress_count`; completa quando atinge `amount`
- *     (default 1 se ausente).
- *   - `defeat_villain`: só conta se `participant.type === "npc"`. Single-shot
- *     (amount sempre 1) — vilão nomeado, alvo único.
- *
- * Match por nome via `slugifyFuzzy` (mesma normalização do detector
- * determinístico em `quest_judge.py` — tolerante a acentos, conectores e
- * underscore vs hífen). Idempotente via `event_listener_processed`.
- */
+
 @Injectable()
 export class QuestDefeatListener implements EventListener {
   readonly name = "QuestDefeatListener";
@@ -109,7 +98,7 @@ export class QuestDefeatListener implements EventListener {
       await this.objectiveRepo.save(activeObj);
 
       if (newProgress < requiredAmount) {
-        // Progresso parcial — fica pra próximo kill.
+
         this.logger.info("quest_defeat.progress", {
           "quest.slug": quest.slug,
           "objective.idx": activeObj.sortOrder,

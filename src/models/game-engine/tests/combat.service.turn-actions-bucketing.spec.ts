@@ -3,15 +3,7 @@ import { DiceService } from "../services/dice.service";
 import { ConditionEffectsService } from "../services/condition-effects.service";
 import { MonsterActionResolver } from "../services/monster-action-resolver.service";
 
-/**
- * Unit tests for US13 (005-encounter-polish-and-observability) — bucketing
- * of turn actions: ataques e multiattaques ficam em `actions[]`; as 8 ações
- * genéricas PHB (Dodge/Dash/Disengage/Help/Hide/Ready/Search/Use Object)
- * ficam em `genericActions[]` separado.
- *
- * Bug reportado: a aba "Atacar" misturava genéricas com ataques reais,
- * pois `getTurnActions` devolvia `actions: [...attacks, ...genericActions]`.
- */
+
 
 function makeParticipant(overrides: Record<string, any> = {}): any {
   return {
@@ -228,7 +220,7 @@ function createHarness() {
       }),
     } as any,
     { shouldOfferShield: async () => null } as any,
-    // Spec 027 (M2 follow-up) — EncounterEndDetectorService stub
+
     { tryAutoEnd: async () => null, detectOutcome: async () => null } as any,
     { processRoundStart: async () => [] } as any,
     { processAfterPcTurn: async () => [] } as any,

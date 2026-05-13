@@ -1,18 +1,4 @@
-/**
- * Spec 020 — Revivify Check (PHB 5e p.272 — RAW puro, stateless).
- *
- * NÃO executa o cast. Apenas valida pré-requisitos para a magia ser elegível:
- *   1. Alvo tem dyingState='dead' (e o caster declarou esse character_id)
- *   2. Tempo desde a morte ≤ 1 minuto (60s) — janela rígida RAW
- *   3. Diamante de 300+gp declarado como componente material
- *   4. Corpo intacto (não-RAW: campo `body_destroyed` na character state)
- *
- * Emite NarrativeEvent.revivify_eligibility_checked (audience: Narrator,
- * CompanionAI, Director — info para arc-beat de fuga, drama, etc.).
- *
- * Nota RAW: spell em si tem casting time 1 action, range Touch — esses
- * detalhes ficam com cast_spell normal. Aqui só checamos eligibility.
- */
+
 
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -30,7 +16,7 @@ export interface RevivifyCheckInput {
   hasDiamond300gp?: boolean;
   casterCharacterId?: string | null;
   campaignId?: string;
-  /** Caller-declared dying state (override). Default: lookup latest participant. */
+
   targetDyingState?: "none" | "dying" | "stable" | "dead" | "captured";
   bodyDestroyed?: boolean;
   traceId?: string;
@@ -44,7 +30,7 @@ export interface RevivifyCheckResult {
   narrativeDescriptor: string;
 }
 
-const REVIVIFY_WINDOW_MIN = 1; // RAW PHB
+const REVIVIFY_WINDOW_MIN = 1;
 
 @Injectable()
 export class RevivifyCheckService {
@@ -68,8 +54,8 @@ export class RevivifyCheckService {
       );
     }
 
-    // 1. dyingState='dead': caller pode passar `targetDyingState`; senão
-    // tentamos lookup via participant mais recente do PC.
+
+
     let dyingState = input.targetDyingState;
     if (!dyingState) {
       const part = await this.partRepo.findOne({
@@ -93,7 +79,7 @@ export class RevivifyCheckService {
 
     const missing: string[] = [];
 
-    // 2. window
+
     if (input.timeSinceDeathMin < 0) {
       missing.push("invalid_time_input");
     }
@@ -105,12 +91,12 @@ export class RevivifyCheckService {
       Math.floor((REVIVIFY_WINDOW_MIN - input.timeSinceDeathMin) * 60),
     );
 
-    // 3. diamond
+
     if (input.hasDiamond300gp !== true) {
       missing.push("missing_diamond_300gp");
     }
 
-    // 4. body intact — caller declara via bodyDestroyed=true
+
     if (input.bodyDestroyed === true) {
       throw new DomainException(
         ErrorCode.REVIVIFY_BODY_DESTROYED,
@@ -119,8 +105,8 @@ export class RevivifyCheckService {
       );
     }
 
-    // 5. caster knows spell — V1 não valida (cast_spell endpoint já checa
-    // spell_known/prepared). Retornamos null pra indicar "não validado aqui".
+
+
     const casterKnowsSpell: boolean | null = null;
 
     const eligible = missing.length === 0;
@@ -150,7 +136,7 @@ export class RevivifyCheckService {
         });
         await this.eventBus.publish(envelope);
       } catch {
-        /* best-effort */
+
       }
     }
 

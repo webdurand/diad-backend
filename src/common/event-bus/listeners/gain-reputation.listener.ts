@@ -9,18 +9,7 @@ import { EventCategory, EventEnvelope } from "../event-envelope.types";
 import { QuestService } from "src/models/world/services/quest.service";
 import { slugifyFuzzy } from "../../text/slugify-fuzzy";
 
-/**
- * Avança/falha objetivos `gain_reputation` baseado em `reputation_shift`.
- *
- * Threshold simples (alinhado à intuição do produto):
- *   - `newValue >= completionConditions.amount` → completed
- *   - `newValue < 0` → failed (player rompeu com a facção — tipicamente mata
- *     líder, agride membros, alia-se com inimigo declarado)
- *   - intermediário → não muda nada (player ainda está ganhando reputação)
- *
- * Match por nome via `slugifyFuzzy` (mesma normalização do detector de
- * defeat). Idempotente via `event_listener_processed`.
- */
+
 @Injectable()
 export class GainReputationListener implements EventListener {
   readonly name = "GainReputationListener";

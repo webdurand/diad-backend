@@ -165,7 +165,7 @@ describe("LegendaryActionsCoordinator", () => {
     });
     const enc = { id: ENC_ID } as EncounterEntity;
     await coord.processAfterPcTurn(enc, PC_ID);
-    // Apenas o monstro real é avaliado (não o PC)
+
     expect(aiProxy.decideLegendary).toHaveBeenCalledTimes(1);
     expect(aiProxy.decideLegendary).toHaveBeenCalledWith(
       expect.objectContaining({ monsterParticipantId: MON_ID }),

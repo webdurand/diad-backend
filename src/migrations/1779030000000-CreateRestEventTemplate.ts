@@ -1,15 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 016 M0 — RestEventTemplate (camp events pool, BG3-inspired).
- *
- * Pool priorizado: bond > chekhov > dream > mythic > interruption > nothing.
- * Director picker faz weighted roll, max 1 event/long rest (anti-overload).
- *
- * Templates iniciais seedados via migration separada (M4).
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §6.3 e contract `rest-session.json#restEventTemplate`.
- */
+
 export class CreateRestEventTemplate1779030000000 implements MigrationInterface {
   name = "CreateRestEventTemplate1779030000000";
 

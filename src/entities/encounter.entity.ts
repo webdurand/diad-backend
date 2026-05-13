@@ -43,7 +43,7 @@ export class EncounterEntity {
   @Column({ name: "turn_order", type: "jsonb", default: [] })
   turnOrder: string[];
 
-  /** Spec 004: encontro acontece no covil de criatura lendária? Habilita lair actions. */
+
   @Column({ name: "in_lair", type: "boolean", default: false })
   inLair: boolean;
 
@@ -58,12 +58,12 @@ export class EncounterEntity {
   @Column({ name: "map_data", type: "jsonb", default: {} })
   mapData: {
     backgroundUrl?: string;
-    gridSize?: number; // cells per row (default 20)
-    gridColumns?: number; // columns (default = gridSize)
-    gridRows?: number; // rows (default = gridSize)
-    gridVisible?: boolean; // show grid lines (default true)
-    gridColor?: string; // grid line color (default rgba(255,255,255,0.15))
-    /** Spec 012 Lote B — RAW 2024: cells de difficult terrain dobram custo de movimento. */
+    gridSize?: number;
+    gridColumns?: number;
+    gridRows?: number;
+    gridVisible?: boolean;
+    gridColor?: string;
+
     difficultTerrainCells?: Array<{ x: number; y: number }>;
   };
 

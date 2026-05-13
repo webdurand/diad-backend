@@ -4,7 +4,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
   name = "CreateWorldTables1774100000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // --- campaigns ---
+
     await queryRunner.query(`
       CREATE TABLE "campaigns" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -32,7 +32,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_campaigns_dm" ON "campaigns" ("dm_user_id")`,
     );
 
-    // --- campaign_players ---
+
     await queryRunner.query(`
       CREATE TABLE "campaign_players" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -58,7 +58,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_cp_user" ON "campaign_players" ("user_id")`,
     );
 
-    // --- locations ---
+
     await queryRunner.query(`
       CREATE TABLE "locations" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -90,7 +90,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_loc_parent" ON "locations" ("parent_id")`,
     );
 
-    // --- location_connections ---
+
     await queryRunner.query(`
       CREATE TABLE "location_connections" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -110,7 +110,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       )
     `);
 
-    // --- factions ---
+
     await queryRunner.query(`
       CREATE TABLE "factions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -138,7 +138,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_fac_campaign" ON "factions" ("campaign_id")`,
     );
 
-    // --- npcs ---
+
     await queryRunner.query(`
       CREATE TABLE "npcs" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -178,7 +178,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_npc_location" ON "npcs" ("current_location_id")`,
     );
 
-    // --- npc_relationships ---
+
     await queryRunner.query(`
       CREATE TABLE "npc_relationships" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -203,7 +203,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_nr_source" ON "npc_relationships" ("source_npc_id")`,
     );
 
-    // --- faction_relations ---
+
     await queryRunner.query(`
       CREATE TABLE "faction_relations" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -221,7 +221,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       )
     `);
 
-    // --- story_arcs ---
+
     await queryRunner.query(`
       CREATE TABLE "story_arcs" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -244,7 +244,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_sa_campaign" ON "story_arcs" ("campaign_id")`,
     );
 
-    // --- quests ---
+
     await queryRunner.query(`
       CREATE TABLE "quests" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -278,7 +278,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_q_campaign" ON "quests" ("campaign_id")`,
     );
 
-    // --- quest_objectives ---
+
     await queryRunner.query(`
       CREATE TABLE "quest_objectives" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -295,7 +295,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       )
     `);
 
-    // --- quest_prerequisites ---
+
     await queryRunner.query(`
       CREATE TABLE "quest_prerequisites" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -311,7 +311,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       )
     `);
 
-    // --- loot_tables ---
+
     await queryRunner.query(`
       CREATE TABLE "loot_tables" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -335,7 +335,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       `CREATE INDEX "IDX_lt_campaign" ON "loot_tables" ("campaign_id")`,
     );
 
-    // --- loot_table_items ---
+
     await queryRunner.query(`
       CREATE TABLE "loot_table_items" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -355,7 +355,7 @@ export class CreateWorldTables1774100000000 implements MigrationInterface {
       )
     `);
 
-    // --- encounter_templates ---
+
     await queryRunner.query(`
       CREATE TABLE "encounter_templates" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),

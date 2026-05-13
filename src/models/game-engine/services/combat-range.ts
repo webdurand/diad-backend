@@ -1,13 +1,4 @@
-/**
- * Spec 012 #1 — range enforcement pra resolveAttack.
- *
- * Funções puras (sem DI, sem IO). Recebem o range string já populado pelo
- * actions.service / monsterActionResolver (`"5 ft"`, `"150/600 ft"`, `"Self"`,
- * `"Touch"`) + posições de grid, retornam ok/disadvantage/out-of-range.
- *
- * RAW D&D 5e: cada cell do grid = 5ft, Chebyshev distance (diagonais contam
- * como 1 cell, NÃO como 1.5). Armas ranged entre normal e long = disadvantage.
- */
+
 
 export interface Position {
   x: number;
@@ -15,20 +6,20 @@ export interface Position {
 }
 
 export interface ParsedRange {
-  /** Distância normal em pés. Para melee weapons é o reach (5ft default, 10ft reach). */
+
   normal: number;
-  /** Long range em pés (só ranged weapons/spells com categoria `150/600`). */
+
   long?: number;
 }
 
 export interface RangeCheckResult {
   ok: boolean;
-  /** True quando falta grid info (position null em um dos lados) — check é pulado. */
+
   skipped?: boolean;
-  /** True se o alvo está entre normal e long (ranged com disadvantage). */
+
   disadvantage: boolean;
   distanceFt: number;
-  /** Alcance máximo da ação (long se existir, senão normal). */
+
   maxFt: number;
 }
 

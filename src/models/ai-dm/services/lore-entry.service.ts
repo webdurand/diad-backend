@@ -74,10 +74,7 @@ export class LoreEntryService {
     return entry;
   }
 
-  /**
-   * Retorna entries ativadas por keyword match (case-insensitive substring)
-   * no texto recente. Ordenadas por priority desc.
-   */
+
   async matchActivation(
     campaignId: string,
     recentText: string,

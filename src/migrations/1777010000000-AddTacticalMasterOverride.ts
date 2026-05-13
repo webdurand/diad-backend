@@ -1,10 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Fighter L9 Tactical Master (RAW 2024) — pode aplicar mastery alternativa
- * (Push/Sap/Slow) em qualquer weapon que domina. Armazena override até consumo
- * no próximo attack.
- */
+
 export class AddTacticalMasterOverride1777010000000 implements MigrationInterface {
   name = "AddTacticalMasterOverride1777010000000";
 

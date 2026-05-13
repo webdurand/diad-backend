@@ -60,34 +60,28 @@ import {
   type Position as GridPosition,
 } from "./combat-range";
 
-// --- DTOs ---
+
 
 export interface AttackDto {
   attackerParticipantId: string;
-  /** Single-target: required for regular attacks. */
+
   targetParticipantId: string;
-  /** Multiattack only: one entry per sub-attack in sequence order. */
+
   targetParticipantIds?: string[];
-  /** Action name/id from ActionsService (for PCs) or monster action name.
-   *  Spec 003: preserved for internal multiattack / legacy flows. Novos
-   *  chamadores externos devem usar `actionSlug`; o service traduz. */
+
   actionName: string;
-  /** Spec 003: slug canônico vindo do CombatActionRegistry (ex: 'longsword-attack',
-   *  'unarmed-strike', 'bugbear-morningstar'). Quando presente, `actionName`
-   *  é derivado e o slug é usado para log/events. */
+
   actionSlug?: string;
-  /** Spec 003: opções específicas da ação (ex: Unarmed Strike mode='damage'|'grapple'|'shove'). */
+
   options?: Record<string, unknown>;
-  /** Manual override from DM */
+
   forceAdvantage?: boolean;
   forceDisadvantage?: boolean;
-  /** UserId of the session owner (DM), needed for CharacterState delegation */
+
   ownerUserId: string;
-  /** Internal: skip turn/action validation and action-consumption. Set only by resolveMultiattack. */
+
   _isSubAttack?: boolean;
-  /** Spec 012 Lote B — Opportunity Attack: skipa range check porque o trigger
-   *  foi computado no momento que o mover ainda estava em reach. Attack roda
-   *  "retroativamente" com target já potencialmente fora de reach. */
+
   _bypassRangeCheck?: boolean;
 }
 
@@ -117,7 +111,7 @@ export interface DamageDto {
   amount: number;
   damageType: string;
   ownerUserId: string;
-  /** Set by attack resolver when the hit was a critical. Used for death-save failures at 0 HP. */
+
   fromCriticalHit?: boolean;
 }
 
@@ -165,19 +159,15 @@ export class CombatService {
     private readonly exhaustion: ExhaustionService,
     private readonly capstones: CapstonesService,
     private readonly reactionOpportunity: ReactionOpportunityService,
-    // Spec 027 (M2 follow-up) — single auto-end hook em endTurn (lifecycle).
-    // Detector é gateado por solo (no-op em multiplayer DM-led).
+
+
     private readonly encounterEndDetector: EncounterEndDetectorService,
     private readonly lairActionsCoordinator: LairActionsCoordinator,
     private readonly legendaryActionsCoordinator: LegendaryActionsCoordinator,
     private readonly monsterReactions: MonsterReactionService,
   ) {}
 
-  /**
-   * Spec 012 \u2014 aplica dano num PC respeitando Wild Shape/Polymorph: se PC
-   * est\u00e1 transformado, dano vai pro form HP primeiro; excesso (overflow) vai
-   * pro HP original. Retorna shape compat\u00edvel com stateService.updateHp.
-   */
+
   private async applyDamageToPcFormAware(
     target: EncounterParticipantEntity,
     damage: number,
@@ -201,8 +191,8 @@ export class CombatService {
         damage,
       );
       if (!res.reverted) {
-        // Form absorveu tudo. N\u00e3o toca o HP original.
-        // Retorna a cabe\u00e7a do form como "currentHp" pra logs/eventos externos.
+
+
         const formHp =
           target.transformationState.form.currentHp - res.absorbedByForm;
         return {
@@ -211,8 +201,8 @@ export class CombatService {
           instantDeath: false,
         };
       }
-      // Reverteu. Overflow j\u00e1 foi aplicado no char_state pelo service.
-      // Reload state pra refletir mudan\u00e7a atual.
+
+
       if (res.overflowToOriginal > 0) {
         const st = await this.stateService.updateHp(
           ownerUserId,
@@ -239,15 +229,7 @@ export class CombatService {
     };
   }
 
-  /**
-   * Spec 003 — traduz `actionSlug` em `actionName` interno.
-   *
-   * - `unarmed-strike`                → "Unarmed Strike"
-   * - `<equip>-attack`  (PC weapon)   → nome humano do equipment (ex: "Longsword")
-   * - `<monsterSlug>-<rest>` (monster) → nome canônico do monster.action
-   *
-   * Retorna failure INVALID_ACTION_SLUG se nenhum resolver bate.
-   */
+
   async translateSlugToActionName(
     encounterId: string,
     attackerParticipantId: string,
@@ -269,7 +251,7 @@ export class CombatService {
       return success("Unarmed Strike" as string, []);
     }
 
-    // PC weapon-attack: `<equipmentSlug>-attack` → busca nome do equipment equipado.
+
     if (
       attacker.type === "pc" &&
       attacker.characterId &&
@@ -296,9 +278,9 @@ export class CombatService {
       return success(eq.name, []);
     }
 
-    // Spec 012 — PC weapon via ActionBar: `weapon-<characterEquipmentId>` ou
-    // `weapon-thrown-<characterEquipmentId>`. Shape populado por
-    // actions.service.buildWeaponActions — bate com sheet.equipment[i].id.
+
+
+
     if (
       attacker.type === "pc" &&
       attacker.characterId &&
@@ -325,9 +307,9 @@ export class CombatService {
       return success(eq.name, []);
     }
 
-    // Spec 012 \u2014 PC transformado (Wild Shape, Polymorph). Slug \u00e9 formatado como
-    // monsterSlug-<actionName> igual monster branch. Valida contra form.actions
-    // do transformationState em vez da sheet.
+
+
+
     if (attacker.type === "pc" && attacker.transformationState) {
       const form = attacker.transformationState.form;
       const formSlug = form.monsterSlug ?? "";
@@ -339,13 +321,13 @@ export class CombatService {
       }
     }
 
-    // Monster: slug prefixado por monster.slug. Match por rest == action name (kebab).
+
     if (attacker.type === "monster" && attacker.monster) {
       const monsterSlug: string = (attacker.monster as any).slug ?? "";
       if (monsterSlug && slug.startsWith(monsterSlug + "-")) {
         const rest = slug.slice(monsterSlug.length + 1);
 
-        // Multiattack é armazenado separado de monster.actions
+
         if (rest === "multiattack" || rest === "multiataque") {
           const ma = (attacker.monster as any).multiattack;
           if (ma) {
@@ -376,17 +358,13 @@ export class CombatService {
       .replace(/^-+|-+$/g, "");
   }
 
-  /** Spec 012 #1 — extrai posição de grid de um participant (null se ausente). */
+
   private positionOf(p: EncounterParticipantEntity): GridPosition | null {
     if (p.positionX == null || p.positionY == null) return null;
     return { x: p.positionX, y: p.positionY };
   }
 
-  /**
-   * Spec 003 Fatia 5 — lista ActionDescriptor[] para um participant no encounter,
-   * com action economy aplicada (`available`/`disabledReason` refletem turno atual,
-   * actionUsed, attacksUsedThisTurn, etc).
-   */
+
   async getParticipantCombatActions(
     encounterId: string,
     participantId: string,
@@ -502,7 +480,7 @@ export class CombatService {
       return success(descriptors, []);
     }
 
-    // NPC: cobertura minima via generic resolver
+
     const descriptors = await this.combatActionRegistry.listActions({
       type: "npc",
       participantId,
@@ -535,7 +513,7 @@ export class CombatService {
     if (encounter.turnOrder[encounter.currentTurnIndex] !== caster.id)
       return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
-    // Find action definition
+
     let actionBlock: TurnActionBlock | undefined;
     if (caster.type === "monster" && caster.monster) {
       const all = [
@@ -584,7 +562,7 @@ export class CombatService {
         .catch(() => null);
       if (!target || target.isDefeated) continue;
 
-      // Roll save
+
       let saveResult: SavingThrowResult | undefined;
       let saved = false;
       if (actionBlock.save) {
@@ -633,7 +611,7 @@ export class CombatService {
         }
       }
 
-      // Roll damage
+
       const dmgResult = this.diceService.rollExpression(
         actionBlock.damage.dice,
       );
@@ -666,7 +644,7 @@ export class CombatService {
         }
       }
 
-      // Apply damage
+
       let targetHpAfter: number | undefined;
       let targetDefeated = false;
       if (finalDamage > 0) {
@@ -744,7 +722,7 @@ export class CombatService {
       });
     }
 
-    // Mark action as used
+
     caster.actionUsed = true;
     await this.participantRepo.save(caster);
 
@@ -777,11 +755,7 @@ export class CombatService {
     );
   }
 
-  /**
-   * Spec 012 Fase 0 — Improved Critical (Champion L3+) / Superior Critical (L15+).
-   * Retorna o natural mínimo pra virar crit (20 default, 19 com IC, 18 com SC).
-   * Só PC Champion Fighter; monsters ficam com 20.
-   */
+
   private async computeCritThreshold(
     attacker: EncounterParticipantEntity,
     requesterUserId: string,
@@ -805,8 +779,8 @@ export class CombatService {
       const activeSlugs = features
         .filter((f) => f.active !== false)
         .map((f) => f.slug);
-      // DB tem variantes (improved-critical, improved-critical-fighter-champion-3,
-      // improved-critical-fighter-champion-3-phb). Match por prefixo pra aceitar todas.
+
+
       const hasSuperior = activeSlugs.some((s) =>
         s.startsWith("superior-critical"),
       );
@@ -821,11 +795,7 @@ export class CombatService {
     }
   }
 
-  /**
-   * Fighter L13 Studied Attacks (RAW 2024) — attacker tem a feature ativa?
-   * Match por prefixo (DB tem `studied-attacks-fighter-13`; variantes futuras
-   * aceitam o mesmo prefixo).
-   */
+
   private async hasStudiedAttacks(
     attacker: EncounterParticipantEntity,
     requesterUserId: string,
@@ -854,10 +824,7 @@ export class CombatService {
     }
   }
 
-  /**
-   * Spec 012 Fase 0 — prof bonus do attacker pra Topple save DC.
-   * PC: lê da sheet computada. Monster: usa `monster.proficiency_bonus`.
-   */
+
   private async getAttackerProfBonus(
     attacker: EncounterParticipantEntity,
     requesterUserId: string,
@@ -877,12 +844,7 @@ export class CombatService {
     return m?.proficiency_bonus ?? 2;
   }
 
-  /**
-   * Spec 004 — heuristica para decidir se attack eh melee.
-   * Default: true (maioria dos attacks). Identifica ranged por keywords
-   * comuns nos nomes (Longbow, Shortbow, Crossbow, Javelin, Dart, Sling,
-   * Ray, Bolt com "ranged"). Spec 005 refina via metadata de action.
-   */
+
   private isMeleeAttack(actionName?: string, actionSlug?: string): boolean {
     const s = `${actionName ?? ""} ${actionSlug ?? ""}`.toLowerCase();
     const rangedKeywords = [
@@ -904,10 +866,7 @@ export class CombatService {
     return true;
   }
 
-  /**
-   * Spec 004 — remove effects one-shot (expiresAt.kind='until_consumed') após
-   * um attack. Itera nos dois participants.
-   */
+
   private async consumeOneShotEffects(
     attacker: EncounterParticipantEntity,
     target: EncounterParticipantEntity,
@@ -919,17 +878,17 @@ export class CombatService {
       if (e.expiresAt.kind !== "until_consumed") return false;
       if (side === "attacker") {
         if (e.kind === "self_advantage_next_attack") {
-          // Vex: só consome se target match (Steady Aim não tem constraint).
+
           const requiredTargetId = (
             e.payload as { requiredTargetId?: string } | undefined
           )?.requiredTargetId;
           return !requiredTargetId || requiredTargetId === target.id;
         }
-        // Sap: consome em qualquer attack do participant afetado
+
         if (e.kind === "self_disadvantage_next_attack") return true;
         return false;
       }
-      // target side: only consume advantage/disadvantage-grant kinds
+
       return (
         e.kind === "grant_advantage_to_attackers" ||
         e.kind === "grant_disadvantage_to_attackers"
@@ -949,11 +908,7 @@ export class CombatService {
     }
   }
 
-  /**
-   * Spec 004 — consulta EffectInstances do attacker e target para decidir
-   * advantage/disadvantage/bonuses e ac_bonus. Nao consome effects one-shot
-   * (Steady Aim, Guiding Bolt) — isso acontece pos-roll em resolveAttack.
-   */
+
   private resolveEffectInstanceDecisions(
     attacker: EncounterParticipantEntity,
     target: EncounterParticipantEntity,
@@ -974,17 +929,17 @@ export class CombatService {
       amount?: number;
     }> = [];
 
-    // --- Attacker-side effects ---
+
     for (const e of attackerFx) {
       if (e.kind === "self_advantage") {
-        // Escopo: 'melee' só vale se isMelee; 'any' sempre; default = any.
+
         const scope = e.payload?.scope ?? "any";
         if (scope === "any" || (scope === "melee" && isMelee)) advantage = true;
       }
       if (e.kind === "self_disadvantage") disadvantage = true;
       if (e.kind === "self_advantage_next_attack") {
-        // Spec 012 — Vex: requiredTargetId filtra pra mesmo alvo.
-        // Sem o campo → qualquer alvo (Steady Aim default).
+
+
         const requiredTargetId = e.payload?.requiredTargetId;
         if (!requiredTargetId || requiredTargetId === target.id)
           advantage = true;
@@ -1008,7 +963,7 @@ export class CombatService {
       }
     }
 
-    // --- Target-side effects ---
+
     let targetAcBonus = 0;
     for (const e of targetFx) {
       if (e.kind === "ac_bonus") targetAcBonus += e.payload?.amount ?? 0;
@@ -1016,9 +971,9 @@ export class CombatService {
       if (e.kind === "grant_disadvantage_to_attackers") disadvantage = true;
     }
 
-    // --- Condition special case: prone ---
-    // Prone target: melee attacks have advantage, ranged have disadvantage.
-    // (getDefenseModifiers nao sabe de isMelee; tratar aqui).
+
+
+
     if ((target.conditions ?? []).includes("prone")) {
       if (isMelee) advantage = true;
       else disadvantage = true;
@@ -1027,7 +982,7 @@ export class CombatService {
     return { advantage, disadvantage, attackBonuses, targetAcBonus };
   }
 
-  // --- Turn Management ---
+
 
   async getCurrentTurn(encounterId: string): Promise<GameResult<TurnInfo>> {
     const encounter = await this.encounterRepo.findOne({
@@ -1085,8 +1040,8 @@ export class CombatService {
     let reactions: TurnActionBlock[] = [];
 
     if (participant.type === "pc" && participant.characterId) {
-      // Spec 012 \u2014 quando PC est\u00e1 transformado (Wild Shape, Polymorph, etc),
-      // ActionBar mostra as a\u00e7\u00f5es do form em vez das weapons do PC.
+
+
       if (participant.transformationState) {
         const formSynthetic = {
           slug:
@@ -1193,7 +1148,7 @@ export class CombatService {
       }
     }
 
-    // Spec 003 T034 — as 8 ações genéricas PHB aparecem em qualquer participant.
+
     const genericActions: TurnActionBlock[] = [
       this.makeGenericAction("dodge", "Esquivar"),
       this.makeGenericAction("dash", "Disparada"),
@@ -1205,9 +1160,9 @@ export class CombatService {
       this.makeGenericAction("use-object", "Usar Objeto"),
     ];
 
-    // Spec 005 US13 — `actions` contém apenas ataques/multiataque/ações de monstro
-    // (source !== 'generic'); as 8 ações PHB vão em `genericActions` separado, para
-    // que a aba "Ações" do frontend possa renderizar subgrupos Ataques + PHB.
+
+
+
     return success({
       participantId: participant.id,
       participantName: participant.displayName,
@@ -1226,7 +1181,7 @@ export class CombatService {
     });
   }
 
-  /** Monta um TurnActionBlock para uma das 8 ações genéricas PHB (spec 003 T034). */
+
   private makeGenericAction(
     genericKind:
       | "dodge"
@@ -1239,9 +1194,9 @@ export class CombatService {
       | "use-object",
     label: string,
   ): TurnActionBlock {
-    // Spec 005 US13 — não marcamos mais como `kind: 'attack'` porque essas ações
-    // são agora retornadas em `genericActions[]` (não em `actions[]`), e `kind`
-    // é um discriminator para aggregators de ataque.
+
+
+
     return {
       id: `generic-${genericKind}`,
       name: label,
@@ -1253,9 +1208,9 @@ export class CombatService {
   }
 
   private toTurnActionBlock(a: any): TurnActionBlock {
-    // Spec 011 Phase 2 — `ActionBlock` da actions.service expõe `saveDc` +
-    // `saveAbility` flat; `TurnActionBlock` espera `save: {ability, dc, ...}`.
-    // Deriva o objeto quando o handler a montante não fez.
+
+
+
     const save =
       a.save ??
       (typeof a.saveDc === "number" && a.saveAbility
@@ -1283,15 +1238,15 @@ export class CombatService {
       save,
       sequence: a.sequence,
       rechargeRequired: a.rechargeRequired,
-      // Spec 011 Phase 3 — slug canônico pra dispatch no frontend.
+
       featureSlug: a.featureSlug,
-      // Spec 012 Fase 0 — weapon mastery surface (frontend ActionBar chip)
+
       weaponSlug: a.weaponSlug,
       masterySlug: a.masterySlug,
-      // Premissa weapons-in-hand — proficiency + hand slot surface
+
       proficient: a.proficient,
       handSlot: a.handSlot,
-      // Spec 015 — uses/charges passthrough (BI, Second Wind, Rage, etc).
+
       uses: a.uses,
       usesMax: a.usesMax,
       usesRecharge: a.usesRecharge,
@@ -1312,9 +1267,9 @@ export class CombatService {
     i: number,
     idPrefix: string,
   ): TurnActionBlock {
-    // Delegate attack bonus + damage resolution to the single source of truth.
-    // Keeps the number displayed in turn-actions identical to the one rolled
-    // in resolveAttack (US4 / D7).
+
+
+
     const resolved = this.monsterActionResolver.resolve(a, monster?.name);
     const desc = resolved.description;
     const attackBonus = resolved.hasAttack ? resolved.attackBonus : undefined;
@@ -1326,11 +1281,11 @@ export class CombatService {
         }
       : undefined;
 
-    // --- AoE detection ---
-    // Statblocks de monstro quase sempre descrevem AoE que emana do monstro
-    // (breath weapons, roars, auras). Por isso default = originType: 'self'.
-    // Se surgir counterexample (ex: monstro com fireball num ponto descrito em prose),
-    // tratar caso a caso. Ações de spell-casting reais vão por outra rota e usam deriveOriginType().
+
+
+
+
+
     const coneMatch = desc.match(/(\d+)[- ]?foot\s+cone/i);
     const lineMatch = desc.match(/(\d+)[- ]?foot(?:\s+long)?\s+line/i);
     const sphereMatch = desc.match(/(\d+)[- ]?foot[- ]?radius/i);
@@ -1350,7 +1305,7 @@ export class CombatService {
       aoe = { originType: "self", shape: "cube", sizeFt: size, rangeFt: 0 };
     }
 
-    // --- Save detection ---
+
     const saveMatch = desc.match(
       /DC\s+(\d+)\s+(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+saving throw/i,
     );
@@ -1408,9 +1363,9 @@ export class CombatService {
       },
     ];
 
-    // Spec 004 — tick de EffectInstance do participant que termina o turno.
-    // Decrementa expiresAt.value em kinds rounds/turns/until_caster_turn;
-    // remove quando chega a 0. Emite effect_expired por cada.
+
+
+
     const tickParticipant = await this.participantRepo.findOne({
       where: { id: currentParticipantId },
     });
@@ -1419,10 +1374,10 @@ export class CombatService {
       events.push(...tick.events);
     }
 
-    // Spec 003 T013 + Spec 004 fix: Dodge RAW expira NO INICIO DO PROXIMO TURNO
-    // DO ATOR (nao ao terminar seu turno). Legacy clearava aqui o que quebrava
-    // RAW (dodge nunca durava). Mantem Help/Ready clear aqui (essas expiram
-    // quando o ator termina de ajudar/armar).
+
+
+
+
     const currentParticipant = await this.participantRepo.findOne({
       where: { id: currentParticipantId },
     });
@@ -1453,8 +1408,8 @@ export class CombatService {
       }
     }
 
-    // RAW MM: monstro lendário pode gastar pontos no fim de qualquer turno
-    // que não seja o dele próprio. Disparamos só após turno de PC.
+
+
     if (currentParticipant && currentParticipant.type === "pc") {
       try {
         const legendaryEvents =
@@ -1464,7 +1419,7 @@ export class CombatService {
           );
         events.push(...legendaryEvents);
       } catch {
-        // legendary é best-effort; falha não aborta endTurn
+
       }
     }
 
@@ -1481,7 +1436,7 @@ export class CombatService {
           await this.lairActionsCoordinator.processRoundStart(encounter);
         events.push(...lairEvents);
       } catch (err) {
-        // lair actions são best-effort; falha não aborta o round
+
       }
     }
 
@@ -1499,7 +1454,7 @@ export class CombatService {
         continue;
       }
 
-      // Monster: skip when isDefeated.
+
       if (p.type !== "pc" && p.isDefeated) {
         nextIndex = (nextIndex + 1) % turnOrderLen;
         if (nextIndex === 0) newRound += 1;
@@ -1507,7 +1462,7 @@ export class CombatService {
         continue;
       }
 
-      // PC dead: skip (participants-ordered removal happens at round boundary).
+
       if (p.type === "pc" && p.dyingState === "dead") {
         nextIndex = (nextIndex + 1) % turnOrderLen;
         if (nextIndex === 0) newRound += 1;
@@ -1515,13 +1470,13 @@ export class CombatService {
         continue;
       }
 
-      // PC stable: deliver turn but mark autoSkip so frontend calls end-turn immediately.
+
       if (p.type === "pc" && p.dyingState === "stable") {
         autoSkip = true;
         break;
       }
 
-      // Everyone else (including PC dying): deliver turn normally.
+
       break;
     }
 
@@ -1536,8 +1491,8 @@ export class CombatService {
       relations: ["monster"],
     });
 
-    // Spec 004 — Dodge expira no INICIO do proximo turno do dodger (RAW PHB p.192).
-    // Se o nextParticipant eh o proprio dodger, limpar agora.
+
+
     if (
       nextParticipant &&
       nextParticipant.dodgingUntilTurnOfParticipantId === nextParticipant.id
@@ -1556,7 +1511,7 @@ export class CombatService {
         nextParticipant,
         ownerId || undefined,
       );
-      // Spec 012 Lote C — Capstones start-of-combat (PC first turn).
+
       try {
         const capRes = await this.capstones.runStartOfCombat(
           nextParticipant,
@@ -1564,7 +1519,7 @@ export class CombatService {
         );
         events.push(...capRes.events);
       } catch {
-        // capstones nunca aborta endTurn
+
       }
     }
 
@@ -1580,12 +1535,12 @@ export class CombatService {
 
     await this.eventService.emit(encounter.sessionId, encounterId, events);
 
-    // Spec 027 (M2 follow-up) — single auto-end hook, no início de cada turno.
-    // Regra (DIAD solo): se a IA é o DM e nenhum token controlled='ai' está
-    // vivo → finaliza combate, calcula XP/loot/fame e devolve pro chat.
-    // Idempotente; multiplayer DM-led: no-op (gateado por isSoloCampaign no
-    // detector). NÃO afeta turn_start emitido — frontend lê encounter.status
-    // e navega quando ver 'completed'.
+
+
+
+
+
+
     await this.encounterEndDetector.tryAutoEnd(encounterId);
 
     return success(
@@ -1604,11 +1559,7 @@ export class CombatService {
     );
   }
 
-  /**
-   * Removes dead PCs from the turnOrder. Called at round boundary so indices
-   * stay stable during the round. Monsters are never removed (isDefeated
-   * monsters stay indexed but are skipped each round).
-   */
+
   private async pruneDeadFromTurnOrder(
     encounter: EncounterEntity,
   ): Promise<void> {
@@ -1628,7 +1579,7 @@ export class CombatService {
     }
   }
 
-  // --- Attack Resolution ---
+
 
   async resolveAttack(
     encounterId: string,
@@ -1657,9 +1608,9 @@ export class CombatService {
       if (currentPid !== dto.attackerParticipantId)
         return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
 
-      // Spec 003 Fatia 6 — respeita Extra Attack: bloqueia só quando attacker
-      // esgotou attacksMaxThisTurn (ou actionUsed foi setado por feature tipo
-      // Action Surge consumindo o slot inteiro de action).
+
+
+
       if (
         attacker.actionUsed &&
         attacker.attacksUsedThisTurn >= attacker.attacksMaxThisTurn
@@ -1667,16 +1618,16 @@ export class CombatService {
         return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
 
-    // Check if attacker can act (condition still applies even for sub-attacks).
+
     if (!this.conditionEffects.canTakeAction(attacker.conditions))
       return failure(
         "Atacante nao pode agir devido a condicoes.",
         "CONDITION_PREVENTS_ACTION",
       );
 
-    // Spec 012 — Nature's Sanctuary (Druid Land L14): if target has the feature
-    // and attacker is a Beast/Plant, attacker makes WIS save DC 8+PB+WIS. Fail
-    // means attack is aborted (attacker cannot target caster).
+
+
+
     const naturesSanctuaryEvents: GameEventData[] = [];
     if (
       target.type === "pc" &&
@@ -1738,39 +1689,39 @@ export class CombatService {
             }
           }
         } catch {
-          // Se sheet lookup falhar, não bloqueia o ataque (graceful degradation).
+
         }
       }
     }
 
-    // Get attack bonus and damage info
+
     let attackBonus = 0;
     let damageDice = "1d4";
     let damageType = "bludgeoning";
     let damageBonus = 0;
-    // Spec 012 #1 — range da ação, populado em cada branch (unarmed/pc/monster)
-    // e consumido logo antes dos rolls.
-    let actionRangeStr: string | null = null;
-    // Spec 012 Fase 0 — Weapon Mastery (só PC + weapon action). masterySlug
-    // só fica populado quando `buildWeaponActions` confirmou que (a) arma tem
-    // mastery E (b) o char escolheu essa arma em weapon_mastery_choices.
-    let masterySlug: string | undefined;
-    let masteryAbilityMod = 0; // abilityMod usado no attack; = damageBonus pra weapon
 
-    // Spec 012 Fase 0 — Fighting Style (só PC). rerollLowDamage usado pelo
-    // GWF pra rerolar 1s/2s no dano. appliedFightingStyle loggado no evento.
+
+    let actionRangeStr: string | null = null;
+
+
+
+    let masterySlug: string | undefined;
+    let masteryAbilityMod = 0;
+
+
+
     let rerollLowDamage = false;
     let appliedFightingStyle: string | undefined;
 
-    // Fighter L13 Studied Attacks (RAW 2024) — flag "attack atual é weapon ou
-    // unarmed" (feature só triggera nesses tipos; spell attacks / cast não contam).
-    // Setada true nas branches unarmed e PC weapon; lida no branch miss.
+
+
+
     let isWeaponOrUnarmedAttack = false;
 
-    // Spec 003 Fatia 4 — Unarmed Strike (XPHB 2024) com 3 modes:
-    //   damage   → attack roll normal (1 + STR mod bludgeoning)
-    //   grapple  → STR save DC 8+prof+STR; falha aplica condition 'grappled' (Spec 4)
-    //   shove    → STR save mesmo DC; falha = push 5ft OU prone (Spec 4)
+
+
+
+
     if (
       dto.actionSlug === "unarmed-strike" &&
       attacker.type === "pc" &&
@@ -1791,8 +1742,8 @@ export class CombatService {
       const mode = (dto.options?.mode as string | undefined) ?? "damage";
       actionRangeStr = "5 ft";
 
-      // Spec 012 #1 — Unarmed Strike (damage/grapple/shove) é sempre melee 5ft.
-      // Valida aqui porque grapple/shove retornam antes do check unificado abaixo.
+
+
       {
         const rangeCheck = checkAttackRange(
           this.positionOf(attacker),
@@ -1808,7 +1759,7 @@ export class CombatService {
       }
 
       if (mode === "grapple" || mode === "shove") {
-        // Short-circuit: sem attack roll; emite evento para a Spec 4 resolver o save.
+
         const saveDc = 8 + profBonus + strMod;
         if (!dto._isSubAttack) {
           attacker.actionUsed = true;
@@ -1823,7 +1774,7 @@ export class CombatService {
           actor_participant_id: attacker.id,
           target_participant_id: target.id,
           data: {
-            featureSlug: mode, // 'grapple' | 'shove'
+            featureSlug: mode,
             actionCost: "action",
             targets: [target.id],
             saveDc,
@@ -1837,7 +1788,7 @@ export class CombatService {
           },
         };
         await this.eventService.emit(encounter.sessionId, encounterId, [event]);
-        // Spec 004 — resolver consome o evento imediatamente
+
         const resolution = await this.classFeatureResolver.resolveInvocation(
           attacker.id,
           {
@@ -1874,20 +1825,20 @@ export class CombatService {
         );
       }
 
-      // mode === 'damage' (default): populamos stats e seguimos o fluxo de attack roll.
+
       attackBonus = strMod + profBonus;
       damageDice = "1";
       damageType = "bludgeoning";
       damageBonus = strMod;
 
-      // Spec 012 Fase 0 — Fighting Style: Unarmed Fighting upgrade do damage die
-      // (d6, d8 se 2 mãos livres). Sheet já foi buscada acima via sheetService.
+
+
       const unarmedOrigin = (
         sheet as unknown as { originDetails?: { fightingStyleIndex?: string } }
       ).originDetails;
       const unarmedFsSlug = unarmedOrigin?.fightingStyleIndex;
       if (unarmedFsSlug === "unarmed-fighting") {
-        // "2 mãos livres" = sem arma equipada. Simplificação: consulta equip equipada.
+
         const hasBothHandsFree = !(
           (
             sheet as unknown as {
@@ -1899,9 +1850,9 @@ export class CombatService {
         appliedFightingStyle = "unarmed-fighting";
       }
 
-      // Spec 012 Sprint F \u2014 Monk Martial Arts (RAW 2024 XPHB).
-      // Unarmed strike: upgrade damage die to dN (L1=d6, L5=d8, L11=d10, L17=d12)
-      // + use max(STR, DEX) for attack bonus + damage.
+
+
+
       const monkClass = (
         sheet as unknown as { classes?: Array<{ slug: string; level: number }> }
       ).classes?.find((c) => c.slug.replace(/-phb$/, "") === "monk");
@@ -1918,17 +1869,17 @@ export class CombatService {
         damageDice = `1${maDie}`;
         const dexScore = sheet.abilityScores.find((a) => a.slug === "dex");
         const dexMod = dexScore?.modifier ?? 0;
-        // Usa DEX se maior que STR (RAW: Monk's choice)
+
         if (dexMod > strMod) {
           attackBonus = dexMod + profBonus;
           damageBonus = dexMod;
         }
       }
     } else if (attacker.type === "pc" && attacker.transformationState) {
-      // Spec 012 \u2014 PC transformado: resolve a\u00e7\u00e3o via form.actions como se fosse
-      // monster. Skip da PC weapon pipeline (sheet.equipment, fighting style,
-      // weapon mastery) porque o PC n\u00e3o est\u00e1 empunhando weapon \u2014 est\u00e1 com as
-      // actions do form (Bite do Wolf, Claws do Bear, etc).
+
+
+
+
       const form = attacker.transformationState.form;
       const syntheticMonster = {
         slug: form.monsterSlug ?? "transformed",
@@ -1958,10 +1909,10 @@ export class CombatService {
         attacker.characterId,
       );
       const allActions = [...actions.actions, ...actions.bonusActions];
-      // Spec 012 Fase 0 — prioriza match por actionSlug (id) quando presente,
-      // antes de cair pro match por nome. Sem isso, quando há 2 armas com mesmo
-      // nome (ex: Greatsword PHB + XPHB no inventário), o find pegava a primeira
-      // pelo nome (PHB sem mastery), perdendo a XPHB.
+
+
+
+
       const actionSlugKey = dto.actionSlug ?? dto.actionName;
       const action =
         allActions.find((a) => a.id === actionSlugKey) ??
@@ -1983,15 +1934,15 @@ export class CombatService {
         damageBonus = action.damage.bonus ?? 0;
       }
       actionRangeStr = action.range ?? null;
-      // Spec 012 Fase 0 — weapon mastery (só armas PC, nunca unarmed/spell)
+
       if (action.source === "weapon" && action.masterySlug) {
         masterySlug = action.masterySlug;
         masteryAbilityMod = action.damage?.bonus ?? 0;
       }
 
-      // Fighter L9 Tactical Master (RAW 2024) — se attacker armou override,
-      // substitui mastery original por push/sap/slow. Override é consumido
-      // (limpo) após o attack resolver.
+
+
+
       if (
         action.source === "weapon" &&
         attacker.tacticalMasterOverride &&
@@ -2000,8 +1951,8 @@ export class CombatService {
         masterySlug = attacker.tacticalMasterOverride;
       }
 
-      // Spec 012 Fase 0 — Fighting Style (PC weapon attacks).
-      // Busca slug do Fighting Style via sheet.originDetails, aplica bonus conforme contexto.
+
+
       if (action.source === "weapon") {
         const pcOwnerId = await this.resolveParticipantOwner(
           attacker,
@@ -2024,10 +1975,10 @@ export class CombatService {
             (dto.actionSlug ?? "").startsWith("weapon-thrown-") ||
             props.includes("thrown");
           const isMeleeCtx = this.isMeleeAttack(action.name, dto.actionSlug);
-          // Offhand: simplificação — se actionSlug contém 'thrown' não é offhand;
-          // TWF real exige light + offhand equipado (futuro). Por ora Offhand=false.
+
+
           const isOffhand = false;
-          // 1h sem offhand: não two-handed E ação é melee (escudo permitido)
+
           const isOneHandNoOffhand = isMeleeCtx && !isTwoHanded;
           const fsRes = this.fightingStyle.resolveAttackModifiers({
             fightingStyleSlug: fsSlug,
@@ -2050,12 +2001,12 @@ export class CombatService {
       (attacker.type === "monster" || attacker.type === "npc") &&
       attacker.monster
     ) {
-      // Spec 027 (M2 follow-up) — fallback pra primeira ação atacável quando
-      // actionName não bate com nada no statblock. Cobre dois cenários:
-      //   1) AI mandou nome genérico ("attack") porque _pick_best_attack
-      //      não conseguiu resolver nome real (statblock vazio no snapshot).
-      //   2) Tradução slug→nome divergiu (renames RAW vs DB).
-      // Sem isso, NPC ficava parado o turno inteiro retornando INVALID_ACTION.
+
+
+
+
+
+
       let resolved = this.monsterActionResolver.resolveByName(
         attacker.monster,
         dto.actionName,
@@ -2094,17 +2045,17 @@ export class CombatService {
       actionRangeStr = resolved.range ?? resolved.reach ?? null;
     }
 
-    // Spec 012 #1 — range check unificado (PC weapon + monster). Ficou depois
-    // do unarmed check porque unarmed returns early em grapple/shove. Se
-    // ranged entre normal e long, disadvantage flag é lida mais abaixo.
+
+
+
     const parsedRange = parseRangeString(actionRangeStr);
     const rangeCheck = checkAttackRange(
       this.positionOf(attacker),
       this.positionOf(target),
       parsedRange,
     );
-    // Spec 012 Lote B — OAs bypassam range check: trigger já foi computado
-    // quando o mover ainda estava em reach.
+
+
     if (!rangeCheck.ok && !dto._bypassRangeCheck) {
       const actionLabel = dto.actionName || "Ataque";
       return failure(
@@ -2113,7 +2064,7 @@ export class CombatService {
       );
     }
 
-    // Determine advantage/disadvantage
+
     const attackerMods = this.conditionEffects.getAttackModifiers(
       attacker.conditions,
     );
@@ -2121,10 +2072,10 @@ export class CombatService {
       target.conditions,
     );
 
-    // Spec 003 T032 — estados reativos (Dodge, Help, Hidden) lidos dos campos
-    // da entity (não apenas de `conditions[]`). Help vive no AJUDANTE, não no
-    // atacante — buscamos o helper cujo `helpingAllyParticipantId` aponta pro
-    // atacante E `helpingTargetParticipantId` pro alvo atual.
+
+
+
+
     const activeHelper = await this.participantRepo.findOne({
       where: {
         encounterId: encounter.id,
@@ -2155,8 +2106,8 @@ export class CombatService {
       helpingState ? { helpingAgainst: helpingState } : undefined,
     );
 
-    // Spec 004 — consulta effectInstances (Bless, Guiding Bolt, Dodge, Rage, etc)
-    // e casos especiais de conditions (prone melee vs ranged).
+
+
     const isMeleeAttack = this.isMeleeAttack(dto.actionName, dto.actionSlug);
     const effectDec = this.resolveEffectInstanceDecisions(
       attacker,
@@ -2164,8 +2115,8 @@ export class CombatService {
       isMeleeAttack,
     );
 
-    // Spec 012 — Heroic Inspiration: se armed, dá advantage e marca pra consumo
-    // after the attack resolves successfully (ver logo após rolls).
+
+
     const consumeInspiration = attacker.inspirationArmed === true;
 
     let hasAdvantage =
@@ -2183,8 +2134,8 @@ export class CombatService {
       rangeCheck.disadvantage ||
       (dto.forceDisadvantage ?? false);
 
-    // Spec 012 Lote C — Rogue L18 Elusive (RAW 2024 XPHB).
-    // "Enquanto não Incapacitated, attack rolls contra você não têm advantage."
+
+
     let elusiveCancelledAdvantage = false;
     if (target.type === "pc" && target.characterId && hasAdvantage) {
       try {
@@ -2212,17 +2163,17 @@ export class CombatService {
           elusiveCancelledAdvantage = true;
         }
       } catch {
-        /* fallback */
+
       }
     }
 
-    // Advantage and disadvantage cancel out
+
     if (hasAdvantage && hasDisadvantage) {
       hasAdvantage = false;
       hasDisadvantage = false;
     }
 
-    // Roll attack
+
     let attackRoll: number;
     let advantageResult:
       | { roll1: number; roll2: number; chosen: number; discarded: number }
@@ -2240,8 +2191,8 @@ export class CombatService {
       attackRoll = this.diceService.roll(20);
     }
 
-    // Spec 012 Fase 0 — Improved/Superior Critical (Champion Fighter):
-    // L3+ crit em 19-20, L15+ crit em 18-20. Default 20.
+
+
     const critThreshold = await this.computeCritThreshold(
       attacker,
       dto.ownerUserId,
@@ -2249,7 +2200,7 @@ export class CombatService {
     const isCritical = attackRoll >= critThreshold;
     const isCriticalMiss = attackRoll === 1;
 
-    // Get target AC
+
     let targetAc = 10;
     if (target.type === "pc" && target.characterId) {
       const targetOwnerId = await this.resolveParticipantOwner(
@@ -2265,11 +2216,11 @@ export class CombatService {
       const ac = target.monster.armor_class as any;
       targetAc = (Array.isArray(ac) ? ac[0]?.value : ac?.value) ?? 10;
     }
-    // Spec 004 — somar ac_bonus dos EffectInstance do alvo
+
     targetAc += effectDec.targetAcBonus;
 
-    // Spec 004 — rolar dice-bonuses dos EffectInstance (Bless +1d4 etc) e somar ao total.
-    // Bane usa dice com prefixo "-" (ex: "-1d4") — rolamos a expressão e negamos.
+
+
     const rolledEffectBonuses = effectDec.attackBonuses.map((b) => {
       if (b.dice) {
         const negated = b.dice.startsWith("-");
@@ -2285,9 +2236,9 @@ export class CombatService {
       0,
     );
 
-    // Spec 012 Sprint F \u2014 Bardic Inspiration consume hook (RAW 2024 XPHB).
-    // Short-circuit: s\u00f3 chama BardFeaturesService se attacker tem effect BI
-    // armado (evita dependency inj\u00e7\u00e3o issue em fluxos sem Bard envolvido).
+
+
+
     let biBonus = 0;
     let biEvents: GameEventData[] = [];
     const hasBardicInspirationEffect = (attacker.effectInstances ?? []).some(
@@ -2303,12 +2254,12 @@ export class CombatService {
         biBonus = biResult.consumed ? biResult.bonus : 0;
         biEvents = biResult.events;
       } catch {
-        // n\u00e3o aborta attack se BI consumption falha
+
       }
     }
 
-    // Spec 012 Lote B — Exhaustion XPHB 2024: -2×level em attack rolls do PC.
-    // Monsters não sofrem exhaustion via mecânica RAW (apenas em NPCs especiais).
+
+
     let exhaustionAttackPenalty = 0;
     let attackerExhaustionLevel = 0;
     if (attacker.type === "pc" && attacker.characterId) {
@@ -2331,7 +2282,7 @@ export class CombatService {
           exhaustionAttackPenalty = mods.d20Penalty ?? 0;
         }
       } catch {
-        // fallback 0
+
       }
     }
 
@@ -2345,8 +2296,8 @@ export class CombatService {
       !isCriticalMiss &&
       (isCritical || defenderMods.autoCritIfMelee || totalAttack >= targetAc);
 
-    // Spec 012 Lote D — Rogue L20 Stroke of Luck: se attack iria miss, consome
-    // stroke_of_luck_armed_attack effect e converte em hit.
+
+
     let hit = rawHit;
     let strokeOfLuckConsumed = false;
     if (!rawHit && !isCriticalMiss) {
@@ -2427,13 +2378,13 @@ export class CombatService {
       },
     });
 
-    // Spec 004 — consumir effects one-shot (until_consumed):
-    //  - attacker: self_advantage_next_attack (Steady Aim)
-    //  - target: grant_advantage_to_attackers / grant_disadvantage_to_attackers (Guiding Bolt etc)
+
+
+
     await this.consumeOneShotEffects(attacker, target);
 
-    // A6 — Parry: monstro alvo com Parry pode +N AC contra ataque corpo-a-corpo
-    // que iria acertar. Não dispara em crit. Consome reaction se aplicar.
+
+
     if (hit && !isCritical) {
       const parryRes = await this.monsterReactions.tryParryAfterAttackRoll(
         target,
@@ -2456,12 +2407,12 @@ export class CombatService {
     let concentrationBroken: boolean | undefined;
 
     if (hit) {
-      // Roll damage
+
       const dmgResult = this.diceService.rollExpression(damageDice);
       let totalDamage = dmgResult.total + damageBonus;
 
-      // Spec 012 Fase 0 — Great Weapon Fighting: rerola 1s e 2s uma vez
-      // (aceita o segundo resultado). Aplica em damageDice base E no crit extra.
+
+
       if (rerollLowDamage) {
         const rollsArr = dmgResult.rolls ?? [];
         const dieSize = parseInt(damageDice.split("d")[1] ?? "0", 10);
@@ -2476,7 +2427,7 @@ export class CombatService {
         }
       }
 
-      // Critical: double the dice (roll again), keep flat bonus once
+
       if (isCritical || defenderMods.autoCritIfMelee) {
         const critExtra = this.diceService.rollExpression(damageDice);
         let critTotal = critExtra.total;
@@ -2494,10 +2445,10 @@ export class CombatService {
         totalDamage += critTotal;
       }
 
-      // Spec 012 Sprint F \u2014 Rogue Sneak Attack (RAW 2024 XPHB).
-      // 1/turn damage rider se: attacker PC Rogue + weapon tem Finesse OR Ranged
-      // + (hasAdvantage OU (ally adjacente ao target AND !hasDisadvantage)).
-      // Dice = Nd6 onde N = floor((rogueLevel+1)/2) (1d6 L1, 2d6 L3, ..., cap 10d6 L19).
+
+
+
+
       let sneakAttackDamage = 0;
       let sneakAttackDice: string | null = null;
       try {
@@ -2546,12 +2497,12 @@ export class CombatService {
           }
         }
       } catch {
-        // SA check falha silenciosa \u2014 n\u00e3o aborta attack
+
       }
 
-      // Spec 012 Lote C \u2014 Ranger L20 Foe Slayer (RAW 2024 XPHB).
-      // 1/turn: +WIS mod em damage no hit. Rastreia via effectInstance
-      // `foe_slayer_used_this_turn` com expiresAt.kind='turns' value=1.
+
+
+
       let foeSlayerBonus = 0;
       let foeSlayerConsumed = false;
       try {
@@ -2574,8 +2525,8 @@ export class CombatService {
               (a) => a.slug === "wis",
             );
             const wisMod = wisAbility?.modifier ?? 0;
-            // RAW 2024: Foe Slayer sempre consome 1/turn ao hit, mesmo com WIS mod ≤ 0.
-            // Isso mantém determinismo e emite evento p/ observabilidade no harness.
+
+
             if (hasFoeSlayer) {
               foeSlayerBonus = Math.max(0, wisMod);
               foeSlayerConsumed = true;
@@ -2599,14 +2550,14 @@ export class CombatService {
           }
         }
       } catch {
-        // Foe Slayer check falha silenciosa
+
       }
 
-      // Spec 012 — consumir damage_bonus effects do attacker (Rage +2 melee,
-      // Hunter's Mark +1d6, etc). Filtra por scope: 'melee' só em melee,
-      // 'ranged' só em ranged, 'any' sempre. Flat amount vai direto; dice é
-      // rolado pra cada attack. Empilhável com damageBonus (ability mod +
-      // weapon bonus) que já está no totalDamage.
+
+
+
+
+
       const damageBonusEffects = (attacker.effectInstances ?? []).filter(
         (e) => e.kind === "damage_bonus",
       );
@@ -2665,9 +2616,9 @@ export class CombatService {
         }
       }
 
-      // Spec 012 Gap #25 — Hex / Hunter's Mark damage riders. Target carrega
-      // `hex_mark` / `hunter_mark` effect linkado ao attacker. Por weapon attack
-      // hit, +1d6 (necrotic pra Hex, damage type do weapon pra HM).
+
+
+
       const targetMarks = (target.effectInstances ?? []).filter(
         (e) =>
           (e.kind === "hex_mark" || e.kind === "hunter_mark") &&
@@ -2688,7 +2639,7 @@ export class CombatService {
         });
       }
 
-      // Check monster immunities/resistances/vulnerabilities
+
       let resisted = false;
       let immune = false;
       let vulnerable = false;
@@ -2739,7 +2690,7 @@ export class CombatService {
         },
       });
 
-      // Apply damage
+
       if (target.type === "pc" && target.characterId) {
         const targetOwnerId = await this.resolveParticipantOwner(
           target,
@@ -2747,7 +2698,7 @@ export class CombatService {
         );
         const wasDying = target.dyingState === "dying";
         if (wasDying) {
-          // RAW: damage to a dying PC is a death-save failure (2 on crit).
+
           const failuresDelta = isCritical ? 2 : 1;
           const ds = await this.stateService.updateDeathSaves(
             targetOwnerId,
@@ -2771,7 +2722,7 @@ export class CombatService {
             },
           });
         } else {
-          // Spec 012 \u2014 Wild Shape/Polymorph: dano vai pro form HP primeiro, reverte em 0
+
           const hpResult = await this.applyDamageToPcFormAware(
             target,
             finalDamage,
@@ -2800,14 +2751,14 @@ export class CombatService {
           }
         }
       } else {
-        // Monster: apply directly
+
         const result = this.applyDamageToMonster(target, finalDamage);
         targetHpAfter = result.hpAfter;
         targetDefeated = result.defeated;
         await this.participantRepo.save(target);
       }
 
-      // Concentration check
+
       if (target.isConcentrating && finalDamage > 0 && !targetDefeated) {
         const concResult = await this.concentrationCheck(target, finalDamage);
         concentrationBroken = !concResult.maintained;
@@ -2823,17 +2774,17 @@ export class CombatService {
       }
 
       if (targetDefeated) {
-        // Spec 004 fix: delega a ConcentrationService pra cascatar
-        // appliedEffects/effectInstances em vez de so flipar flag.
+
+
         if (target.isConcentrating) {
           const breakRes = await this.concentration.breakDueToDeath(target);
           events.push(...breakRes.events);
         }
 
-        // Spec 012 — Hunter's Mark / Hex: RAW 2024 XPHB permite mover a mark
-        // pra novo alvo (bonus action em turno subsequente) SEM novo slot, se
-        // o alvo marcado caiu a 0 HP antes da spell expirar. Emite evento de
-        // sinal — UI pode prompt player. (Endpoint de transfer é deferido.)
+
+
+
+
         const hunterMarks = (target.effectInstances ?? []).filter(
           (e) =>
             e.kind === "hunter_mark" &&
@@ -2872,10 +2823,10 @@ export class CombatService {
         }
       }
 
-      // Spec 012 Fase 0 — Weapon Mastery on-hit (Sap/Slow/Topple/Vex/Push/Cleave/Nick).
-      // Dispara mesmo em target defeated: RAW 2024 não restringe ("on a hit…"),
-      // e Prone/Sap em cadáver é harmless. Assim o caso "Maul one-shot + Topple"
-      // continua emitindo evento do pipeline.
+
+
+
+
       if (masterySlug) {
         const mRes = await this.weaponMastery.resolveOnHit({
           masterySlug,
@@ -2884,13 +2835,13 @@ export class CombatService {
           abilityMod: masteryAbilityMod,
           profBonus: await this.getAttackerProfBonus(attacker, dto.ownerUserId),
           damageType,
-          // Cleave: total final do damage no primário (pós-resistência/vulnerabilidade)
+
           damageRolledAmount: damageRollResult?.finalDamage,
         });
         events.push(...mRes.events);
 
-        // Cleave (RAW 2024) — aplica mesmo damage no 2º alvo adjacente identificado
-        // pelo weapon-mastery.service. Re-utiliza o mesmo fluxo de damage application.
+
+
         if (mRes.cleaveSecondTarget) {
           const secondTarget = await this.participantRepo.findOne({
             where: { id: mRes.cleaveSecondTarget.participantId },
@@ -2939,7 +2890,7 @@ export class CombatService {
         }
       }
     } else {
-      // Spec 012 Fase 0 — Weapon Mastery on-miss (Graze). Damage = abilityMod.
+
       if (masterySlug === "graze") {
         const profBonus = await this.getAttackerProfBonus(
           attacker,
@@ -2955,9 +2906,9 @@ export class CombatService {
         });
         events.push(...mRes.events);
         if (mRes.grazeDamage && mRes.grazeDamage.amount > 0) {
-          // Aplicar damage direto (sem resistências — é dano físico do mesmo tipo
-          // da arma, já coberto pela immunity logic ao reprocessar seria overkill
-          // pra miss. Fase 1 simplifica: aplica literal).
+
+
+
           const dmg = mRes.grazeDamage.amount;
           if (target.type === "pc" && target.characterId) {
             const targetOwnerId = await this.resolveParticipantOwner(
@@ -3002,7 +2953,7 @@ export class CombatService {
               source: "weapon-mastery:graze",
             },
           });
-          // damageRollResult para o return payload
+
           damageRollResult = {
             rolls: [],
             bonus: 0,
@@ -3017,10 +2968,10 @@ export class CombatService {
         }
       }
 
-      // Fighter L13 Studied Attacks (RAW 2024) — quando miss com weapon/unarmed,
-      // attacker ganha advantage no próximo attack contra mesmo alvo (until end
-      // of next turn). Aplica `self_advantage_next_attack` com `requiredTargetId`
-      // (mesmo effect kind do Vex mastery — trigger oposto). Só PC weapon/unarmed.
+
+
+
+
       if (
         isWeaponOrUnarmedAttack &&
         attacker.type === "pc" &&
@@ -3051,8 +3002,8 @@ export class CombatService {
     }
 
     if (!dto._isSubAttack) {
-      // Spec 003 Fatia 6 — weapon attacks consomem 1 slot de Extra Attack.
-      // `actionUsed` só vai a true quando atingir o limite (attacksMaxThisTurn).
+
+
       attacker.attacksUsedThisTurn = Math.min(
         attacker.attacksUsedThisTurn + 1,
         attacker.attacksMaxThisTurn,
@@ -3061,12 +3012,12 @@ export class CombatService {
         attacker.actionUsed = true;
       }
 
-      // Fighter L9 Tactical Master — consome override após o attack.
+
       if (attacker.tacticalMasterOverride) {
         attacker.tacticalMasterOverride = null;
       }
 
-      // Spec 003 T032 — ataque remove Hidden do atacante (RAW PHB cap. 9).
+
       if (attacker.conditions?.includes("hidden")) {
         attacker.conditions = attacker.conditions.filter((c) => c !== "hidden");
         events.push({
@@ -3076,8 +3027,8 @@ export class CombatService {
         });
       }
 
-      // Spec 003 T032 — consome Help (limpa a tríade no ajudante) se
-      // o ataque foi contra o alvo escolhido.
+
+
       if (reactive.consumedHelp && activeHelper) {
         activeHelper.helpingAllyParticipantId = null;
         activeHelper.helpingTargetParticipantId = null;
@@ -3093,16 +3044,16 @@ export class CombatService {
         });
       }
 
-      // Spec 012 — consome Heroic Inspiration via service compartilhado
-      // (mesma lógica de save/skill-check).
+
+
       if (consumeInspiration) {
         const inspResult = await this.inspirationService.consumeIfArmed(
           attacker.id,
           "attack_roll",
         );
         if (inspResult.consumed && inspResult.eventData) {
-          // InspirationService já persistiu; apenas refletimos no local
-          // attacker object pra evitar re-fetch + emite evento.
+
+
           attacker.inspirationArmed = false;
           events.push(inspResult.eventData);
         }
@@ -3116,9 +3067,9 @@ export class CombatService {
         events,
       );
 
-      // Spec 015 Eixo 7 — Shield opportunity. Se o hit foi marginal E target é
-      // PC com Shield preparado + slot L1+ livre, emite `shield_opportunity`
-      // referenciando o attack_roll salvo (pra recompute retroactive).
+
+
+
       if (hit && target.type === "pc") {
         const shieldOpp = await this.reactionOpportunity.shouldOfferShield(
           target,
@@ -3151,7 +3102,7 @@ export class CombatService {
                 },
               ],
             );
-            // Adiciona no retorno pra o frontend processar sem precisar re-fetch.
+
             events.push({
               event_type: "shield_opportunity",
               actor_participant_id: attacker.id,
@@ -3166,7 +3117,7 @@ export class CombatService {
                 timeoutSeconds: 10,
               },
             });
-            // silencia lint: oppEvents usado só pra persistir
+
             void oppEvents;
           }
         }
@@ -3185,7 +3136,7 @@ export class CombatService {
     );
   }
 
-  // --- Multiattack ---
+
 
   async resolveMultiattack(
     encounterId: string,
@@ -3318,7 +3269,7 @@ export class CombatService {
     );
   }
 
-  // --- Arbitrary Damage/Heal ---
+
 
   async applyDamage(
     encounterId: string,
@@ -3350,8 +3301,8 @@ export class CombatService {
     if (target.type === "pc" && target.characterId) {
       const wasDying = target.dyingState === "dying";
 
-      // Rule: PC already at 0 HP and dying takes damage → death-save failure
-      // (+2 on crit, +1 otherwise) instead of further HP loss.
+
+
       if (wasDying) {
         const failuresDelta = dto.fromCriticalHit ? 2 : 1;
         const ds = await this.stateService.updateDeathSaves(
@@ -3389,8 +3340,8 @@ export class CombatService {
         }
         await this.participantRepo.save(target);
       } else {
-        // Spec 015 Eixo 4: se PC está transformado (Wild Shape/Polymorph), dano
-        // vai pro form HP primeiro; overflow aplicado ao caster via service.
+
+
         let formAbsorbed = 0;
         let formReverted = false;
         let overflowAmount = 0;
@@ -3405,7 +3356,7 @@ export class CombatService {
           formReverted = formRes.reverted;
           overflowAmount = formRes.overflowToOriginal;
           if (!formReverted) {
-            // Form absorveu tudo — HP original não muda.
+
             const formHpAfter = Math.max(
               0,
               target.transformationState.form.currentHp - formAbsorbed,
@@ -3424,8 +3375,8 @@ export class CombatService {
           }
         }
         if (!target.transformationState || formReverted) {
-          // Não transformado OU reverteu: consome do HP original. Se reverteu,
-          // applyDamageToForm já aplicou o overflow no character_state — aqui só lê.
+
+
           const effectiveDamage = formReverted ? 0 : dto.amount;
           const result = await this.stateService.updateHp(
             dto.ownerUserId,
@@ -3495,12 +3446,12 @@ export class CombatService {
       },
     });
 
-    // Spec 004 — trigger auto CON save quando target estava concentrando.
-    // RAW PHB p.203: ao receber dano, caster faz CON save DC max(10, floor(damage/2)).
-    // Falha → break + cascade dos appliedEffects/effectInstances.
+
+
+
     if (target.isConcentrating && dto.amount > 0 && !defeated) {
       const dc = Math.max(10, Math.floor(dto.amount / 2));
-      // Roll d20 + CON modifier (save proficiency raramente; por ora, simples CON mod).
+
       let conMod = 0;
       if (target.type === "pc" && target.characterId) {
         try {
@@ -3513,7 +3464,7 @@ export class CombatService {
           );
           conMod = conBlock?.modifier ?? 0;
         } catch {
-          /* fallback 0 */
+
         }
       } else if (target.type === "monster") {
         const conScore = (target.monster as any)?.stats?.con ?? 10;
@@ -3539,7 +3490,7 @@ export class CombatService {
         events.push(...breakRes.events);
       }
     } else if (target.isConcentrating && defeated) {
-      // Death break
+
       const breakRes = await this.concentration.breakDueToDeath(target);
       events.push(...breakRes.events);
     }
@@ -3575,9 +3526,9 @@ export class CombatService {
     let dyingState: "none" | "dying" | "stable" | "dead" | undefined;
     let defeated = false;
 
-    // Spec 015 Eixo 3 — capture prevHp para revalidateAfterHpChange.
-    // Tolera stateService sem `getCurrentHp` (mocks antigos) — cai pra
-    // `target.currentHp` que sempre reflete o último snapshot persistido.
+
+
+
     const prevHp =
       target.type === "pc" &&
       target.characterId &&
@@ -3631,9 +3582,9 @@ export class CombatService {
       },
     ];
 
-    // Spec 015 Eixo 3 — remove Unconscious derivada de hp_zero quando heal
-    // transiciona HP≤0 → HP>0. Condições de outras fontes permanecem (RAW).
-    // Tolera mocks de teste sem o método (checagem defensiva).
+
+
+
     if (typeof this.conditionLifecycle.revalidateAfterHpChange === "function") {
       const revalidation =
         await this.conditionLifecycle.revalidateAfterHpChange(
@@ -3649,14 +3600,9 @@ export class CombatService {
     return success({ hpAfter, defeated, dyingState, deathSavesReset }, events);
   }
 
-  // --- Conditions ---
 
-  /**
-   * Spec 004 — delega a ConditionLifecycleService. Mantém contract legado
-   * (`{ condition, apply }` + resposta `{ conditions: string[] }`) mas
-   * internamente cria/remove ConditionInstance com metadata completa +
-   * dispara cascata de concentração quando aplicável.
-   */
+
+
   async applyCondition(
     encounterId: string,
     dto: ConditionDto,
@@ -3675,7 +3621,7 @@ export class CombatService {
     const events: GameEventData[] = [];
 
     if (dto.apply) {
-      // Evita duplicata de ConditionInstance quando já existe a mesma slug
+
       const alreadyHas = (participant.conditionInstances ?? []).some(
         (ci) => ci.slug === slug,
       );
@@ -3688,7 +3634,7 @@ export class CombatService {
         events.push(...res.events);
       }
     } else {
-      // Remove a instância mais recente com essa slug
+
       const match = (participant.conditionInstances ?? [])
         .filter((ci) => ci.slug === slug)
         .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
@@ -3702,13 +3648,13 @@ export class CombatService {
       }
     }
 
-    // Re-fetch para ter o conditions[] derivado atualizado
+
     const refreshed = await this.encounterService.getParticipant(
       dto.participantId,
     );
     const conditions = refreshed.conditions;
 
-    // Sync to CharacterState for PCs
+
     if (refreshed.type === "pc" && refreshed.characterId) {
       await this.stateService.updateConditions(
         dto.ownerUserId,
@@ -3722,7 +3668,7 @@ export class CombatService {
     return success({ conditions }, events);
   }
 
-  // --- Death Saves ---
+
 
   async resolveDeathSave(
     encounterId: string,
@@ -3797,7 +3743,7 @@ export class CombatService {
     return success(result, events);
   }
 
-  // --- Private Helpers ---
+
 
   private applyDamageToMonster(
     participant: EncounterParticipantEntity,
@@ -3805,7 +3751,7 @@ export class CombatService {
   ): { hpAfter: number; defeated: boolean } {
     let remaining = amount;
 
-    // Temp HP absorbs first
+
     if (participant.tempHp > 0) {
       if (remaining <= participant.tempHp) {
         participant.tempHp -= remaining;
@@ -3839,8 +3785,8 @@ export class CombatService {
     if (participant.type === "monster" && participant.monster) {
       conMod = getAbilityModifier(participant.monster.constitution);
     } else if (participant.type === "pc" && participant.characterId) {
-      // Read real CON save bonus from the computed sheet (includes proficiency
-      // when the class grants it — e.g., Barbarian, Cleric, Fighter, etc.).
+
+
       try {
         const ownerId = await this.resolveParticipantOwner(participant, "");
         if (ownerId) {
@@ -3854,7 +3800,7 @@ export class CombatService {
           if (conSave) conMod = conSave.bonus;
         }
       } catch {
-        // Fall through: conMod stays 0. The check still runs, just with no bonus.
+
       }
     }
 
@@ -3863,9 +3809,9 @@ export class CombatService {
     const maintained = total >= dc;
     const spellName = participant.concentratingOn ?? undefined;
 
-    // NB: break cascade is delegated to ConcentrationService.break('damage') in
-    // the caller, so we keep `isConcentrating` true here — break() checks the
-    // flag before cascading. Only flip if maintained.
+
+
+
     return {
       dc,
       roll,

@@ -45,20 +45,20 @@ export function transformWeaponProperties(): TransformedWeaponProperty[] {
   const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
   const props: FiveToolsItemProperty[] = data.itemProperty ?? [];
 
-  // Deduplicate: prefer XPHB version
+
   const seen = new Map<string, TransformedWeaponProperty>();
 
   for (const p of props) {
     const abbr = p.abbreviation;
     const slugBase = WEAPON_PROPERTY_MAP[abbr];
 
-    // Skip properties not in WEAPON_PROPERTY_MAP (e.g., Burst Fire, Vestige)
+
     if (!slugBase) continue;
 
     const name = extractName(p.entries as unknown[]) || slugBase;
     const description = p.entries ? parseEntriesAsText(p.entries as any[]) : "";
 
-    // Prefer XPHB source
+
     if (!seen.has(slugBase) || p.source === "XPHB") {
       seen.set(slugBase, {
         slug: slugBase,

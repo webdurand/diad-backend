@@ -23,15 +23,7 @@ export interface OutboundRequestInit extends RequestInit {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-/**
- * fetch() wrapper que:
- *  - Propaga traceparent (mesmo trace-id, novo span-id) via CLS.
- *  - Aplica timeout via AbortController (default 30s) → AGENT_TIMEOUT.
- *  - Detecta network failure → AGENT_UNREACHABLE.
- *  - Parseia application/problem+json upstream → UpstreamException com code preservado.
- *  - Detecta heurística "200 com erro" (body.error truthy && !body.data) → AGENT_INVALID_RESPONSE.
- *  - Loga wide-event http.client.request.
- */
+
 @Injectable()
 export class OutboundFetch {
   constructor(
@@ -232,8 +224,8 @@ export class OutboundFetch {
     if (!body || typeof body !== "object") return undefined;
     const code = (body as Record<string, unknown>).code;
     if (typeof code !== "string") return undefined;
-    // Apenas se já bater no nosso enum — caso contrário deixa undefined e
-    // engolimos só o detail; mantemos AGENT_UPSTREAM_ERROR.
+
+
     return undefined;
   }
 

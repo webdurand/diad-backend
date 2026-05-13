@@ -1,13 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Big bang (1789000000000) tornou narrative_decisions.session_id NOT NULL
- * mas deixou a FK como ON DELETE SET NULL (vinda da CreateNarrativeDecision
- * original). Apagar GameSession explode 23502 porque Postgres tenta
- * UPDATE ... SET session_id = NULL e bate na NOT NULL constraint.
- *
- * Aqui só recria a FK com ON DELETE CASCADE (alinhado com a entity).
- */
+
 export class FixNarrativeDecisionsSessionFkCascade1789200000000 implements MigrationInterface {
   name = "FixNarrativeDecisionsSessionFkCascade1789200000000";
 

@@ -26,7 +26,7 @@ import {
   type CreateNpcRelationshipDto,
   type UpdateNpcRelationshipDto,
 } from "./services/npc-relationship.service";
-// Spec 019 — Living World & Ambiance
+
 import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService, type Biome } from "./services/weather.service";
 import { GameClockService } from "./services/game-clock.service";
@@ -55,7 +55,7 @@ import type {
 } from "./services/npc.service";
 import { isDmOmniscient } from "./services/npc-projection";
 import type { CreateFactionDto } from "./services/faction.service";
-// Spec 027 (M2, AC2.10 / bug D3) — resolve slug-ou-UUID em `:id`.
+
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 
 interface AuthRequest extends Request {
@@ -68,7 +68,7 @@ function getUserId(req: AuthRequest): string {
   return id;
 }
 
-/** W3C traceparent: `00-<32hex traceId>-<16hex spanId>-<flags>`. */
+
 function extractTraceId(traceparent: string | undefined): string | undefined {
   if (!traceparent) return undefined;
   const parts = traceparent.split("-");
@@ -102,22 +102,18 @@ export class WorldController {
     private readonly locationPoiService: LocationPoiService,
     private readonly npcService: NpcService,
     private readonly factionService: FactionService,
-    // Spec 019 — Living World & Ambiance
+
     private readonly ambianceService: AmbianceService,
     private readonly weatherService: WeatherService,
     private readonly gameClockService: GameClockService,
-    // Spec NNN — Mundo + Aventura (story arcs + NPC relationships)
+
     private readonly storyArcService: StoryArcService,
     private readonly npcRelationshipService: NpcRelationshipService,
   ) {}
 
-  // ==================== AMBIANCE (Spec 019) ====================
 
-  /**
-   * Spec 019 — payload agregado consumido pelo agent (`get_ambiance`) e
-   * frontend (`useAmbiancePill`). Inclui weather, timeOfDay (derivado),
-   * chaosFactor, clocks visíveis e summary narrativo PT-BR.
-   */
+
+
   @Get(":id/ambiance")
   async getAmbiance(
     @Param("id", CampaignIdPipe) campaignId: string,
@@ -166,10 +162,10 @@ export class WorldController {
     };
   }
 
-  // chaos_factor migrou pra session-scoped: PATCH /sessions/:sid/chaos
-  // (SessionScopedWorldController). Não há mais setter via /campaigns/:id/chaos.
 
-  // ==================== CAMPAIGNS ====================
+
+
+
 
   @Post()
   async createCampaign(
@@ -218,13 +214,9 @@ export class WorldController {
     return { ok: true };
   }
 
-  // ==================== Spec NNN: Mundo + Aventura ====================
 
-  /**
-   * Lista paginada de mundos solo (dm_mode='ai') do user.
-   * Usado em /jogar/preparar mode='pick_world'.
-   * Default: só publicados (isDraft=false).
-   */
+
+
   @Get("solo/list")
   async listSoloWorlds(
     @Req() req: AuthRequest,
@@ -242,9 +234,7 @@ export class WorldController {
     });
   }
 
-  /**
-   * Publica mundo (transição draft → published). Usado no submit final do wizard.
-   */
+
   @Post(":id/publish")
   async publishWorld(
     @Req() req: AuthRequest,
@@ -254,9 +244,7 @@ export class WorldController {
     return this.campaignService.publishWorld(id);
   }
 
-  /**
-   * Persiste generation_seed (snapshot do dict do wizard pra replay/audit).
-   */
+
   @Post(":id/generation-seed")
   async setGenerationSeed(
     @Req() req: AuthRequest,
@@ -267,7 +255,7 @@ export class WorldController {
     return this.campaignService.setGenerationSeed(id, body.seed);
   }
 
-  // ==================== Story Arcs (Spec NNN) ====================
+
 
   @Post(":id/story-arcs")
   async createStoryArc(
@@ -310,7 +298,7 @@ export class WorldController {
     return { ok: true };
   }
 
-  // ==================== NPC Relationships (Spec NNN) ====================
+
 
   @Post(":id/npcs/:npcId/relationships")
   async createNpcRelationship(
@@ -358,7 +346,7 @@ export class WorldController {
     return { ok: true };
   }
 
-  // ==================== Spec 014 M1: BOUNDED WORLD ====================
+
 
   @Post(":id/initialize-with-budget")
   async initializeWithBudget(
@@ -428,7 +416,7 @@ export class WorldController {
     return this.campaignService.removePlayer(id, userId);
   }
 
-  // ==================== LOCATIONS ====================
+
 
   @Post(":id/locations")
   async createLocation(
@@ -548,7 +536,7 @@ export class WorldController {
     return this.locationService.addConnection(locId, dto);
   }
 
-  // ==================== NPCS ====================
+
 
   @Post(":id/npcs")
   async createNpc(
@@ -589,7 +577,7 @@ export class WorldController {
     @Param("id", CampaignIdPipe) id: string,
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
-    // Spec 020 — redaction filter default-on. dm-omniscient bypass via header.
+
     return this.npcService.listCanonicalProjected(id, {
       dmOmniscient: isDmOmniscient(headers),
     });
@@ -603,7 +591,7 @@ export class WorldController {
     @Param("npcId") npcId: string,
   ) {
     await this.campaignService.ensureMembership(id, getUserId(req));
-    // Spec 020 — redaction filter default-on. dm-omniscient bypass via header.
+
     return this.npcService.getProjectedById(npcId, {
       dmOmniscient: isDmOmniscient(headers),
     });
@@ -650,7 +638,7 @@ export class WorldController {
     return this.npcService.listStoryHooksByCampaign(id);
   }
 
-  // ==================== FACTIONS ====================
+
 
   @Post(":id/factions")
   async createFaction(
@@ -682,9 +670,9 @@ export class WorldController {
     return this.factionService.update(facId, dto);
   }
 
-  // Quests session-scoped vivem em SessionScopedWorldController (POST/GET/PATCH /sessions/:sessionId/quests).
-  // Aqui guardamos só o TEMPLATE de quests gerado pela síntese de mundo — materializa
-  // em quests session-scoped quando uma session inicia.
+
+
+
 
   @Post(":id/quest-templates")
   async setQuestsTemplate(

@@ -1,21 +1,9 @@
-/**
- * Canonical-first policy (spec 012).
- *
- * Classes e subclasses 100% validadas em tela (RAW 2024 XPHB) aparecem ao jogador.
- * Itens incompletos ficam ocultos até serem enviados em um release futuro.
- *
- * Admin seed (/admin/seed-character) bypassa este filtro — usado pelo harness.
- *
- * Ao concluir a próxima classe/subclasse canônica, atualizar aqui.
- */
+
 
 export interface ClassAvailability {
-  /** Classe pode ser escolhida na criação e no level-up multiclasse. */
+
   available: boolean;
-  /**
-   * Slugs de subclasse (como persistidos em `subclasses.slug`) que aparecem
-   * no picker de subclasse. Outros slugs da mesma classe ficam ocultos.
-   */
+
   canonicalSubclasses: string[];
 }
 
@@ -26,21 +14,21 @@ const CLASS_AVAILABILITY: Record<string, ClassAvailability> = {
   paladin: { available: true, canonicalSubclasses: ["devotion"] },
   wizard: { available: true, canonicalSubclasses: ["evocation"] },
   sorcerer: { available: true, canonicalSubclasses: ["draconic"] },
-  // Druid L1-L20 + Land canonical liberado (Sprint C+D do spec 012).
-  // Wild Shape (Transformation) + Conjure Animals (Summoning) em tela.
+
+
   druid: { available: true, canonicalSubclasses: ["druid-land", "land"] },
-  // Bard L1-L20 + Lore canonical liberado. Bardic Inspiration + spellcasting em tela.
+
   bard: { available: true, canonicalSubclasses: ["bard-lore", "lore"] },
-  // Warlock: Pact Magic + Fiend canonical (Dark One's Blessing + Dark One's Own Luck).
+
   warlock: { available: true, canonicalSubclasses: ["warlock-fiend", "fiend"] },
-  // Monk: Focus Points (Flurry/Patient/Step) + Stunning Strike + Open Hand canonical
+
   monk: {
     available: true,
     canonicalSubclasses: ["monk-open-hand", "open-hand"],
   },
-  // Rogue: Cunning Action (Dash/Disengage/Hide) + Steady Aim + Uncanny Dodge + Thief canonical
+
   rogue: { available: true, canonicalSubclasses: ["rogue-thief", "thief"] },
-  // Ranger: Hunter's Mark + Tireless + Nature's Veil + Hunter canonical
+
   ranger: { available: true, canonicalSubclasses: ["ranger-hunter", "hunter"] },
 };
 

@@ -32,7 +32,7 @@ export class ChronicleService {
     private readonly knowledgeRepo: Repository<PartyKnowledgeEntity>,
   ) {}
 
-  // --- Chronicles ---
+
 
   async createChronicle(
     dto: CreateChronicleDto,
@@ -72,7 +72,7 @@ export class ChronicleService {
     });
   }
 
-  // --- Party Knowledge ---
+
 
   async recordKnowledge(
     dto: RecordKnowledgeDto,

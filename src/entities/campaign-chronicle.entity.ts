@@ -30,7 +30,7 @@ export class CampaignChronicleEntity {
   session?: GameSessionEntity;
 
   @Column({ name: "entry_date", type: "varchar", nullable: true })
-  entryDate?: string; // in-game date
+  entryDate?: string;
 
   @Column({ type: "varchar" })
   title: string;
@@ -42,7 +42,7 @@ export class CampaignChronicleEntity {
   entityChanges: Record<string, any>;
 
   @Column({ type: "int", default: 5 })
-  significance: number; // 1-10
+  significance: number;
 
   @Column({ name: "created_at", type: "timestamptz", default: () => "now()" })
   createdAt: Date;

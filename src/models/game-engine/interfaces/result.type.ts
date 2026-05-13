@@ -1,7 +1,4 @@
-/**
- * Result pattern for game engine operations.
- * Game logic never throws — it returns Success or Failure.
- */
+
 
 export type GameResult<T> = GameSuccess<T> | GameFailure;
 
@@ -17,37 +14,34 @@ export interface GameFailure {
   code: GameErrorCode;
 }
 
-/**
- * Catalog of canonical error codes used in the envelope `{ok:false, error, code}`.
- * See `specs/002-encounter-correctness/contracts/error-codes-catalog.md` for semantics.
- */
+
 export enum GameErrorCode {
-  // Generic validation and permissions
+
   INVALID_PAYLOAD = "INVALID_PAYLOAD",
   FORBIDDEN = "FORBIDDEN",
   UNAUTHORIZED = "UNAUTHORIZED",
 
-  // Spec 002: Encounter DM-led setup
+
   FORBIDDEN_CAMPAIGN_MEMBER = "FORBIDDEN_CAMPAIGN_MEMBER",
   ENCOUNTER_ALREADY_ACTIVE = "ENCOUNTER_ALREADY_ACTIVE",
   ENCOUNTER_COMPLETED = "ENCOUNTER_COMPLETED",
   CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND",
   CHARACTER_ALREADY_IN_ENCOUNTER = "CHARACTER_ALREADY_IN_ENCOUNTER",
 
-  // Encounter lifecycle
+
   ENCOUNTER_NOT_FOUND = "ENCOUNTER_NOT_FOUND",
   ENCOUNTER_NOT_ACTIVE = "ENCOUNTER_NOT_ACTIVE",
   ENCOUNTER_NOT_PREPARING = "ENCOUNTER_NOT_PREPARING",
   SESSION_NOT_FOUND = "SESSION_NOT_FOUND",
 
-  // Participants
+
   PARTICIPANT_NOT_FOUND = "PARTICIPANT_NOT_FOUND",
   INVALID_PARTICIPANT = "INVALID_PARTICIPANT",
   INVALID_TARGET = "INVALID_TARGET",
   TARGET_DEFEATED = "TARGET_DEFEATED",
   OUT_OF_RANGE = "OUT_OF_RANGE",
 
-  // Turn and action economy
+
   NOT_YOUR_TURN = "NOT_YOUR_TURN",
   NO_ACTION_AVAILABLE = "NO_ACTION_AVAILABLE",
   NO_BONUS_ACTION_AVAILABLE = "NO_BONUS_ACTION_AVAILABLE",
@@ -55,26 +49,26 @@ export enum GameErrorCode {
   CONDITION_PREVENTS_ACTION = "CONDITION_PREVENTS_ACTION",
   INVALID_ACTION = "INVALID_ACTION",
 
-  // Death saves (novos na spec 002)
+
   NOT_DYING = "NOT_DYING",
   ALREADY_DEAD = "ALREADY_DEAD",
 
-  // Multiataque (novos na spec 002)
+
   INVALID_MULTIATTACK = "INVALID_MULTIATTACK",
   MULTIATTACK_NOT_RECHARGED = "MULTIATTACK_NOT_RECHARGED",
 
-  // Magia
+
   INVALID_SPELL = "INVALID_SPELL",
   INSUFFICIENT_SPELL_SLOTS = "INSUFFICIENT_SPELL_SLOTS",
   ALREADY_CONCENTRATING = "ALREADY_CONCENTRATING",
   NO_CONCENTRATION = "NO_CONCENTRATION",
 
-  // Movement
+
   POSITION_OUT_OF_BOUNDS = "POSITION_OUT_OF_BOUNDS",
   POSITION_OCCUPIED = "POSITION_OCCUPIED",
   OUT_OF_MOVEMENT = "OUT_OF_MOVEMENT",
 
-  // Spec 003: IA e ações genéricas
+
   NOT_AI_CONTROLLED = "NOT_AI_CONTROLLED",
   AI_UNAVAILABLE = "AI_UNAVAILABLE",
   AI_TIMEOUT = "AI_TIMEOUT",
@@ -84,7 +78,7 @@ export enum GameErrorCode {
   ITEM_NOT_USABLE = "ITEM_NOT_USABLE",
   CONTROL_CHANGE_FORBIDDEN = "CONTROL_CHANGE_FORBIDDEN",
 
-  // Spec 004: completude RAW
+
   INSUFFICIENT_LEGENDARY_POINTS = "INSUFFICIENT_LEGENDARY_POINTS",
   CONDITION_PREVENTS_LEGENDARY = "CONDITION_PREVENTS_LEGENDARY",
   LAIR_ACTION_NOT_AVAILABLE = "LAIR_ACTION_NOT_AVAILABLE",
@@ -94,15 +88,15 @@ export enum GameErrorCode {
   INVALID_CONDITION_INSTANCE = "INVALID_CONDITION_INSTANCE",
   PERSISTENT_AREA_NOT_FOUND = "PERSISTENT_AREA_NOT_FOUND",
 
-  // Spec 005: polish + bug fixes (US14 + US9)
+
   SPELL_NOT_AOE = "SPELL_NOT_AOE",
   SPELL_OUT_OF_RANGE = "SPELL_OUT_OF_RANGE",
   LIBRARY_MONSTER_NOT_FOUND = "LIBRARY_MONSTER_NOT_FOUND",
 
-  // Spec 015 Eixo 2: spell range semantics (Self-origin-attack rejeita caster)
+
   INVALID_TARGET_SELF = "INVALID_TARGET_SELF",
 
-  // Spec 003 (combat action registry) — novos codes
+
   MISSING_ACTION_SLUG = "MISSING_ACTION_SLUG",
   INVALID_ACTION_SLUG = "INVALID_ACTION_SLUG",
   USE_UNARMED_STRIKE = "USE_UNARMED_STRIKE",
@@ -215,7 +209,7 @@ const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
   [GameErrorCode.INVALID_TARGET_SELF]:
     "Esta magia precisa ser lancada contra outra criatura.",
 
-  // Spec 003 (combat action registry)
+
   [GameErrorCode.MISSING_ACTION_SLUG]:
     "Campo 'actionSlug' e obrigatorio. O shape antigo ('actionName') foi removido.",
   [GameErrorCode.INVALID_ACTION_SLUG]:
@@ -259,9 +253,7 @@ export interface GameEventData {
   data: Record<string, any>;
 }
 
-/**
- * Helper para resposta de sucesso.
- */
+
 export function success<T>(
   value: T,
   events: GameEventData[] = [],
@@ -269,15 +261,7 @@ export function success<T>(
   return { ok: true, value, events };
 }
 
-/**
- * Helper para resposta de falha.
- * Aceita (code) - mensagem vem do catálogo PT-BR.
- * Ou (message, code) - mensagem customizada.
- *
- * O segundo parâmetro aceita `GameErrorCode` ou string (porque os valores do
- * enum são strings idênticas aos códigos canônicos). Isso mantém backwards
- * compatibility com call sites que passam literais antes de migrar pro enum.
- */
+
 export function failure(
   codeOrMessage: GameErrorCode | string,
   code?: GameErrorCode | string,

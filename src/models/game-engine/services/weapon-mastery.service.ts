@@ -8,11 +8,11 @@ import { ConditionLifecycleService } from "./condition-lifecycle.service";
 import { GameEventData } from "../interfaces/result.type";
 import { getAbilityModifier } from "src/shared/srd-utils";
 
-// Spec 012 Fase 0 — Weapon Mastery (XPHB 2024)
-//
-// 8 properties, cada uma com timing e efeito mecânico distintos. Fase 1 cobre
-// post-hit/miss: Graze · Sap · Slow · Topple · Vex · Push.
-// Fase 2 (deferred): Cleave (second attack in chain), Nick (TWF action flow).
+
+
+
+
+
 
 export type MasterySlug =
   | "cleave"
@@ -28,36 +28,32 @@ export interface MasteryContext {
   masterySlug: string;
   attacker: EncounterParticipantEntity;
   target: EncounterParticipantEntity;
-  /** Ability modifier used for the attack roll (STR or DEX, depending on weapon). */
+
   abilityMod: number;
-  /** Attacker's proficiency bonus (for Topple save DC). */
+
   profBonus: number;
-  /** Damage type of the weapon — used by Graze when dealing ability-mod damage. */
+
   damageType: string;
-  /** Weapon size / target size — only Push requires "Large or smaller". Default lenient. */
+
   targetSizeOk?: boolean;
-  /** Grid cell size (ft). Used by Push to convert 10ft → cells. */
+
   cellSizeFt?: number;
-  /** Cleave — dano rolado no hit primário. Cleave aplica mesmo total num 2º alvo. */
+
   damageRolledAmount?: number;
 }
 
 export interface MasteryOnHitResult {
-  /** Slug do efeito aplicado (p/ log). */
+
   applied: MasterySlug[];
-  /** Damage bonus extra from mastery (só Graze on-hit normalmente = 0). */
+
   extraDamage: number;
-  /** Eventos pra emitir via EventService. */
+
   events: GameEventData[];
-  /** Push: nova posição do target (se aplicável). */
+
   pushedTo?: { x: number; y: number };
-  /** Topple: resultado do CON save (applied prone só em falha). */
+
   toppleSave?: { roll: number; total: number; dc: number; success: boolean };
-  /**
-   * Cleave (RAW 2024) — se houver alvo adjacente ao primário (5ft Chebyshev,
-   * mesma faction inimiga), retorna descritor pra combat.service aplicar damage.
-   * Service não mexe HP direto; responsabilidade fica no caller.
-   */
+
   cleaveSecondTarget?: {
     participantId: string;
     damageAmount: number;
@@ -66,7 +62,7 @@ export interface MasteryOnHitResult {
 }
 
 export interface MasteryOnMissResult {
-  /** Graze damage se aplicável. */
+
   grazeDamage?: { amount: number; damageType: string };
   events: GameEventData[];
 }
@@ -81,12 +77,7 @@ export class WeaponMasteryService {
     private readonly conditionLifecycle: ConditionLifecycleService,
   ) {}
 
-  /**
-   * Ponto de entrada pós-hit. Aplica o efeito correspondente ao masterySlug.
-   * Chamado em combat.service.resolveAttack depois de `damage_applied`, antes
-   * de persistir attacker/target, pra que mudanças (conditions/effects/pos) já
-   * fiquem na mesma transação lógica.
-   */
+
   async resolveOnHit(ctx: MasteryContext): Promise<MasteryOnHitResult> {
     const result: MasteryOnHitResult = {
       applied: [],
@@ -113,9 +104,9 @@ export class WeaponMasteryService {
         await this.applyCleave(ctx, result);
         break;
       case "nick":
-        // Nick é "action economy rider" — expõe via actions.service + flag
-        // nickUsedThisTurn (gerenciado em combat.service quando extra attack
-        // light é feito). Aqui só emite marker.
+
+
+
         result.events.push({
           event_type: "weapon_mastery_triggered",
           actor_participant_id: ctx.attacker.id,
@@ -126,7 +117,7 @@ export class WeaponMasteryService {
           },
         });
         break;
-      // Graze só em miss — ignora em hit
+
       case "graze":
         break;
       default:
@@ -135,9 +126,7 @@ export class WeaponMasteryService {
     return result;
   }
 
-  /**
-   * Ponto de entrada pós-miss. Só Graze entra aqui.
-   */
+
   resolveOnMiss(ctx: MasteryContext): MasteryOnMissResult {
     const result: MasteryOnMissResult = { events: [] };
     if ((ctx.masterySlug as MasterySlug) !== "graze") return result;
@@ -157,17 +146,12 @@ export class WeaponMasteryService {
     return result;
   }
 
-  /**
-   * Cleave (RAW 2024) — hit melee com weapon 2-handed + Cleave causa o mesmo
-   * damage total num 2º alvo adjacente (5ft Chebyshev) ao primário. 1× por turno.
-   * Service apenas identifica o 2º alvo; combat.service aplica damage (mantém
-   * responsabilidade de HP/defeat/events de damage_applied no caller).
-   */
+
   private async applyCleave(
     ctx: MasteryContext,
     result: MasteryOnHitResult,
   ): Promise<void> {
-    // Limite 1×/turno
+
     if (ctx.attacker.cleaveUsedThisTurn) {
       result.events.push({
         event_type: "weapon_mastery_deferred",
@@ -180,18 +164,18 @@ export class WeaponMasteryService {
     if (!ctx.damageRolledAmount || ctx.damageRolledAmount <= 0) return;
     if (ctx.target.positionX == null || ctx.target.positionY == null) return;
 
-    // Busca 2º alvo adjacente (hostil, não o primário, não o próprio attacker)
+
     const all = await this.participantRepo.find({
       where: { encounterId: ctx.target.encounterId },
     });
     const adjacent = all.find((p) => {
       if (p.id === ctx.target.id || p.id === ctx.attacker.id) return false;
       if (p.isDefeated) return false;
-      if (p.faction === ctx.attacker.faction) return false; // só hostis
+      if (p.faction === ctx.attacker.faction) return false;
       if (p.positionX == null || p.positionY == null) return false;
       const dx = Math.abs(p.positionX - (ctx.target.positionX ?? 0));
       const dy = Math.abs(p.positionY - (ctx.target.positionY ?? 0));
-      // Chebyshev distance 1 = adjacente em grid quadrada (inclui diagonais)
+
       return Math.max(dx, dy) <= 1 && dx + dy > 0;
     });
 
@@ -205,7 +189,7 @@ export class WeaponMasteryService {
       return;
     }
 
-    // Marca flag per-turn + retorna descritor pro combat.service aplicar damage
+
     ctx.attacker.cleaveUsedThisTurn = true;
     await this.participantRepo.save(ctx.attacker);
 
@@ -229,11 +213,7 @@ export class WeaponMasteryService {
     });
   }
 
-  /**
-   * Sap — alvo tem disadvantage no próximo attack roll antes do início do meu
-   * próximo turno. Usa `self_disadvantage_next_attack` (one-shot consumido no
-   * proximo attack do target).
-   */
+
   private async applySap(
     ctx: MasteryContext,
     result: MasteryOnHitResult,
@@ -259,16 +239,12 @@ export class WeaponMasteryService {
     });
   }
 
-  /**
-   * Slow — Speed do alvo reduz em 10ft até o início do meu próximo turno.
-   * Não empilha (RAW: "If you hit a creature with this weapon"). Impl: se ja tem
-   * um speed_reduction aplicado por Slow, substitui (remove antigo, adiciona novo).
-   */
+
   private async applySlow(
     ctx: MasteryContext,
     result: MasteryOnHitResult,
   ): Promise<void> {
-    // Remove existing slow mastery stacking
+
     const existing = (ctx.target.effectInstances ?? []).filter(
       (e) =>
         e.kind === "speed_reduction" &&
@@ -285,7 +261,7 @@ export class WeaponMasteryService {
         sourceFeatureSlug: "weapon-mastery:slow",
         sourceCasterParticipantId: ctx.attacker.id,
         payload: { amount: 10, masterySlug: "slow" },
-        // Dura até o início do próximo turno do attacker (approx: 1 round, decresce no tick)
+
         expiresAt: { kind: "rounds", value: 1 },
         requiresConcentration: false,
       },
@@ -300,11 +276,7 @@ export class WeaponMasteryService {
     });
   }
 
-  /**
-   * Vex — advantage no meu próximo attack roll contra mesmo alvo antes do fim
-   * do meu próximo turno. Usa `self_advantage_next_attack` com payload
-   * `requiredTargetId` pra restringir ao alvo específico.
-   */
+
   private async applyVex(
     ctx: MasteryContext,
     result: MasteryOnHitResult,
@@ -334,9 +306,7 @@ export class WeaponMasteryService {
     });
   }
 
-  /**
-   * Topple — alvo faz CON save DC 8 + prof + abilityMod. Falha = Prone.
-   */
+
   private async applyTopple(
     ctx: MasteryContext,
     result: MasteryOnHitResult,
@@ -369,25 +339,21 @@ export class WeaponMasteryService {
     }
   }
 
-  /**
-   * Push — empurra o alvo até 10ft pra longe do attacker (Large ou menor).
-   * Assume grid 5ft/cell. Direção: vetor attacker→target normalizado,
-   * arredondado pra células cardinais/diagonais.
-   */
+
   private async applyPush(
     ctx: MasteryContext,
     result: MasteryOnHitResult,
   ): Promise<void> {
-    if (ctx.targetSizeOk === false) return; // Large+ creatures ignoram Push
+    if (ctx.targetSizeOk === false) return;
     const cellSize = ctx.cellSizeFt ?? 5;
-    const cellsToMove = Math.floor(10 / cellSize); // 2 cells @ 5ft
+    const cellsToMove = Math.floor(10 / cellSize);
     const ax = ctx.attacker.positionX ?? 0;
     const ay = ctx.attacker.positionY ?? 0;
     const tx = ctx.target.positionX ?? 0;
     const ty = ctx.target.positionY ?? 0;
     const dx = tx - ax;
     const dy = ty - ay;
-    // Normalize to -1/0/1 (grid-friendly); default (0,0) → no push possible
+
     if (dx === 0 && dy === 0) return;
     const mag = Math.max(Math.abs(dx), Math.abs(dy));
     const nx = Math.sign(dx) * (Math.abs(dx) / mag >= 0.5 ? 1 : 0);
@@ -412,13 +378,7 @@ export class WeaponMasteryService {
     });
   }
 
-  /**
-   * Roll inline CON save para o target (PC ou monstro). Versão simplificada:
-   * usa monster.constitution + proficiency_bonus quando monster; pra PC usa
-   * stat_block aproximado (10 default) — ideal seria delegar pra SavingThrowService,
-   * mas isso ficaria dependente de userId (que não temos aqui). Como Topple
-   * é 1 save simples sem conditions, a aproximação é aceitável por enquanto.
-   */
+
   private rollConSave(target: EncounterParticipantEntity): {
     roll: number;
     total: number;
@@ -441,7 +401,7 @@ export class WeaponMasteryService {
       );
       if (hasProf) mod += m.proficiency_bonus ?? 0;
     }
-    // PC: delegar save seria ideal; por ora usa 0 (conservador — fica como debt).
+
     const roll = this.dice.roll(20);
     return { roll, total: roll + mod, mod };
   }

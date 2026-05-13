@@ -77,11 +77,7 @@ export interface AddRelationshipDto {
   isKnownToParty?: boolean;
 }
 
-/**
- * NPC com state de aventura mergeado (status, disposition, currentLocationId).
- * Retornado por listForSession / getForSession quando o caller precisa do estado
- * "como aparece nessa aventura" em vez da ficha canônica pura.
- */
+
 export type NpcWithSessionState = NpcEntity & {
   status: "alive" | "dead" | "missing" | "unknown";
   disposition: "friendly" | "neutral" | "hostile" | "indifferent";
@@ -138,11 +134,7 @@ export class NpcService {
     return template;
   }
 
-  /**
-   * Cria NPC. Sem gameSessionId = canônico do mundo (setup via UI). Com
-   * gameSessionId = scoped à aventura, auto-anexado à scene ativa e com state
-   * inicializado. Caminho da narrativa (create_npc_from_narrative tool).
-   */
+
   async create(campaignId: string, dto: CreateNpcDto): Promise<NpcEntity> {
     const campaign = await this.campaignRepo.findOne({
       where: { id: campaignId },
@@ -384,12 +376,7 @@ export class NpcService {
     }));
   }
 
-  /**
-   * NPC criado pelo narrador precisa virar tangível na cena ativa: state
-   * inicial + scene_npcs. Sem isso, o agent diz "5 homens chegam" mas o
-   * combate não acha hostis (`npcsPresent` empty) e o fallback heurístico
-   * inventa stub genérica do label do botão.
-   */
+
   private async attachToSessionContext(
     npc: NpcEntity,
     gameSessionId: string,
@@ -452,7 +439,7 @@ export class NpcService {
     return projectNpc(npc, options);
   }
 
-  /** Lista NPCs canônicos da campanha (sem state de sessão). */
+
   async listCanonical(campaignId: string): Promise<NpcEntity[]> {
     return this.npcRepo.find({
       where: { campaignId, gameSessionId: IsNull() },
@@ -468,11 +455,7 @@ export class NpcService {
     return projectNpcs(npcs, options);
   }
 
-  /**
-   * Lista NPCs visíveis nessa aventura: canônicos do mundo + auto-materializados
-   * da própria sessão. Cada um vem com state mergeado da `session_npc_state`
-   * (status/disposition/currentLocationId), criando defaults se ainda não existir.
-   */
+
   async listForSession(gameSessionId: string): Promise<NpcWithSessionState[]> {
     const session = await this.sessionRepo.findOne({
       where: { id: gameSessionId },
@@ -521,10 +504,7 @@ export class NpcService {
     }));
   }
 
-  /**
-   * Match canônico por nome dentro da campanha (excluí auto-materializados).
-   * Case-insensitive exato; sem fuzzy. Multiple match retorna `null`.
-   */
+
   async findByNameInCampaign(
     campaignId: string,
     name: string,
@@ -541,10 +521,7 @@ export class NpcService {
     return matches.length === 1 ? matches[0] : null;
   }
 
-  /**
-   * Match por nome dentro da aventura: canônicos do mundo + auto-materializados
-   * dessa sessão. Idempotência do materialize usa esta lookup.
-   */
+
   async findByNameInSession(
     gameSessionId: string,
     name: string,
@@ -578,12 +555,7 @@ export class NpcService {
     return this.npcRepo.save(npc);
   }
 
-  /**
-   * Materializa NPC stub a partir de nome livre, scoped à aventura. Idempotente:
-   * retorna o NPC existente (canônico ou auto da mesma sessão) se já houver
-   * match por nome. Auto-materializados criados aqui têm gameSessionId setado e
-   * são deletados em cascade quando a sessão é deletada.
-   */
+
   async materializeStubFromName(
     gameSessionId: string,
     name: string,
@@ -647,10 +619,7 @@ export class NpcService {
     await this.npcRepo.delete(npcId);
   }
 
-  /**
-   * Move NPC pra location dentro da aventura. Atualiza session_npc_state,
-   * não a tabela canônica.
-   */
+
   async moveNpc(
     gameSessionId: string,
     npcId: string,

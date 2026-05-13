@@ -1,13 +1,4 @@
-/**
- * Spec 027 (M2, AC2.10 / bug D3) — testes do CampaignService.resolveId
- * + getById slug-tolerante.
- *
- * Cobre o caminho que produzia 500 em `/campaigns/<slug>/ambiance`:
- *   findOne({ where: { id: 'misterio-aldeia-campaign' } }) → Postgres
- *   "invalid input syntax for type uuid: 'misterio-aldeia-campaign'".
- *
- * Após o fix, `getById` detecta non-UUID e busca por `slug` na coluna.
- */
+
 import { NotFoundException } from "@nestjs/common";
 import { CampaignService } from "../campaign.service";
 
@@ -74,12 +65,12 @@ describe("CampaignService.resolveId / getById slug-tolerance", () => {
     });
 
     it("não busca por slug quando input parece UUID inválido (não loose-match)", async () => {
-      // Input parece UUID mas não existe; service NÃO deve cair em busca por slug
-      // como fallback (comportamento explícito: UUID-shaped → busca por id, ponto).
+
+
       const { svc, repo } = makeService([{ id: VALID_UUID, slug: SLUG }]);
       const otherUuid = "99999999-9999-4999-8999-999999999999";
       await expect(svc.resolveId(otherUuid)).rejects.toThrow(NotFoundException);
-      // Confirma que NÃO houve fallback pra busca por slug
+
       const slugLookups = repo.findOne.mock.calls.filter(
         (c: unknown[]) =>
           (c[0] as { where: Record<string, string> }).where.slug !== undefined,

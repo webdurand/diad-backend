@@ -1,7 +1,4 @@
-/**
- * Typed interfaces for Equipment JSONB fields.
- * Replaces unsafe `Record<string, unknown>` casts throughout the codebase.
- */
+
 
 export interface EquipmentArmorClass {
   base: number;

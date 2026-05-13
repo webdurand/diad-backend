@@ -181,7 +181,7 @@ describe("CharactersService", () => {
       };
       const bgEntity = { id: "bg-1", slug: "acolyte", name: "Acolyte" };
 
-      // When manager.save(CharacterEntity, ...) is called, return an entity with an id
+
       mockManager.save.mockImplementation(async (entity: any, data: any) => {
         if (typeof entity === "function" && entity.name === "CharacterEntity") {
           return { id: "char-new", ...data };
@@ -195,7 +195,7 @@ describe("CharactersService", () => {
           return null;
         });
 
-      // Setup repos for lookups inside transaction
+
       repos.class.findOneBy = jest.fn().mockResolvedValue(fighterClass) as any;
       repos.race.findOneBy = jest.fn().mockResolvedValue(raceEntity) as any;
       repos.subrace.findOneBy = jest.fn().mockResolvedValue(null) as any;
@@ -209,15 +209,15 @@ describe("CharactersService", () => {
       repos.classStartingEquip.find = jest.fn().mockResolvedValue([]) as any;
       repos.level.findOne = jest.fn().mockResolvedValue(null) as any;
 
-      // The actual mock chain for transaction manager uses different repos
-      // We need the transaction's manager to do all the lookups
+
+
       const lookups: Record<string, any> = {
         fighter: fighterClass,
         human: raceEntity,
         acolyte: bgEntity,
       };
 
-      // Re-mock the manager to handle entity manager lookups
+
       const abilityEntities: Record<string, any> = {
         str: { id: "as-str", slug: "str" },
         dex: { id: "as-dex", slug: "dex" },
@@ -227,7 +227,7 @@ describe("CharactersService", () => {
         cha: { id: "as-cha", slug: "cha" },
       };
 
-      // Override transaction to test the create flow
+
       dataSource.transaction.mockImplementation(async (cb: any) => {
         const mgr = {
           create: jest.fn((_, data: any) => ({ id: "char-new", ...data })),
@@ -271,7 +271,7 @@ describe("CharactersService", () => {
     });
 
     it("should compute starting HP as hit_die + CON modifier", async () => {
-      // CON 14 -> mod = 2; fighter hit_die = 10 -> HP = 12
+
       const saves: Array<{ entity: string; data: any }> = [];
       const fighterClass = makeClass("fighter");
 
@@ -307,7 +307,7 @@ describe("CharactersService", () => {
           findOneBy: jest
             .fn()
             .mockImplementation((entityClass: any, criteria: any) => {
-              // Simulate lookups
+
               if (criteria?.slug === "fighter") return fighterClass;
               if (criteria?.slug === "human")
                 return {
@@ -358,13 +358,13 @@ describe("CharactersService", () => {
 
       const stateSave = saves.find((s) => s.entity === "CharacterStateEntity");
       expect(stateSave).toBeDefined();
-      // Fighter hit_die = 10, CON 14 -> mod +2, starting HP = 12
+
       expect(stateSave!.data.current_hp).toBe(12);
     });
 
     it("should handle negative CON modifier for starting HP", async () => {
       const saves: Array<{ entity: string; data: any }> = [];
-      const wizardClass = makeClass("wizard"); // hit_die = 6
+      const wizardClass = makeClass("wizard");
 
       repos.class.findOneBy!.mockResolvedValue(wizardClass);
       repos.race.findOneBy!.mockResolvedValue({
@@ -447,7 +447,7 @@ describe("CharactersService", () => {
       });
 
       const stateSave = saves.find((s) => s.entity === "CharacterStateEntity");
-      // Wizard hit_die = 6, CON 8 -> mod -1, starting HP = 5
+
       expect(stateSave!.data.current_hp).toBe(5);
     });
 
@@ -537,7 +537,7 @@ describe("CharactersService", () => {
           },
           classCantrips: ["fire-bolt", "mage-hand"],
           classPreparedSpells: ["shield"],
-          classSpellbook: ["shield"], // duplicate — should be skipped
+          classSpellbook: ["shield"],
         },
       });
 
@@ -545,7 +545,7 @@ describe("CharactersService", () => {
         (s) => s.entity === "CharacterSpellEntity",
       );
       const spellIds = spellSaves.map((s) => s.data.spell_id);
-      // shield should appear only once (as Prepared, not Spellbook)
+
       const shieldSaves = spellSaves.filter(
         (s) => s.data.spell_id === "spell-shield",
       );
@@ -632,7 +632,7 @@ describe("CharactersService", () => {
       });
 
       const stateSave = saves.find((s) => s.entity === "CharacterStateEntity");
-      // CON 14 + bonus 1 = 15 -> mod +2, fighter hit_die = 10, HP = 12
+
       expect(stateSave!.data.current_hp).toBe(12);
     });
 
@@ -716,7 +716,7 @@ describe("CharactersService", () => {
 
       const stateSave = saves.find((s) => s.entity === "CharacterStateEntity");
       expect(stateSave!.data.gp).toBe(150);
-      // Also ensure no equipment is materialized
+
       const equipSaves = saves.filter(
         (s) => s.entity === "CharacterEquipmentEntity",
       );
@@ -1437,7 +1437,7 @@ describe("CharactersService", () => {
         });
       });
 
-      // ─── spec 008 — equipment choices refactor (XPHB letter-based packages) ───
+
 
       it('validates XPHB class letter choice "A" against defaultData groups', async () => {
         const saves: Array<{ entity: string; data: any }> = [];
@@ -1667,7 +1667,7 @@ describe("CharactersService", () => {
         expect(equipSaves.some((s) => s.data.equipment_id === "eq-book")).toBe(
           true,
         );
-        // Gold applied via queryBuilder update (extraGold = 8)
+
       });
 
       it('resolves XPHB background letter "B" gold-only — no equipment, gold applied', async () => {
@@ -1722,7 +1722,7 @@ describe("CharactersService", () => {
           (s) => s.entity === "CharacterEquipmentEntity",
         );
         expect(equipSaves).toHaveLength(0);
-        // Gold of 50 gp applied via queryBuilder update
+
       });
 
       it("rejects wrong number of letters for multi-group defaultData", async () => {
@@ -1782,7 +1782,7 @@ describe("CharactersService", () => {
                 wis: 12,
                 cha: 8,
               },
-              classEquipmentChoices: ["A"], // Only 1 letter for 2 groups
+              classEquipmentChoices: ["A"],
             },
           }),
         ).rejects.toMatchObject({

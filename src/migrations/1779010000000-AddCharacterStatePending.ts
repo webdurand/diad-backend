@@ -1,14 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 016 M0 — Pending state em character_state.
- *
- * - pending_level_up: snapshot do drawer state (idempotent — refresh preserva).
- *   Disparado quando currentXP >= threshold[level+1]. Apply gated em rest/end-encounter.
- * - reaction_prefs: { name: 'auto'|'ask'|'off' } per reaction. Default por classe seedado em ReactionDefault.
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §7.5 e §8.2.
- */
+
 export class AddCharacterStatePending1779010000000 implements MigrationInterface {
   name = "AddCharacterStatePending1779010000000";
 

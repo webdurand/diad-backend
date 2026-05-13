@@ -88,7 +88,7 @@ describe("ActionsService", () => {
     repos.charEquip.find!.mockResolvedValue(equip);
     repos.charFeature.find!.mockResolvedValue(opts.features ?? []);
     repos.charState.findOne!.mockResolvedValue(state);
-    // Build category items for all equipped weapons so proficiency checking works
+
     const catItems = equip
       .filter((ce: any) => ce.equipment?.damage)
       .map((ce: any) => ({
@@ -138,8 +138,8 @@ describe("ActionsService", () => {
       const weapon = result.actions.find((a) => a.name === "Longsword");
 
       expect(weapon).toBeDefined();
-      expect(weapon!.attackBonus).toBe(3 + 2); // strMod(3) + prof(2) = 5
-      expect(weapon!.damage?.bonus).toBe(3); // strMod
+      expect(weapon!.attackBonus).toBe(3 + 2);
+      expect(weapon!.damage?.bonus).toBe(3);
       expect(weapon!.source).toBe("weapon");
     });
 
@@ -167,8 +167,8 @@ describe("ActionsService", () => {
       const weapon = result.actions.find((a) => a.name === "Shortbow");
 
       expect(weapon).toBeDefined();
-      expect(weapon!.attackBonus).toBe(4 + 2); // dexMod(4) + prof(2) = 6
-      expect(weapon!.damage?.bonus).toBe(4); // dexMod
+      expect(weapon!.attackBonus).toBe(4 + 2);
+      expect(weapon!.damage?.bonus).toBe(4);
     });
 
     it("should use max(STR, DEX) for finesse weapons", async () => {
@@ -194,7 +194,7 @@ describe("ActionsService", () => {
       const weapon = result.actions.find((a) => a.name === "Rapier");
 
       expect(weapon).toBeDefined();
-      expect(weapon!.attackBonus).toBe(4 + 2); // max(strMod 1, dexMod 4) + prof(2) = 6
+      expect(weapon!.attackBonus).toBe(4 + 2);
       expect(weapon!.damage?.bonus).toBe(4);
     });
 
@@ -227,7 +227,7 @@ describe("ActionsService", () => {
       const unarmed = result.actions.find((a) => a.id === "unarmed-strike");
 
       expect(unarmed).toBeDefined();
-      expect(unarmed!.attackBonus).toBe(2 + 2); // strMod(2) + prof(2)
+      expect(unarmed!.attackBonus).toBe(2 + 2);
     });
 
     it("monk should use martial arts die with max(STR, DEX)", async () => {
@@ -242,8 +242,8 @@ describe("ActionsService", () => {
       const unarmed = result.actions.find((a) => a.id === "unarmed-strike");
 
       expect(unarmed).toBeDefined();
-      expect(unarmed!.damage?.dice).toBe("1d8"); // monk lvl 5 = 1d8
-      expect(unarmed!.attackBonus).toBe(4 + 3); // dexMod(4) + prof(3 at lvl 5) = 7
+      expect(unarmed!.damage?.dice).toBe("1d8");
+      expect(unarmed!.attackBonus).toBe(4 + 3);
     });
 
     it.each([
@@ -313,7 +313,7 @@ describe("ActionsService", () => {
       const firebolt = result.actions.find((a) => a.name === "Fire Bolt");
 
       expect(firebolt).toBeDefined();
-      expect(firebolt!.damage?.dice).toBe("2d10"); // level 5 scaling
+      expect(firebolt!.damage?.dice).toBe("2d10");
       expect(firebolt!.source).toBe("spell");
     });
   });
@@ -328,9 +328,9 @@ describe("ActionsService", () => {
 
       const result = await service.getActions("user-1", "char-1");
 
-      // 8 + prof(3) + intMod(4) = 15
+
       expect(result.summary.spellSaveDc.wizard).toBe(15);
-      expect(result.summary.spellAttackBonus.wizard).toBe(7); // 3 + 4
+      expect(result.summary.spellAttackBonus.wizard).toBe(7);
     });
 
     it("non-caster should have no spell save DC", async () => {
@@ -368,7 +368,7 @@ describe("ActionsService", () => {
         ...result.reactions.map((a) => a.id),
       ];
 
-      // generic actions belong to the combat-turn layer, not to the character sheet
+
       expect(allActionIds).not.toContain("base-dash");
       expect(allActionIds).not.toContain("base-dodge");
       expect(allActionIds).not.toContain("base-disengage");

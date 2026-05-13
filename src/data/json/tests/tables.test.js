@@ -39,7 +39,7 @@ describe('api references', () => {
 
     forEachFileEntry((filename, topLevelEntry) => {
       recurseIntoObject(topLevelEntry, (subEntry) => {
-        if (!subEntry.hasOwnProperty('url')) return; // eslint-disable-line no-prototype-builtins
+        if (!subEntry.hasOwnProperty('url')) return;
 
         if (resources[subEntry.url] === undefined) {
           errors.push(`${filename}: URL '${subEntry.url}' not found.`);
@@ -66,12 +66,7 @@ describe('api references', () => {
   });
 });
 
-/**
- * Calls the callback for top-level objects/arrays in all JSON files.
- *
- * @param (function(string, object)) callback Called with filename and each
- *     top-level entry.
- */
+
 const forEachFileEntry = (callback) => {
   let filenames = glob.sync('src/2014/*.json');
 
@@ -82,13 +77,7 @@ const forEachFileEntry = (callback) => {
   }
 };
 
-/**
- * Calls the callback recursivelly for all objects/arrays contained in the
- * passed object.
- *
- * @param (object) object The object to recurse into.
- * @param (function(object)) callback Called with each sub-top-level entry.
- */
+
 const recurseIntoObject = (object, callback) => {
   for (const property in object) {
     if (typeof object[property] === 'object' && object[property] !== null) {

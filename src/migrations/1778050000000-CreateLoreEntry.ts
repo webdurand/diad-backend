@@ -1,12 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M1 — NovelAI-style lorebook (L2 memory).
- *
- * Keyword match case-insensitive no texto recente ativa entry;
- * description entra no prompt do Narrator. GIN index em activation_keys
- * pra match sub-millisegundo mesmo com 200+ entries por campanha.
- */
+
 export class CreateLoreEntry1778050000000 implements MigrationInterface {
   name = "CreateLoreEntry1778050000000";
 

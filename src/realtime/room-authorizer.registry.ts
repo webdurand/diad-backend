@@ -25,11 +25,7 @@ export class RoomAuthorizerRegistry {
     }
   }
 
-  /**
-   * Register an authorizer imperatively. Used by domain modules in their
-   * `OnModuleInit` hook when NestJS multi-providers can't cross module
-   * boundaries.
-   */
+
   register(authorizer: RoomAuthorizer): void {
     if (this.byPrefix.has(authorizer.prefix)) {
       this.logger.warn(

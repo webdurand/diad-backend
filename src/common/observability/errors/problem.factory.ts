@@ -13,7 +13,7 @@ import { generateTraceId } from "../trace/trace-context";
 
 const ERROR_TYPE_BASE = "https://diad.dev/errors/";
 
-/** SCREAMING_SNAKE válido — alfanumérico, ao menos um `_`. */
+
 const CODE_FORMAT_REGEX = /^[A-Z]+(_[A-Z0-9]+)+$/;
 
 interface NormalizedHttpBody {
@@ -27,12 +27,7 @@ interface NormalizedHttpBody {
   code?: string;
 }
 
-/**
- * Constrói envelope RFC 9457 + extensions a partir de exceptions/errors arbitrários.
- *
- * Sempre injeta traceId do CLS (gera fallback se ausente). Suporta flag
- * LEGACY_ERROR_ENVELOPE=true que mescla campos legados {ok:false, error, code}.
- */
+
 @Injectable()
 export class ProblemFactory {
   constructor(private readonly cls: ClsService) {}
@@ -108,12 +103,12 @@ export class ProblemFactory {
     status: number,
   ): ErrorCode {
     if (body?.code && isErrorCode(body.code)) return body.code;
-    // Aceita qualquer code SCREAMING_SNAKE como `error.code`. O catálogo central
-    // continua sendo fonte canônica pra metadata (httpStatus/title/hint) — quando
-    // o code não está catalogado, esses campos saem do statusToCode (genérico).
-    // Isso permite que regras D&D do GameErrorCode local (SPELL_OUT_OF_RANGE,
-    // OUT_OF_RANGE, NOT_YOUR_TURN, etc) cheguem ao envelope/log com error.code
-    // específico, sem precisar mover 80+ codes pro catálogo TS.
+
+
+
+
+
+
     if (body?.code && CODE_FORMAT_REGEX.test(body.code)) {
       return body.code as ErrorCode;
     }
@@ -223,7 +218,7 @@ export class ProblemFactory {
 
   private legacyEnabled(): boolean {
     const v = process.env.LEGACY_ERROR_ENVELOPE;
-    if (v === undefined || v === null || v === "") return true; // default 1 sprint
+    if (v === undefined || v === null || v === "") return true;
     return v.toLowerCase() !== "false" && v !== "0";
   }
 }

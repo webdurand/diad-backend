@@ -1,22 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 026 / Pillar 6 — NPC Archetype Registry + provenance tracking.
- *
- * Cria 1 tabela + adiciona 1 coluna em `npcs`:
- *
- *  - `npc_archetype_templates` (slug PK → monster_id FK): mapeia archetypes
- *    canônicos PT-BR/EN para stat blocks RAW do MM 2024 já existentes em
- *    `monsters`. Seed feito via INSERT...SELECT (zero hardcoded ids).
- *  - `npcs.provenance`: tracking de origem (`manual` | `auto-materialized`
- *    | `director-planned`) — habilita futuro GC de NPCs órfãos.
- *
- * 14 archetypes seeded cobrem ~90% dos NPCs humanoides comuns: commoner,
- * acolyte, guard, noble, thug, bandit, cultist, bandit-captain, cult-fanatic,
- * spy, priest, veteran, mage, assassin.
- *
- * Down() simétrico (drop coluna + tabela).
- */
+
 export class CreateNpcArchetypeTemplates1784000000000 implements MigrationInterface {
   name = "CreateNpcArchetypeTemplates1784000000000";
 
@@ -40,9 +24,9 @@ export class CreateNpcArchetypeTemplates1784000000000 implements MigrationInterf
         ON npc_archetype_templates(monster_id)
     `);
 
-    // Seed inicial — 14 archetypes resolvidos via JOIN no slug do monster.
-    // Slugs foram validados contra a base existente; INSERT...SELECT é
-    // idempotente via ON CONFLICT (re-execução não duplica).
+
+
+
     const seed: Array<{
       slug: string;
       monsterSlug: string;
@@ -161,9 +145,9 @@ export class CreateNpcArchetypeTemplates1784000000000 implements MigrationInterf
       );
     }
 
-    // Sanity check: todos os 14 archetypes resolveram pra um monster?
-    // Se algum monster slug mudou, INSERT...SELECT não falha — apenas
-    // não insere a row. Levantar erro explícito pra pegar regressão.
+
+
+
     const result = await queryRunner.query(
       `SELECT COUNT(*)::int AS n FROM npc_archetype_templates`,
     );

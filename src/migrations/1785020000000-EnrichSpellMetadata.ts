@@ -1,19 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 027 (M2, AC2.3) — enrich `spells` com metadata semântica do Hostile
- * Action Arbiter.
- *
- * Adiciona coluna `arbiter_metadata jsonb` em `spells`. Backfill 50 SRD 2024
- * spells canônicos (16 do registry agents + 34 cobertura geral). Lookup do
- * Arbiter passa a ser DB-backed; registry stub do diad-agents vira fallback.
- *
- * Schema do JSONB segue `contracts/spell-metadata.schema.json` (campos opcionais
- * com defaults RAW-conservadores). Spells sem entry retornam `{}` — Arbiter
- * trata como `hostile_intent_default = "conditional"` (default seguro).
- *
- * Down() simétrico.
- */
+
 export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
   name = "EnrichSpellMetadata1785020000000";
 
@@ -23,21 +10,21 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       ADD COLUMN IF NOT EXISTS "arbiter_metadata" jsonb NOT NULL DEFAULT '{}'::jsonb
     `);
 
-    // GIN index pra lookup por boolean flags (is_harmful=true, damaging=true)
-    // sem table-scan. Pattern jsonb_path_ops cobre `@>` operator.
+
+
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS "IDX_spells_arbiter_metadata"
         ON "spells" USING gin ("arbiter_metadata" jsonb_path_ops)
     `);
 
-    // ════════════════════════════════════════════════════════════════
-    // Backfill — 50 SRD 2024 spells canônicos.
-    //
-    // Cada row: { slug: kebab-case, metadata: SpellMetadata JSONB }.
-    // UPDATE ... WHERE slug = $1 — idempotente (re-run não duplica).
-    // Sem error se slug não existe (spells DB pode não ter todos os 50 seeded
-    // ainda; backfill aplica nos que existem).
-    // ════════════════════════════════════════════════════════════════
+
+
+
+
+
+
+
+
     type Meta = {
       name: string;
       is_harmful: boolean;
@@ -116,7 +103,7 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
     });
 
     const seed: Array<{ slug: string; metadata: Meta }> = [
-      // ───── Cantrips (level 0) ─────
+
       { slug: "fire-bolt", metadata: damaging("Fire Bolt", "creature") },
       {
         slug: "eldritch-blast",
@@ -167,7 +154,7 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       },
       { slug: "minor-illusion", metadata: buff("Minor Illusion", "space") },
 
-      // ───── Level 1 ─────
+
       {
         slug: "magic-missile",
         metadata: damaging("Magic Missile", "creature"),
@@ -264,7 +251,7 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
         },
       },
 
-      // ───── Level 2 ─────
+
       {
         slug: "scorching-ray",
         metadata: damaging("Scorching Ray", "creature"),
@@ -285,7 +272,7 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       { slug: "spike-growth", metadata: damaging("Spike Growth", "space") },
       { slug: "web", metadata: debuff("Web", "DEX", "space") },
 
-      // ───── Level 3 ─────
+
       {
         slug: "fireball",
         metadata: {
@@ -335,7 +322,7 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       { slug: "fly", metadata: buff("Fly") },
       { slug: "revivify", metadata: heal("Revivify") },
 
-      // ───── Level 4-5 (cobertura mínima) ─────
+
       { slug: "polymorph", metadata: debuff("Polymorph", "WIS") },
       {
         slug: "wall-of-fire",
@@ -351,7 +338,7 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       { slug: "mass-cure-wounds", metadata: heal("Mass Cure Wounds") },
       { slug: "raise-dead", metadata: heal("Raise Dead") },
 
-      // ───── Utility (objects/space, never hostile alone) ─────
+
       {
         slug: "knock",
         metadata: {
@@ -408,17 +395,17 @@ export class EnrichSpellMetadata1785020000000 implements MigrationInterface {
       if (Array.isArray(result?.[0]) && result[0].length > 0) {
         updated += result[0].length;
       } else if (Array.isArray(result) && result.length > 0) {
-        // pg driver às vezes retorna [[rows], rowCount]; outras só [rows].
-        // Conta linhas retornadas pra cobrir os dois shapes.
+
+
         updated += result.filter(
           (r: unknown) => r && typeof r === "object" && "id" in r,
         ).length;
       }
     }
 
-    // Soft-warn — DIAD pode rodar testes em DB sem spell seed completo.
-    // Fail apenas se ZERO atualizações (sinal claro de que coluna não existe
-    // ou tabela vazia — bug, não missing data).
+
+
+
     const total = await queryRunner.query(
       `SELECT COUNT(*)::int AS n FROM "spells" WHERE "arbiter_metadata" <> '{}'::jsonb`,
     );

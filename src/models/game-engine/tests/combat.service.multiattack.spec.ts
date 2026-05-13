@@ -3,15 +3,7 @@ import { DiceService } from "../services/dice.service";
 import { ConditionEffectsService } from "../services/condition-effects.service";
 import { MonsterActionResolver } from "../services/monster-action-resolver.service";
 
-/**
- * Unit tests for US2 (002-encounter-correctness) — monster multiattack.
- *
- * Covers:
- *   - Owlbear: 1 Beak + 1 Claws → 2 sub-attacks, action consumed once
- *   - targetParticipantIds length mismatch → INVALID_PAYLOAD
- *   - Monster without multiattack → INVALID_MULTIATTACK
- *   - Target defeated mid-sequence → interruptedAt populated
- */
+
 
 function makeParticipant(overrides: Record<string, any> = {}): any {
   return {
@@ -221,7 +213,7 @@ function createHarness() {
       }),
     } as any,
     { shouldOfferShield: async () => null } as any,
-    // Spec 027 (M2 follow-up) — EncounterEndDetectorService stub
+
     { tryAutoEnd: async () => null, detectOutcome: async () => null } as any,
     { processRoundStart: async () => [] } as any,
     { processAfterPcTurn: async () => [] } as any,
@@ -323,7 +315,7 @@ describe("CombatService — US2 multiattack", () => {
     const dto: AttackDto = {
       attackerParticipantId: owlbear.id,
       targetParticipantId: pc.id,
-      targetParticipantIds: [pc.id], // Only 1 target for a 2-target multiattack
+      targetParticipantIds: [pc.id],
       actionName: "Multiattack",
       ownerUserId: "dm-1",
     };

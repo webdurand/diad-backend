@@ -8,25 +8,7 @@ import { EventBusService } from "../event-bus.service";
 import { EventEnvelopeFactory } from "../event-envelope.factory";
 import { EventCategory, EventEnvelope } from "../event-envelope.types";
 
-/**
- * Spec 027 (M2, AC2.5) — ReputationListener.
- *
- * Reage a `NarrativeEvent.npc_witnessed_event` (vindo do WitnessPropagationListener).
- * Aplica delta no `npc_reputation` da testemunha conforme severity → tag map:
- *  - severity=3 → tag 'witnessed-murder' (tier_delta -3, permanente)
- *  - severity=2 → tag 'assault-witnessed' (tier_delta -2, decay 0.1/in_game_day)
- *  - severity=1 → soft pulse, não persiste tag (apenas log) — evita poluição
- *    com micro-eventos de skirmish.
- *
- * Whitelist de tags lockada em `reputation-tags-catalog.json` — esta listener
- * usa subset hard-coded equivalent (sem fetch JSON em runtime). Tabela
- * `npc_reputation` foi criada na migration `CreateReputationFoundation` (1785000000000).
- *
- * Decay rate é informação semântica (decisão do ReputationDecayService cron
- * — M3, AC3.2). Listener só persiste tier + score + tag; cron processa decay.
- *
- * Idempotente via `event_listener_processed`. Emite `SocialEvent.reputation_tag_added`.
- */
+
 @Injectable()
 export class ReputationListener implements EventListener {
   readonly name = "ReputationListener";
@@ -58,7 +40,7 @@ export class ReputationListener implements EventListener {
 
     const mapped = this.mapSeverity(severity);
     if (!mapped) {
-      // Severity 1 — soft pulse não persiste. Log e segue.
+
       this.logger.debug("event_bus.reputation.soft_pulse_skipped", {
         "event.id": envelope.eventId,
         "witness.id": witnessId,
@@ -119,10 +101,7 @@ export class ReputationListener implements EventListener {
     return null;
   }
 
-  /**
-   * Upsert atômico no `npc_reputation` — append tag se nova, recalcula tier
-   * via clamp do delta.
-   */
+
   private async upsertReputation(
     campaignId: string,
     npcId: string,
@@ -131,8 +110,8 @@ export class ReputationListener implements EventListener {
     sourceEventId: string,
     sourceEventAt: string,
   ): Promise<void> {
-    // CTE update-or-insert. Postgres ON CONFLICT garante atomicidade na
-    // unique constraint (npc_id, campaign_id).
+
+
     await this.dataSource.query(
       `
       INSERT INTO "npc_reputation" (

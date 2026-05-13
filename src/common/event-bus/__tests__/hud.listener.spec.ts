@@ -85,15 +85,15 @@ describe("HUDListener", () => {
 
   it("idempotente: 2x handle() mesmo eventId → side-effect 1×", async () => {
     repo.findOne
-      .mockResolvedValueOnce(null) // 1ª passada — não processado ainda
-      .mockResolvedValueOnce({ id: "p1" }); // 2ª passada — já processado
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "p1" });
 
     const env = makeEnv(["HUD"]);
     await listener.handle(env);
     await listener.handle(env);
 
     expect(repo.save).toHaveBeenCalledTimes(1);
-    // info loggado só na 1ª passada — 2ª retorna antes do log
+
     expect(logger.info).toHaveBeenCalledTimes(1);
   });
 

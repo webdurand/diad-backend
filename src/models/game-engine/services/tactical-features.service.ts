@@ -15,17 +15,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Fighter Tactical trio (XPHB 2024):
- *  - Tactical Mind L2: após failed ability check, gasta 1 Second Wind use,
- *    rola 1d10, adiciona ao total. Se passar: consome use. Se falhar: refund.
- *  - Tactical Shift L5: rider do Second Wind (handled em handleSecondWind).
- *  - Tactical Master L9: ao atacar com weapon que você domina, pode trocar
- *    a mastery própria pela Push, Sap ou Slow.
- *
- * Tactical Shift é implementado dentro de handleSecondWind (class-feature-executor)
- * porque é rider, não feature separada invocável.
- */
+
 @Injectable()
 export class TacticalFeaturesService {
   constructor(
@@ -40,12 +30,7 @@ export class TacticalFeaturesService {
     private readonly eventService: EventService,
   ) {}
 
-  /**
-   * Tactical Mind (Fighter L2, RAW 2024). Input: check total original + DC +
-   * ability mod (pra saber quanto foi o roll puro). Rola 1d10, soma ao total.
-   * Se novo total >= DC: success + consome 1 Second Wind use.
-   * Se não: failed, refund (não consome).
-   */
+
   async tacticalMind(
     userId: string,
     encounterId: string,
@@ -91,7 +76,7 @@ export class TacticalFeaturesService {
       return failure("Você não tem Tactical Mind.", "FEATURE_NOT_AVAILABLE");
     }
 
-    // Second Wind pool check
+
     const maxSw = fighterLv >= 10 ? 3 : fighterLv >= 4 ? 2 : 1;
     const sheetState = sheet as unknown as {
       featureUsesUsed?: Record<string, number>;
@@ -104,7 +89,7 @@ export class TacticalFeaturesService {
       );
     }
 
-    // Rola 1d10 + adiciona ao total original
+
     const bonusRoll = this.dice.roll(10);
     const newTotal = originalCheckTotal + bonusRoll;
     const passed = newTotal >= dc;
@@ -145,12 +130,7 @@ export class TacticalFeaturesService {
     );
   }
 
-  /**
-   * Tactical Master (Fighter L9, RAW 2024): arma flag `tactical_master_override`
-   * no participant com a mastery alternativa. combat.service checa esse flag
-   * no próximo attack e aplica mastery alternativa em vez da original.
-   * Simplificação: guarda override como effect one-shot até próximo attack.
-   */
+
   async tacticalMasterArm(
     userId: string,
     encounterId: string,
@@ -180,10 +160,10 @@ export class TacticalFeaturesService {
       return failure("Você não tem Tactical Master.", "FEATURE_NOT_AVAILABLE");
     }
 
-    // Guarda no participant via campo dedicado (migration posterior) OU via
-    // effectInstances. Simplificação imediata: usa campo novo no participant
-    // (via migration separada se necessário). Pragmático: stash no campo
-    // tacticalMasterOverride adicionado direto via query.
+
+
+
+
     participant.tacticalMasterOverride = masteryOverride;
     await this.participantRepo.save(participant);
 

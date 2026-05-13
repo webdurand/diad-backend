@@ -1,19 +1,6 @@
 import type { SaveAbility } from "../interfaces/combat.interfaces";
 
-/**
- * Spec 013 — Tile Effect Catalog.
- *
- * Catálogo OCP-aligned de magias que criam tile-effects persistentes.
- * Adicionar magia nova = nova entry aqui; ZERO edit em service.
- *
- * Princípio X (Constitution): cada entry expõe três camadas:
- *   1. Mecânica RAW    — `triggers[]`, `shapeKind`, `defaultRadiusCells`
- *   2. Metadata tática — `tactical` (tags, tacticalValue, beneficiaryFaction)
- *   3. Narrativa       — `narrativeDescriptor` (≤120 chars PT-BR)
- *
- * Referências RAW 2024 — PHB pp.273 (Grease), 329 (Spike Growth), 353 (Wall of Fire);
- * dnd2024.wikidot/dndbeyond/roll20 2024 compendiums.
- */
+
 
 export type TileEffectKind =
   | "grease"
@@ -28,16 +15,16 @@ export type ConditionSlug = "prone" | "restrained" | "blinded";
 
 export interface SaveSpec {
   ability: SaveAbility;
-  /** Half damage if save passes (Wall of Fire, Spirit Guardians). */
+
   halfOnSave?: boolean;
-  /** Condition aplicada quando save falha (Grease=prone, Web=restrained). */
+
   onFailCondition?: ConditionSlug;
-  /** RAW 2024 Sleet Storm: save falhar quebra concentração + aplica prone (fused). */
+
   affectsConcentration?: boolean;
 }
 
 export interface DamageSpec {
-  /** Função de slot → expression (ex: slot=4 → '5d8'). */
+
   expressionPerSlot: (slot: number) => string;
   type: string;
 }
@@ -52,7 +39,7 @@ export type TileEffectTrigger =
 
 export interface TileEffectTactical {
   tags: string[];
-  /** 0 = irrelevante; 10 = decisivo. */
+
   tacticalValue: number;
   beneficiaryFaction: "caster" | "allies" | "neutral";
   creatureAffinity?: { high?: string[]; low?: string[] };
@@ -61,25 +48,25 @@ export interface TileEffectTactical {
 export interface TileEffectDefinition {
   spellSlug: string;
   shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
-  /** Slot → raio em cells. Ex: Grease 10ft cube → 2 cells. */
+
   defaultRadiusCells: (slot: number) => number;
   isDifficultTerrain: boolean;
-  /** Multiplicador de speed: 0.5=×2 cost; 0=stop on fail save (Web). null=default 0.5. */
+
   speedMultiplier?: number;
-  /** Slot → rounds. null = sem prazo. */
+
   durationRoundsAtSlot: (slot: number) => number | null;
   sourceConcentration: boolean;
   triggers: TileEffectTrigger[];
   tactical: TileEffectTactical;
-  /** Princípio X camada 3 — prosa curta PT-BR (≤120 chars) usada pelo Narrator agent. */
+
   narrativeDescriptor: string;
-  /** Spec 004 legacy — Spirit Guardians segue o caster. */
+
   auraFollowsCaster?: boolean;
 }
 
-// ── Helpers de damage scaling ─────────────────────────────────────────────
 
-/** xdY com base em slot mínimo + dado extra por slot acima. */
+
+
 function bySlotLinear(
   baseSlot: number,
   baseDice: number,
@@ -97,7 +84,7 @@ function bySlotLinear(
   };
 }
 
-/** Damage fixo (Spike Growth: 2d4 piercing constante). */
+
 function fixedDamage(dice: number, diceSize: number, type: string): DamageSpec {
   return {
     expressionPerSlot: () => `${dice}d${diceSize}`,
@@ -105,18 +92,18 @@ function fixedDamage(dice: number, diceSize: number, type: string): DamageSpec {
   };
 }
 
-// ── Catálogo ──────────────────────────────────────────────────────────────
+
 
 export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
   {
-    // L1 Wizard — DEX save → Prone; difficult terrain; 1 min concentration.
+
     grease: {
       spellSlug: "grease",
       shapeKind: "cube",
-      defaultRadiusCells: () => 2, // 10ft = 2 cells (cube radius)
+      defaultRadiusCells: () => 2,
       isDifficultTerrain: true,
       speedMultiplier: 0.5,
-      durationRoundsAtSlot: () => 10, // 1 min = 10 rounds
+      durationRoundsAtSlot: () => 10,
       sourceConcentration: true,
       triggers: [
         { kind: "on-cast", save: { ability: "dex", onFailCondition: "prone" } },
@@ -135,14 +122,14 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
         "Graxa escorregadia cobre o chão; pés deslizam sem firmeza.",
     },
 
-    // L2 Wizard — DEX save → Restrained; STR check to escape; 1 hour concentration.
+
     web: {
       spellSlug: "web",
       shapeKind: "cube",
-      defaultRadiusCells: () => 4, // 20ft cube = 4 cells radius
+      defaultRadiusCells: () => 4,
       isDifficultTerrain: true,
-      speedMultiplier: 0, // RAW: end movement on enter when save fails
-      durationRoundsAtSlot: () => 600, // 1 hour = 600 rounds (effectively combat-long)
+      speedMultiplier: 0,
+      durationRoundsAtSlot: () => 600,
       sourceConcentration: true,
       triggers: [
         {
@@ -164,15 +151,15 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
         "Teias densas se estendem entre o chão e o teto, agarrando quem entra.",
     },
 
-    // L2 Druid/Ranger — 2d4 piercing per 5ft moved; difficult terrain; 10min concentration.
-    // RAW: NO save — damage is automatic per cell of movement.
+
+
     "spike-growth": {
       spellSlug: "spike-growth",
       shapeKind: "sphere",
-      defaultRadiusCells: () => 4, // 20ft radius = 4 cells
+      defaultRadiusCells: () => 4,
       isDifficultTerrain: true,
       speedMultiplier: 0.5,
-      durationRoundsAtSlot: () => 100, // 10 min concentration = 100 rounds
+      durationRoundsAtSlot: () => 100,
       sourceConcentration: true,
       triggers: [
         {
@@ -195,14 +182,14 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
         "Espinhos curvos brotam do solo, ferindo quem se move sobre eles.",
     },
 
-    // L4 Wizard/Druid — 5d8 fire on cast (DEX half) + on-pass-through-wall + on-end-turn-adjacent.
-    // 2024: cold side disabled by default (caster picks heat side).
+
+
     "wall-of-fire": {
       spellSlug: "wall-of-fire",
       shapeKind: "line",
-      defaultRadiusCells: () => 12, // 60ft line = 12 cells
+      defaultRadiusCells: () => 12,
       isDifficultTerrain: false,
-      durationRoundsAtSlot: () => 10, // 1 min concentration = 10 rounds
+      durationRoundsAtSlot: () => 10,
       sourceConcentration: true,
       triggers: [
         {
@@ -230,13 +217,13 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
         "Parede de chamas ruge a 6 metros de altura; o calor pulsa do lado escolhido.",
     },
 
-    // L2 — 4d4 slashing on cast (NEW 2024) + on-enter + on-start-turn-in. NO save.
+
     "cloud-of-daggers": {
       spellSlug: "cloud-of-daggers",
       shapeKind: "cube",
-      defaultRadiusCells: () => 1, // 5ft cube = 1 cell
+      defaultRadiusCells: () => 1,
       isDifficultTerrain: false,
-      durationRoundsAtSlot: () => 10, // 1 min concentration = 10 rounds
+      durationRoundsAtSlot: () => 10,
       sourceConcentration: true,
       triggers: [
         { kind: "on-cast", damage: bySlotLinear(2, 4, "slashing", 4, 2) },
@@ -255,15 +242,15 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
         "Lâminas espectrais giram em círculo, cortando o ar com precisão letal.",
     },
 
-    // L3 — DEX save → Prone + concentration check FUSED (2024 buff).
-    // 20ft radius × 40ft tall cylinder; heavily obscured + Blinded inside.
+
+
     "sleet-storm": {
       spellSlug: "sleet-storm",
       shapeKind: "cylinder",
-      defaultRadiusCells: () => 4, // 20ft radius = 4 cells
+      defaultRadiusCells: () => 4,
       isDifficultTerrain: true,
       speedMultiplier: 0.5,
-      durationRoundsAtSlot: () => 10, // 1 min concentration = 10 rounds
+      durationRoundsAtSlot: () => 10,
       sourceConcentration: true,
       triggers: [
         {
@@ -299,15 +286,15 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
         "Granizo cortante e gelo escorregadio caem em redemoinho dentro do cilindro.",
     },
 
-    // L3 Cleric — 15ft aura that follows caster; WIS save half; 3d8 radiant per turn.
-    // Refator: deixa de ser hardcoded (Spec 004 legacy) e entra no catalog OCP-aligned.
+
+
     "spirit-guardians": {
       spellSlug: "spirit-guardians",
       shapeKind: "sphere",
-      defaultRadiusCells: () => 3, // 15ft = 3 cells
+      defaultRadiusCells: () => 3,
       isDifficultTerrain: true,
       speedMultiplier: 0.5,
-      durationRoundsAtSlot: () => 100, // 10 min concentration = 100 rounds
+      durationRoundsAtSlot: () => 100,
       sourceConcentration: true,
       auraFollowsCaster: true,
       triggers: [
@@ -328,10 +315,7 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
     },
   };
 
-/**
- * Helper para lookup case-sensitive. Retorna null pra slug inexistente
- * pra não esconder bug de typo (vs. retornar undefined).
- */
+
 export function getTileEffectDefinition(
   slug: string,
 ): TileEffectDefinition | null {

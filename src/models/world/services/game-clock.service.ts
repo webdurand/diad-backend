@@ -10,7 +10,7 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
 export interface AdvanceTimeOptions {
   hours: number;
-  /** Origem do delta — usado em narrativeDescriptor + audit. */
+
   trigger?:
     | "scene_transition"
     | "long_rest"
@@ -20,7 +20,7 @@ export interface AdvanceTimeOptions {
     | "travel_instant"
     | "travel_tick"
     | "travel_arrival";
-  /** Trace propagado para o envelope (Princípio XI). */
+
   traceId?: string;
 }
 
@@ -30,15 +30,9 @@ export interface AdvanceTimeResult {
   previousTimeOfDay: TimeOfDay;
 }
 
-const MAX_HOURS_PER_CALL = 168; // 1 semana — sane upper bound
+const MAX_HOURS_PER_CALL = 168;
 
-/**
- * Spec 019 — GameClockService.
- *
- * Gerencia o relógio in-game (1:1 com campaign). `advanceTime` aplica delta
- * em horas (>0, ≤168), recalcula `daysPassed`, computa novo `timeOfDay`,
- * persiste e emite `WorldEvent.time_advanced` via EventBusService.
- */
+
 @Injectable()
 export class GameClockService {
   constructor(
@@ -48,10 +42,7 @@ export class GameClockService {
     private readonly factory: EventEnvelopeFactory,
   ) {}
 
-  /**
-   * Retorna clock existente OR cria com defaults (currentInGameDateTime=now,
-   * 06:00/18:00). Idempotente — segura de chamar em qualquer fluxo.
-   */
+
   async getOrCreate(campaignId: string): Promise<GameClockEntity> {
     const existing = await this.clockRepo.findOne({ where: { campaignId } });
     if (existing) return existing;
@@ -148,11 +139,11 @@ export class GameClockService {
           ? `Tempo avança: ${previousTimeOfDay} → ${newTimeOfDay}.`
           : `Tempo avança ${hours.toFixed(1)}h.`,
     });
-    // Best-effort emit — falha não rollback de update.
+
     try {
       await this.eventBus.publish(envelope);
     } catch {
-      /* swallow */
+
     }
 
     return {

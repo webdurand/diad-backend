@@ -56,9 +56,7 @@ export class LibraryService {
     }
   }
 
-  /**
-   * Spec 007: paginated query with strict source filter and entity-specific filters.
-   */
+
   async findPaginated<T extends ObjectLiteral>(
     entityClass: EntityTarget<T>,
     entityName: string,
@@ -73,24 +71,24 @@ export class LibraryService {
     try {
       const qb = this.entityManager.createQueryBuilder(entityClass, "entity");
 
-      // Load relations via leftJoinAndSelect
+
       for (const rel of relations) {
         const parts = rel.split(".");
         if (parts.length === 1) {
           qb.leftJoinAndSelect(`entity.${parts[0]}`, parts[0]);
         } else {
-          // Nested relation: e.g. 'spell_classes.class' → join spell_classes on entity, then class on spell_classes
+
           const parentAlias = parts[0];
           const childField = parts[1];
           const childAlias = `${parentAlias}_${childField}`;
-          // Only add the parent join if not already added
+
           if (!relations.includes(parentAlias)) {
             qb.leftJoinAndSelect(`entity.${parentAlias}`, parentAlias);
           }
           qb.leftJoinAndSelect(`${parentAlias}.${childField}`, childAlias);
         }
       }
-      // Also add standalone parent joins for dotted relations
+
       const standaloneParents = new Set<string>();
       for (const rel of relations) {
         const parts = rel.split(".");
@@ -99,17 +97,17 @@ export class LibraryService {
         }
       }
       for (const parent of standaloneParents) {
-        // Already handled in the loop above, but ensure no duplicate
+
       }
 
-      // Strict source filter via INNER JOIN
+
       if (query.source) {
         if (entityName === "comp_sources") {
           qb.andWhere("entity.code = :sourceCode", {
             sourceCode: query.source,
           });
         } else {
-          // Use innerJoin to ensure strict filtering — only entries matching the source
+
           qb.innerJoin("entity.source", "source_filter").andWhere(
             "source_filter.code = :sourceCode",
             { sourceCode: query.source },
@@ -117,12 +115,12 @@ export class LibraryService {
         }
       }
 
-      // Name filter (ILIKE) — available for all entities
+
       if (query.name) {
         qb.andWhere("entity.name ILIKE :name", { name: `%${query.name}%` });
       }
 
-      // Entity-specific filters
+
       this.applyEntityFilters(qb, entityName, query);
 
       qb.orderBy("entity.name", "ASC").skip(offset).take(limit);
@@ -169,13 +167,13 @@ export class LibraryService {
         qb.andWhere("entity.level = :level", { level: query.level });
       }
       if (query.school) {
-        // school is a relation already joined via relations config
+
         qb.andWhere("school.name ILIKE :school", {
           school: `%${query.school}%`,
         });
       }
       if (query.class) {
-        // spell_classes.class already joined via relations config
+
         qb.andWhere("spell_classes_class.name ILIKE :className", {
           className: `%${query.class}%`,
         });
@@ -184,7 +182,7 @@ export class LibraryService {
 
     if (entityName === "equipments") {
       if (query.category) {
-        // category_items.category already joined via relations config
+
         qb.andWhere("category_items_category.name ILIKE :category", {
           category: `%${query.category}%`,
         });
@@ -192,23 +190,15 @@ export class LibraryService {
     }
   }
 
-  /**
-   * Spec 015 Eixo 4: lista beasts com CR ≤ maxCr ordenados por CR asc.
-   * Usado pelo picker de Wild Shape/Polymorph/True Polymorph. Não aplica
-   * source filter (Polymorph usa SRD base).
-   *
-   * Filtra "summons" genéricos (Beast of the Land/Sea/Sky do Summon Beast
-   * XPHB 2024 e Ranger Primal Companion) que têm type='beast' mas não são
-   * feras reais RAW — são templates conjurados.
-   */
+
   async findBeastsForForm(maxCr: number): Promise<MonsterEntity[]> {
     try {
       return await this.entityManager
         .createQueryBuilder(MonsterEntity, "monster")
         .where("monster.type = :type", { type: "beast" })
         .andWhere("monster.challenge_rating <= :maxCr", { maxCr })
-        // Exclui summons conjurados. Slugs SRD: beast-of-the-land,
-        // beast-of-the-sea, beast-of-the-sky, beast-of-the-land-tce, etc.
+
+
         .andWhere("monster.slug NOT LIKE :summonPrefix", {
           summonPrefix: "beast-of-%",
         })
@@ -250,7 +240,7 @@ export class LibraryService {
   ): Promise<T> {
     this.validateEntity(entityClass);
 
-    // Tentativa de preload
+
     const entity = await this.entityManager.preload(entityClass, {
       id,
       ...data,
@@ -282,7 +272,7 @@ export class LibraryService {
   }
 
   private handleErrors(error: any): never {
-    // Erros de violação de banco (TypeORM)
+
     if (error instanceof QueryFailedError) {
       const code = (error as any).code;
       if (code === "23505") throw new ConflictException("Registro duplicado.");
@@ -290,12 +280,12 @@ export class LibraryService {
         throw new BadRequestException("Violação de dependência (FK).");
     }
 
-    // Se o erro já for uma HttpException (como o nosso BadRequest do validateEntity), apenas repassa
+
     if (error.status && error.response) {
       throw error;
     }
 
-    // Erro de metadados do TypeORM (quando a entidade é lixo/null)
+
     if (error.name === "EntityMetadataNotFoundError") {
       throw new BadRequestException(
         "A entidade informada não existe no esquema do banco.",

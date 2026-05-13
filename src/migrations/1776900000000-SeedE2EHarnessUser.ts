@@ -2,21 +2,7 @@ import * as bcrypt from "bcryptjs";
 import { Logger } from "@nestjs/common";
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 — Seed do usuário E2E usado pelo game-validation-harness.
- *
- * Cria `e2e-harness@diad.local` com role=`admin` (precisa chamar endpoints
- * /admin/seed-character e /game/dice/seed).
- *
- * Senha é lida de `E2E_HARNESS_PASSWORD` no env. Se ausente, a migration
- * **skipa silenciosamente** (não falha) — permite rodar `migration:run` em
- * ambientes dev que não usam harness.
- *
- * Em produção (sem `ALLOW_TEST_ENDPOINTS=true`), também skipa — user E2E
- * não deve existir em prod.
- *
- * Idempotente: ON CONFLICT (email) DO NOTHING.
- */
+
 export class SeedE2EHarnessUser1776900000000 implements MigrationInterface {
   name = "SeedE2EHarnessUser1776900000000";
 

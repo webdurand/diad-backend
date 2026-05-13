@@ -1,19 +1,8 @@
-/**
- * Spec 016 P5/P6 (M4) — XP helpers (pure).
- *
- * RAW 2024 PHB XP thresholds (também em shared/srd-constants).
- * Funções puras: lookup do level pelo total XP, progresso até próximo
- * nível, aplicação de award com levelUpReady flag.
- *
- * `campaign.xp_mode` policy aplicada aqui:
- *   'rules'     — grants raw amount (default RAW)
- *   'milestone' — coerces to 0 unless source=quest_step|quest_completion|exploration_milestone
- *   'hybrid'    — combat raw + roleplay coerced 0 (BG3-ish)
- */
+
 
 export const XP_THRESHOLDS_2024 = [
-  0, // L1
-  300, // L2
+  0,
+  300,
   900,
   2700,
   6500,
@@ -22,7 +11,7 @@ export const XP_THRESHOLDS_2024 = [
   34000,
   48000,
   64000,
-  85000, // L11
+  85000,
   100000,
   120000,
   140000,
@@ -31,7 +20,7 @@ export const XP_THRESHOLDS_2024 = [
   225000,
   265000,
   305000,
-  355000, // L20
+  355000,
 ] as const;
 
 const MAX_LEVEL = XP_THRESHOLDS_2024.length;
@@ -58,9 +47,7 @@ const MILESTONE_SOURCES: XpAwardSource[] = [
   "exploration_milestone",
 ];
 
-/**
- * Aplica policy de xp mode. Returns awardedXp (0 se mode coerce).
- */
+
 export function policyAdjustedAward(
   amount: number,
   source: XpAwardSource,
@@ -70,7 +57,7 @@ export function policyAdjustedAward(
   if (mode === "milestone") {
     return MILESTONE_SOURCES.includes(source) ? amount : 0;
   }
-  // hybrid: combat OK + milestone OK; roleplay/skill_challenge coerced
+
   if (mode === "hybrid") {
     if (COMBAT_SOURCES.includes(source)) return amount;
     if (MILESTONE_SOURCES.includes(source)) return amount;
@@ -79,9 +66,7 @@ export function policyAdjustedAward(
   return amount;
 }
 
-/**
- * Dado XP total, retorna o level (1..20).
- */
+
 export function levelForXp(totalXp: number): number {
   if (totalXp < 0) return 1;
   for (let lvl = MAX_LEVEL; lvl >= 1; lvl--) {
@@ -90,9 +75,7 @@ export function levelForXp(totalXp: number): number {
   return 1;
 }
 
-/**
- * Threshold pra atingir o level N. xpThresholdForLevel(2) === 300.
- */
+
 export function xpThresholdForLevel(level: number): number {
   if (level < 1) return 0;
   if (level > MAX_LEVEL) return XP_THRESHOLDS_2024[MAX_LEVEL - 1];
@@ -103,16 +86,14 @@ export interface XpProgress {
   level: number;
   xpInLevel: number;
   xpRequiredForNextLevel: number;
-  /** progress 0..1 dentro do nível atual (1.0 quando ready pra subir). */
+
   progressFraction: number;
   isMaxLevel: boolean;
-  /** XP needed pra atingir próximo level (0 se max). */
+
   xpToNextLevel: number;
 }
 
-/**
- * Computa progresso visual dado total XP. Útil pra HUD bar.
- */
+
 export function computeXpProgress(totalXp: number): XpProgress {
   const level = levelForXp(totalXp);
   if (level >= MAX_LEVEL) {
@@ -148,22 +129,17 @@ export interface XpAwardOutcome {
   levelBefore: number;
   levelAfter: number;
   levelUpReady: boolean;
-  /** Threshold do próximo nível (após award). 0 se max level. */
+
   nextThreshold: number;
-  /** XP faltando pra próximo nível (0 se max). */
+
   xpToNextLevel: number;
-  /** Modo XP aplicado. */
+
   modeApplied: XpMode;
-  /** Fonte do award. */
+
   source: XpAwardSource;
 }
 
-/**
- * Aplica um XP award puro: respeita policy, computa novo total,
- * detecta level-up ready.
- *
- * NÃO muta state — caller persiste se ok.
- */
+
 export function applyXpAward(input: {
   totalXpBefore: number;
   amount: number;

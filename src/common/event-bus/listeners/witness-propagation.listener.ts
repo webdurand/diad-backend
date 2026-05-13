@@ -10,25 +10,7 @@ import { EventBusService } from "../event-bus.service";
 import { EventEnvelopeFactory } from "../event-envelope.factory";
 import { EventCategory, EventEnvelope } from "../event-envelope.types";
 
-/**
- * Spec 027 (M2, AC2.5) — WitnessPropagationListener.
- *
- * Reage a `EncounterEvent.damage_applied` e `EncounterEvent.participant_died`.
- * Query NPCs em mesma `current_location_id` do alvo, com `status='alive'`.
- * Pra cada testemunha, emite `NarrativeEvent.npc_witnessed_event` com severity
- * derivada do tipo do evento original. ReputationListener e GuardDispatchListener
- * consomem o evento propagado.
- *
- * Severity mapping (BG3 Patch 7 + PF2e):
- *  - participant_died (lethal) → 3 (critical)
- *  - damage_applied + isLethal=true → 3
- *  - damage_applied + amount >= 10 → 2 (serious)
- *  - damage_applied default → 1 (soft)
- *
- * NÃO emite witness pro próprio attacker/victim. NÃO propaga se sceneId/locationId
- * faltarem (best-effort — sem location não há "witnesses presentes"). Idempotente
- * via `event_listener_processed`.
- */
+
 @Injectable()
 export class WitnessPropagationListener implements EventListener {
   readonly name = "WitnessPropagationListener";
@@ -65,8 +47,8 @@ export class WitnessPropagationListener implements EventListener {
 
     const locationId = this.resolveLocationId(envelope);
     if (!locationId) {
-      // Sem location não há witnesses — early return (cenário válido em
-      // testes unit ou eventos sintéticos).
+
+
       await this.markProcessed(envelope.eventId);
       return;
     }
@@ -83,8 +65,8 @@ export class WitnessPropagationListener implements EventListener {
       await this.markProcessed(envelope.eventId);
       return;
     }
-    // Witnesses são NPCs com state ativo nessa session na location do evento
-    // (state.status='alive', state.current_location_id=locationId).
+
+
     const states = await this.npcStateRepo.find({
       where: {
         gameSessionId: sessionId,
@@ -156,7 +138,7 @@ export class WitnessPropagationListener implements EventListener {
         });
         await this.eventBus.publish(propagated);
       } catch (err) {
-        // Falha em emit não rollback — log e continua próximas testemunhas.
+
         this.logger.warn("event_bus.witness_propagation.publish_failed", {
           "event.id": envelope.eventId,
           "witness.id": witness.id,

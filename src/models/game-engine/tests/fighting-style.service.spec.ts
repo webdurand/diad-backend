@@ -4,8 +4,8 @@ import {
 } from "../services/fighting-style.service";
 import { DiceService } from "../services/dice.service";
 
-// Spec 012 Fase 0 — testes unit FightingStyleService (7 styles Tier A).
-// Deferred: blind-fighting (blindsight), interception/protection (reactions).
+
+
 
 function baseCtx(
   over: Partial<AttackFightingStyleContext> = {},
@@ -269,7 +269,7 @@ describe("FightingStyleService", () => {
       dice.setSeed(42);
       const res = service.applyRerollLowDamage([1, 2, 5, 6], 6);
       expect(res.rerolled).toBe(true);
-      // O segundo roll pode vir 1/2 de novo (RAW aceita), mas os 5/6 ficam intactos
+
       expect(res.rolls.length).toBe(4);
       expect(res.rolls[2]).toBe(5);
       expect(res.rolls[3]).toBe(6);

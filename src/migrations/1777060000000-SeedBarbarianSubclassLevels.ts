@@ -1,19 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 Barbarian — Data gap: 3 subclasses alternativas (barbarian-wild-heart,
- * barbarian-world-tree, barbarian-zealot) existem na tabela `subclasses` mas
- * NÃO têm rows em `levels`. Consequência: level-up.service não acha levelData
- * ao processar L3 dessas subclasses.
- *
- * Esta migration cria 1 level row L3 pra cada + linka features XPHB L3
- * (MVP — V2 adiciona L6/10/14).
- *
- * Features XPHB L3 esperadas (serão linkadas se existirem em `features`):
- *  - Wild Heart: rage-of-the-wilds (Bear/Eagle/Wolf)
- *  - World Tree: vitality-of-the-tree
- *  - Zealot: divine-fury + warrior-of-the-gods
- */
+
 export class SeedBarbarianSubclassLevels1777060000000 implements MigrationInterface {
   name = "SeedBarbarianSubclassLevels1777060000000";
 
@@ -54,7 +41,7 @@ export class SeedBarbarianSubclassLevels1777060000000 implements MigrationInterf
         levelId = inserted[0].id;
       }
 
-      // Linka features L3 da subclass (pelo subclass_id do feature = sc.id)
+
       await queryRunner.query(
         `INSERT INTO level_features (level_id, feature_id)
          SELECT $1, f.id

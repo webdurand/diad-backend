@@ -2,21 +2,7 @@ import { CombatService } from "../services/combat.service";
 import { DiceService } from "../services/dice.service";
 import { ConditionEffectsService } from "../services/condition-effects.service";
 
-/**
- * Unit tests for US1 (002-encounter-correctness) — death save flow.
- *
- * Covers transitions:
- *   applyDamage (HP>0 → 0)       → dyingState='dying', fell_unconscious
- *   applyDamage (HP=0 → instant) → dyingState='dead'
- *   applyDamage (already dying)  → +1 failure (+2 crit)
- *   applyHealing (dying/stable)  → dyingState='none', deathSavesReset
- *   resolveDeathSave (nat 20)    → revive, dyingState='none'
- *   resolveDeathSave (nat 1)     → +2 failures
- *   resolveDeathSave (≥10)       → +1 success; 3 successes → stable
- *   resolveDeathSave (<10)       → +1 failure; 3 failures → dead
- *   resolveDeathSave (not dying) → NOT_DYING error
- *   endTurn                      → skips dead, delivers to dying, auto-skips stable
- */
+
 
 type MockParticipant = {
   id: string;
@@ -330,7 +316,7 @@ function createHarness() {
       }),
     } as any,
     { shouldOfferShield: async () => null } as any,
-    // Spec 027 (M2 follow-up) — EncounterEndDetectorService stub
+
     { tryAutoEnd: async () => null, detectOutcome: async () => null } as any,
     { processRoundStart: async () => [] } as any,
     { processAfterPcTurn: async () => [] } as any,
@@ -726,7 +712,7 @@ describe("CombatService — US1 death-save flow", () => {
       h.participants.set(dead.id, dead);
       h.participants.set(alive.id, alive);
       h.encounter.turnOrder = [monster.id, dead.id, alive.id];
-      h.encounter.currentTurnIndex = 2; // end of round — next is wrap-around
+      h.encounter.currentTurnIndex = 2;
 
       const res = await h.combat.endTurn(h.encounter.id);
 

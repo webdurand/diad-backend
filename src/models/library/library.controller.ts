@@ -21,13 +21,7 @@ import {
 export class LibraryController {
   constructor(private readonly libraryService: LibraryService) {}
 
-  /**
-   * Spec 015 Eixo 4: beast picker para Polymorph / Wild Shape / True Polymorph.
-   * Filtros CR (numerator/denominator) + locomoção especial + enriquece cada
-   * beast com tacticalSummary + narrativeDescriptor (Princípio X).
-   *
-   * Mantido antes do catch-all `@Get(':entity')` por prioridade de route.
-   */
+
   @Get("beasts")
   async getBeasts(
     @Query("maxCrNumerator") maxCrNumeratorRaw?: string,
@@ -77,12 +71,7 @@ export class LibraryController {
     return { beasts: filtered, total: filtered.length };
   }
 
-  /**
-   * Spec 007: paginated library endpoint with strict source filter and
-   * entity-specific filters (cr, level, class, category, name).
-   *
-   * Response: { data: T[], total: number, limit: number, offset: number }
-   */
+
   @Get(":entity")
   async get(@Param("entity") entity: string, @Query() query: LibraryQueryDto) {
     const config = ENTITY_CONFIG[entity];

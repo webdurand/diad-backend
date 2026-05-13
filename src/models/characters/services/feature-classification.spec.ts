@@ -3,17 +3,7 @@ import {
   type FeatureClassification,
 } from "./feature-classification";
 
-/**
- * Spec 015 Eixo 1 — classifica features do SRD para a aba de Ações.
- *
- * Pré-015: o `actions.service.buildFeatureActions` usava regex no description
- * para decidir se uma feature virava "action". Passivas puras (Song of Rest,
- * Expertise, Jack of All Trades) matcham no regex "use|activate" e vazam pra
- * aba Ações. Scalings (`bardic-inspiration-d8/d10/d12`) emitem 3 cards
- * idênticos em vez de 1 com o dado mais alto.
- *
- * Este helper é uma tabela curada com página PHB ao lado (Princípio II).
- */
+
 
 describe("classifyFeatureForActions", () => {
   describe("hide — features passivas (Bardo)", () => {
@@ -55,19 +45,19 @@ describe("classifyFeatureForActions", () => {
 
   describe("hide — features passivas (Druida)", () => {
     const druidPassives = [
-      // L18 + L20
+
       "archdruid",
       "druid-timeless-body",
-      // Wild Shape scaling markers (CR unlocks são passive, apenas informacionais)
+
       "wild-shape-cr-1-4-or-below-no-flying-or-swim-speed",
       "wild-shape-cr-1-2-or-below-no-flying-speed",
       "wild-shape-cr-1-or-below",
       "wild-shape-improvements",
-      // Spellcasting grants
+
       "druidic",
       "druidic-druid-1",
       "spellcasting-druid-1",
-      // Druid Circle markers
+
       "druid-circle",
       "druid-subclass-druid-3",
       "druid-circle-improvement-1",
@@ -77,7 +67,7 @@ describe("classifyFeatureForActions", () => {
       "subclass-feature-druid-14",
       "nature-s-sanctuary",
       "nature-s-ward",
-      // ASI + Epic Boon
+
       "druid-ability-score-improvement-1",
       "druid-ability-score-improvement-2",
       "druid-ability-score-improvement-3",
@@ -187,9 +177,9 @@ describe("classifyFeatureForActions", () => {
   });
 
   describe("alias — XPHB 2024 class-suffix slugs (regressão 2026-04-24)", () => {
-    // O SRD XPHB 2024 adiciona sufixo `<feature>-<classe>-<level>` ao slug
-    // pro seed (ex: `wild-shape-druid-2`). Sem aliases, `featureActionMap.get()`
-    // falha e a feature some da ActionBar. Teste regression pros 10 canonicals.
+
+
+
     test.each([
       ["wild-shape-druid-2", "wild-shape"],
       ["rage-barbarian-1", "rage"],
@@ -235,7 +225,7 @@ describe("classifyFeatureForActions", () => {
     });
 
     it("retorna null pra feature canonical sem override", () => {
-      // countercharm (canonical) não tem entry — segue fluxo normal do featureActionMap
+
       expect(classifyFeatureForActions("countercharm")).toBeNull();
     });
 

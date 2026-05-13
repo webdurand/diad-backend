@@ -1,9 +1,4 @@
-/**
- * rest-helpers — Spec 016 P5 (M4) tests.
- *
- * Short rest (HP≥1 RAW 2024 + HD spend), long rest (full HP+HD 2024 +
- * exhaustion -1 + slots), 24h gate.
- */
+
 import {
   CharacterRestSnapshot,
   computeLongRestDelta,
@@ -48,12 +43,12 @@ describe("rest-helpers — validateShortRestEligibility", () => {
 
 describe("rest-helpers — computeShortRestDelta", () => {
   it("rola HD + CON modifier, soma heal", () => {
-    // RNG fixa em 0.5 → rolled = floor(0.5 * 8) + 1 = 5; +CON 2 = 7 por die
+
     const delta = computeShortRestDelta(baseSnapshot(), { d8: 2 }, () => 0.5);
     expect(delta.hpRolls).toHaveLength(2);
     expect(delta.hpRolls[0].rolled).toBe(5);
     expect(delta.hpRolls[0].effective).toBe(7);
-    expect(delta.hpDelta).toBe(10); // 7+7=14, mas room é 30-20=10, cap em 10
+    expect(delta.hpDelta).toBe(10);
     expect(delta.hdSpent).toEqual({ d8: 2 });
   });
 
@@ -63,7 +58,7 @@ describe("rest-helpers — computeShortRestDelta", () => {
       { d8: 5 },
       () => 0.99,
     );
-    expect(delta.hpDelta).toBeLessThanOrEqual(2); // só 2 HP de room
+    expect(delta.hpDelta).toBeLessThanOrEqual(2);
   });
 
   it("rejeita gastar mais HD do que disponível", () => {
@@ -80,9 +75,9 @@ describe("rest-helpers — computeShortRestDelta", () => {
     const delta = computeShortRestDelta(
       baseSnapshot({ conModifier: -3, hp: 1 }),
       { d8: 1 },
-      () => 0.0, // rolled 1
+      () => 0.0,
     );
-    // 1 + (-3) = -2 → clamp 1
+
     expect(delta.hpRolls[0].effective).toBe(1);
   });
 
@@ -113,7 +108,7 @@ describe("rest-helpers — computeLongRestDelta", () => {
   it("full HP + full HD restore (RAW 2024 100%)", () => {
     const delta = computeLongRestDelta(baseSnapshot({ hp: 5, hpMax: 30 }));
     expect(delta.hpDelta).toBe(25);
-    expect(delta.hdRestored).toEqual({ d8: 2 }); // 5 max - 3 current = 2
+    expect(delta.hdRestored).toEqual({ d8: 2 });
   });
 
   it("exhaustion -1", () => {

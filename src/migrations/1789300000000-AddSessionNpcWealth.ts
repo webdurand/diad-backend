@@ -1,17 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * NPC wealth híbrido: tier enum default cobre 80% dos NPCs anônimos +
- * treasure/currency JSONB pros nomeados (mercadores, quest-givers).
- *
- * Estende `session_npc_state` (mutável por sessão) — NÃO toca `npcs`
- * canônico (Big Bang preserva a separação ficha vs estado).
- *
- * Foundation pra theft tools (steal_from_npc / npc_steals_from_pc) +
- * futuro vendor/merchant. NPCs antigos reuse default ('modest', [], zeros).
- *
- * Down() simétrico.
- */
+
 export class AddSessionNpcWealth1789300000000 implements MigrationInterface {
   name = "AddSessionNpcWealth1789300000000";
 

@@ -66,16 +66,16 @@ describe("SceneContextCacheService", () => {
   });
 
   it("evicts oldest entry when exceeding MAX_ENTRIES", () => {
-    // Insert 201 entries — first should be evicted.
-    // Stagger expiresAt by advancing time 1ms between sets, so eviction
-    // is deterministic (oldest = entry inserted first).
+
+
+
     for (let i = 0; i < 201; i++) {
       jest.advanceTimersByTime(1);
       cache.set(`scene-${i}`, fakeCtx(String(i)));
     }
     expect(cache.size()).toBe(200);
-    expect(cache.get("scene-0")).toBeNull(); // oldest evicted
-    expect(cache.get("scene-200")?.scene.title).toBe("200"); // newest kept
+    expect(cache.get("scene-0")).toBeNull();
+    expect(cache.get("scene-200")?.scene.title).toBe("200");
   });
 
   it("set on existing key refreshes TTL", () => {
@@ -83,7 +83,7 @@ describe("SceneContextCacheService", () => {
     jest.advanceTimersByTime(40_000);
     cache.set("scene-1", fakeCtx("v2"));
     jest.advanceTimersByTime(30_000);
-    // 70s after first set, but only 30s after refresh — should still hit
+
     expect(cache.get("scene-1")?.scene.title).toBe("v2");
   });
 });

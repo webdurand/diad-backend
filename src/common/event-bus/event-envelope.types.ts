@@ -1,8 +1,4 @@
-/**
- * Mirror de contracts/event-envelope.json. Unidade canônica do EventBus.
- * Self-contained payloads (hpBefore + hpAfter, não só delta) — listeners
- * reagem sem ler banco; replay determinístico fica viável.
- */
+
 
 export const EVENT_CATEGORIES = [
   "EncounterEvent",
@@ -34,14 +30,14 @@ export type EmittingService = (typeof EMITTING_SERVICES)[number];
 export interface EventEnvelopeSource {
   service: EmittingService;
   module: string;
-  /** W3C trace-id — 32 lowercase hex chars (Princípio XI). */
+
   traceId: string;
-  /** W3C span-id — 16 lowercase hex chars opcional. */
+
   spanId?: string;
 }
 
 export interface EventEnvelopeScope {
-  /** AudienceMap é campaign-scoped — campaignId é obrigatório. */
+
   campaignId: string;
   sessionId?: string;
   sceneId?: string;
@@ -49,9 +45,9 @@ export interface EventEnvelopeScope {
 }
 
 export interface EventEnvelopeMetadata {
-  /** 0-10 — Combat L3 utility scoring multiplica. */
+
   tacticalValue?: number;
-  /** 0-10 — Director/Chekhov ledger usa pra rank de payoff. */
+
   narrativeWeight?: number;
   tags?: string[];
   beneficiaryFaction?: "ally" | "enemy" | "neutral";
@@ -61,44 +57,33 @@ export interface EventEnvelopeMetadata {
 
 export interface EventEnvelope {
   eventId: string;
-  /** Schema version do payload deste eventType. Default 1. */
+
   version: number;
-  /** Aggregate principal afetado — encounterId / characterId / campaignId etc. */
+
   aggregateId: string;
-  /** ISO-8601 UTC. */
+
   timestamp: string;
   eventCategory: EventCategory;
-  /** snake_case en machine-readable. Deve estar no catálogo (event-categories). */
+
   eventType: string;
   source: EventEnvelopeSource;
   scope: EventEnvelopeScope;
-  /**
-   * Self-contained payload (ADR-017): carrega estado pré e pós quando
-   * aplicável (`hpBefore` + `hpAfter`, não só delta). Bus não valida shape
-   * interno — convenção definida aqui e no contract per spec.
-   */
+
   payload: Record<string, unknown>;
   audiences: EventAudience[];
-  /** PT-BR ≤120 chars (Princípio X). */
+
   narrativeDescriptor?: string;
   metadata?: EventEnvelopeMetadata;
 }
 
-/**
- * Input parcial usado por publishers — eventId/timestamp/audiences podem
- * ser preenchidos pela factory/bus.
- */
+
 export interface EventEnvelopeInput {
   eventCategory: EventCategory;
   eventType: string;
   source: Omit<EventEnvelopeSource, "traceId"> & { traceId?: string };
   scope: EventEnvelopeScope;
   payload: Record<string, unknown>;
-  /**
-   * Opcional — quando ausente, factory infere do escopo mais específico
-   * disponível (encounter > session > scene > campaign). Princípio X
-   * exige aggregateId em todo envelope (ADR-017).
-   */
+
   aggregateId?: string;
   audiences?: EventAudience[];
   narrativeDescriptor?: string;
@@ -108,12 +93,8 @@ export interface EventEnvelopeInput {
   timestamp?: string;
 }
 
-/**
- * Regex W3C trace-id — 32 lowercase hex chars, não all-zero.
- */
+
 export const TRACE_ID_REGEX = /^[0-9a-f]{32}$/;
 
-/**
- * Regex eventType — ^[a-z][a-z0-9_]+$ (snake_case en, padrão indústria).
- */
+
 export const EVENT_TYPE_REGEX = /^[a-z][a-z0-9_]+$/;

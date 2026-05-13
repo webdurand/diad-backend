@@ -1,22 +1,4 @@
-/**
- * Spec 020 — start_encounter_from_narrative.
- *
- * Orquestra a transição narrativa → combate formal.
- *
- * Fluxo:
- *   1. Valida sceneId existe na session.
- *   2. Para cada NPC alvo: valida existe + tem monsterId (sem stats não pode lutar).
- *   3. Cria EncounterEntity (auto-attach PCs já incluso em EncounterService.create).
- *   4. Materializa NPC participants (type='npc', monsterId, hp do monster).
- *   5. Auto-place tokens em grid (linha por linha, top-left).
- *   6. Inicia combate (turn order por initiative).
- *   7. Aplica condition `surprised` nos NPCs alvos quando surprise_round=true (RAW 2024).
- *   8. Emite EncounterEvent.encounter_started.
- *
- * Idempotência: parcial. Cada step é atômico, mas se step 5/6/7 falham depois
- * do encounter ser criado, ele permanece em status='preparing' (consistente
- * com o resto do código). Caller pode retentar place_tokens manualmente.
- */
+
 
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -40,12 +22,12 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { getAbilityModifier } from "src/shared/srd-utils";
 import { AiProxyService } from "src/models/ai-proxy/ai-proxy.service";
 
-/** UUID v4-ish detection — distingue UUID de nome livre nos targets. */
+
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface TokenLayoutEntry {
-  /** characterId (PC) ou npcId — backend resolve pra participantId. */
+
   ref: string;
   x: number;
   y: number;
@@ -54,19 +36,12 @@ export interface TokenLayoutEntry {
 
 export interface StartEncounterFromNarrativeInput {
   sessionId: string;
-  /** Quando ausente, backend resolve via active OU cria stub auto. */
+
   sceneId?: string;
   attackerParticipantId?: string | null;
-  /**
-   * NPC UUIDs já materializados (path otimizado — PreFlightOracle resolveu
-   * placeholders via materializations sequenciais). Mantido pra back-compat.
-   */
+
   targetNpcIds?: string[];
-  /**
-   * Lista mista UUID + nome livre. Backend detecta por elemento: UUID carrega
-   * NpcEntity, nome materializa stub via archetype heurístico. Quando ambos
-   * `targetNpcIds` e `targets` são passados, são merged.
-   */
+
   targets?: string[];
   surpriseRound?: boolean;
   autoPlaceTokens?: boolean;
@@ -74,7 +49,7 @@ export interface StartEncounterFromNarrativeInput {
   campaignId?: string;
   ownerUserId: string;
   traceId?: string;
-  /** Spec 026 Pillar 4 — layout sugerido pelo agente (oracle). */
+
   tokensLayout?: TokenLayoutEntry[];
 }
 
@@ -118,13 +93,13 @@ export class StartEncounterFromNarrativeService {
   async run(
     input: StartEncounterFromNarrativeInput,
   ): Promise<StartEncounterFromNarrativeResult> {
-    // 1. Resolve cena (combate é prioridade — nunca falha por scene ausente).
-    //    Ordem: sceneId explícito → active scene da session → cria stub auto.
+
+
     const scene = await this.resolveOrCreateScene(input);
     const resolvedSceneId = scene.id;
 
-    // 2. Resolve targets mistos (UUID + nome). Nomes materializam stub via
-    // NpcService com archetype heurístico.
+
+
     let resolvedIds = await this.resolveOrMaterializeTargets(
       input.targetNpcIds ?? [],
       input.targets ?? [],
@@ -137,9 +112,9 @@ export class StartEncounterFromNarrativeService {
       klass: string;
     } | null = null;
 
-    // 2.5. Fallback do botão "Iniciar combate": resolve hostis a partir da
-    // cena ativa. Hostis primeiro; figurantes neutros materializados pelo
-    // narrator entram só se não houver hostis declarados.
+
+
+
     if (resolvedIds.length === 0) {
       const sceneCtx = await this.sceneContextService.assembleContext(scene.id);
       const hostiles = sceneCtx.npcsPresent.filter(
@@ -157,12 +132,12 @@ export class StartEncounterFromNarrativeService {
       }
     }
 
-    // 2.6. Lazy extraction: cena sem hostis materializados é o caso comum
-    // (narrator descreve "5 homens armados" só na prosa). Chama o agno
-    // /narrative/extract-combat-targets passando a prosa recente + snapshot
-    // do PC (level/HP/classe) — o Haiku identifica alvos com CR adequado ao
-    // tier, materializa via NpcService.create (auto-attach scene_npcs), e
-    // devolve os IDs prontos pra encounter.
+
+
+
+
+
+
     if (resolvedIds.length === 0 && input.sessionId && input.campaignId) {
       const recentProse = await this.collectRecentNarratorProse(
         input.sessionId,
@@ -199,7 +174,7 @@ export class StartEncounterFromNarrativeService {
 
     const npcs = await this.loadAndValidateNpcs(resolvedIds);
 
-    // 3. Cria encounter (auto-anexa PCs da session/campaign)
+
     let encounter;
     try {
       encounter = await this.encounterService.create(
@@ -219,21 +194,21 @@ export class StartEncounterFromNarrativeService {
       );
     }
 
-    // 4. Materializa NPC participants (type='npc', monsterId, hp do monster).
-    // Não há método dedicado no EncounterService para "anexar NPC nomeado":
-    // addMonster cria participants type='monster' sem ligação ao NpcEntity.
-    // Inline aqui — pequena divergência: type='npc' + monsterId (stats vêm do monster
-    // cacheado), permitindo que o agente saiba que é um NPC nomeado da campanha.
+
+
+
+
+
     const npcParticipants = await this.materializeNpcParticipants(
       encounter.id,
       npcs,
     );
 
-    // Refresh encounter pra ter PCs + NPCs juntos.
+
     encounter = await this.encounterService.getById(encounter.id);
     const allParticipants = encounter.participants ?? [];
 
-    // 5. Auto place tokens (default true)
+
     const shouldPlace = input.autoPlaceTokens !== false;
     if (shouldPlace) {
       try {
@@ -261,7 +236,7 @@ export class StartEncounterFromNarrativeService {
       }
     }
 
-    // 6. Roll initiative + start combat
+
     await this.rollInitiative(
       allParticipants,
       input.surpriseRound === true,
@@ -269,7 +244,7 @@ export class StartEncounterFromNarrativeService {
     );
     encounter = await this.encounterService.startCombat(encounter.id);
 
-    // 7. Aplica `surprised` em NPCs (best-effort)
+
     const surprisedIds: string[] = [];
     if (input.surpriseRound === true) {
       for (const np of npcParticipants) {
@@ -290,7 +265,7 @@ export class StartEncounterFromNarrativeService {
       }
     }
 
-    // 8. Emite event encounter_started (best-effort se faltar campaignId).
+
     const campaignId = await this.resolveCampaignId(
       input.campaignId,
       input.sessionId,
@@ -341,16 +316,9 @@ export class StartEncounterFromNarrativeService {
     };
   }
 
-  // --- helpers ---
 
-  /**
-   * Resolve scene em ordem de preferência:
-   *   1. sceneId explícito do input → valida existe + pertence à session
-   *   2. Active scene da session (isActive=true)
-   *   3. Cria scene stub auto (campanhas custom sem world building formal)
-   *
-   * Combate é prioridade — nunca falha aqui. Sempre retorna SceneEntity válida.
-   */
+
+
   private async resolveOrCreateScene(
     input: StartEncounterFromNarrativeInput,
   ): Promise<SceneEntity> {
@@ -388,11 +356,7 @@ export class StartEncounterFromNarrativeService {
     return saved;
   }
 
-  /**
-   * Resolve lista mista (UUID + name) para lista de UUIDs. UUIDs passam direto.
-   * Nomes resolvem via `findByNameInSession`; se não acharem, materializam
-   * stub auto via archetype heurístico.
-   */
+
   private async resolveOrMaterializeTargets(
     uuidTargets: string[],
     mixedTargets: string[],
@@ -489,7 +453,7 @@ export class StartEncounterFromNarrativeService {
           );
           hp = Math.max(1, rolled.total);
         } catch {
-          /* fallback to monster.hit_points */
+
         }
       }
       const dexMod = getAbilityModifier(monster.dexterity);
@@ -505,12 +469,12 @@ export class StartEncounterFromNarrativeService {
         conditions: [],
         isDefeated: false,
         faction: "enemy",
-        // Spec 027 (M2 follow-up) — NPCs hostis criados via narrative em
-        // DIAD solo são controlados pela IA. Antes vinha 'dm' (assumia DM
-        // humano), causando turno NPC parado esperando input do player.
-        // Frontend ([sessao/page.tsx:510-522]) auto-dispatcha POST /ai-turn
-        // quando current participant tem controlledBy='ai' → AiTurnService
-        // → /monsters/decide no agno (rule-based / utility / LLM por INT).
+
+
+
+
+
+
         controlledBy: "ai",
       });
       const saved = await this.participantRepo.save(participant);
@@ -519,15 +483,7 @@ export class StartEncounterFromNarrativeService {
     return participants;
   }
 
-  /**
-   * Spec 026 Pillar 4 — aplica layout proposto pelo agente narrativo quando
-   * existe e auto-completa o resto via grid top-left.
-   *
-   * Resolução de `ref`: tenta como `npcId` (com base nos NPCs hostis criados
-   * neste encounter) → cai pra `characterId` do participant (PCs já anexados
-   * pelo `EncounterService.create`). Refs sem match e coords fora do grid
-   * são descartadas sem erro — auto-grid cobre a lacuna.
-   */
+
   private async placeTokens(
     encounterId: string,
     participants: EncounterParticipantEntity[],
@@ -552,7 +508,7 @@ export class StartEncounterFromNarrativeService {
     const positions: Array<{ participantId: string; x: number; y: number }> =
       [];
 
-    // Resolver ref (npcId | characterId) → participantId.
+
     const npcIdToParticipantId = new Map<string, string>();
     const participantsByMonsterId = new Map<string, EncounterParticipantEntity[]>();
     for (const p of participants) {
@@ -601,10 +557,10 @@ export class StartEncounterFromNarrativeService {
       }
     }
 
-    // Layout BG3-like: PCs sul (centro da última linha), hostis norte (centro
-    // da primeira linha). Token spread horizontal pra evitar empilhar — ranged
-    // antes/depois do melee fica natural quando NPCs se movem no Round 1.
-    // Distância vertical mantém ~6 tiles (range típico de bow) entre as linhas.
+
+
+
+
     const remainingPcs = participants.filter(
       (p) =>
         p.positionX == null &&
@@ -625,13 +581,13 @@ export class StartEncounterFromNarrativeService {
       list: EncounterParticipantEntity[],
     ): void => {
       if (list.length === 0) return;
-      // Centra horizontalmente: spread N tokens em torno do meio.
+
       const center = Math.floor(gridColumns / 2);
       const startX = Math.max(0, center - Math.floor(list.length / 2));
       let x = startX;
       for (const p of list) {
-        // Avança até achar célula livre na linha (com wrap pra próxima linha
-        // se a linha alvo lotar — caso extremo de party gigante).
+
+
         let y = row;
         while (true) {
           if (x >= gridColumns) {
@@ -659,8 +615,8 @@ export class StartEncounterFromNarrativeService {
     placeRow(gridRows - 1, remainingPcs);
     placeRow(0, remainingNpcs);
 
-    // Fallback: alguém ainda não posicionado (caso layout proposto + rows
-    // cheios). Auto-grid top-left preenche o resto.
+
+
     let cursorX = 0;
     let cursorY = 0;
 
@@ -700,10 +656,7 @@ export class StartEncounterFromNarrativeService {
     await this.encounterService.batchUpdatePositions(encounterId, positions);
   }
 
-  /**
-   * Rola initiative pra cada participant. Aplica Disadvantage nos NPCs surpresos
-   * (RAW 2024 Surprised condition: Disadvantage on initiative roll).
-   */
+
   private async rollInitiative(
     participants: EncounterParticipantEntity[],
     surpriseRound: boolean,
@@ -711,7 +664,7 @@ export class StartEncounterFromNarrativeService {
   ): Promise<void> {
     const surprisedIds = new Set(surprisedNpcs.map((p) => p.id));
     for (const p of participants) {
-      if (p.initiativeTotal != null) continue; // já rolada
+      if (p.initiativeTotal != null) continue;
       const mod = p.initiativeModifier ?? 0;
       const disadvantage = surpriseRound && surprisedIds.has(p.id);
       const roll = disadvantage ? Math.min(this.d20(), this.d20()) : this.d20();
@@ -739,11 +692,7 @@ export class StartEncounterFromNarrativeService {
     return session?.campaignId ?? undefined;
   }
 
-  /**
-   * Pega as últimas N narrações da sessão (kind=narration) e concatena na
-   * ordem cronológica. Cap de tamanho pra controlar tokens da chamada Haiku
-   * (≈4k chars cobrem 4-5 cenas tranquilamente).
-   */
+
   private async collectRecentNarratorProse(
     sessionId: string,
     limit = 5,

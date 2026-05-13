@@ -44,9 +44,9 @@ export class RealtimeGateway
 
   afterInit(): void {
     this.realtime.setServer(this.server);
-    // Authenticate inside the namespace middleware (runs BEFORE connect), so
-    // `socket.data.userId` is guaranteed to exist by the time any message
-    // handler runs. A late async handleConnection would race with the client.
+
+
+
     this.server.use(async (socket, next) => {
       try {
         const userId = await this.authenticate(socket as unknown as Socket);
@@ -65,7 +65,7 @@ export class RealtimeGateway
   async handleConnection(socket: Socket): Promise<void> {
     const userId = socket.data.userId as string | undefined;
     if (!userId) {
-      // Middleware already rejected; nothing to do.
+
       return;
     }
     await socket.join(`user:${userId}`);

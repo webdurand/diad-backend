@@ -24,7 +24,7 @@ export class CompSourceEntity {
   @Column({ nullable: true })
   group: string;
 
-  /** Edition-specific rules/capabilities for extensible ruleset support */
+
   @Column({ type: "jsonb", nullable: true })
   rules?: EditionRules;
 

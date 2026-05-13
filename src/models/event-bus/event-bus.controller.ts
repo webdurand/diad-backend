@@ -22,18 +22,7 @@ import { DomainException } from "src/common/observability/errors/diad-exception"
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { PublishEventDto } from "./dto/publish-event.dto";
 
-/**
- * Spec 017 — Event Bus controller.
- *
- * Endpoints:
- *  - GET  /campaigns/:id/audience-map — resolved map (defaults + overrides).
- *  - POST /events/publish              — emite envelope (cross-service ou cookie session).
- *
- * Auth via cookie session OU `X-Service-Key` (cross-service do diad-agents),
- * herda o AuthGuard padrão. POST /events/publish exige header `traceparent`
- * obrigatório (Princípio XI) — se ausente/inválido, factory regera mas o
- * gate força o publisher a propagar trace correto cross-boundary.
- */
+
 @Controller()
 @UseGuards(AuthGuard)
 export class EventBusController {
@@ -74,8 +63,8 @@ export class EventBusController {
       timestamp: dto.timestamp,
     });
 
-    // Returns enriched envelope (audiences resolvidas via AudienceMap).
-    // Cliente pode validar audiences finais sem novo round-trip.
+
+
     return await this.eventBus.publish(envelope);
   }
 
@@ -107,7 +96,7 @@ export class EventBusController {
         { context: { traceId: bodyTraceId } },
       );
     }
-    // Sem traceparent nem traceId no body → factory regera via CLS/randomBytes.
+
     return "";
   }
 }

@@ -1,12 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 Global — cost tracking.
- *
- * Log de usage do Anthropic SDK (input/output tokens, cache hits, cost USD)
- * per turn per role. Powered by GET /campaigns/:id/cost-summary pra validar
- * target ≤$0.50/sessão (spec §8 cost-aware model selection).
- */
+
 export class AddAiUsageLog1778200000000 implements MigrationInterface {
   name = "AddAiUsageLog1778200000000";
 

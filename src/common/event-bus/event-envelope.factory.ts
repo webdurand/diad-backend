@@ -8,20 +8,7 @@ import {
   TRACE_ID_REGEX,
 } from "./event-envelope.types";
 
-/**
- * Spec 017 — Factory que monta `EventEnvelope` completo a partir de input
- * parcial dos publishers.
- *
- * Responsabilidades:
- *  - Gera `eventId` UUID v4 quando ausente.
- *  - Gera `timestamp` ISO-8601 UTC quando ausente.
- *  - Lê `traceId` do CLS quando disponível; regera (W3C 32 hex) caso contrário.
- *    Princípio XI — todo envelope cross-boundary carrega traceId.
- *  - Default `version = 1` (ADR-017 future-proofing).
- *
- * NÃO valida shape do payload — quem chama declara seu contract por eventType.
- * NÃO computa audiences — `EventBusService` resolve via `AudienceMapService`.
- */
+
 @Injectable()
 export class EventEnvelopeFactory {
   constructor(@Optional() private readonly cls?: ClsService) {}
@@ -51,12 +38,7 @@ export class EventEnvelopeFactory {
     };
   }
 
-  /**
-   * ADR-017 — `aggregateId` é a chave que ES futuro usa pra reconstruir
-   * state por aggregate. Quando publisher não declara, inferimos a partir
-   * do escopo mais específico disponível (encounter > session > scene > campaign).
-   * Garante que todo envelope tenha aggregateId — Princípio X obrigatório.
-   */
+
   private inferAggregateId(scope: EventEnvelopeInput["scope"]): string {
     return (
       scope.encounterId ?? scope.sessionId ?? scope.sceneId ?? scope.campaignId

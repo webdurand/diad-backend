@@ -27,24 +27,7 @@ export interface TransferMarkResult {
   transferredEffectId?: string;
 }
 
-/**
- * Spec 012 — Mark Transfer (Hunter's Mark / Hex RAW 2024 XPHB).
- *
- * Quando o alvo marcado cai a 0 HP antes da spell expirar, o caster pode
- * mover a mark para um novo alvo usando bonus action no seu turno subsequente,
- * SEM gastar novo slot. A concentração permanece ativa (só muda o alvo).
- *
- * Fluxo:
- *  - combat.service emite `mark_ready_to_transfer` quando o target morre.
- *  - UI mostra prompt; player chama este endpoint no turno seguinte.
- *  - Este service valida pré-requisitos e move o effectInstance + tracker
- *    do caster para o novo alvo.
- *
- * Pré-requisitos validados:
- *  - Caster possui um AppliedEffect de concentração marcando spell HM/Hex.
- *  - Bonus action ainda não foi gasta.
- *  - Novo alvo existe no encontro e não está derrotado.
- */
+
 @Injectable()
 export class MarkTransferService {
   private readonly logger = new Logger(MarkTransferService.name);
@@ -73,8 +56,8 @@ export class MarkTransferService {
     const expectedKind =
       dto.sourceSpellSlug === "hunters-mark" ? "hunter_mark" : "hex_mark";
 
-    // 1. Procurar um effect órfão: sourceCaster=caster, kind=hunter_mark/hex_mark,
-    //    ainda aplicado num target (morto ou vivo) dentro do encontro.
+
+
     const encounterParticipants = await this.participants.find({
       where: { encounterId: dto.encounterId },
     });
@@ -103,7 +86,7 @@ export class MarkTransferService {
       };
     }
 
-    // 2. Verificar bonus action disponível
+
     if (caster.bonusActionUsed) {
       return {
         ok: false,
@@ -112,7 +95,7 @@ export class MarkTransferService {
       };
     }
 
-    // 3. Verificar novo alvo
+
     if (dto.newTargetParticipantId === previousTarget.id) {
       return {
         ok: false,
@@ -139,17 +122,17 @@ export class MarkTransferService {
       };
     }
 
-    // 4. Remover do alvo anterior (com reason='manual' pra não cascade-break
-    //    concentração — só estamos movendo). removeEffect também limpa o tracker
-    //    appliedEffects do caster; vamos re-adicionar via addEffect abaixo, que
-    //    recria o tracker. Assim a concentração continua armada.
+
+
+
+
     const removed = await this.effects.removeEffect(
       previousTarget,
       orphanEffect.id,
       "manual",
     );
 
-    // 5. Aplicar no novo alvo (mesmo payload, mesma duração).
+
     const applied = await this.effects.addEffect(newTarget, {
       kind: expectedKind,
       sourceSpellSlug: dto.sourceSpellSlug,
@@ -159,7 +142,7 @@ export class MarkTransferService {
       requiresConcentration: orphanEffect.requiresConcentration,
     });
 
-    // 6. Consumir bonus action do caster.
+
     caster.bonusActionUsed = true;
     await this.participants.save(caster);
 

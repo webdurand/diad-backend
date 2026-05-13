@@ -22,7 +22,7 @@ describe("Error Codes Catalog", () => {
   });
 
   it("todos os codes têm metadata com httpStatus válido (200 warning ou 4xx/5xx)", () => {
-    // CONDITION_BLOCKED_BY_IMMUNITY (spec 020) é warning-style 200.
+
     for (const code of ALL_ERROR_CODES) {
       const md = getMetadata(code);
       const isWarning = md.httpStatus === 200;

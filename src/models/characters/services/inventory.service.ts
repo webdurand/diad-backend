@@ -25,7 +25,7 @@ import {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// ---- DTOs ----
+
 
 export interface AddItemDto {
   equipmentId: string;
@@ -51,7 +51,7 @@ export interface EquipToggleDto {
 export type HandSlot = "main" | "off" | null;
 
 export interface SetHandDto {
-  /** 'main' = empunha em main hand; 'off' = em off-hand; null = guarda (stow) */
+
   hand: HandSlot;
 }
 
@@ -75,7 +75,7 @@ export interface UseItemResult {
   };
 }
 
-// ---- Response types ----
+
 
 export interface InventoryItemResponse {
   id: string;
@@ -129,11 +129,7 @@ export interface GoldResponse {
 
 const MAX_ATTUNEMENTS = 3;
 
-/**
- * RAW 2024 — weapon tem property `two-handed` (ocupa ambas mãos) ou
- * `versatile` (pode usar 1 ou 2 mãos — ao empunhar em 'main' é tratado como 1H).
- * Admin seeder grava properties como `{ name, slug }` ou `{ index }` — aceitar ambos.
- */
+
 function isTwoHanded(equipment: EquipmentEntity | undefined | null): boolean {
   if (!equipment) return false;
   const props = (equipment.properties ?? []) as Array<{
@@ -171,7 +167,7 @@ export class InventoryService {
     private readonly stateService: CharacterStateService,
   ) {}
 
-  // ---- Helpers ----
+
 
   private async ensureReadAccess(
     userId: string,
@@ -247,7 +243,7 @@ export class InventoryService {
     };
   }
 
-  // ---- Inventory CRUD ----
+
 
   async getInventory(
     userId: string,
@@ -373,7 +369,7 @@ export class InventoryService {
     await this.charEquipRepo.remove(item);
   }
 
-  // ---- Gold ----
+
 
   async updateGold(
     userId: string,
@@ -403,7 +399,7 @@ export class InventoryService {
     return { cp: state.cp, sp: state.sp, gp: state.gp, pp: state.pp };
   }
 
-  // ---- Equip / Unequip ----
+
 
   async toggleEquip(
     userId: string,
@@ -477,7 +473,7 @@ export class InventoryService {
       }
     }
 
-    // Check STR minimum for heavy armor
+
     if (isArmor) {
       const raw = eq.raw as Record<string, unknown> | null;
       const strMin =
@@ -495,18 +491,9 @@ export class InventoryService {
     }
   }
 
-  // ---- Weapons in hand (RAW 2024) ----
 
-  /**
-   * Empunha ou guarda um item. Regras RAW 2024:
-   * - `hand='main'`: ocupa main. Se item tem property `two-handed`, também
-   *   limpa off_hand (2H weapon ocupa ambas — escudo em off deve ser guardado antes).
-   * - `hand='off'`: ocupa off. Exige property `light` (dual-wielding) OU
-   *   shield. Proibido se main atual é 2H.
-   * - `hand=null`: guarda (stow). Limpa ambos main_hand e off_hand.
-   *
-   * Não altera `equipped` (pra armadura/shield AC isso é separado).
-   */
+
+
   async setHand(
     userId: string,
     characterId: string,
@@ -529,7 +516,7 @@ export class InventoryService {
     if (dto.hand === null) {
       item.mainHand = false;
       item.offHand = false;
-      // Escudo: AC calc lê `equipped`. Sincroniza ao guardar.
+
       if (isShield) item.equipped = false;
       const saved = await this.charEquipRepo.save(item);
       return this.mapEquipItem(saved);
@@ -537,9 +524,9 @@ export class InventoryService {
 
     await this.validateSetHand(characterId, item, dto.hand);
 
-    // Libera a mão alvo em QUALQUER outro item (a mão é exclusiva).
-    // Também libera 2H conflicts: ao equipar em 'main' um 1H, se havia 2H
-    // antes, ela sai de off automaticamente (porque era o mesmo item, main+off).
+
+
+
     const allInHand = await this.charEquipRepo.find({
       where: { character_id: characterId },
     });
@@ -550,7 +537,7 @@ export class InventoryService {
         other[targetCol] = false;
         await this.charEquipRepo.save(other);
       }
-      // Se o NOVO item é 2H e vai em main, também zera o off_hand dos outros
+
       if (dto.hand === "main" && isTwoHanded(item.equipment) && other.offHand) {
         other.offHand = false;
         await this.charEquipRepo.save(other);
@@ -559,11 +546,11 @@ export class InventoryService {
 
     item.mainHand = dto.hand === "main";
     item.offHand = dto.hand === "off";
-    // Se é 2H em main, também marca off (ocupa ambas)
+
     if (dto.hand === "main" && isTwoHanded(item.equipment)) {
       item.offHand = true;
     }
-    // Escudo: AC calc lê `equipped`. Sincroniza ao empunhar.
+
     if (isShield) item.equipped = true;
     const saved = await this.charEquipRepo.save(item);
     return this.mapEquipItem(saved);
@@ -606,7 +593,7 @@ export class InventoryService {
     }
 
     if (hand === "off") {
-      // Off hand: light weapon (dual-wielding) OU shield
+
       const isLight = propSlugs.has("light");
       if (!isShield && !isLight) {
         throw new BadRequestException(
@@ -614,7 +601,7 @@ export class InventoryService {
         );
       }
 
-      // Main hand atual não pode ser 2H (pois 2H ocupa ambas)
+
       const mainHandItem = await this.charEquipRepo.findOne({
         where: { character_id: characterId, mainHand: true },
       });
@@ -634,7 +621,7 @@ export class InventoryService {
     }
   }
 
-  // ---- Magic Items ----
+
 
   async addMagicItem(
     userId: string,
@@ -712,7 +699,7 @@ export class InventoryService {
     return this.mapMagicItem(saved);
   }
 
-  // ---- Use consumable ----
+
 
   private rollDice(expression: string): number {
     const match = expression.match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
@@ -741,7 +728,7 @@ export class InventoryService {
       throw new NotFoundException("Item nao encontrado no inventario.");
     }
 
-    // Decrement quantity (remove if 0)
+
     item.quantity -= 1;
     if (item.quantity <= 0) {
       await this.charEquipRepo.remove(item);

@@ -7,15 +7,7 @@ import { MonsterActionAdapterResolver } from "../game-engine/services/action-res
 import { ClassFeatureActionResolver } from "../game-engine/services/action-resolvers/class-feature.resolver";
 import { ACTION_RESOLVERS } from "../game-engine/services/action-resolvers/action-resolver.interface";
 
-/**
- * Spec 003 — Combat Action Registry module.
- *
- * Módulo independente que agrupa o registry + resolvers. Exportado tanto para
- * `CharactersModule` (expõe `GET /characters/:id/combat-actions`) quanto para
- * `GameEngineModule` (usa em `/attack`, `/generic-action`, `/encounters/:id/participants/:pid/actions`).
- *
- * Extraído daqui pra evitar dependência circular entre Characters ↔ GameEngine.
- */
+
 @Module({
   providers: [
     GenericActionResolver,

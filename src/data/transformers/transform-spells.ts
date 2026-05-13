@@ -5,9 +5,9 @@ import { parseEntries } from "./entries-parser";
 import { stripTags } from "./tag-stripper";
 import { SPELL_SCHOOL_MAP } from "./code-maps";
 
-// ────────────────────────────────────────────────────────────────
-// 5etools input types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 interface FiveToolsSpell {
   name: string;
@@ -63,9 +63,9 @@ interface SpellSourceEntry {
   }[];
 }
 
-// ────────────────────────────────────────────────────────────────
-// Output types
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export interface TransformedSpell {
   slug: string;
@@ -95,9 +95,9 @@ export interface SpellClassMapping {
   class_slug: string;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Area tag map
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const AREA_TAG_MAP: Record<string, string> = {
   S: "sphere",
@@ -112,9 +112,9 @@ const AREA_TAG_MAP: Record<string, string> = {
   ST: "single target",
 };
 
-// ────────────────────────────────────────────────────────────────
-// Conversion helpers
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 function convertRange(range: FiveToolsSpell["range"]): string {
   if (!range) return "Self";
@@ -259,7 +259,7 @@ function convertAreaOfEffect(
 
   if (tags.length === 0) return null;
 
-  // If the range is "self" with area, try to extract size from range
+
   const range = spell.range;
   if (range && range.type !== "point" && range.distance?.amount) {
     return {
@@ -280,9 +280,9 @@ function detectAttackType(spell: FiveToolsSpell): "melee" | "ranged" | null {
   return null;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Main transformer
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 const SPELLS_DIR = path.resolve(
   __dirname,
@@ -347,9 +347,9 @@ export function transformSpells(): TransformedSpell[] {
   return raw.map(transformOneSpell);
 }
 
-// ────────────────────────────────────────────────────────────────
-// Spell → Class mapping from sources.json
-// ────────────────────────────────────────────────────────────────
+
+
+
 
 export function loadSpellClassMappings(): SpellClassMapping[] {
   const filePath = path.join(SPELLS_DIR, "sources.json");

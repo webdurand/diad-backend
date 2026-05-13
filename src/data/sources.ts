@@ -1,6 +1,6 @@
-// All official D&D 5e sources from 5etools
-// edition: "classic" (2014 rules) | "one" (2024 rules)
-// group: "core" | "sourcebook" | "adventure" | "supplement" | "other"
+
+
+
 
 export interface SourceEntry {
   code: string;
@@ -12,7 +12,7 @@ export interface SourceEntry {
 }
 
 export const ALL_SOURCES: SourceEntry[] = [
-  // ── SRD (default for legacy data) ──
+
   {
     code: "SRD",
     name: "System Reference Document 5e",
@@ -22,7 +22,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "core",
   },
 
-  // ── Core Rulebooks (2024 / One D&D) ──
+
   {
     code: "XPHB",
     name: "Player's Handbook (2024)",
@@ -56,7 +56,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Core Rulebooks (2014 / Classic) ──
+
   {
     code: "PHB",
     name: "Player's Handbook (2014)",
@@ -82,7 +82,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "core",
   },
 
-  // ── Sourcebooks (Classic) ──
+
   {
     code: "SCAG",
     name: "Sword Coast Adventurer's Guide",
@@ -204,7 +204,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "sourcebook",
   },
 
-  // ── Spelljammer ──
+
   {
     code: "SAiS",
     name: "Spelljammer: Adventures in Space",
@@ -230,7 +230,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "sourcebook",
   },
 
-  // ── Planescape ──
+
   {
     code: "PAitM",
     name: "Planescape: Adventures in the Multiverse",
@@ -256,7 +256,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "sourcebook",
   },
 
-  // ── Dragonlance ──
+
   {
     code: "DSotDQ",
     name: "Dragonlance: Shadow of the Dragon Queen",
@@ -266,7 +266,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "sourcebook",
   },
 
-  // ── Adventures (Classic) ──
+
   {
     code: "CoS",
     name: "Curse of Strahd",
@@ -492,7 +492,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "adventure",
   },
 
-  // ── Adventures (One D&D era) ──
+
   {
     code: "DrDe",
     name: "Dragon Delves",
@@ -558,7 +558,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "sourcebook",
   },
 
-  // ── Supplements & Companions ──
+
   {
     code: "EEPC",
     name: "Elemental Evil Player's Companion",
@@ -832,7 +832,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Adventures in the Forgotten Realms (MTG crossover) ──
+
   {
     code: "AitFR",
     name: "Adventures in the Forgotten Realms",
@@ -882,7 +882,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Strixhaven adventures ──
+
   {
     code: "SCC-CK",
     name: "Campus Kerfuffle",
@@ -916,7 +916,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Tales from the Yawning Portal sub-adventures ──
+
   {
     code: "TftYP-AtG",
     name: "Tales from the Yawning Portal: Against the Giants",
@@ -974,7 +974,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "adventure",
   },
 
-  // ── Dragon Delves sub-adventures ──
+
   {
     code: "DrDe-DaS",
     name: "Death at Sunset",
@@ -1056,7 +1056,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "adventure",
   },
 
-  // ── Monstrous Compendiums ──
+
   {
     code: "MCV1SC",
     name: "Monstrous Compendium Volume 1: Spelljammer Creatures",
@@ -1090,7 +1090,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Plane Shift ──
+
   {
     code: "PSA",
     name: "Plane Shift: Amonkhet",
@@ -1140,7 +1140,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── NERDS Restoring Harmony ──
+
   {
     code: "NRH",
     name: "NERDS Restoring Harmony",
@@ -1206,7 +1206,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Other supplements and misc ──
+
   {
     code: "MGELFT",
     name: "Muk's Guide To Everything He Learned From Tasha",
@@ -1360,7 +1360,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "adventure",
   },
 
-  // ── Honor Among Thieves ──
+
   {
     code: "HAT-TG",
     name: "Honor Among Thieves: Thieves' Gallery",
@@ -1378,7 +1378,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Misc adventures ──
+
   {
     code: "GotSF",
     name: "Giants of the Star Forge",
@@ -1468,7 +1468,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Adventurers League ──
+
   {
     code: "ALCurseOfStrahd",
     name: "Adventurers' League: Curse of Strahd",
@@ -1494,7 +1494,7 @@ export const ALL_SOURCES: SourceEntry[] = [
     group: "supplement",
   },
 
-  // ── Unearthed Arcana ──
+
   {
     code: "UATheMysticClass",
     name: "Unearthed Arcana: The Mystic Class",

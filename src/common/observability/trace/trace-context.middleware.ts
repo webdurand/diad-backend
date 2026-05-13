@@ -8,16 +8,7 @@ import {
   parseTraceparent,
 } from "./trace-context";
 
-/**
- * Lê traceparent do request, parseia, gera novo se ausente/inválido.
- * Popula CLS com traceId/spanId/parentSpanId. Ecoa header no response.
- *
- * Sempre tenta ser graceful — middleware NUNCA rejeita request por trace inválido.
- *
- * Não emite log próprio: pinoHttp auto-loga 1x por request no fim com customLogLevel
- * controlando ruído (ver pino.config.ts), e RequestBodyLogInterceptor / GlobalExceptionFilter
- * cobrem body/erro. Logar aqui dobraria linhas sem ganho.
- */
+
 @Injectable()
 export class TraceContextMiddleware implements NestMiddleware {
   constructor(private readonly cls: ClsService) {}
@@ -26,7 +17,7 @@ export class TraceContextMiddleware implements NestMiddleware {
     try {
       this.applyTrace(req, res);
     } catch {
-      // Observability nunca quebra request. Falha silenciosa pra logger fallback.
+
     }
     next();
   }

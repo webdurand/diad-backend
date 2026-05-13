@@ -27,19 +27,7 @@ const INCAPACITATING: ConditionSlug[] = [
   "unconscious",
 ];
 
-/**
- * Spec 004 — Rastreio e quebra automática de concentração.
- *
- * Cobre 5 gatilhos (PHB cap. 10 + research D4):
- *  - dano (CON save delegado a combat.service)
- *  - incapacitated/sub
- *  - nova spell de concentração (replace)
- *  - duração expirada
- *  - morte
- *
- * Quebra é atómica: itera `appliedEffects` e remove cada
- * ConditionInstance/PersistentAreaEffect que esta concentração mantinha.
- */
+
 @Injectable()
 export class ConcentrationService {
   constructor(
@@ -49,10 +37,7 @@ export class ConcentrationService {
     private readonly areas: Repository<PersistentAreaEffectEntity>,
   ) {}
 
-  /**
-   * Inicia uma nova concentração. Se o caster já estava concentrando, quebra a
-   * anterior atomicamente antes (evento `concentration_replaced`).
-   */
+
   async startNew(
     caster: EncounterParticipantEntity,
     spellName: string,
@@ -80,10 +65,7 @@ export class ConcentrationService {
     return { events, broken };
   }
 
-  /**
-   * Adiciona um efeito aplicado pela concentração ativa (ex: condition em
-   * alvo, ou criação de PersistentAreaEffect).
-   */
+
   async trackAppliedEffect(
     caster: EncounterParticipantEntity,
     effect: AppliedEffect,
@@ -92,9 +74,7 @@ export class ConcentrationService {
     await this.participants.save(caster);
   }
 
-  /**
-   * Quebra concentração e remove **atomicamente** todos os appliedEffects.
-   */
+
   async break(
     caster: EncounterParticipantEntity,
     reason: ConcentrationBreakReason,
@@ -106,7 +86,7 @@ export class ConcentrationService {
     const prev = caster.concentratingOn;
     const effects = caster.appliedEffects ?? [];
 
-    // Buscar todos os participantes alvo de uma vez
+
     const targetIds = effects
       .filter((e) => e.kind === "condition" && e.targetParticipantId)
       .map((e) => e.targetParticipantId as string);
@@ -127,9 +107,9 @@ export class ConcentrationService {
           (ci) => ci.id !== eff.refId,
         );
         if (tgt.conditionInstances.length !== before) {
-          // Sincroniza legacy `conditions: string[]`
+
           tgt.conditions = this.deriveSlugs(tgt.conditionInstances);
-          // Spec 015 Eixo 3 — event enriquecido com source + narrativeDescriptor
+
           const slug = removed?.slug ?? null;
           const narrative = slug
             ? narrativeForConditionRemoval(slug, "concentration_broken")
@@ -148,9 +128,9 @@ export class ConcentrationService {
           });
         }
       } else if (eff.kind === "persistent-area") {
-        // Spec 013 — emite tile_effect_concentration_broken pra registros catalog-aware,
-        // mantém persistent_area_removed pra legacy (Princípio X: Narrator consome
-        // narrativeDescriptor; CombatAgent consome tactical metadata).
+
+
+
         const area = await this.areas.findOne({ where: { id: eff.refId } });
         await this.areas.delete({ id: eff.refId });
         events.push({
@@ -171,16 +151,16 @@ export class ConcentrationService {
     }
     if (targets.length) await this.participants.save(targets);
 
-    // Spec 013 — cleanup órfão: tile-effects criados via createFromCatalog
-    // têm sourceConcentration=true mas NÃO entram em appliedEffects (sem DI
-    // ciclo em spell-casting). Garantia: deletamos áreas que casterParticipantId
-    // mantém via query direta (mesma source-of-truth da entity).
+
+
+
+
     const orphanAreas = await this.areas.find({
       where: { casterParticipantId: caster.id, sourceConcentration: true },
     });
     if (orphanAreas.length) {
       for (const a of orphanAreas) {
-        // Skip se já cleanup-ed acima (kind:'persistent-area' em appliedEffects).
+
         const alreadyHandled = effects.some(
           (e) => e.kind === "persistent-area" && e.refId === a.id,
         );
@@ -203,10 +183,10 @@ export class ConcentrationService {
       await this.areas.delete(orphanAreas.map((a) => a.id));
     }
 
-    // Spec 004 — cascade-remove EffectInstances onde o caster perdeu concentracao.
-    // NB: iteramos re-fetched participants, mas o proprio `caster` pode estar no
-    // loop como uma NOVA instancia. Se for, precisamos sincronizar de volta
-    // antes do save final, senao o save do caster overwrite as mudancas.
+
+
+
+
     const encounterParticipants = await this.participants.find({
       where: { encounterId: caster.encounterId },
     });
@@ -237,15 +217,15 @@ export class ConcentrationService {
         }
         p.effectInstances = kept;
         if (p.id === caster.id) {
-          // Sincroniza pro save final do caster nao reverter.
+
           caster.effectInstances = kept;
         } else {
           await this.participants.save(p);
         }
       }
 
-      // Spec 012 Lote B — revert transformations mantidas pela concentração.
-      // Polymorph e similares registram sourceCasterParticipantId + revertTriggers.concentrationBroken.
+
+
       const tState = p.transformationState;
       if (
         tState &&
@@ -291,10 +271,7 @@ export class ConcentrationService {
     return this.break(caster, "death");
   }
 
-  /**
-   * Verifica se uma condição recém-aplicada quebra a concentração do alvo.
-   * Chamado por `condition-lifecycle.service.applyCondition`.
-   */
+
   async checkBreakOnCondition(
     target: EncounterParticipantEntity,
     addedSlug: ConditionSlug,
@@ -307,10 +284,7 @@ export class ConcentrationService {
     return { events: r.events, broken: true };
   }
 
-  /**
-   * Decrementa a duração da concentração ativa do participante. Ao chegar a 0,
-   * concentração expira (evento + cascata).
-   */
+
   async decrementDurationFor(
     caster: EncounterParticipantEntity,
   ): Promise<{ events: GameEventData[] }> {

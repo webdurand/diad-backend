@@ -16,14 +16,7 @@ import {
   failure,
 } from "../interfaces/result.type";
 
-/**
- * Fighting Style Tier B — reactions que exigem endpoint dedicado (RAW 2024):
- *  - Interception: reação pós-dano, reduz dano aliado adjacente em 1d10+PB
- *  - Protection: reação pré-ataque, impõe disadvantage em atacante vs aliado
- *
- * Ambas consomem reactionsUsed (1/turno). PC deve ter fightingStyleSlug match
- * + reaction disponível + aliado adjacente (5ft Chebyshev).
- */
+
 @Injectable()
 export class FightingStyleReactionsService {
   constructor(
@@ -39,14 +32,7 @@ export class FightingStyleReactionsService {
     private readonly effectInstances: EffectInstanceService,
   ) {}
 
-  /**
-   * Interception (RAW 2024): "When a creature you can see hits a target, other
-   * than you, within 5 feet of you with an attack, you can use your Reaction
-   * to reduce the damage by 1d10 + your Proficiency Bonus (minimum 1)."
-   *
-   * Endpoint é chamado APÓS o damage_applied (harness/DM sabe o damage). Service
-   * aplica healing equivalent pra reverter parcialmente o dano. Consome reaction.
-   */
+
   async interception(
     userId: string,
     encounterId: string,
@@ -68,7 +54,7 @@ export class FightingStyleReactionsService {
       return failure("Reação já usada neste turno.", "NO_REACTION_AVAILABLE");
     }
 
-    // Valida FS=interception via sheet
+
     const sheet = await this.sheetService.computeSheet(
       userId,
       fighter.characterId,
@@ -83,7 +69,7 @@ export class FightingStyleReactionsService {
       );
     }
 
-    // Valida adjacência (Chebyshev 1)
+
     if (
       fighter.positionX == null ||
       fighter.positionY == null ||
@@ -101,13 +87,13 @@ export class FightingStyleReactionsService {
       return failure("Aliado fora de alcance (5ft).", "OUT_OF_RANGE");
     }
 
-    // Rola 1d10 + PB, reduction = min(damage, roll)
+
     const roll = this.dice.roll(10);
     const pb = sheet.proficiencyBonus ?? 2;
     const raw = roll + pb;
     const reduction = Math.max(1, Math.min(damageAmount, raw));
 
-    // Aplica healing equivalente ao ally (reverte parte do dano)
+
     if (ally.type === "pc" && ally.characterId) {
       try {
         const hpRes = await this.stateService.updateHp(
@@ -117,7 +103,7 @@ export class FightingStyleReactionsService {
         );
         ally.currentHp = hpRes.currentHp;
       } catch {
-        // Fallback: atualiza currentHp direto
+
         ally.currentHp = Math.min(
           (ally.currentHp ?? 0) + reduction,
           ally.maxHp ?? 999,
@@ -131,7 +117,7 @@ export class FightingStyleReactionsService {
     }
     await this.participantRepo.save(ally);
 
-    // Consume reaction
+
     fighter.reactionsUsed += 1;
     await this.participantRepo.save(fighter);
 
@@ -158,14 +144,7 @@ export class FightingStyleReactionsService {
     return success({ reduction, roll }, [event]);
   }
 
-  /**
-   * Protection (RAW 2024): "When a creature you can see attacks a target, other
-   * than you, within 5 feet of you, you can use your Reaction to impose
-   * Disadvantage on the attack roll, provided you're holding a Shield."
-   *
-   * Chamada ANTES do attack resolve: aplica effect grant_disadvantage_to_attackers
-   * no aliado (one-shot, consumido no próximo attack). Consome reaction.
-   */
+
   async protection(
     userId: string,
     encounterId: string,
@@ -200,8 +179,8 @@ export class FightingStyleReactionsService {
       );
     }
 
-    // RAW exige shield empunhado. Premissa weapons-in-hand: shield vai em off-hand.
-    // Aceita ambos: equipped legacy OU offHand (novo pattern RAW 2024).
+
+
     const hasShield = (sheet.equipment ?? []).some((e) => {
       const isShieldSlug =
         e.slug?.includes("shield") || e.name?.toLowerCase().includes("shield");
@@ -217,7 +196,7 @@ export class FightingStyleReactionsService {
       );
     }
 
-    // Adjacência
+
     if (
       fighter.positionX == null ||
       fighter.positionY == null ||
@@ -232,7 +211,7 @@ export class FightingStyleReactionsService {
       return failure("Aliado fora de alcance (5ft).", "OUT_OF_RANGE");
     }
 
-    // Aplica effect no ally: próximo attack contra ele tem disadvantage
+
     const { effect, events } = await this.effectInstances.addEffect(ally, {
       kind: "grant_disadvantage_to_attackers",
       sourceFeatureSlug: "fighting-style:protection",
@@ -242,7 +221,7 @@ export class FightingStyleReactionsService {
       requiresConcentration: false,
     });
 
-    // Consume reaction
+
     fighter.reactionsUsed += 1;
     await this.participantRepo.save(fighter);
 

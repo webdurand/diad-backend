@@ -21,7 +21,7 @@ function makeAudienceMap(): AudienceMapService {
 
 function makeBus(): EventBusService {
   return {
-    // publish returns enriched envelope (audiences resolved). Mock echoes back input.
+
     publish: jest.fn().mockImplementation(async (env) => env),
     subscribe: jest.fn(),
     registerListener: jest.fn(),
@@ -55,7 +55,7 @@ describe("EventBusController", () => {
 
       const result = await ctrl.publishEvent(baseDto, VALID_TRACEPARENT);
 
-      // Controller returns enriched envelope (Princípio X — audiences cross-domain).
+
       expect(result).toMatchObject({
         eventCategory: "EncounterEvent",
         eventType: "damage_applied",

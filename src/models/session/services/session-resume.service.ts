@@ -10,7 +10,7 @@ import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
-const RESUME_GAP_THRESHOLD_MS = 5 * 60 * 1000; // 5min — spec 024 §C1
+const RESUME_GAP_THRESHOLD_MS = 5 * 60 * 1000;
 const RECENT_MESSAGES_LIMIT = 8;
 const RECENT_MESSAGES_CONTENT_CAP = 2000;
 
@@ -33,25 +33,11 @@ export interface AssembledTurnContext {
   previousSessionSummary: string | null;
   hotRecapTriggered: boolean;
   lastMessageMismatch: boolean;
-  /** maior `sequenceNumber` já persistido para a session — comparar ao `lastMessageId` do front. */
+
   serverLastMessageId: number;
 }
 
-/**
- * Spec 024 — Monta o payload enriquecido pro turn de retomada.
- *
- * Detecção de retomada server-side: gap (`now - lastTurnAt`) > 5min
- * conta como `isResumed=true`. Cobre cross-device também (sem depender
- * de flag do cliente).
- *
- * Hot-recap async (fire-and-forget): quando `previousSession.summaryText`
- * é NULL e há ≥10 messages, dispara `SessionRecapService.ensureRecap`
- * em paralelo. Primeiro turn da retomada usa só recent messages + scene
- * context (suficiente). Segundo turn em diante já tem recap cacheado.
- *
- * Princípio X v1.4.0 — emite `NarrativeEvent.session_resumed` quando
- * detecta retomada (audiences resolved Director/HUD).
- */
+
 @Injectable()
 export class SessionResumeService {
   constructor(
@@ -139,7 +125,7 @@ export class SessionResumeService {
       (!previousSessionSummary || previousSessionSummary.length === 0)
     ) {
       hotRecapTriggered = true;
-      // Fire-and-forget — não bloqueia primeiro turn (spec 024 §C3).
+
       void this.recapService.ensureRecap(previousSessionId).catch((err) =>
         this.logger.error("session.recap.fire_and_forget_failed", err, {
           "session.id": previousSessionId,
@@ -178,8 +164,8 @@ export class SessionResumeService {
     fromServer: number,
   ): boolean {
     if (fromClient === null || fromClient === undefined) return false;
-    // Cliente com lastMessageId menor que server por > 1 → state drift.
-    // Diferença de 1 é tolerada (race entre append e response normal).
+
+
     return fromServer - fromClient > 1;
   }
 

@@ -7,7 +7,7 @@ interface FiveToolsLanguage {
   name: string;
   source: string;
   srd52?: boolean;
-  type?: string; // "standard" | "exotic" | "rare"
+  type?: string;
   origin?: string;
   typicalSpeakers?: string[];
   script?: string;

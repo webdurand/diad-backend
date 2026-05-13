@@ -1,14 +1,6 @@
 import { EncounterEndDetectorService } from "./encounter-end-detector.service";
 
-/**
- * Spec 027 (M2 follow-up) — auto-end de combate solo com cálculo de XP +
- * loot transient via LootRollService. Tests cobrem o fluxo completo:
- *  - Vitória: soma XP, escolhe CR band, chama LootRollService, monta payload
- *    com xpRewards.equal-split + goldRewards e chama resolveEncounter.
- *  - Loot falhou: XP ainda aplicado (best-effort).
- *  - Derrota: só `{ outcome: 'defeat' }`, sem XP nem loot.
- *  - Multiplayer (≥2 user_ids): tryAutoEnd retorna null (DM humano resolve).
- */
+
 describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => {
   const ENCOUNTER_ID = "enc-1";
   const SESSION_ID = "ses-1";
@@ -269,8 +261,8 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
     const { svc, encounterService, lootRollService } = setup({
       participants: [
         pcParticipant(),
-        // Hostil sem monster relation (xp=0, cr=0). Filtragem mantém ele
-        // (faction enemy + ai + defeated), mas crBand vira null → loot skip.
+
+
         {
           type: "monster",
           controlledBy: "ai",
@@ -287,7 +279,7 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
 
     expect(outcome).toBe("victory");
     expect(lootRollService.roll).not.toHaveBeenCalled();
-    // xp=0 não inclui xpRewards. cr=0 não inclui goldRewards. Apenas outcome.
+
     expect(encounterService.resolveEncounter).toHaveBeenCalledWith(
       ENCOUNTER_ID,
       { outcome: "victory" },

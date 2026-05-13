@@ -8,7 +8,7 @@ interface FiveToolsSkill {
   name: string;
   source: string;
   srd52?: boolean;
-  ability?: string; // "str" | "dex" | "con" | "int" | "wis" | "cha"
+  ability?: string;
   entries?: unknown[];
   [key: string]: unknown;
 }

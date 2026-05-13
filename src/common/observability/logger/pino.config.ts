@@ -16,10 +16,7 @@ const SENSITIVE_PATHS = [
 const SILENT_PATHS = new Set(["/health", "/metrics", "/favicon.ico"]);
 const DEBUG_PATH_PREFIXES = ["/_next/", "/swagger"];
 
-/**
- * Recursivamente serializa Error.cause até `maxDepth` níveis.
- * pino.stdSerializers.err já lida com cause, mas garantimos formato consistente.
- */
+
 function serializeError(err: unknown, depth = 0, maxDepth = 5): unknown {
   if (depth >= maxDepth) return undefined;
   if (!(err instanceof Error)) {
@@ -31,7 +28,7 @@ function serializeError(err: unknown, depth = 0, maxDepth = 5): unknown {
     message: err.message,
     stack: err.stack,
   };
-  // Carrega code/context de DiadException sem importar a classe (evitar ciclo).
+
   for (const key of Object.keys(err)) {
     if (key === "cause") continue;
     out[key] = (err as unknown as Record<string, unknown>)[key];
@@ -42,10 +39,7 @@ function serializeError(err: unknown, depth = 0, maxDepth = 5): unknown {
   return out;
 }
 
-/**
- * Serializer minimalista para `req`. Sem headers, sem query, sem remoteAddress.
- * Body do request sai via RequestBodyLogInterceptor em log separado correlacionado.
- */
+
 function serializeRequestSlim(req: IncomingMessage): Record<string, unknown> {
   const url = (req as IncomingMessage & { url?: string }).url ?? "";
   const id = (req as IncomingMessage & { id?: unknown }).id;
@@ -56,22 +50,12 @@ function serializeRequestSlim(req: IncomingMessage): Record<string, unknown> {
   };
 }
 
-/**
- * Serializer minimalista para `res`. Sem headers. Status fica.
- */
+
 function serializeResponseSlim(res: ServerResponse): Record<string, unknown> {
   return { statusCode: res.statusCode };
 }
 
-/**
- * customLogLevel — decide o nível por response. Usado pelo nestjs-pino auto-log.
- *
- * - silent: 304, OPTIONS, /health, /metrics, /favicon.ico
- * - debug: rotas estáticas (_next, swagger)
- * - error: 5xx ou err presente
- * - warn:  4xx
- * - info:  demais 2xx/3xx
- */
+
 function pickLogLevel(
   req: IncomingMessage,
   res: ServerResponse,
@@ -102,21 +86,7 @@ export interface BuildPinoOptionsArgs {
   serviceVersion?: string;
 }
 
-/**
- * Constrói options pro nestjs-pino LoggerModule. Inclui:
- *  - redaction de auth/cookie/password/apiKey/token/secret
- *  - err serializer recursivo (cause chain)
- *  - req/res serializers MINIMALISTAS (sem headers/query) — body sai via
- *    RequestBodyLogInterceptor em evento separado correlacionado por trace.id
- *  - customLogLevel: silencia ruído (304, /health, OPTIONS); escala 4xx/5xx
- *  - customAttributeKeys: renomeia req→http.request, res→http.response,
- *    responseTime→duration_ms (alinha com OTel naming já usado em DiadLogger)
- *  - customSuccessMessage/customErrorMessage: msg unificada "http.server.request"
- *  - level como string (não number)
- *  - timestamp ISO
- *  - base com service.name, service.version, deployment.environment
- *  - pino-pretty transport quando env=development
- */
+
 export function buildPinoOptions(args: BuildPinoOptionsArgs = {}): PinoParams {
   const env = args.env ?? process.env.NODE_ENV ?? "development";
   const level = args.level ?? process.env.LOG_LEVEL ?? "info";

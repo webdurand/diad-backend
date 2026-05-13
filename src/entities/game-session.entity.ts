@@ -76,7 +76,7 @@ export class GameSessionEntity {
     critical_variant?: "double_dice" | "double_damage";
   };
 
-  // ── Spec 014 M2.C: cross-session recap ──
+
 
   @Column({ name: "summary_text", type: "text", nullable: true })
   summaryText?: string;
@@ -87,7 +87,7 @@ export class GameSessionEntity {
   @Column({ name: "previous_session_id", type: "uuid", nullable: true })
   previousSessionId?: string;
 
-  /** Mythic GME chaos factor (1-9). Estado de aventura, não do mundo. */
+
   @Column({ name: "chaos_factor", type: "smallint", default: 5 })
   chaosFactor: number;
 

@@ -6,7 +6,7 @@ import { DiceService } from "../services/dice.service";
 import { ConditionEffectsService } from "../services/condition-effects.service";
 import { ExhaustionService } from "../services/exhaustion.service";
 
-// Minimal mock of CharacterSheetService
+
 const mockSheet = {
   abilityScores: [
     { slug: "str", name: "Strength", score: 16, modifier: 3 },
@@ -97,7 +97,7 @@ describe("SkillCheckService", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.ability).toBe("str");
-    expect(result.value.modifier).toBe(3); // STR mod
+    expect(result.value.modifier).toBe(3);
     expect(result.value.dc).toBe(15);
     expect(result.value.roll).toBeGreaterThanOrEqual(1);
     expect(result.value.roll).toBeLessThanOrEqual(20);
@@ -113,7 +113,7 @@ describe("SkillCheckService", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.modifier).toBe(5); // Athletics bonus
+    expect(result.value.modifier).toBe(5);
     expect(result.value.proficient).toBe(true);
     expect(result.value.skill).toBe("athletics");
   });

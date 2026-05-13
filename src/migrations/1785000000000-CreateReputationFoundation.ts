@@ -1,26 +1,11 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 027 (M2, AC2.1) — fundação de reputation per-NPC e per-faction.
- *
- * 2 tabelas + 2 índices. Modelagem dual:
- *   - `npc_reputation` (npc_id × campaign_id): tier numérico [-3,+3] + tags
- *     semânticas (whitelist em `reputation-tags-catalog.json`). Permite
- *     "Eda hostile pra Goma; Padre Anselmo friendly pra Goma".
- *   - `faction_reputation` (faction_id × campaign_id): mesmo modelo, escopo
- *     coletivo. NPC herda reputation da faction quando sem override próprio.
- *
- * `campaign_id` faz papel de party scope no DIAD solo (single party / campaign).
- * Schema do contract usa `partyId` opcional — quando multi-party shipar (V2),
- * adiciona-se coluna `party_id` e update do uniqueness constraint.
- *
- * Down() simétrico.
- */
+
 export class CreateReputationFoundation1785000000000 implements MigrationInterface {
   name = "CreateReputationFoundation1785000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    // ─────────── npc_reputation ───────────
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "npc_reputation" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -52,7 +37,7 @@ export class CreateReputationFoundation1785000000000 implements MigrationInterfa
       `CREATE INDEX IF NOT EXISTS "IDX_npc_rep_tier" ON "npc_reputation" ("campaign_id", "tier") WHERE "tier" <> 0`,
     );
 
-    // ─────────── faction_reputation ───────────
+
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "faction_reputation" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),

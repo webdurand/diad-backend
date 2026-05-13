@@ -1,15 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 016 M0 — RestSession entity (audit + state delta + event triggered).
- *
- * Persistência completa do rest pra:
- * 1. Auditoria (tracking economy: short rest spam, exhaustion timeline)
- * 2. Memory L4 (sessão pode citar "no rest anterior, sonhou com X")
- * 3. Event picker history (não disparar mesmo evento 2× seguidos)
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §6 e contract `rest-session.json`.
- */
+
 export class CreateRestSession1779020000000 implements MigrationInterface {
   name = "CreateRestSession1779020000000";
 

@@ -24,12 +24,7 @@ export interface HpUpdateDto {
   damage?: number;
   healing?: number;
   tempHp?: number;
-  /**
-   * Spec 016 M3 — Nonlethal damage flag (RAW 2024 PHB).
-   * Se true e o dano levaria HP a 0, em vez de aplicar morte/death-saves
-   * o PC fica a 1 HP e ganha condition Unconscious. Acordável com ação
-   * (qualquer aliado adjacente) ou short rest.
-   */
+
   nonlethal?: boolean;
 }
 
@@ -41,9 +36,9 @@ export interface DeathSaveDto {
   success?: boolean;
   fail?: boolean;
   reset?: boolean;
-  /** If provided, handles natural 20 (regain 1 HP + reset) and natural 1 (2 failures) */
+
   rollValue?: number;
-  /** Direct delta for failures — used when taking damage at 0 HP (1, or 2 on critical hit). */
+
   failuresDelta?: number;
 }
 
@@ -69,7 +64,7 @@ export interface HpResult {
   maxHp: number;
   isDown: boolean;
   instantDeath: boolean;
-  /** Spec 016 M3 — true se nonlethal flag levou PC a 1 HP + Unconscious. */
+
   knockedOut?: boolean;
   deathSaves: { successes: number; failures: number };
 }
@@ -122,10 +117,7 @@ export class CharacterStateService {
     return getCharacterState(this.stateRepo, characterId);
   }
 
-  /**
-   * Spec 003 — retorna o record `feature_uses_used` do PC (vazio se state não existe).
-   * Usado pelo CombatActionRegistry para decidir `available` de class features.
-   */
+
   async getFeatureUsesUsed(
     characterId: string,
   ): Promise<Record<string, number>> {
@@ -135,11 +127,7 @@ export class CharacterStateService {
     return state?.feature_uses_used ?? {};
   }
 
-  /**
-   * Spec 015 Eixo 4 — leitura direta do HP atual do PC, sem checagem de
-   * ownership. Usado por endpoints que já validaram autoridade via
-   * permissionResolver (ex.: revert-transformation).
-   */
+
   async getCurrentHp(characterId: string): Promise<number | null> {
     const state = await this.stateRepo.findOne({
       where: { character_id: characterId },
@@ -147,10 +135,7 @@ export class CharacterStateService {
     return state?.current_hp ?? null;
   }
 
-  /**
-   * Spec 003 — incrementa usos consumidos de uma feature. Usado pelo executor.
-   * Se delta for HP gasto (ex: lay-on-hands), passar delta variável.
-   */
+
   async incrementFeatureUses(
     characterId: string,
     featureSlug: string,
@@ -227,12 +212,12 @@ export class CharacterStateService {
     let instantDeath = false;
     let knockedOut = false;
 
-    // Apply temp HP update
+
     if (dto.tempHp !== undefined) {
       state.temp_hp = dto.tempHp;
     }
 
-    // Apply damage: temp HP absorbs first
+
     if (dto.damage !== undefined && dto.damage > 0) {
       let remaining = dto.damage;
 
@@ -244,8 +229,8 @@ export class CharacterStateService {
 
       const hpBeforeDamage = state.current_hp;
 
-      // Spec 016 M3 — Nonlethal 2024: se dano levaria a 0 HP, fica a 1 HP +
-      // Unconscious; não dispara massive damage / death-saves.
+
+
       if (dto.nonlethal && remaining >= hpBeforeDamage && hpBeforeDamage > 0) {
         state.current_hp = 1;
         knockedOut = true;
@@ -256,7 +241,7 @@ export class CharacterStateService {
       } else {
         state.current_hp = Math.max(0, state.current_hp - remaining);
 
-        // Massive damage 2024: excess damage >= maxHp → instant death
+
         if (state.current_hp === 0 && remaining > hpBeforeDamage) {
           const excessDamage = remaining - hpBeforeDamage;
           if (excessDamage >= maxHp) {
@@ -266,10 +251,10 @@ export class CharacterStateService {
       }
     }
 
-    // Apply healing (cap at max HP, only if alive)
+
     if (dto.healing !== undefined && dto.healing > 0) {
       state.current_hp = Math.min(maxHp, state.current_hp + dto.healing);
-      // Revived from 0: reset death saves
+
       if (state.current_hp > 0) {
         state.death_saves_success = 0;
         state.death_saves_fail = 0;
@@ -344,13 +329,13 @@ export class CharacterStateService {
         state.death_saves_fail + dto.failuresDelta,
       );
     } else if (dto.rollValue === 20) {
-      // Natural 20: regain 1 HP, reset all death saves, regain consciousness
+
       state.current_hp = 1;
       state.death_saves_success = 0;
       state.death_saves_fail = 0;
       revivedHp = 1;
     } else if (dto.rollValue === 1) {
-      // Natural 1: counts as 2 failures
+
       state.death_saves_fail = Math.min(3, state.death_saves_fail + 2);
     } else {
       if (dto.success || (dto.rollValue !== undefined && dto.rollValue >= 10)) {
@@ -401,7 +386,7 @@ export class CharacterStateService {
     return { total, used };
   }
 
-  // ---- Conditions ----
+
 
   async updateConditions(
     userId: string,
@@ -415,7 +400,7 @@ export class CharacterStateService {
     return { conditions: state.conditions };
   }
 
-  // ---- Exhaustion ----
+
 
   async updateExhaustion(
     userId: string,
@@ -424,13 +409,13 @@ export class CharacterStateService {
   ): Promise<{ exhaustionLevel: number }> {
     await this.ensureOwnership(userId, characterId);
     const state = await this.getState(characterId);
-    // Spec 012 Lote B — RAW 2024 XPHB exhaustion vai até 10 (antes 6).
+
     state.exhaustion_level = Math.max(0, Math.min(10, dto.level));
     await this.stateRepo.save(state);
     return { exhaustionLevel: state.exhaustion_level };
   }
 
-  // ---- Inspiration ----
+
 
   async updateInspiration(
     userId: string,
@@ -444,11 +429,7 @@ export class CharacterStateService {
     return { inspiration: state.inspiration };
   }
 
-  /**
-   * Spec 012 — Heroic Inspiration: set inspiration sem owner-check. Usado
-   * pelo DM via encounter-service (DM já teve permissão validada na rota
-   * de encounter). Retorna `{ inspiration }` atualizado.
-   */
+
   async setInspiration(
     characterId: string,
     value: boolean,
@@ -459,13 +440,13 @@ export class CharacterStateService {
     return { inspiration: state.inspiration };
   }
 
-  /** Spec 012 — leitura pública (read-only, sem owner check). */
+
   async getInspiration(characterId: string): Promise<boolean> {
     const state = await this.getState(characterId);
     return state.inspiration;
   }
 
-  /** Returns XP threshold info for a given total level */
+
   static getXpInfo(
     xp: number,
     totalLevel: number,

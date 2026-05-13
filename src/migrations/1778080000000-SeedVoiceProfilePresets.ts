@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 014 M1 — seed dos 4 voice presets do sistema.
- *
- * - heroic-high-fantasy    (Dragonlance/BG3-light)
- * - grim-low-fantasy       (Dark Sun/Ravenloft)
- * - investigativo-misterioso (Curse of Strahd opening)
- * - comico-pulp            (Honor Among Thieves)
- *
- * Cada preset tem ≥3 few_shot_examples curados (um por sceneType).
- * Idempotente via ON CONFLICT (name).
- */
+
 
 interface PresetPayload {
   name: string;

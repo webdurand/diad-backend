@@ -31,7 +31,7 @@ export interface CreatePersistentAreaInput {
   sourceConcentration?: boolean;
 }
 
-/** Spec 013 — input pra `createFromCatalog`. Catalog dita shape/triggers/etc. */
+
 export interface CreateFromCatalogInput {
   encounterId: string;
   casterParticipantId: string;
@@ -50,31 +50,7 @@ export interface ResolveResult {
 
 type SaveModifierFn = (ability: SaveAbility) => Promise<{ modifier: number }>;
 
-/**
- * Spec 004 (legacy) + Spec 013 (ground effects).
- *
- * Áreas persistentes que duram além do turno do caster: Spirit Guardians, Wall
- * of Fire, Cloud of Daggers, Moonbeam, Spike Growth, Grease, Web, Sleet Storm.
- *
- * Spec 004 path (legacy, registros sem `effectKind`):
- *  - `create()`              — instancia via input cru
- *  - `tickDamageFor()`       — usado em start-of-turn (orchestrator dormant)
- *  - `decrementDurations()`  — fim de round
- *  - `removeByCasterConcentrationBreak()` — cascata de concentration
- *
- * Spec 013 path (registros com `effectKind` setado, triggers[] dita comportamento):
- *  - `createFromCatalog()`       — instancia via TILE_EFFECT_CATALOG
- *  - `resolveOnCast()`           — Grease save adjacents, Wall of Fire 5d8 inicial
- *  - `resolveEntry()`            — save-on-enter + condition (Grease/Web/Sleet)
- *  - `resolveMoveThrough()`      — Spike Growth 2d4 per cell, no save
- *  - `resolveStartTurnIn()`      — Cloud of Daggers, Spirit Guardians, Sleet Storm
- *  - `resolveEndTurnAdjacent()`  — Wall of Fire heat side
- *  - `getDifficultTerrainOverlay()` — overlay dinâmico de difficult cells
- *
- * Damage application: methods retornam `totalDamage` + `events` com damage info;
- * caller é responsável por aplicar HP (mantém pattern do legacy `tickDamageFor`).
- * Frontend renderiza damage via events.
- */
+
 @Injectable()
 export class PersistentAreaService {
   constructor(
@@ -83,7 +59,7 @@ export class PersistentAreaService {
     private readonly dice: DiceService,
   ) {}
 
-  // ── Spec 004 legacy path (preserved) ───────────────────────────────────
+
 
   async create(
     input: CreatePersistentAreaInput,
@@ -106,13 +82,9 @@ export class PersistentAreaService {
     return this.areas.save(entity);
   }
 
-  // ── Spec 013 path (catalog-driven) ─────────────────────────────────────
 
-  /**
-   * Instancia via catalog. ZERO branch hardcoded por spell — adicionar magia
-   * nova = entry no catalog. Princípio X 3 camadas snapshotted na entity:
-   * tactical_metadata + narrative_descriptor + triggers[].
-   */
+
+
   async createFromCatalog(
     input: CreateFromCatalogInput,
   ): Promise<PersistentAreaEffectEntity> {
@@ -125,10 +97,10 @@ export class PersistentAreaService {
     const radius = def.defaultRadiusCells(input.slotLevel);
     const duration = def.durationRoundsAtSlot(input.slotLevel);
 
-    // Damage RAW snapshot — pega expression de qualquer trigger com damage
-    // (start-turn-in preferred, fallback on-cast, fallback on-pass-through).
-    // Damage real de cada trigger usa expressionPerSlot do catalog em runtime,
-    // mas snapshot top-level mantém compat com tickDamageFor legacy + queries.
+
+
+
+
     const dmgTrigger =
       def.triggers.find((t) => t.kind === "on-start-turn-in" && t.damage) ??
       def.triggers.find((t) => t.kind === "on-cast" && t.damage) ??
@@ -146,7 +118,7 @@ export class PersistentAreaService {
           ? dmgTrigger.damagePerCell.type
           : "";
 
-    // Save snapshot — primeiro trigger com save define o top-level (compat).
+
     const saveTrigger = def.triggers.find((t) => "save" in t && t.save) as
       | Extract<TileEffectTrigger, { save?: unknown }>
       | undefined;
@@ -167,7 +139,7 @@ export class PersistentAreaService {
       halfOnSave,
       durationRoundsRemaining: duration,
       sourceConcentration: def.sourceConcentration,
-      // Spec 013 fields
+
       effectKind: input.spellSlug,
       triggers: def.triggers,
       isDifficultTerrain: def.isDifficultTerrain,
@@ -180,11 +152,7 @@ export class PersistentAreaService {
     return this.areas.save(entity);
   }
 
-  /**
-   * Dispara triggers `on-cast` para uma área recém-criada.
-   * Ex: Grease — DEX save em todos os adjacents dentro da área.
-   * Ex: Wall of Fire — 5d8 fire (DEX half) em criaturas dentro do path.
-   */
+
   async resolveOnCast(
     area: PersistentAreaEffectEntity,
     participantsInArea: EncounterParticipantEntity[],
@@ -226,11 +194,7 @@ export class PersistentAreaService {
     return result;
   }
 
-  /**
-   * Spec 013 — quando criatura entra num cell. Dispara on-enter triggers.
-   * Web pode retornar `stopMovement:true` (speedMultiplier=0 + save fail).
-   * Caller (movement.service) deve interromper iteração de cells.
-   */
+
   async resolveEntry(
     participant: EncounterParticipantEntity,
     toCell: { x: number; y: number },
@@ -267,7 +231,7 @@ export class PersistentAreaService {
           targetId: participant.id,
           slug: partial.conditionApplied,
         });
-        // Web (speedMultiplier=0): save fail → stop movement.
+
         if (area.speedMultiplier === 0 && !partial.savePassed) {
           result.stopMovement = true;
           result.events.push({
@@ -288,10 +252,7 @@ export class PersistentAreaService {
     return result;
   }
 
-  /**
-   * Spec 013 — Spike Growth: damage per cell movido através da área.
-   * RAW: NO save, automatic per 5ft. Sem dependência de save modifier.
-   */
+
   async resolveMoveThrough(
     participant: EncounterParticipantEntity,
     cellsTraversed: Array<{ x: number; y: number }>,
@@ -345,13 +306,7 @@ export class PersistentAreaService {
     return result;
   }
 
-  /**
-   * Spec 013 — start-of-turn IN tile: Spirit Guardians, Cloud of Daggers,
-   * Sleet Storm, Spike Growth (auto-damage if creature is inside).
-   *
-   * Backward compat: registros sem `effectKind` ainda usam `tickDamageFor`
-   * (delega abaixo).
-   */
+
   async resolveStartTurnIn(
     participant: EncounterParticipantEntity,
     getSaveModifier?: SaveModifierFn,
@@ -376,7 +331,7 @@ export class PersistentAreaService {
       this.cellInArea(participant.positionX!, participant.positionY!, a),
     );
     for (const area of affecting) {
-      // Catalog-aware: usa triggers[] e expressionPerSlot.
+
       if (area.effectKind && area.triggers) {
         const trig = area.triggers.find((t) => t.kind === "on-start-turn-in");
         if (trig) {
@@ -399,7 +354,7 @@ export class PersistentAreaService {
           continue;
         }
       }
-      // Legacy path (Spec 004) — registros sem effectKind.
+
       const legacy = await this.tickDamageForArea(
         area,
         participant,
@@ -411,10 +366,7 @@ export class PersistentAreaService {
     return result;
   }
 
-  /**
-   * Spec 004 legacy entry-point. Mantém pra orchestrator dormant + compat.
-   * Spec 013: prefira `resolveStartTurnIn`.
-   */
+
   async tickDamageFor(
     participant: EncounterParticipantEntity,
     getSaveModifier?: SaveModifierFn,
@@ -446,7 +398,7 @@ export class PersistentAreaService {
     return { events, totalDamage, affectingAreas: affecting };
   }
 
-  /** Damage tick legado para uma área específica (Spec 004 path). */
+
   private async tickDamageForArea(
     a: PersistentAreaEffectEntity,
     participant: EncounterParticipantEntity,
@@ -494,10 +446,7 @@ export class PersistentAreaService {
     };
   }
 
-  /**
-   * Spec 013 — Wall of Fire heat side: criaturas adjacentes (range:1) ao tile
-   * sofrem damage no fim do turno. Caller (combat.endTurn ou similar) chama.
-   */
+
   async resolveEndTurnAdjacent(
     participant: EncounterParticipantEntity,
     getSaveModifier?: SaveModifierFn,
@@ -522,7 +471,7 @@ export class PersistentAreaService {
       if (!area.effectKind || !area.triggers) continue;
       const trig = area.triggers.find((t) => t.kind === "on-end-turn-adjacent");
       if (!trig || trig.kind !== "on-end-turn-adjacent") continue;
-      // Critério: está DENTRO ou ADJACENTE (Chebyshev ≤ trig.range) ao tile.
+
       const dx = participant.positionX - area.originCell.x;
       const dy = participant.positionY - area.originCell.y;
       const chebyshev = Math.max(Math.abs(dx), Math.abs(dy));
@@ -541,12 +490,9 @@ export class PersistentAreaService {
     return result;
   }
 
-  // ── Helper Strategy: dispatch por trigger.kind ─────────────────────────
 
-  /**
-   * Strategy core. Dado um trigger + participant, retorna events + damage +
-   * condition (Princípio X aware).
-   */
+
+
   private async dispatchTrigger(
     area: PersistentAreaEffectEntity,
     trigger: TileEffectTrigger,
@@ -564,11 +510,11 @@ export class PersistentAreaService {
     let conditionApplied: ConditionSlug | null = null;
     let savePassed = true;
 
-    // 1. Save (se trigger tem save + saveDc setado na área).
-    // Spec 013: se getSaveModifier não for fornecido (PATCH position path),
-    // default pra modifier=0. Save ainda rola — RAW per default a criatura
-    // sem proficiency gets +0 mod. Isso preserva eventos save_rolled +
-    // condition_applied que probes esperam.
+
+
+
+
+
     let saveData: {
       rolled: number;
       passed: boolean;
@@ -601,7 +547,7 @@ export class PersistentAreaService {
           narrativeDescriptor: area.narrativeDescriptor,
         },
       });
-      // Save fail → aplica condition se trigger especifica
+
       if (!passed && save.onFailCondition) {
         conditionApplied = save.onFailCondition;
         events.push({
@@ -618,7 +564,7 @@ export class PersistentAreaService {
       }
     }
 
-    // 2. Damage (se trigger tem damage)
+
     let damageSpec:
       | { expressionPerSlot: (s: number) => string; type: string }
       | undefined;
@@ -666,7 +612,7 @@ export class PersistentAreaService {
     return { events, damage, conditionApplied, savePassed };
   }
 
-  // ── Spec 004 lifecycle (preserved) ─────────────────────────────────────
+
 
   async decrementDurations(encounterId: string): Promise<{
     events: GameEventData[];
@@ -702,11 +648,7 @@ export class PersistentAreaService {
     return { events, expired };
   }
 
-  /**
-   * Spec 004 + Spec 013 — cascade quando concentration quebra.
-   * Emite `tile_effect_concentration_broken` pra registros novos (effectKind set);
-   * `persistent_area_removed` pra legacy. Garante backward compat com Spec 004.
-   */
+
   async removeByCasterConcentrationBreak(
     casterParticipantId: string,
   ): Promise<{ events: GameEventData[] }> {
@@ -735,29 +677,22 @@ export class PersistentAreaService {
     return { events };
   }
 
-  /**
-   * Spec 012 + Spec 013 — recentraliza aura em torno do caster (Spirit Guardians
-   * e qualquer registro com `auraFollowsCaster=true`).
-   */
+
   async relocateAurasByCaster(
     casterParticipantId: string,
     newCell: { x: number; y: number },
   ): Promise<void> {
     const areas = await this.areas.find({ where: { casterParticipantId } });
     for (const a of areas) {
-      // Spec 013: usa flag boolean (popula via createFromCatalog ou backfill).
-      // Backward compat: legacy Spirit Guardians backfilled em migration.
+
+
       if (!a.auraFollowsCaster) continue;
       a.originCell = newCell;
       await this.areas.save(a);
     }
   }
 
-  /**
-   * Spec 013 — overlay dinâmico de difficult terrain.
-   * movement.service merge com `difficultTerrainCells` estático antes de
-   * calcular cost. speedMultiplier=0 → cell de stop (Web fail save).
-   */
+
   async getDifficultTerrainOverlay(
     encounterId: string,
   ): Promise<Map<string, number>> {
@@ -765,11 +700,11 @@ export class PersistentAreaService {
     const areas = await this.areas.find({ where: { encounterId } });
     for (const a of areas) {
       if (!a.isDifficultTerrain) continue;
-      const mult = a.speedMultiplier ?? 0.5; // default 0.5 = ×2 cost
-      // Enumera cells da área (fallback shape-based).
+      const mult = a.speedMultiplier ?? 0.5;
+
       for (const cell of this.cellsCovered(a)) {
         const key = `${cell.x},${cell.y}`;
-        // Stack: pega mult mais agressiva (0 = stop wins).
+
         const prev = overlay.get(key);
         if (prev === undefined || mult < prev) overlay.set(key, mult);
       }
@@ -777,14 +712,14 @@ export class PersistentAreaService {
     return overlay;
   }
 
-  // ── Geometry helpers ───────────────────────────────────────────────────
+
 
   cellInArea(x: number, y: number, area: PersistentAreaEffectEntity): boolean {
     const dx = x - area.originCell.x;
     const dy = y - area.originCell.y;
     if (area.shapeKind === "sphere" || area.shapeKind === "cylinder") {
-      // Chebyshev RAW 5e (diagonal=5ft); legacy usava Euclidean — mantido
-      // pra compat com Spirit Guardians (refatorável em spec futura).
+
+
       return Math.sqrt(dx * dx + dy * dy) <= area.radiusCells;
     }
     if (area.shapeKind === "cube") {
@@ -793,14 +728,14 @@ export class PersistentAreaService {
       );
     }
     if (area.shapeKind === "line") {
-      // Line: bounding box até radiusCells de comprimento, 1 cell de largura.
-      // Direção implícita pela origem; aproximação Chebyshev.
+
+
       return Math.abs(dx) <= area.radiusCells && Math.abs(dy) <= 0;
     }
     return Math.max(Math.abs(dx), Math.abs(dy)) <= area.radiusCells;
   }
 
-  /** Enumera cells cobertas por uma área (pra overlay). */
+
   private cellsCovered(
     area: PersistentAreaEffectEntity,
   ): Array<{ x: number; y: number }> {
@@ -823,7 +758,7 @@ export class PersistentAreaService {
     return this.dice.rollExpression(expr).total;
   }
 
-  // ── Princípio X camada 3 — narrativa ───────────────────────────────────
+
 
   private buildDamageNarrative(
     area: PersistentAreaEffectEntity,

@@ -362,7 +362,7 @@ export class ClockService {
       });
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort */
+
     }
   }
 

@@ -23,18 +23,7 @@ import { MovementService } from "./movement.service";
 import { SpellCastingService } from "./spell-casting.service";
 import type { GenericActionDto } from "../dto/generic-action.dto";
 
-/**
- * Spec 003 T050 — orquestrador de `POST /encounters/:id/ai-turn`.
- *
- * Fluxo:
- *  1. Idempotência via `lastAiTurnRound === currentRound`.
- *  2. Valida pré-requisitos (controlledBy='ai', turno, encounter ativo).
- *  3. Build snapshot.
- *  4. Chama `AiTurnExecutor.executeTurn` (timeout 30s, catch → fallback).
- *  5. Aplica cada step via serviços existentes (combat.resolveAttack,
- *     movement.move, genericActions.execute, etc.).
- *  6. Persiste resultado + emite evento `ai_turn_executed`.
- */
+
 @Injectable()
 export class AiTurnService {
   constructor(
@@ -95,11 +84,11 @@ export class AiTurnService {
       return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
     }
 
-    // Idempotência: mesmo round + resultado cacheado → retorna direto.
-    // Spec 027 (M2 follow-up) — invalida cache quando steps são triviais (só
-    // dodge/end-turn, sem attack/move/cast). Cobre regressão onde upgrade do
-    // engine de decisão (ex: smart→medium fallback) não dispararia em rounds
-    // antigos que cacheraram steps degenerados.
+
+
+
+
+
     if (
       participant.lastAiTurnRound === encounter.currentRound &&
       participant.lastAiTurnResult
@@ -150,7 +139,7 @@ export class AiTurnService {
       return failure(GameErrorCode.NOT_YOUR_TURN);
     }
 
-    // Build snapshot
+
     const snapRes = await this.snapshotService.build(encounterId, authUserId);
     if (!snapRes.ok) {
       this.logger.warn("ai.turn.fail", {
@@ -161,10 +150,10 @@ export class AiTurnService {
       return snapRes;
     }
 
-    // Spec 027 (M2 follow-up logs) — summary do que sai pro agents service.
-    // Foco: diagnose silent fail "NPC parado". Loga monster + position +
-    // actions count (se 0 → snapshot não propagou statblockRef.actions e
-    // _pick_best_attack vai cair pra Unarmed Strike).
+
+
+
+
     const monsterPart = snapRes.value.participants.find(
       (p) => p.id === participantId,
     );
@@ -187,7 +176,7 @@ export class AiTurnService {
       "monster.actions_count": monsterPart?.statblockRef?.actions?.length ?? 0,
       "snapshot.enemies_alive": enemiesAlive.length,
     });
-    // Breakdown dos participantes — útil pra entender encontros stuck.
+
     this.logger.info("ai.turn.participants_breakdown", {
       participants: snapRes.value.participants.map((p) => ({
         id: p.id,
@@ -201,7 +190,7 @@ export class AiTurnService {
       })),
     });
 
-    // Chama executor
+
     const planRes = await this.executor.executeTurn(
       snapRes.value,
       participantId,
@@ -224,7 +213,7 @@ export class AiTurnService {
       return planRes;
     }
 
-    // Aplica steps
+
     this.logger.info("ai.turn.steps_planned", {
       "participant.id": participantId,
       "encounter.round": encounter.currentRound,
@@ -255,8 +244,8 @@ export class AiTurnService {
         "step.summary": executed.result.summary,
         "step.error.code": executed.result.error?.code ?? null,
       });
-      // Se step falhou criticamente (ex: TARGET_DEFEATED), para — o
-      // frontend/executor pode re-chamar com continuationFrom.
+
+
       if (!executed.result.ok && step.kind !== "end-turn") {
         this.logger.warn("ai.turn.step_failed", {
           "step.kind": step.kind,
@@ -277,7 +266,7 @@ export class AiTurnService {
       }
     }
 
-    // Garante end-turn
+
     if (!executedSteps.some((s) => s.kind === "end-turn")) {
       const endRes = await this.combatService.endTurn(encounter.id);
       executedSteps.push({
@@ -316,7 +305,7 @@ export class AiTurnService {
       llmCostUsd: planRes.value.llmCostUsd,
     };
 
-    // Cache pra idempotência
+
     if (finalParticipant) {
       finalParticipant.lastAiTurnRound = encounter.currentRound;
       finalParticipant.lastAiTurnResult = result;
@@ -372,11 +361,11 @@ export class AiTurnService {
             ownerUserId: authUserId,
             ...(isSubAttack ? { _isSubAttack: true } : {}),
           } as Parameters<typeof this.combatService.resolveAttack>[1]);
-          // Spec 027 (M2 follow-up) — propaga AttackResult no events array.
-          // Antes events ficava `[]` e o frontend não tinha como animar
-          // damage floater no ataque da IA — PC tomava dano sem feedback
-          // visual. Frontend (page.tsx) lê `attack_resolved` e chama
-          // showDamageFloater pra render o número flutuante no token.
+
+
+
+
+
           const attackEvents: Array<{
             type: string;
             [k: string]: unknown;

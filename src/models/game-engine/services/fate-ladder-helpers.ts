@@ -1,10 +1,4 @@
-/**
- * Spec 016 P4 (M3) — Fate Ladder pure helpers.
- *
- * Stateless logic isolada: price table seleção, sacrifice validation,
- * resurrection requirements per spell. Service `fate-ladder.service.ts`
- * envelopa estes helpers + DB lookups (inventory, party).
- */
+
 
 export type ResurrectionSpell =
   | "Revivify"
@@ -16,7 +10,7 @@ export interface ResurrectionRequirements {
   spell: ResurrectionSpell;
   diamondGp: number;
   spellSlotLevel: number;
-  /** Janela em minutos (após morte) em que o spell pode ser cast. */
+
   timeWindowMinutes: number;
   d20Penalty: number;
   decayPerLongRest: number;
@@ -30,7 +24,7 @@ export const RESURRECTION_TABLE: Record<
   ResurrectionSpell,
   ResurrectionRequirements
 > = {
-  // RAW 2024 PHB.
+
   Revivify: {
     spell: "Revivify",
     diamondGp: 300,
@@ -44,7 +38,7 @@ export const RESURRECTION_TABLE: Record<
     spell: "Raise Dead",
     diamondGp: 500,
     spellSlotLevel: 5,
-    timeWindowMinutes: 10 * 24 * 60, // 10 dias
+    timeWindowMinutes: 10 * 24 * 60,
     d20Penalty: -4,
     decayPerLongRest: 1,
     duration: "until_long_rest_decay",
@@ -53,7 +47,7 @@ export const RESURRECTION_TABLE: Record<
     spell: "Resurrection",
     diamondGp: 1000,
     spellSlotLevel: 7,
-    timeWindowMinutes: 100 * 365 * 24 * 60, // 100 anos
+    timeWindowMinutes: 100 * 365 * 24 * 60,
     d20Penalty: -4,
     decayPerLongRest: 1,
     duration: "until_long_rest_decay",
@@ -62,7 +56,7 @@ export const RESURRECTION_TABLE: Record<
     spell: "True Resurrection",
     diamondGp: 25000,
     spellSlotLevel: 9,
-    timeWindowMinutes: 200 * 365 * 24 * 60, // 200 anos
+    timeWindowMinutes: 200 * 365 * 24 * 60,
     d20Penalty: 0,
     decayPerLongRest: 0,
     duration: "none",
@@ -83,11 +77,7 @@ export interface PriceCost {
   weight: number;
 }
 
-/**
- * Default price table (M3 ships). M4 expandirá via PriceTable seed migration.
- * Forbidden (NUNCA inclusos): level_drain, hp_max_permanent_loss,
- * ability_score_reduction (Ironsworn lesson + community consensus).
- */
+
 export const DEFAULT_PRICE_TABLE: PriceCost[] = [
   {
     kind: "npc_bond_broken",
@@ -133,10 +123,7 @@ export const FORBIDDEN_COSTS = [
   "ability_score_reduction",
 ] as const;
 
-/**
- * Seleciona um price weighted-random. RNG injetada (default Math.random)
- * pra testabilidade.
- */
+
 export function pickRandomPrice(
   table: PriceCost[] = DEFAULT_PRICE_TABLE,
   rng: () => number = Math.random,
@@ -175,11 +162,7 @@ export function validateSacrificeBounded(
   return { ok: true };
 }
 
-/**
- * Dado tempo desde morte (minutos) e diamantes disponíveis (gp), retorna
- * quais resurrection spells podem ser oferecidos. Não checa caster — isso
- * é responsabilidade do service que tem acesso a inventory + party.
- */
+
 export function eligibleResurrectionSpells(input: {
   minutesSinceDeath: number;
   diamondsAvailableGp: number;
@@ -193,10 +176,7 @@ export function eligibleResurrectionSpells(input: {
     .map((req) => req.spell);
 }
 
-/**
- * Outcome do option C (Pay the Price): HP=1, status=stable_unconscious,
- * acorda no próximo round.
- */
+
 export interface PayPriceOutcome {
   hpRestored: 1;
   status: "stable_unconscious";

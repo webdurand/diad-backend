@@ -18,24 +18,7 @@ import {
 } from "../interfaces/transformation.interfaces";
 import type { GameEventData } from "../interfaces/result.type";
 
-/**
- * Spec 012 — TransformationService.
- *
- * Pipeline compartilhado por Wild Shape, Polymorph, Form of Dread, Draconic
- * Transformation, etc. Cada fonte chama `enterForm` com seus par\u00e2metros.
- *
- * Contrato core:
- * - `enterForm`: snapshota HP original (e displayName), popula `form` com
- *   stats/AC/speed/actions copiados do monster alvo, persiste no participant.
- * - `revertForm`: restaura HP original, limpa transformationState.
- * - `applyDamageToForm`: dano vai pro form HP primeiro; se zera, reverte e
- *   excesso vai pro HP original.
- *
- * Invariantes:
- * - Enquanto transformado, HP original fica intacto (RAW 2024 Wild Shape).
- * - Speed/AC/stats f\u00edsicos do form substituem os do PC no combate.
- * - Mentais (INT/WIS/CHA) ficam com original (RAW explicit).
- */
+
 @Injectable()
 export class TransformationService {
   private readonly logger = new Logger(TransformationService.name);
@@ -59,9 +42,7 @@ export class TransformationService {
     return participant.transformationState ?? null;
   }
 
-  /**
-   * Entra em forma nova. Retorna o participant atualizado.
-   */
+
   async enterForm(
     participantId: string,
     dto: {
@@ -73,7 +54,7 @@ export class TransformationService {
       equipmentHandling?: TransformationState["equipmentHandling"];
       revertTriggers?: Partial<TransformationState["revertTriggers"]>;
       currentEncounterRound?: number;
-      /** Spec 012 Lote B — Caster que mantém concentração (Polymorph etc). */
+
       sourceCasterParticipantId?: string | null;
     },
   ): Promise<EncounterParticipantEntity> {
@@ -95,11 +76,11 @@ export class TransformationService {
       throw new NotFoundException(`MONSTER_NOT_FOUND: slug=${dto.monsterSlug}`);
     }
 
-    // Snapshot HP original. Pro PC, busca HP atual do character_state.
+
     const original: TransformationOriginalSnapshot =
       await this.snapshotOriginal(participant);
 
-    // Popula form do monster
+
     const form: TransformationForm = this.buildFormFromMonster(
       monster,
       dto.formDisplayName,
@@ -124,15 +105,15 @@ export class TransformationService {
     };
 
     participant.transformationState = state;
-    // RAW: o token representa a FORMA enquanto transformado (todo mundo vê
-    // o urso, não o druida). Display name = formName simples pro token
-    // exibir initials corretos ("Brown Bear" → "BB"). Original preservado
-    // em state.original.displayName pra restaurar no revert.
+
+
+
+
     const newDisplay = dto.formDisplayName ?? form.formName;
     participant.displayName = newDisplay;
     form.displayName = newDisplay;
 
-    // Wild Shape \u00e9 bonus action em 2024 XPHB \u2014 consome agora se for a fonte
+
     if (dto.source === "wild-shape") {
       participant.bonusActionUsed = true;
     }
@@ -144,9 +125,7 @@ export class TransformationService {
     return participant;
   }
 
-  /**
-   * Reverte pra forma original. Idempotente se n\u00e3o transformado.
-   */
+
   async revertForm(
     participantId: string,
     reason: TransformationRevertReason,
@@ -158,7 +137,7 @@ export class TransformationService {
       throw new NotFoundException(`participant ${participantId} not found`);
     }
     if (!participant.transformationState) {
-      return participant; // j\u00e1 n\u00e3o-transformado
+      return participant;
     }
 
     const state = participant.transformationState;
@@ -172,10 +151,7 @@ export class TransformationService {
     return participant;
   }
 
-  /**
-   * Aplica dano ao HP do form. RAW 2024: quando form chega a 0, reverte e
-   * damage excedente vai pro HP original do PC.
-   */
+
   async applyDamageToForm(
     participantId: string,
     amount: number,
@@ -199,7 +175,7 @@ export class TransformationService {
     const reverted = state.form.currentHp <= 0 && state.revertTriggers.hpZero;
 
     if (reverted) {
-      // Revert + apply overflow to original via character_state
+
       participant.displayName = state.original.displayName;
       participant.transformationState = null;
       await this.participantRepo.save(participant);
@@ -226,19 +202,7 @@ export class TransformationService {
     };
   }
 
-  /**
-   * Spec 015 Eixo 4 \u2014 tick de dura\u00e7\u00e3o no in\u00edcio de cada turno do participante
-   * transformado. Retorna eventos emitidos.
-   *
-   * RAW 2024:
-   *   - Wild Shape: 1h (600 rounds); ao expirar, reverte para forma humana.
-   *   - Polymorph: 1h concentration; se dura\u00e7\u00e3o chega a 0, reverte.
-   *   - True Polymorph: 1h concentration \u2192 ap\u00f3s isso, **permanente** (a forma
-   *     n\u00e3o expira mais; s\u00f3 dispel/greater restoration reverte).
-   *
-   * `durationRoundsRemaining: null` = sem prazo (Shapechange via dismiss). N\u00e3o
-   * decrementa nem reverte por timeout.
-   */
+
   async tickDurationOnTurnStart(
     participantId: string,
   ): Promise<{ events: GameEventData[] }> {
@@ -256,10 +220,10 @@ export class TransformationService {
       return { events };
     }
 
-    // Chegou a 0. Comportamento depende da source.
+
     if (state.source === "true-polymorph-spell") {
-      // RAW XPHB 2024: "If the creature maintains the spell for 1 hour, the
-      // form becomes permanent". Remove concentration bind; mant\u00e9m a forma.
+
+
       state.sourceCasterParticipantId = null;
       state.revertTriggers = {
         ...state.revertTriggers,
@@ -283,7 +247,7 @@ export class TransformationService {
       return { events };
     }
 
-    // Wild Shape, Polymorph, Shapechange: reverte ao expirar.
+
     const formName = state.form.formName;
     const originalDisplay = state.original.displayName;
     participant.displayName = originalDisplay;
@@ -305,9 +269,7 @@ export class TransformationService {
     return { events };
   }
 
-  /**
-   * Helper: retorna speed efetivo considerando transforma\u00e7\u00e3o.
-   */
+
   getEffectiveSpeed(
     participant: EncounterParticipantEntity,
   ): TransformationForm["speed"] | null {
@@ -324,7 +286,7 @@ export class TransformationService {
     return participant.transformationState?.form.actions ?? null;
   }
 
-  // ---- internals ----
+
 
   private async snapshotOriginal(
     participant: EncounterParticipantEntity,
@@ -333,15 +295,15 @@ export class TransformationService {
       const state = await this.stateRepo.findOne({
         where: { character_id: participant.characterId },
       });
-      // max_hp \u00e9 derivado do sheet (computeMaxHp), guardamos s\u00f3 current+temp.
+
       return {
-        maxHp: 0, // sentinel \u2014 revert usa sheet.maxHp atual do char (n\u00e3o muda)
+        maxHp: 0,
         currentHp: state?.current_hp ?? 1,
         tempHp: state?.temp_hp ?? 0,
         displayName: participant.displayName,
       };
     }
-    // Monster/NPC snapshot (maxHp relevante pois participant guarda seu pr\u00f3prio)
+
     return {
       maxHp: participant.maxHp ?? 1,
       currentHp: participant.currentHp ?? 1,

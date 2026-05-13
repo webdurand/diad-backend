@@ -5,18 +5,11 @@ import {
   MULTI_TARGET_NON_AOE_SPELLS,
 } from "../services/spell-targeting";
 
-/**
- * Spec 005 US14 — validação de número de alvos por magia.
- *
- * Regras:
- *  - AoE (`area_of_effect != null`): aceita qualquer N >= 1 (forma restringe).
- *  - Multi-target não-AoE curadas: aceita N até o limite do spell/slot.
- *  - Single-target (default): aceita 1 alvo.
- */
+
 
 type MiniSpell = { slug: string; area_of_effect: unknown };
 
-// Acid Splash RAW: sem area_of_effect (é multi-target até 2 alvos, não AoE com shape).
+
 const acidSplash: MiniSpell = { slug: "acid-splash", area_of_effect: null };
 const burningHands: MiniSpell = {
   slug: "burning-hands",
@@ -48,8 +41,8 @@ describe("spell-targeting — US14 (Spec 005)", () => {
       expect(isAoeSpell(acidSplash as any)).toBe(false);
     });
     it("rejeita area_of_effect XPHB que só tem tags (sem shape real)", () => {
-      // Bug capturado em playtest: DB XPHB armazena { tags: ['multiple targets'] }
-      // como metadado de targeting, NÃO é shape. Precisa de type+size pra ser AoE real.
+
+
       const xphbMultiTarget = {
         slug: "acid-splash-phb",
         area_of_effect: { tags: ["multiple targets"] },

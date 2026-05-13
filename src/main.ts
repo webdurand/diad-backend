@@ -32,7 +32,7 @@ async function bootstrap() {
     allowedHeaders: "Content-Type,Authorization,traceparent,x-diad-domain",
     exposedHeaders: "traceparent",
   });
-  // Resolve infra de observability do DI antes de configurar pipes/filters.
+
   app.get(ProblemFactory);
 
   app.useGlobalPipes(

@@ -1,9 +1,4 @@
-/**
- * damage-trigger-helpers — Spec 016 P4 (M3) tests.
- *
- * Massive damage 2024 detection (PHB rule), Fate Ladder trigger
- * dispatch, hardcore vs narrative mode gating.
- */
+
 import {
   detectFateLadderTrigger,
   isMassiveDamage2024,
@@ -12,7 +7,7 @@ import {
 
 describe("isMassiveDamage2024", () => {
   it("true when remaining damage zeroes HP + excess >= hpMax", () => {
-    // PC com 5 HP, hpMax 10, recebe 18 dano → 5 zerados + 13 excess >= 10 → massive
+
     expect(
       isMassiveDamage2024({
         hpBefore: 5,
@@ -24,7 +19,7 @@ describe("isMassiveDamage2024", () => {
   });
 
   it("false when excess < hpMax (regular drop to 0)", () => {
-    // PC com 5 HP, hpMax 50, recebe 10 dano → 5 excess << 50 → dying not dead
+
     expect(
       isMassiveDamage2024({
         hpBefore: 5,
@@ -36,7 +31,7 @@ describe("isMassiveDamage2024", () => {
   });
 
   it("false when excess exactly < hpMax", () => {
-    // hpBefore 10, hpMax 30, dmg 35 → excess 25 < 30
+
     expect(
       isMassiveDamage2024({
         hpBefore: 10,
@@ -48,7 +43,7 @@ describe("isMassiveDamage2024", () => {
   });
 
   it("true when excess EQUALS hpMax (>=)", () => {
-    // hpBefore 10, hpMax 30, dmg 40 → excess 30 == 30 → massive (RAW: >=)
+
     expect(
       isMassiveDamage2024({
         hpBefore: 10,

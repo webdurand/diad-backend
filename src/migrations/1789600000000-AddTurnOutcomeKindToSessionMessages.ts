@@ -1,10 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Adiciona `turn_outcome` ao CHECK de session_messages.kind para persistir
- * canon beats do turno: quest update, fato aprendido, recurso alterado,
- * viagem disponível/bloqueada e vitória de campanha.
- */
+
 export class AddTurnOutcomeKindToSessionMessages1789600000000 implements MigrationInterface {
   name = "AddTurnOutcomeKindToSessionMessages1789600000000";
 

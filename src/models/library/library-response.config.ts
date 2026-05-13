@@ -1,7 +1,7 @@
-// Configuration for Library API responses:
-// - Which relations to load per entity
-// - How to flatten junction tables
-// - Strips raw, source, timestamps from all responses
+
+
+
+
 
 interface FlattenConfig {
   as: string;
@@ -115,7 +115,7 @@ function stripInternal(obj: unknown, depth = 0, entityName = ""): unknown {
   for (const [key, value] of Object.entries(obj)) {
     if (INTERNAL_FIELDS.has(key)) continue;
 
-    // Strip FK columns for loaded relations (e.g. school_id when school is loaded)
+
     if (
       key.endsWith("_id") &&
       key !== "id" &&
@@ -125,7 +125,7 @@ function stripInternal(obj: unknown, depth = 0, entityName = ""): unknown {
     }
 
     if (key === "description" && entityName === "spells") {
-      // Remover description do retorno da listagem para reduzir drastically tamanho
+
       continue;
     } else if (value && typeof value === "object" && !(value instanceof Date)) {
       result[key] = stripInternal(value, depth + 1, entityName);
@@ -143,7 +143,7 @@ export function transformLibraryResponse(
   const config = ENTITY_CONFIG[entityName];
 
   return items.map((item) => {
-    // Flatten junction tables
+
     if (config?.flatten) {
       for (const [junctionField, { as: targetField, pick }] of Object.entries(
         config.flatten,

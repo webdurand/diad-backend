@@ -1,20 +1,11 @@
-/**
- * Spec 020 — Scene Context Redaction Filter (AI3 leak fix).
- *
- * Stripa campos sensíveis (descriptionHidden, personalityBig5, knowledgeScope)
- * antes de retornar NpcEntity para o agent. Bypass apenas via header
- * X-DIAD-Role=dm-omniscient (modo debug humano).
- *
- * Princípio II + X: fog of war é state mecânico explícito. LLM tem acesso
- * APENAS ao que o jogador descobriu.
- */
+
 
 import { NpcEntity } from "src/entities/npc.entity";
 
 export interface NpcProjectionOptions {
-  /** true = libera todos os campos (header X-DIAD-Role=dm-omniscient) */
+
   dmOmniscient?: boolean;
-  /** knowledge keys já reveladas pra party (libera motivation/voiceNotes) */
+
   knownKeys?: ReadonlySet<string>;
 }
 

@@ -6,18 +6,13 @@ import {
   AiUsageLogEntity,
 } from "src/entities/ai-usage-log.entity";
 
-/**
- * Preços Anthropic (por 1M tokens, USD). Spec §8 cost-aware.
- *
- * Fontes: https://www.anthropic.com/pricing (snapshot 2026-04).
- * Cache read = 10% do input. Cache write = 25% premium.
- */
+
 const PRICING: Record<
   string,
   { input: number; output: number; cacheWrite: number; cacheRead: number }
 > = {
   "claude-haiku-4-5-20251001": {
-    input: 1.0, // $1.00 / 1M input
+    input: 1.0,
     output: 5.0,
     cacheWrite: 1.25,
     cacheRead: 0.1,

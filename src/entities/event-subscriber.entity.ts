@@ -6,14 +6,7 @@ import {
   Unique,
 } from "typeorm";
 
-/**
- * Spec 017 — Registry de subscribers dinâmicos.
- *
- * Listeners default (Narrator/CombatAgent/Director/CompanionAI/HUD) ficam
- * registrados em código. Listeners adicionais (ex: companions específicos
- * em spec 022) são persistidos aqui — `EventBusService.subscribe` consulta
- * pra wire em runtime.
- */
+
 @Entity("event_subscribers")
 @Unique("event_subscribers_listener_name_unique", ["listenerName"])
 export class EventSubscriberEntity {

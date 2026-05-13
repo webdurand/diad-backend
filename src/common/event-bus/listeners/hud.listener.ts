@@ -10,18 +10,7 @@ import {
   EventEnvelope,
 } from "../event-envelope.types";
 
-/**
- * Spec 017 — HUDListener (STUB M1).
- *
- * Mvp: filtra envelopes com `audiences.includes('HUD')`, registra log
- * estruturado e marca em `event_listener_processed` (idempotência ADR-017).
- *
- * NÃO faz SSE push ainda — wiring com `useAiStream` e gateway WebSocket
- * fica pra próximo /execute (M2). Esta versão prova que:
- *  1. Bus dispatcha envelope completo pro listener.
- *  2. Listener é idempotente (2x same eventId → side-effect 1×).
- *  3. Audiência filtra corretamente — eventos sem 'HUD' são ignorados.
- */
+
 @Injectable()
 export class HUDListener implements EventListener {
   readonly name = "HUDListener";
@@ -44,7 +33,7 @@ export class HUDListener implements EventListener {
       return;
     }
 
-    // STUB — log estruturado + mark processed. SSE push fica pra M2.
+
     this.logger.info("event_bus.hud.received", {
       "event.id": envelope.eventId,
       "event.category": envelope.eventCategory,
@@ -71,9 +60,9 @@ export class HUDListener implements EventListener {
         this.processedRepo.create({ listenerName: this.name, eventId }),
       );
     } catch (err) {
-      // Race possível em retry concorrente — unique constraint força 1 row.
-      // Erro graceful: o log de listener_failed acima do bus já capturaria
-      // outras causas. Se já existe, está tudo certo (idempotente).
+
+
+
       this.logger.warn("event_bus.hud.mark_processed_conflict", {
         "event.id": eventId,
         "error.message": err instanceof Error ? err.message : String(err),

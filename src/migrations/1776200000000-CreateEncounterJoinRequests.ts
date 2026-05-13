@@ -1,10 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 002 — Creates `encounter_join_requests` for the late-join approval
- * flow. Player requests entry in an active encounter; DM approves (rolls
- * initiative + inserts into turnOrder) or rejects (player may retry).
- */
+
 export class CreateEncounterJoinRequests1776200000000 implements MigrationInterface {
   name = "CreateEncounterJoinRequests1776200000000";
 
@@ -39,7 +35,7 @@ export class CreateEncounterJoinRequests1776200000000 implements MigrationInterf
     await queryRunner.query(
       `CREATE INDEX "IDX_ejr_character" ON "encounter_join_requests" ("character_id")`,
     );
-    // Partial unique: only one pending request per (encounter, character).
+
     await queryRunner.query(
       `CREATE UNIQUE INDEX "IDX_ejr_encounter_character_pending" ON "encounter_join_requests" ("encounter_id", "character_id") WHERE status = 'pending'`,
     );

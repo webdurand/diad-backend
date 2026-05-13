@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Enriquecimento de quests pra suportar reveal pipeline e detecção via diálogo:
- *   - is_main_quest: marca a main quest do arc (1 por arc, MVP só usa esta)
- *   - trigger_npc_name / trigger_location_name / activation_keys: candidatos
- *     a trigger declarativo (V2 — Director hoje só reveala main quest)
- *   - revealed_at / discovered_at: timestamps p/ audit
- *   - reveal_evidence: string que Director persiste explicando POR QUE revelou
- *
- * E em quest_objectives:
- *   - advance_evidence: string com a evidência da última transição de status
- */
+
 export class EnrichQuestsForRevealAndTriggers1788000000000 implements MigrationInterface {
   name = "EnrichQuestsForRevealAndTriggers1788000000000";
 
@@ -26,7 +16,7 @@ export class EnrichQuestsForRevealAndTriggers1788000000000 implements MigrationI
       ADD COLUMN IF NOT EXISTS reveal_evidence text
     `);
 
-    // Index pra lookup rápido da main quest do campaign
+
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_quests_main_per_campaign
       ON quests (campaign_id) WHERE is_main_quest = true

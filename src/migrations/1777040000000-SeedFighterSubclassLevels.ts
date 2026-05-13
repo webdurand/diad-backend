@@ -1,29 +1,15 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Spec 012 Fighter 100% — Data gap: as 3 subclasses Fighter alternativas
- * (fighter-battle-master, fighter-eldritch-knight, fighter-psi-warrior) NÃO
- * têm rows em `levels`. Consequência: level-up.service não acha levelData
- * ao processar L3 e nenhuma feature da subclass é atribuída ao char.
- *
- * Esta migration:
- *  1. Cria 1 level row L3 pra cada subclass (MVP — V2 adiciona L7/10/15/18)
- *  2. Linka as features XPHB L3 da subclass via level_features
- *
- * Subclass features XPHB L3 (feature slug.startsWith('<feature>-fighter-<subclass>-3')):
- *  - Battle Master: battle-master, combat-superiority, maneuver-options
- *  - Eldritch Knight: spellcasting, war-bond (+weapon-bond etc)
- *  - Psi Warrior: protective-field, psionic-power, psionic-strike, telekinetic-movement
- */
+
 export class SeedFighterSubclassLevels1777040000000 implements MigrationInterface {
   name = "SeedFighterSubclassLevels1777040000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    // source_id pega o XPHB source
+
     const [xphb] = (await queryRunner.query(
       `SELECT id FROM comp_sources WHERE code = 'XPHB' LIMIT 1`,
     )) as Array<{ id: string }>;
-    if (!xphb) return; // DB sem XPHB — migration no-op
+    if (!xphb) return;
 
     const fighterClass = (await queryRunner.query(
       `SELECT id FROM classes WHERE slug = 'fighter' AND source_id = $1 LIMIT 1`,
@@ -37,7 +23,7 @@ export class SeedFighterSubclassLevels1777040000000 implements MigrationInterfac
     )) as Array<{ id: string; slug: string }>;
 
     for (const sc of subclasses) {
-      // Cria L3 row se não existir
+
       const existing = (await queryRunner.query(
         `SELECT id FROM levels WHERE subclass_id = $1 AND level = 3 LIMIT 1`,
         [sc.id],
@@ -56,7 +42,7 @@ export class SeedFighterSubclassLevels1777040000000 implements MigrationInterfac
         levelId = inserted[0].id;
       }
 
-      // Linka features L3 da subclass (pelo subclass_id do feature = sc.id)
+
       await queryRunner.query(
         `INSERT INTO level_features (level_id, feature_id)
          SELECT $1, f.id

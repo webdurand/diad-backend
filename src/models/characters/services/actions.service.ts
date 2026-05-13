@@ -28,7 +28,7 @@ import {
 import { classifyFeatureForActions } from "./feature-classification";
 import { ensureCharacterReadAccess } from "src/shared/character-guard";
 
-// ---- Types ----
+
 
 export type ActionTiming =
   | "action"
@@ -61,21 +61,19 @@ export interface ActionBlock {
   versatileDamage?: DamageBlock;
   saveDc?: number;
   saveAbility?: string;
-  /** Spec 011 Phase 2 — `dc_success` do SRD ('half' | 'none' | 'negates'). */
+
   saveSuccess?: "half" | "none" | "negates";
-  /** Spec 011 Phase 3 — slug canônico da feature/spell (sem prefixo `feature-{uuid}-`).
-   *  Usado pelo front pra resolver `POST /class-feature` e `POST /cast-spell`. */
+
   featureSlug?: string;
   range?: string;
   properties?: string[];
-  /** Spec 012 — weapon slug (for weapon actions) pra lookup de mastery/Fighting Style. */
+
   weaponSlug?: string;
-  /** Spec 012 — mastery slug (Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex). Only present if
-   *  (a) arma tem a propriedade E (b) dono da arma escolheu este weapon slug em weapon_mastery_choices. */
+
   masterySlug?: string;
-  /** Premissa weapons-in-hand — true se o char é proficient com a arma/categoria. Frontend usa pra chip visual. */
+
   proficient?: boolean;
-  /** Premissa weapons-in-hand — 'main' | 'off' | null (intrínseco). Unarmed é null. */
+
   handSlot?: "main" | "off" | null;
   uses?: number;
   usesMax?: number;
@@ -84,8 +82,7 @@ export interface ActionBlock {
   requiresConcentration?: boolean;
   isRitual?: boolean;
   castingTime?: string;
-  /** Spec 005 US14 — área de efeito derivada de `spell.area_of_effect` + `spell.range`.
-   *  Populado somente para spells AoE (Acid Splash, Burning Hands, Fireball, etc.). */
+
   aoe?: {
     originType: "self" | "point" | "fixed";
     shape: "sphere" | "cone" | "line" | "cube" | "cylinder";
@@ -167,7 +164,7 @@ export class ActionsService {
       this.charStateRepo.findOne({ where: { character_id: characterId } }),
     ]);
 
-    // Ability helpers
+
     const abilityMap = new Map<string, number>();
     for (const ca of charAbilities) {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
@@ -177,7 +174,7 @@ export class ActionsService {
     const totalLevel = charClasses.reduce((s, cc) => s + cc.class_level, 0);
     const profBonus = PROF_BONUS_BY_LEVEL[Math.min(totalLevel, 20)] ?? 2;
 
-    // Build weapon proficiency set
+
     const profSlugs = new Set(
       charProfs
         .filter(
@@ -205,7 +202,7 @@ export class ActionsService {
       }
     }
 
-    // Equipment category map for proficiency checking
+
     const equipIds = charEquip.map((ce) => ce.equipment_id);
     const equipCatMap = new Map<string, Set<string>>();
     if (equipIds.length > 0) {
@@ -223,7 +220,7 @@ export class ActionsService {
       }
     }
 
-    // Detect extra attack — Fighter scales: 2 at 5, 3 at 11, 4 at 20
+
     const hasExtraAttack = charFeatures.some(
       (cf) => cf.feature?.slug?.includes("extra-attack") && cf.active,
     );
@@ -240,7 +237,7 @@ export class ActionsService {
       }
     }
 
-    // Spellcasting info per class
+
     const spellSaveDc: Record<string, number> = {};
     const spellAttackBonus: Record<string, number> = {};
     for (const cc of charClasses) {
@@ -253,16 +250,16 @@ export class ActionsService {
 
     const speed = character.character_origin?.race?.speed ?? 30;
 
-    // Spec 012 — weapon mastery choices: armas (slugs) que o personagem "dominou".
-    // Usado em buildWeaponActions pra expor masterySlug só quando o jogador tiver
-    // escolhido essa arma (XPHB 2024: N masteries por level, subiu conforme classe).
+
+
+
     const masteryChoices = new Set<string>(
       character.character_origin?.weapon_mastery_choices ?? [],
     );
 
     const allActions: ActionBlock[] = [];
 
-    // 1. Weapon attacks
+
     this.buildWeaponActions(
       charEquip,
       equipCatMap,
@@ -274,14 +271,14 @@ export class ActionsService {
       allActions,
     );
 
-    // 1b. Draw / Stow weapon (premissa weapons-in-hand).
-    //   - "Sacar X": disponível se weapon está no inventário (handSlot null)
-    //   - "Guardar X": disponível se weapon está em main/off
-    //   RAW 2024: 1 free object interaction por turno. Backend/frontend aplicam
-    //   o limite em runtime (gasta action se já usou free).
+
+
+
+
+
     this.buildDrawStowActions(charEquip, allActions);
 
-    // 2. Unarmed Strike
+
     this.buildUnarmedStrike(
       mod,
       profBonus,
@@ -290,7 +287,7 @@ export class ActionsService {
       allActions,
     );
 
-    // 3. Spell actions
+
     this.buildSpellActions(
       charSpells,
       charClasses,
@@ -300,10 +297,10 @@ export class ActionsService {
       allActions,
     );
 
-    // 4. Consumable actions
+
     this.buildConsumableActions(charEquip, allActions);
 
-    // 5. Feature actions
+
     this.buildFeatureActions(
       charFeatures,
       charClasses,
@@ -313,7 +310,7 @@ export class ActionsService {
       allActions,
     );
 
-    // 6. Race trait actions (e.g. Breath Weapon)
+
     this.buildRaceTraitActions(
       character,
       totalLevel,
@@ -322,7 +319,7 @@ export class ActionsService {
       allActions,
     );
 
-    // Split by timing
+
     const actions = allActions.filter((a) => a.timing === "action");
     const bonusActions = allActions.filter((a) => a.timing === "bonus_action");
     const reactions = allActions.filter((a) => a.timing === "reaction");
@@ -341,7 +338,7 @@ export class ActionsService {
     };
   }
 
-  // ---- Weapon attacks ----
+
 
   private buildWeaponActions(
     charEquip: CharacterEquipmentEntity[],
@@ -358,19 +355,19 @@ export class ActionsService {
 
     for (const ce of charEquip) {
       const eq = ce.equipment;
-      // Premissa RAW 2024 — weapons-in-hand. ActionBar só expõe armas empunhadas
-      // (main_hand ou off_hand). Armas no inventário exigem "Sacar" (free object
-      // interaction) antes de atacar — gerado separadamente como generic action.
-      // Antes: mostrava TUDO com damage, traindo a ficha (Fighter carregando
-      // 8 armas aparecia com 8 ataques). Unarmed Strike segue exposto em
-      // buildUnarmedAction (intrínseco, não precisa handSlot).
+
+
+
+
+
+
       if (!ce.mainHand && !ce.offHand) continue;
       if (!eq.damage) continue;
 
-      // Spec 012 fix: equipment.damage é persistida com shape `{dice, type}`
-      // (formato direto do transformer), não `{damage_dice, damage_type}` do
-      // SRD 5e legado. buildWeaponActions lia o shape errado → continue silencioso
-      // sempre → ActionBar só mostrava Ataque Desarmado. Aceita ambos shapes.
+
+
+
+
       const dmg = eq.damage as {
         damage_dice?: string;
         damage_type?: { name?: string; index?: string };
@@ -385,9 +382,9 @@ export class ActionsService {
         index?: string;
         slug?: string;
       }>;
-      // Spec 012 Fase 0 fix: admin seeder popula `{name, slug}` (não `{index}`),
-      // então propSlugs ficava vazio e thrown/finesse/heavy nunca disparavam.
-      // Aceita ambos shapes pra compat.
+
+
+
       const propSlugs = props.map((p) => p.index ?? p.slug ?? "");
       const isFinesse = propSlugs.includes("finesse");
       const isRanged =
@@ -397,7 +394,7 @@ export class ActionsService {
       const isThrown = propSlugs.includes("thrown");
       const propNames = props.map((p) => p.name ?? "").filter(Boolean);
 
-      // Determine ability modifier
+
       let abilityMod: number;
       if (isFinesse) {
         abilityMod = Math.max(strMod, dexMod);
@@ -407,7 +404,7 @@ export class ActionsService {
         abilityMod = strMod;
       }
 
-      // Check proficiency
+
       const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
       const isProficient =
         isEquipmentProficient(eq.slug, cats, profSlugs) === true;
@@ -426,8 +423,8 @@ export class ActionsService {
         }
       }
 
-      // Spec 012 — masterySlug: só expõe se (a) arma tem mastery na DB E (b) o personagem
-      // escolheu essa arma em weapon_mastery_choices. Sem isso o combat.service ignora.
+
+
       const weaponMastery = eq.mastery as
         | { slug?: string; name?: string }
         | undefined;
@@ -464,7 +461,7 @@ export class ActionsService {
       };
 
       if (isVersatile) {
-        // Parse versatile damage from properties or add d10 variant
+
         const versatileProp = props.find((p) => p.index === "versatile");
         const versatileText = (versatileProp as Record<string, unknown>)
           ?.description as string | undefined;
@@ -481,7 +478,7 @@ export class ActionsService {
 
       out.push(action);
 
-      // Thrown weapons can also be used as ranged
+
       if (isThrown && range && (range.normal ?? 0) > 5) {
         out.push({
           ...action,
@@ -500,7 +497,7 @@ export class ActionsService {
     }
   }
 
-  // ---- Draw / Stow (weapons-in-hand, RAW 2024 free object interaction) ----
+
 
   private buildDrawStowActions(
     charEquip: CharacterEquipmentEntity[],
@@ -511,7 +508,7 @@ export class ActionsService {
       const isShield =
         eq.slug?.includes("shield") ||
         eq.name?.toLowerCase().includes("shield");
-      // Só weapons (damage) ou shields podem ser empunhados.
+
       if (!eq.damage && !isShield) continue;
 
       const label = eq.name;
@@ -537,7 +534,7 @@ export class ActionsService {
     }
   }
 
-  // ---- Unarmed Strike ----
+
 
   private buildUnarmedStrike(
     mod: (s: string) => number,
@@ -549,7 +546,7 @@ export class ActionsService {
     const strMod = mod("str");
     const dexMod = mod("dex");
 
-    // Check for Monk Martial Arts
+
     const monkClass = charClasses.find(
       (cc) => normalizeClassSlug(cc.class.slug) === "monk",
     );
@@ -586,7 +583,7 @@ export class ActionsService {
     });
   }
 
-  // ---- Spell actions ----
+
 
   private buildSpellActions(
     charSpells: CharacterSpellEntity[],
@@ -596,13 +593,13 @@ export class ActionsService {
     totalLevel: number,
     out: ActionBlock[],
   ) {
-    // Only include prepared/known/always_prepared spells + cantrips
+
     const activeSpells = charSpells.filter(
       (cs) =>
         cs.spell.level === 0 || cs.status === "prepared" || cs.always_prepared,
     );
 
-    // Get the primary spellcasting class for DC/attack
+
     const primaryCaster = charClasses.find((cc) =>
       getSpellcastingAbility(cc.class.slug),
     );
@@ -618,9 +615,9 @@ export class ActionsService {
       if (castingTime.includes("bonus")) timing = "bonus_action";
       else if (castingTime.includes("reaction")) timing = "reaction";
 
-      // Normalização — a seed do 5eAPI pode armazenar `damage_type` como
-      // objeto `{ name, index }` (shape antigo) OU como array `['fire']` (shape
-      // novo que veio na re-seed). Spec 011 Phase 2 aceita ambos.
+
+
+
       const dmg = spell.damage as {
         damage_type?: { name?: string; index?: string } | string[] | string;
         damage_at_character_level?: Record<string, string>;
@@ -647,20 +644,20 @@ export class ActionsService {
       if (dmg) {
         let dice = "";
         if (dmg.damage_at_character_level) {
-          // Cantrip scaling
+
           dice = this.getCantripDamage(
             dmg.damage_at_character_level,
             totalLevel,
           );
         } else if (dmg.damage_at_slot_level) {
-          // Take the base slot level damage
+
           const levels = Object.keys(dmg.damage_at_slot_level).sort(
             (a, b) => +a - +b,
           );
           dice = levels.length > 0 ? dmg.damage_at_slot_level[levels[0]] : "";
         } else {
-          // Spec 011 Phase 2 — fallback pra seed incompleta: regex '3d6' na
-          // descrição. Cobre magias cujo `damage_at_slot_level` veio vazio.
+
+
           const rawDesc = Array.isArray(spell.description)
             ? (spell.description as unknown[]).join(" ")
             : typeof spell.description === "string"
@@ -683,7 +680,7 @@ export class ActionsService {
           ? spell.description
           : "";
 
-      // Truncate to first ~150 chars for the action card
+
       const shortDesc =
         description.length > 150
           ? description.substring(0, 147) + "..."
@@ -704,8 +701,8 @@ export class ActionsService {
         castingTime: spell.casting_time,
       };
 
-      // Spec 005 US14 — popular `aoe` quando a spell é de área. Sem isso,
-      // o frontend abre TargetSelector single em vez de MultiTargetSpellPicker.
+
+
       const aoeRaw = spell.area_of_effect as
         | { type?: string; size?: number }
         | null
@@ -768,7 +765,7 @@ export class ActionsService {
     }
   }
 
-  // ---- Consumable actions ----
+
 
   private buildConsumableActions(
     charEquip: CharacterEquipmentEntity[],
@@ -823,7 +820,7 @@ export class ActionsService {
     }
   }
 
-  // ---- Feature actions ----
+
 
   private buildFeatureActions(
     charFeatures: CharacterFeatureEntity[],
@@ -835,22 +832,22 @@ export class ActionsService {
   ) {
     const classMap = new Map(charClasses.map((cc) => [cc.class_id, cc]));
 
-    // Feature-to-action mapping for known class features
+
     const featureActionMap = this.getFeatureActionDefinitions(
       profBonus,
       mod,
       charClasses,
     );
 
-    // Spec 015 — pool de usos consumidos (feature_uses_used do state). Usado
-    // pra calcular `uses` atuais (max - used). Cutting Words compartilha pool
-    // com bardic-inspiration (RAW).
+
+
+
     const featureUsesUsed =
       (charState as unknown as { feature_uses_used?: Record<string, number> })
         ?.feature_uses_used ?? {};
     const SHARED_POOLS: Record<string, string> = {
       "cutting-words": "bardic-inspiration",
-      // Adicione aqui outras features que compartilham pool.
+
     };
     const resolveUsesForDef = (actionDef: ActionBlock): ActionBlock => {
       if (actionDef.uses == null || actionDef.usesMax == null) return actionDef;
@@ -862,8 +859,8 @@ export class ActionsService {
       };
     };
 
-    // Spec 015 Eixo 1 — dedup: se já emitimos actionDef.id via canonical
-    // mapeado OU via alias de uma variante anterior, não emitir 2x.
+
+
     const emittedCanonicals = new Set<string>();
 
     for (const cf of charFeatures) {
@@ -871,23 +868,23 @@ export class ActionsService {
 
       const slug = cf.feature.slug;
 
-      // Spec 015 Eixo 1 — classificação curada (passive → hide; scaling → alias).
+
       const classification = classifyFeatureForActions(slug);
       if (classification?.kind === "hide") {
-        // Feature passiva (Song of Rest, Expertise, Archdruid, Timeless Body,
-        // ASI, Epic Boon, subclass/college markers, spellcasting grants, etc).
-        // Mostradas na aba Traits/Features via FeatureBlock, não como action.
+
+
+
         continue;
       }
 
-      // Resolve slug efetivo: se é alias, usar canonical pra lookup no map.
+
       const effectiveSlug =
         classification?.kind === "alias" && classification.canonicalSlug
           ? classification.canonicalSlug
           : slug;
 
-      // Dedup: se já emitimos esse canonical (ex: BI-d8 e BI-d10 ambos
-      // apontam pra `bardic-inspiration` canonical), emite apenas 1x.
+
+
       if (
         classification?.kind === "alias" &&
         emittedCanonicals.has(effectiveSlug)
@@ -898,14 +895,14 @@ export class ActionsService {
       const mapped = featureActionMap.get(effectiveSlug);
 
       if (mapped) {
-        // Use known mapping
+
         for (const actionDef of mapped) {
-          // Spec 015 — subtrai uses já consumidos do pool (usesSharedWith aware).
+
           const withUses = resolveUsesForDef(actionDef);
           out.push({
             ...withUses,
             id: `feature-${cf.id}-${actionDef.id}`,
-            // Spec 011 Phase 3 — preserva slug canônico pro dispatcher.
+
             featureSlug: actionDef.id,
           });
         }
@@ -913,13 +910,13 @@ export class ActionsService {
         continue;
       }
 
-      // Aliases sem canonical mapeado → hide silencioso (não tem stats
-      // concretos pra emitir e regex do description dispararia dup).
+
+
       if (classification?.kind === "alias") {
         continue;
       }
 
-      // For unknown features, include them as informational if they have description
+
       const desc = cf.feature.description;
       const descText = Array.isArray(desc)
         ? desc[0]
@@ -928,7 +925,7 @@ export class ActionsService {
           : "";
 
       if (descText && typeof descText === "string") {
-        // Skip passive features (no action verb)
+
         const isAction =
           /action|bonus action|reaction|use|activate|expend/i.test(descText);
         if (!isAction) continue;
@@ -950,16 +947,16 @@ export class ActionsService {
               ? classMap.get(cf.source_class_id)?.class.name
               : undefined) ?? "Classe",
           description: shortDesc,
-          // Unknown feature — slug vem direto do catálogo SRD.
+
           featureSlug: slug,
         });
       }
     }
   }
 
-  // ---- Race trait actions ----
 
-  // Draconic ancestry map moved to shared srd-utils.ts
+
+
 
   private buildRaceTraitActions(
     character: CharacterEntity,
@@ -1010,7 +1007,7 @@ export class ActionsService {
     });
   }
 
-  // ---- Feature action definitions ----
+
 
   private getFeatureActionDefinitions(
     profBonus: number,
@@ -1023,7 +1020,7 @@ export class ActionsService {
     const wisMod = mod("wis");
     const chaMod = mod("cha");
 
-    // Fighter
+
     const fighterClass = charClasses.find(
       (cc) => normalizeClassSlug(cc.class.slug) === "fighter",
     );
@@ -1058,8 +1055,8 @@ export class ActionsService {
         },
       ]);
 
-      // Spec 015 Eixo 1 — Indomitable (Fighter L9+). Re-rola 1 save falho.
-      // L9=1 uso, L13=2, L17=3 (RAW XPHB 2024 p.168).
+
+
       if (fighterClass.class_level >= 9) {
         const indomitableUses =
           fighterClass.class_level >= 17
@@ -1083,7 +1080,7 @@ export class ActionsService {
       }
     }
 
-    // Barbarian
+
     const barbarianClass = charClasses.find(
       (cc) => cc.class.slug === "barbarian",
     );
@@ -1132,7 +1129,7 @@ export class ActionsService {
       ]);
     }
 
-    // Rogue
+
     const rogueClass = charClasses.find((cc) => cc.class.slug === "rogue");
     if (rogueClass) {
       const sneakDice = Math.ceil(rogueClass.class_level / 2);
@@ -1176,7 +1173,7 @@ export class ActionsService {
       ]);
     }
 
-    // Monk
+
     const monkClass = charClasses.find(
       (cc) => normalizeClassSlug(cc.class.slug) === "monk",
     );
@@ -1226,7 +1223,7 @@ export class ActionsService {
         },
       ]);
 
-      // Monks can make a bonus action unarmed strike
+
       map.set("martial-arts", [
         {
           id: "martial-arts-bonus",
@@ -1239,9 +1236,9 @@ export class ActionsService {
         },
       ]);
 
-      // Spec 015 Eixo 1 — Stunning Strike (Monk L5+). Quando acerta ataque
-      // desarmado/monge, gasta 1 Ki; target rola CON save (DC 8+prof+WIS).
-      // Falha = Stunned até fim do próximo turno do monge. RAW XPHB 2024.
+
+
+
       if (monkClass.class_level >= 5) {
         const stunDc = 8 + profBonus + wisMod;
         map.set("stunning-strike", [
@@ -1262,7 +1259,7 @@ export class ActionsService {
       }
     }
 
-    // Cleric
+
     const clericClass = charClasses.find((cc) => cc.class.slug === "cleric");
     if (clericClass) {
       map.set("channel-divinity", [
@@ -1280,7 +1277,7 @@ export class ActionsService {
       ]);
     }
 
-    // Paladin
+
     const paladinClass = charClasses.find((cc) => cc.class.slug === "paladin");
     if (paladinClass) {
       map.set("divine-smite", [
@@ -1312,7 +1309,7 @@ export class ActionsService {
       ]);
     }
 
-    // Druid
+
     const druidClass = charClasses.find((cc) => cc.class.slug === "druid");
     if (druidClass && druidClass.class_level >= 2) {
       map.set("wild-shape", [
@@ -1330,7 +1327,7 @@ export class ActionsService {
       ]);
     }
 
-    // Sorcerer
+
     const sorcererClass = charClasses.find(
       (cc) => cc.class.slug === "sorcerer",
     );
@@ -1350,7 +1347,7 @@ export class ActionsService {
       ]);
     }
 
-    // Warlock
+
     const warlockClass = charClasses.find(
       (cc) => normalizeClassSlug(cc.class.slug) === "warlock",
     );
@@ -1368,7 +1365,7 @@ export class ActionsService {
       ]);
     }
 
-    // Wizard
+
     const wizardClass = charClasses.find((cc) => cc.class.slug === "wizard");
     if (wizardClass && wizardClass.class_level >= 2) {
       map.set("arcane-recovery", [
@@ -1386,7 +1383,7 @@ export class ActionsService {
       ]);
     }
 
-    // Bard
+
     const bardClass = charClasses.find((cc) => cc.class.slug === "bard");
     if (bardClass) {
       const inspirationDie =
@@ -1399,10 +1396,10 @@ export class ActionsService {
               : "d6";
       const uses = Math.max(1, chaMod);
 
-      // Spec 015 — Cutting Words (Lore L3) e Countercharm (L5 XPHB/L6 PHB)
-      // chegam aqui como source='feature' via fallback regex do actions.service.
-      // O regex erra timing (aparecem como 'action'). Aqui explicitamos
-      // timing='reaction' RAW. Cutting Words compartilha pool de BI.
+
+
+
+
       if (bardClass.class_level >= 3) {
         map.set("cutting-words", [
           {
@@ -1448,7 +1445,7 @@ export class ActionsService {
       ]);
     }
 
-    // Ranger
+
     const rangerClass = charClasses.find((cc) => cc.class.slug === "ranger");
     if (rangerClass && rangerClass.class_level >= 3) {
       map.set("dreadful-strikes", [
@@ -1466,21 +1463,21 @@ export class ActionsService {
     return map;
   }
 
-  // ---- Helpers ----
+
 
   private parseVersatileDice(
     text: string | undefined,
     baseDice: string,
   ): string {
     if (!text) {
-      // Default: upgrade die by one step
+
       const match = baseDice.match(/(\d+)d(\d+)/);
       if (!match) return baseDice;
       const dieSize = parseInt(match[2], 10);
       const nextDie = { 4: 6, 6: 8, 8: 10, 10: 12, 12: 12 }[dieSize] ?? dieSize;
       return `${match[1]}d${nextDie}`;
     }
-    // Try to extract dice from the text, e.g. "(1d10)"
+
     const diceMatch = text.match(/(\d+d\d+)/);
     return diceMatch
       ? diceMatch[1]

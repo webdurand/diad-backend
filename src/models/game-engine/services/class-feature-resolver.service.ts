@@ -10,9 +10,7 @@ import { TransformationService } from "./transformation.service";
 import { BardFeaturesService } from "./bard-features.service";
 import type { GameEventData } from "../interfaces/result.type";
 
-/**
- * Shape do payload do evento `class_feature_invoked` (Spec 003 contract).
- */
+
 export interface ClassFeatureInvokedPayload {
   featureSlug: string;
   actionCost?: string;
@@ -30,20 +28,7 @@ export interface ClassFeatureInvokedPayload {
   status?: string;
 }
 
-/**
- * Spec 004 — Consumer dos eventos `class_feature_invoked` emitidos pela
- * Spec 3 com `status: 'emitted_pending_resolution'`. Dispatch por featureSlug:
- *
- *  - turn-undead → save WIS vs saveDc; fail = ConditionInstance 'turned' 10 rounds
- *  - rage        → 3 EffectInstance no source (damage_resistance, self_advantage, damage_bonus)
- *  - grapple     → target save STR vs saveDc; fail = ConditionInstance 'grappled' + vinculo
- *  - shove       → target save STR; fail = 'prone' OR push event
- *
- * Retorna { resolved, resolutionPayload, events[] }. Callers (class-feature-
- * executor, combat.service para unarmed-strike) invocam apos emitir o evento
- * pendente. Se featureSlug nao tem handler, retorna resolved=false e o evento
- * fica pendente (compat com Spec 9 futura).
- */
+
 @Injectable()
 export class ClassFeatureResolverService {
   constructor(
@@ -129,11 +114,11 @@ export class ClassFeatureResolverService {
     }
   }
 
-  // ---- Handler: Favored Enemy (Ranger L1 XPHB) ----
-  // RAW 2024: L1 Ranger tem Hunter's Mark preparada + N free casts por LR
-  // (N progride: 2 L1, 3 L5, 4 L9, 5 L13, 6 L17). Este handler s\u00f3 arma o
-  // effect 'favored_enemy_free_cast_available' que o spell-casting pode consumir
-  // quando spellSlug='hunter-mark'/'hunters-mark' no lugar do slot.
+
+
+
+
+
   private async handleFavoredEnemy(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -164,9 +149,9 @@ export class ClassFeatureResolverService {
     };
   }
 
-  // ---- Handler: Natural Recovery (Land Druid L3 XPHB, originally L2 data 2014) ----
-  // RAW 2024: 1/LR em SR, regain spell slot levels totaling floor(druid_level/2),
-  // no slot L6+. body.options.slotAssignments igual Arcane Recovery.
+
+
+
   private async handleNaturalRecovery(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -219,9 +204,9 @@ export class ClassFeatureResolverService {
     };
   }
 
-  // ---- Handler: Tireless (Ranger L10) ----
-  // RAW 2024 XPHB: bonus action, PB/LR. Heal self 1d8 + WIS. Tamb\u00e9m reduz 1 n\u00edvel
-  // de Exhaustion. Pra MVP s\u00f3 heal.
+
+
+
   private async handleTireless(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -255,9 +240,9 @@ export class ClassFeatureResolverService {
     return { resolved: true, events, resolutionPayload: { healAmount: total } };
   }
 
-  // ---- Handler: Nature's Veil (Ranger L13) ----
-  // RAW 2024 XPHB: bonus action, 1/LR. Invis\u00edvel at\u00e9 fim do pr\u00f3ximo turno.
-  // Aplica Invisible condition ao self com dura\u00e7\u00e3o 1 round.
+
+
+
   private async handleNaturesVeil(
     sourceId: string,
     _payload: ClassFeatureInvokedPayload,
@@ -282,9 +267,9 @@ export class ClassFeatureResolverService {
     return { resolved: true, events };
   }
 
-  // ---- Handler: Steady Aim (Rogue L1 XPHB) ----
-  // RAW 2024: bonus action, advantage no pr\u00f3ximo attack ATE o fim do turno.
-  // Custo: speed=0 no turno (n\u00e3o pode mover). Flag effect self_advantage_next_attack.
+
+
+
   private async handleSteadyAim(
     sourceId: string,
     _payload: ClassFeatureInvokedPayload,
@@ -309,9 +294,9 @@ export class ClassFeatureResolverService {
     return { resolved: true, events };
   }
 
-  // ---- Handler: Uncanny Dodge (Rogue L5) ----
-  // RAW 2024: reaction, halve damage de 1 attack que voc\u00ea pode ver. Emite intent
-  // (V2 real integration: hook em applyDamage pra reduzir pr\u00f3ximo damage/2).
+
+
+
   private async handleUncannyDodge(
     sourceId: string,
     _payload: ClassFeatureInvokedPayload,
@@ -336,9 +321,9 @@ export class ClassFeatureResolverService {
     return { resolved: true, events };
   }
 
-  // ---- Handler: Flurry of Blows (Monk L2+) ----
-  // RAW 2024 XPHB: bonus action ap\u00f3s Attack action, 1 FP \u2192 2 unarmed strikes
-  // (usa Martial Arts die). Incrementa attacksMaxThisTurn em 2.
+
+
+
   private async handleFlurryOfBlows(
     sourceId: string,
     _payload: ClassFeatureInvokedPayload,
@@ -356,9 +341,9 @@ export class ClassFeatureResolverService {
     return { resolved: true, events, resolutionPayload: { extraAttacks: 2 } };
   }
 
-  // ---- Handler: Patient Defense (Monk L2+) ----
-  // RAW 2024 XPHB: bonus action, 1 FP \u2192 Dodge + Disengage at\u00e9 pr\u00f3ximo turno.
-  // Seta `dodgingUntilTurnOfParticipantId` (default do Dodge) + flag `hasDisengaged`.
+
+
+
   private async handlePatientDefense(
     sourceId: string,
     _payload: ClassFeatureInvokedPayload,
@@ -377,9 +362,9 @@ export class ClassFeatureResolverService {
     return { resolved: true, events };
   }
 
-  // ---- Handler: Step of the Wind (Monk L2+) ----
-  // RAW 2024 XPHB: bonus action, 1 FP \u2192 Dash + Disengage + 2x speed jump height.
-  // Seta hasDashed + hasDisengaged + dobra movementRemaining.
+
+
+
   private async handleStepOfTheWind(
     sourceId: string,
     _payload: ClassFeatureInvokedPayload,
@@ -401,10 +386,10 @@ export class ClassFeatureResolverService {
     return { resolved: true, events };
   }
 
-  // ---- Handler: Stunning Strike (Monk L5+) ----
-  // RAW 2024 XPHB: ap\u00f3s hit, 2 FP \u2192 target CON save vs DC 8+prof+WIS.
-  // Falha = Stunned at\u00e9 pr\u00f3ximo turno do Monk.
-  // body.options.targetParticipantId = alvo j\u00e1 hit
+
+
+
+
   private async handleStunningStrike(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -460,9 +445,9 @@ export class ClassFeatureResolverService {
     };
   }
 
-  // ---- Handler: Dark One's Blessing (Fiend Warlock L3) ----
-  // RAW 2024 XPHB: reduzir criatura a 0 HP (ou matar) \u2192 temp HP = CHA mod + Warlock level.
-  // Handler fire-manual: player aciona ap\u00f3s kill pra granting o bonus.
+
+
+
   private async handleDarkOnesBlessing(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -474,15 +459,15 @@ export class ClassFeatureResolverService {
     const warlockLevel = payload.caster?.classLevel ?? 3;
     const tempHp = Math.max(1, chaMod + warlockLevel);
 
-    // Spec 012 Gap #23 — fonte de verdade pro tempHp de PC é char_state.temp_hp.
-    // Participant.tempHp ficaria stale e /sheet mostraria 0. Escreve no state service,
-    // enricher overlaya no participant automaticamente.
+
+
+
     if (source.characterId) {
       const st = await this.charStates.findOne({
         where: { character_id: source.characterId },
       });
       if (st) {
-        st.temp_hp = Math.max(st.temp_hp ?? 0, tempHp); // RAW: não empilha, pega maior
+        st.temp_hp = Math.max(st.temp_hp ?? 0, tempHp);
         await this.charStates.save(st);
       }
     }
@@ -497,9 +482,9 @@ export class ClassFeatureResolverService {
     return { resolved: true, events, resolutionPayload: { tempHp } };
   }
 
-  // ---- Handler: Dark One's Own Luck (Fiend Warlock L6) ----
-  // RAW 2024: reaction, +1d10 num ability check ou save, recarga SR. 1/SR.
-  // Simplifica\u00e7\u00e3o: roll 1d10 e retorna bonus a aplicar (UI pode adicionar).
+
+
+
   private async handleDarkOnesOwnLuck(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -514,11 +499,11 @@ export class ClassFeatureResolverService {
     return { resolved: true, events, resolutionPayload: { bonus: rolled } };
   }
 
-  // ---- Handler: Bardic Inspiration (Bard L1+) ----
-  // RAW 2024 XPHB: bonus action, target 1 aliado dentro de 60ft que pode ouvir.
-  // Aliado ganha 1 die (d6/d8/d10/d12 por tier) pra usar em attack/save/check
-  // num pr\u00f3ximo 10 min. Pool = CHA mod (min 1), recarga LR (L5+ Font of Inspiration = SR).
-  // body.options.targetParticipantId = aliado
+
+
+
+
+
   private async handleBardicInspiration(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -528,7 +513,7 @@ export class ClassFeatureResolverService {
     const target =
       (opts.targetParticipantId as string) ?? (payload.targets?.[0] as string);
     if (!target) return { resolved: false, events };
-    // O ownerUserId precisa vir de payload.caster \u2014 fallback pra pegar do participant.
+
     const source = await this.participants.findOne({ where: { id: sourceId } });
     if (!source?.characterId) return { resolved: false, events };
     const bardLevel = payload.caster?.classLevel ?? 1;
@@ -558,9 +543,9 @@ export class ClassFeatureResolverService {
     }
   }
 
-  // ---- Handler: Cutting Words (Lore Bard L3 XPHB/PHB) ----
-  // Reaction que gasta 1 uso de Bardic Inspiration pra aplicar debuff `cutting_words_penalty`
-  // no target. body.options.targetParticipantId (ou payload.targets[0]) = alvo.
+
+
+
   private async handleCuttingWords(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -599,9 +584,9 @@ export class ClassFeatureResolverService {
     }
   }
 
-  // ---- Handler: Countercharm (Bard L5 XPHB / L6 PHB) ----
-  // Reaction: target em 30ft que falhou save vs Charmed/Frightened ganha
-  // re-roll via effect `countercharm_reroll_available`.
+
+
+
   private async handleCountercharm(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -611,7 +596,7 @@ export class ClassFeatureResolverService {
     const target =
       (opts.targetParticipantId as string) ??
       (payload.targets?.[0] as string) ??
-      sourceId; // fallback: caster aplica em si mesmo
+      sourceId;
     try {
       const res = await this.bard.applyCountercharm(sourceId, target);
       events.push(...res.events);
@@ -631,17 +616,17 @@ export class ClassFeatureResolverService {
     }
   }
 
-  // ---- Handler: Wild Shape (Druid L2+) ----
-  // Wrapper fino sobre TransformationService. body.options.monsterSlug = alvo.
-  // RAW 2024 XPHB: bonus action, PB uses/SR, CR max L2=1/4, L4=1/2, L8=1.
+
+
+
   private async handleWildShape(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
     events: GameEventData[],
   ) {
     const opts = payload.options ?? {};
-    // Spec 015 Eixo 4: body pode chegar com options aninhadas (`options.options.monsterSlug`)
-    // quando o frontend empacota `{ featureSlug, options: { monsterSlug } }` — aceitar ambos.
+
+
     const nested = opts.options as Record<string, unknown> | undefined;
     const monsterSlug =
       (opts.monsterSlug as string) ??
@@ -667,10 +652,10 @@ export class ClassFeatureResolverService {
           concentrationBroken: false,
         },
       });
-      // Validar CR do form
+
       const form = updated.transformationState?.form;
       if (form?.challengeRating != null && form.challengeRating > maxCr) {
-        // reverter e emitir erro
+
         await this.transformation.revertForm(sourceId, "player-dismiss");
         events.push({
           event_type: "class_feature_error",
@@ -709,12 +694,12 @@ export class ClassFeatureResolverService {
     }
   }
 
-  // ---- Handler: Channel Divinity (Cleric L2+ + Paladin L3+) ----
-  // RAW 2024 XPHB: a\u00e7\u00e3o que gasta CD use. op\u00e7\u00e3o em body.options.choice determina sub-a\u00e7\u00e3o:
-  //  - 'turn-undead' \u2192 j\u00e1 tratado em case 'turn-undead'. Este handler cai em default quando choice n\u00e3o mapeia.
-  //  - 'preserve-life' (Life Cleric L2) \u2192 pool de cura 5\u00d7level, distribu\u00edvel entre alvos
-  //  - 'harness-divine-power' (Cleric any) \u2192 regain 1 spell slot (n\u00edvel <= half level)
-  // Outras op\u00e7\u00f5es (Sacred Weapon, Turn the Unholy, etc.) s\u00e3o domain-specific \u2014 a\u00e7\u00e3o ou handlers dedicados.
+
+
+
+
+
+
   private async handleChannelDivinity(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -725,13 +710,13 @@ export class ClassFeatureResolverService {
       (opts.choice as string) ?? (opts.variant as string) ?? "turn-undead";
 
     if (choice === "turn-undead") {
-      // Delega pro handler existente
+
       return this.handleTurnUndead(sourceId, payload, events);
     }
 
     if (choice === "preserve-life") {
-      // RAW 2024 Life Cleric L2: pool = 5 \u00d7 cleric_level. Distribui\u00e7\u00e3o entre targets.
-      // Alvos at\u00e9 30ft, cada um recebe HP (n\u00e3o pode passar de metade do maxHp). Aqui tratamos body.healAssignments = {targetId: amount}
+
+
       const classLevel = payload.caster?.classLevel ?? 2;
       const pool = 5 * classLevel;
       const assignments = (opts.assignments as Record<string, number>) ?? {};
@@ -771,7 +756,7 @@ export class ClassFeatureResolverService {
     }
 
     if (choice === "harness-divine-power") {
-      // Regain 1 spell slot, level <= floor(cleric_level / 2), no slot L6+.
+
       const classLevel = payload.caster?.classLevel ?? 2;
       const maxSlotLevel = Math.min(5, Math.floor(classLevel / 2));
       const slotLevel = Math.min((opts.slotLevel as number) ?? 1, maxSlotLevel);
@@ -804,13 +789,13 @@ export class ClassFeatureResolverService {
       return { resolved: true, events };
     }
 
-    // Fallback: op\u00e7\u00e3o desconhecida, s\u00f3 emite evento sem efeito mec\u00e2nico
+
     return { resolved: false, events };
   }
 
-  // ---- Handler: Arcane Recovery (Wizard L1, 1/day, in SR) ----
-  // RAW 2024: recupera spell slot levels totaling floor(wizard_level/2), round up. N\u00e3o L6+.
-  // body.options.slotAssignments: { level1: N, level2: M, ... } soma <= floor(wizard_level/2).
+
+
+
   private async handleArcaneRecovery(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -863,9 +848,9 @@ export class ClassFeatureResolverService {
     };
   }
 
-  // ---- Handler: Divine Sense (Paladin L1) ----
-  // RAW 2024: a\u00e7\u00e3o, at\u00e9 CHA mod + 1 usos/LR. Detecta celestiais/fiends/undead em 60ft.
-  // No encounter, emite evento com lista de targets detectados (frontend pode highlightar).
+
+
+
   private async handleDivineSense(
     sourceId: string,
     payload: ClassFeatureInvokedPayload,
@@ -910,7 +895,7 @@ export class ClassFeatureResolverService {
     return { resolved: true, events, resolutionPayload: { detected } };
   }
 
-  // ---- Handlers ----
+
 
   private async handleTurnUndead(
     sourceId: string,
@@ -925,7 +910,7 @@ export class ClassFeatureResolverService {
     for (const tid of targets) {
       const target = await this.participants.findOne({ where: { id: tid } });
       if (!target) continue;
-      // WIS save: d20 + WIS mod (crude; sem proficiencia aqui)
+
       const wisMod = this.getAbilityMod(target, "wis");
       const rolled = this.dice.roll(20);
       const total = rolled + wisMod;
@@ -946,7 +931,7 @@ export class ClassFeatureResolverService {
       });
       if (!saved) {
         const r = await this.conditionLifecycle.applyCondition(target, {
-          slug: "frightened", // XPHB 2024: Turn Undead impoe 'frightened' (legacy usa 'turned' nao padrao)
+          slug: "frightened",
           appliedBy: sourceId,
           sourceSpell: "turn-undead",
           sourceConcentration: false,
@@ -977,7 +962,7 @@ export class ClassFeatureResolverService {
     const classLevel = payload.caster?.classLevel ?? 1;
     const rageDamage = this.getRageDamageByLevel(classLevel);
 
-    // Effect 1: damage_resistance B/P/S
+
     const r1 = await this.effectInstances.addEffect(source, {
       kind: "damage_resistance",
       sourceFeatureSlug: "rage",
@@ -988,7 +973,7 @@ export class ClassFeatureResolverService {
     });
     events.push(...r1.events);
 
-    // Effect 2: self_advantage em STR checks/saves
+
     const r2 = await this.effectInstances.addEffect(source, {
       kind: "self_advantage",
       sourceFeatureSlug: "rage",
@@ -999,7 +984,7 @@ export class ClassFeatureResolverService {
     });
     events.push(...r2.events);
 
-    // Effect 3: damage_bonus em melee STR
+
     const r3 = await this.effectInstances.addEffect(source, {
       kind: "damage_bonus",
       sourceFeatureSlug: "rage",
@@ -1010,10 +995,10 @@ export class ClassFeatureResolverService {
     });
     events.push(...r3.events);
 
-    // Spec 012 — expor 'raging' como condition pro DTO de participant/UI
-    // renderizar badge visível no token. RAW 2024 não trata "raging" como
-    // condition canônica, mas é feature-flag útil pro jogador saber.
-    // Persistência e remoção ficam linkadas aos effects (quando expirarem).
+
+
+
+
     if (!(source.conditions ?? []).includes("raging")) {
       source.conditions = [...(source.conditions ?? []), "raging"];
       await this.participants.save(source);
@@ -1125,7 +1110,7 @@ export class ClassFeatureResolverService {
           },
         };
       }
-      // push-5ft: movement event (fora do escopo AC — emitir ONLY)
+
       events.push({
         event_type: "movement_forced",
         target_participant_id: targetId,
@@ -1140,7 +1125,7 @@ export class ClassFeatureResolverService {
     return { resolved: true, events, resolutionPayload: { saved: true } };
   }
 
-  // ---- helpers ----
+
 
   private getAbilityMod(
     p: EncounterParticipantEntity,
@@ -1150,14 +1135,14 @@ export class ClassFeatureResolverService {
       const score = (p.monster as any)?.stats?.[ability] ?? 10;
       return Math.floor((score - 10) / 2);
     }
-    // PC: assume 0 por padrao aqui; o caller ideal computaria via sheet, mas
-    // handleRage/grapple nao tem userId. Para alvos monstros funciona bem;
-    // para alvos PC (Turn Undead contra cleric??) refinar em spec futura.
+
+
+
     return 0;
   }
 
   private getRageDamageByLevel(level: number): number {
-    // XPHB 2024 Barbarian Rage Damage: L1-8=+2, L9-15=+3, L16+=+4
+
     if (level >= 16) return 4;
     if (level >= 9) return 3;
     return 2;

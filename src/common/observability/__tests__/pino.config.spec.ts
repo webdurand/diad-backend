@@ -86,8 +86,8 @@ describe("pino.config", () => {
 
     it("respeita maxDepth (não loop infinito)", () => {
       const e = new Error("e") as Error & { cause?: Error };
-      e.cause = e; // self-reference
-      // Não deve estourar stack
+      e.cause = e;
+
       const out = __serializeErrorForTest(e);
       expect(out).toBeDefined();
     });

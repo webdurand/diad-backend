@@ -38,7 +38,7 @@ export interface CreateEncounterDto {
   name: string;
 }
 
-/** Spec 007: shape interno normalizado (após normalizeResolvePayload) */
+
 export interface NormalizedResolveDto {
   outcome: "victory" | "retreat" | "negotiation" | "defeat";
   xpRewards: Array<{ characterId: string; xp: number }>;
@@ -135,12 +135,12 @@ export class EncounterService {
       const session = await this.sessionService.getById(sessionId);
       const charIds = new Set<string>();
 
-      // 1. Add PCs explicitly added to the session
+
       for (const charId of session.characterIds ?? []) {
         charIds.add(charId);
       }
 
-      // 2. Add PCs from campaign players (their chosen characters)
+
       if (session.campaignId) {
         try {
           const players = await this.campaignService.getPlayers(
@@ -159,11 +159,11 @@ export class EncounterService {
         charIds,
       );
 
-      // Add all unique characters with their respective owner IDs.
-      // Iterate in deterministic order for snapshot stability.
-      // Uses the internal helper to bypass auth/status guards — we already
-      // know the encounter is in 'preparing' and the PCs come from trusted
-      // sources (session.characterIds or active CampaignPlayers).
+
+
+
+
+
       const orderedIds = Array.from(charIds).sort();
       for (const charId of orderedIds) {
         const userId = await this.resolveCharacterOwner(
@@ -206,12 +206,7 @@ export class EncounterService {
     }
   }
 
-  /**
-   * Resolves the owning userId of a character. Lookup order:
-   *  1. CampaignPlayer with this characterId (when campaignId is given)
-   *  2. CharacterEntity.userId direct DB lookup
-   *  3. fallbackUserId (caller — typically the DM)
-   */
+
   async resolveCharacterOwner(
     characterId: string,
     fallbackUserId: string,
@@ -223,7 +218,7 @@ export class EncounterService {
         const owner = players.find((p) => p.characterId === characterId);
         if (owner?.userId) return owner.userId;
       } catch {
-        // fall through to direct lookup
+
       }
     }
     const character = await this.characterRepo.findOne({
@@ -244,10 +239,7 @@ export class EncounterService {
     return encounter;
   }
 
-  /**
-   * Spec 006: enriquece PC participants com dados do sheet (HP, AC, speed, init).
-   * Resolve ownerId em batch para evitar N queries.
-   */
+
   private async enrichPcParticipants(
     encounter: EncounterEntity,
   ): Promise<void> {
@@ -256,7 +248,7 @@ export class EncounterService {
     );
     if (pcParticipants.length === 0) return;
 
-    // Batch: buscar owners dos characterIds
+
     const charIds = pcParticipants.map((p) => p.characterId!);
     const characters = await this.characterRepo
       .createQueryBuilder("c")
@@ -276,7 +268,7 @@ export class EncounterService {
       });
     }
 
-    // Se tem campanha, complementar com CampaignPlayer
+
     const session = await this.sessionService
       .getById(encounter.sessionId)
       .catch(() => null);
@@ -291,11 +283,11 @@ export class EncounterService {
           }
         }
       } catch {
-        // fall through — direct lookup já cobriu
+
       }
     }
 
-    // Enriquecer em paralelo
+
     await Promise.all(
       pcParticipants.map(async (p) => {
         const ownerId = ownerMap.get(p.characterId!);
@@ -305,8 +297,8 @@ export class EncounterService {
             ownerId,
             p.characterId!,
           );
-          // Spec 012 \u2014 PC transformado: overlay de HP/AC/speed do form
-          // (Wild Shape, Polymorph, etc). Display reflete a criatura ativa.
+
+
           if (p.transformationState) {
             const form = p.transformationState.form;
             (p as any).currentHp = form.currentHp;
@@ -319,9 +311,9 @@ export class EncounterService {
             (p as any).armorClass = sheet.armorClass;
             (p as any).speed = sheet.speed ?? 30;
           }
-          // Spec 012 Gap #23 — tempHp vive em char_state pra PCs (Dark One's Blessing,
-          // False Life, Heroism, etc). Participant.tempHp podia ficar stale. Overlay do
-          // sheet garante que combat e /sheet usem a mesma fonte.
+
+
+
           (p as any).tempHp = sheet.tempHp ?? 0;
           if (
             p.initiativeModifier == null ||
@@ -331,13 +323,13 @@ export class EncounterService {
           }
           (p as any).deathSaveSuccesses = sheet.deathSaves?.successes ?? 0;
           (p as any).deathSaveFailures = sheet.deathSaves?.failures ?? 0;
-          // Spec 012: expor spellSlots do sheet pro harness e pra UI validar
-          // slot-consumed invariants sem precisar GET /sheet em paralelo.
+
+
           (p as any).spellSlots = sheet.spellSlots ?? [];
           const meta = companionMeta.get(p.characterId!);
           (p as any).isCompanion = meta?.isCompanion === true;
           (p as any).companionTemplateId = meta?.companionTemplateId ?? null;
-          // Spec 012 — Heroic Inspiration (persistente na ficha).
+
           (p as any).hasInspiration = await this.stateService
             .getInspiration(p.characterId!)
             .catch(() => false);
@@ -360,7 +352,7 @@ export class EncounterService {
   }
 
   async listByCampaign(campaignId: string): Promise<EncounterEntity[]> {
-    // Find all sessions for this campaign, then all encounters
+
     const sessions = await this.encounterRepo.manager.find(
       "GameSessionEntity" as any,
       {
@@ -418,8 +410,8 @@ export class EncounterService {
         conditions: [],
         isDefeated: false,
         faction: "enemy",
-        // Spec 003 FR-018 — monstros default 'dm' (backfill da migration só
-        // pega rows existentes; novos precisam explícito).
+
+
         controlledBy: "dm",
       });
       participants.push(participant);
@@ -428,13 +420,7 @@ export class EncounterService {
     return this.participantRepo.save(participants);
   }
 
-  /**
-   * Adds a PC to an encounter in 'preparing' status.
-   *
-   * Authorization (F2 fix): allows either the PC owner or the DM of the
-   * encounter's campaign (when the character belongs to an active
-   * CampaignPlayer). Encounter status transitions return 409, never 404.
-   */
+
   async addCharacter(
     encounterId: string,
     characterId: string,
@@ -465,8 +451,8 @@ export class EncounterService {
       });
     }
 
-    // Auth comes before duplicate check so a non-member always gets 403,
-    // never a conflicting 409 that leaks whether the PC is in the encounter.
+
+
     const session = await this.sessionService.getById(encounter.sessionId);
     await this.assertCanAddPc(
       callerUserId,
@@ -492,12 +478,7 @@ export class EncounterService {
     );
   }
 
-  /**
-   * Authorization rule shared by /characters and /late-join/character.
-   * Throws 403 FORBIDDEN_CAMPAIGN_MEMBER when the caller is neither the PC
-   * owner nor the DM of the encounter's campaign (with an active
-   * CampaignPlayer for the PC's owner).
-   */
+
   private async assertCanAddPc(
     callerUserId: string,
     character: { id: string; userId: string },
@@ -525,11 +506,7 @@ export class EncounterService {
     });
   }
 
-  /**
-   * Status guard for direct /characters add. Active and completed encounters
-   * return 409 pointing callers to the correct flow (late-join for DM,
-   * join-requests for players).
-   */
+
   private assertStatusAllowsDirectAdd(status: string): void {
     if (status === "active" || status === "rolling_initiative") {
       throw new ConflictException({
@@ -548,11 +525,7 @@ export class EncounterService {
     }
   }
 
-  /**
-   * Low-level helper: creates the EncounterParticipant without any
-   * authorization or status guard. Used by create() (trusted inputs) and by
-   * addCharacter/lateJoinCharacter (after guards).
-   */
+
   private async attachCharacterToEncounter(
     encounterId: string,
     characterId: string,
@@ -568,7 +541,7 @@ export class EncounterService {
       characterId,
       displayName: sheet.name,
       initiativeModifier: sheet.initiative,
-      // HP/AC exposed via enrichPcHp() in GET responses — backed by sheet.
+
       tempHp: 0,
       conditions: [],
       isDefeated: false,
@@ -582,10 +555,7 @@ export class EncounterService {
     await this.participantRepo.delete(participantId);
   }
 
-  /**
-   * Add a participant to an active encounter (late join).
-   * Rolls initiative and inserts at the correct position in turnOrder.
-   */
+
   async lateJoinCharacter(
     encounterId: string,
     characterId: string,
@@ -622,7 +592,7 @@ export class EncounterService {
       });
     }
 
-    // Auth before duplicate (same rationale as addCharacter).
+
     const session = await this.sessionService.getById(encounter.sessionId);
     await this.assertCanAddPc(
       callerUserId,
@@ -647,7 +617,7 @@ export class EncounterService {
       character.userId,
     );
 
-    // Roll initiative (Barbarian L7 Feral Instinct → advantage)
+
     const mod = participant.initiativeModifier ?? 0;
     let initAdvantage = false;
     try {
@@ -657,7 +627,7 @@ export class EncounterService {
       )) as unknown as { hasFeralInstinct?: boolean };
       initAdvantage = sheet.hasFeralInstinct === true;
     } catch {
-      /* fallback sem sheet */
+
     }
     const init = this.diceService.rollInitiative(mod, {
       advantage: initAdvantage,
@@ -666,12 +636,12 @@ export class EncounterService {
     participant.initiativeTotal = init.total;
     await this.participantRepo.save(participant);
 
-    // Insert into turnOrder at the correct position (sorted by initiative desc)
+
     const allParticipants = await this.participantRepo.find({
       where: { encounterId },
     });
 
-    // Find where to insert based on initiative
+
     let insertIndex = encounter.turnOrder.length;
     for (let i = 0; i < encounter.turnOrder.length; i++) {
       const existing = allParticipants.find(
@@ -683,14 +653,14 @@ export class EncounterService {
       }
     }
 
-    // Adjust currentTurnIndex if inserting before current turn
+
     if (insertIndex <= encounter.currentTurnIndex) {
       encounter.currentTurnIndex += 1;
     }
 
     encounter.turnOrder.splice(insertIndex, 0, participant.id);
-    // Spec 011 — ver comentário em lateJoinMonster; save com relations stale
-    // disparava cascade que orfanava o participant recém criado.
+
+
     await this.encounterRepo.update(
       { id: encounterId },
       {
@@ -718,14 +688,14 @@ export class EncounterService {
     });
 
     for (const participant of newParticipants) {
-      // Roll initiative
+
       const mod = participant.initiativeModifier ?? 0;
       const init = this.diceService.rollInitiative(mod);
       participant.initiativeRoll = init.roll;
       participant.initiativeTotal = init.total;
       await this.participantRepo.save(participant);
 
-      // Insert into turnOrder
+
       let insertIndex = encounter.turnOrder.length;
       for (let i = 0; i < encounter.turnOrder.length; i++) {
         const existing = allParticipants.find(
@@ -744,11 +714,11 @@ export class EncounterService {
       encounter.turnOrder.splice(insertIndex, 0, participant.id);
     }
 
-    // Spec 011 — `encounter` foi carregado com `relations: ['participants']`
-    // (stale em relação aos novos criados via addMonster acima). Usar `save`
-    // aqui disparava cascade: TypeORM tentava orfanar os novos participants
-    // com UPDATE encounter_id = NULL (FK violation). `update` atualiza
-    // apenas as colunas que mudaram sem tocar no grafo de relations.
+
+
+
+
+
     await this.encounterRepo.update(
       { id: encounterId },
       {
@@ -761,9 +731,9 @@ export class EncounterService {
 
   async deleteEncounter(encounterId: string): Promise<void> {
     const encounter = await this.getById(encounterId);
-    // Clear activeEncounterId if this encounter is active
+
     await this.sessionService.setActiveEncounter(encounter.sessionId, null);
-    // Cascade deletes participants via FK
+
     await this.encounterRepo.delete(encounterId);
   }
 
@@ -824,7 +794,7 @@ export class EncounterService {
       (p) => !p.isDefeated,
     );
 
-    // Sort by initiative descending, DEX mod as tiebreaker
+
     participants.sort((a, b) => {
       const diff = (b.initiativeTotal ?? 0) - (a.initiativeTotal ?? 0);
       if (diff !== 0) return diff;
@@ -842,7 +812,7 @@ export class EncounterService {
       encounter.id,
     );
 
-    // Spec 012 Lote C — Capstones start-of-combat pro primeiro participante.
+
     const startEvents: Array<
       import("../interfaces/result.type").GameEventData
     > = [
@@ -864,7 +834,7 @@ export class EncounterService {
       const firstPid = encounter.turnOrder[0];
       const firstParticipant = participants.find((p) => p.id === firstPid);
       if (firstParticipant?.type === "pc" && firstParticipant.characterId) {
-        // Resolve ownerUserId via characterRepo
+
         const char = await this.characterRepo.findOne({
           where: { id: firstParticipant.characterId },
         });
@@ -877,7 +847,7 @@ export class EncounterService {
         }
       }
     } catch {
-      // capstones nunca aborta start
+
     }
 
     await this.eventService.emit(
@@ -941,7 +911,7 @@ export class EncounterService {
       totalXp += m.monster?.xp ?? 0;
     }
 
-    // DMG multiplier based on monster count
+
     const monsterCount = monsters.length;
     let multiplier = 1;
     if (monsterCount === 2) multiplier = 1.5;
@@ -958,7 +928,7 @@ export class EncounterService {
         ? Math.round(partyLevels.reduce((a, b) => a + b, 0) / partySize)
         : 1;
 
-    // DMG XP thresholds per character level
+
     const thresholds: Record<string, number[]> = {
       easy: [
         25, 50, 75, 125, 250, 300, 350, 450, 550, 600, 800, 1000, 1100, 1250,
@@ -1013,10 +983,7 @@ export class EncounterService {
     };
   }
 
-  /**
-   * Spec 007: normaliza o payload raw do resolve para o shape interno.
-   * Aceita shape simplificado (equal-split/per-pc) e legacy (arrays per-character).
-   */
+
   async normalizeResolvePayload(
     rawBody: any,
     encounter: EncounterEntity,
@@ -1027,11 +994,11 @@ export class EncounterService {
     );
     const pcCharacterIds = pcParticipants.map((p) => p.characterId!);
 
-    // --- XP ---
+
     let xpRewards: NormalizedResolveDto["xpRewards"] = [];
     if (rawBody.xpRewards != null) {
       if (Array.isArray(rawBody.xpRewards)) {
-        // Legacy shape
+
         for (const r of rawBody.xpRewards) {
           if (!r.characterId || typeof r.xp !== "number")
             throw new BadRequestException({
@@ -1108,11 +1075,11 @@ export class EncounterService {
       }
     }
 
-    // --- Gold ---
+
     const goldRewards: NormalizedResolveDto["goldRewards"] = [];
     if (rawBody.goldRewards != null) {
       if (Array.isArray(rawBody.goldRewards)) {
-        // Legacy shape
+
         for (const r of rawBody.goldRewards) {
           if (!r.characterId || typeof r.gp !== "number")
             throw new BadRequestException({
@@ -1127,7 +1094,7 @@ export class EncounterService {
         typeof rawBody.goldRewards === "object" &&
         !Array.isArray(rawBody.goldRewards)
       ) {
-        // Simplified shape: { cp?, sp?, gp?, pp? } — split equally among PCs
+
         const { cp, sp, gp, pp } = rawBody.goldRewards;
         if (pcCharacterIds.length === 0)
           throw new BadRequestException({
@@ -1144,7 +1111,7 @@ export class EncounterService {
             pp: pp != null ? Math.floor(pp / pcCharacterIds.length) : undefined,
           });
         }
-        // Remainder goes to first PC
+
         if (gp != null)
           goldRewards[0].gp +=
             gp - Math.floor(gp / pcCharacterIds.length) * pcCharacterIds.length;
@@ -1157,7 +1124,7 @@ export class EncounterService {
       }
     }
 
-    // --- Items ---
+
     const itemRewards: NormalizedResolveDto["itemRewards"] = [];
     if (rawBody.itemRewards != null) {
       if (!Array.isArray(rawBody.itemRewards))
@@ -1168,7 +1135,7 @@ export class EncounterService {
         });
       for (const r of rawBody.itemRewards) {
         if (r.equipmentId || r.magicItemId) {
-          // Legacy shape
+
           itemRewards.push({
             characterId: r.characterId,
             equipmentId: r.equipmentId,
@@ -1176,7 +1143,7 @@ export class EncounterService {
             quantity: r.quantity ?? 1,
           });
         } else if (r.equipmentSlug) {
-          // Simplified shape — resolve slug to ID
+
           const equipment = await this.characterRepo.manager.findOne(
             EquipmentEntity,
             {
@@ -1215,9 +1182,7 @@ export class EncounterService {
     };
   }
 
-  /**
-   * Spec 007: resolve encounter com payload normalizado e error handling melhorado.
-   */
+
   async resolveEncounter(
     encounterId: string,
     rawBody: any,
@@ -1256,15 +1221,15 @@ export class EncounterService {
     );
     const warnings: string[] = [];
 
-    // Resolve campaign id once — usado pelo XpAwardService pra honrar
-    // `campaign.xp_mode` (rules|milestone|hybrid).
+
+
     const session = await this.sessionService
       .getById(encounter.sessionId)
       .catch(() => null);
     const campaignId = session?.campaignId ?? undefined;
 
-    // Apply XP via XpAwardService — escreve audit row em `xp_award_events`
-    // e respeita xp_mode (milestone retorna awardedXp=0 mas grava audit).
+
+
     const xpApplied: Array<{
       characterId: string;
       xp: number;
@@ -1303,7 +1268,7 @@ export class EncounterService {
       }
     }
 
-    // Apply Gold
+
     const goldApplied: Array<{
       characterId: string;
       gp: number;
@@ -1329,7 +1294,7 @@ export class EncounterService {
       }
     }
 
-    // Apply Items
+
     const itemsApplied: Array<{
       characterId: string;
       itemName: string;
@@ -1375,14 +1340,14 @@ export class EncounterService {
       }
     }
 
-    // Mark encounter as completed
+
     encounter.status = "completed";
     await this.encounterRepo.save(encounter);
     await this.sessionService.setActiveEncounter(encounter.sessionId, null);
 
-    // Build outcome summary — payload estruturado pro post-combat narrative
-    // (Spec 027 follow-up). Lido pelo AiProxy quando systemHint='post_combat'
-    // e injetado em sceneContext.recent_events.
+
+
+
     const outcomeSummary = await this.buildEncounterOutcomeSummary(
       encounter,
       dto.outcome,
@@ -1397,7 +1362,7 @@ export class EncounterService {
       warnings.push(`NPC state sync: ${msg}`);
     }
 
-    // Emit events
+
     const events = [
       {
         event_type: "encounter_resolved",
@@ -1416,11 +1381,11 @@ export class EncounterService {
     ];
     await this.eventService.emit(encounter.sessionId, encounterId, events);
 
-    // Persist combat_resolution SessionMessage so the rewards card survives
-    // F5/reload — without persistence the card lives only in the SSE chunk
-    // and disappears on remount. Owner is the encounter resolver (in solo
-    // auto-end this is the system pseudo-user, but assertOwnership of solo
-    // sessions accepts the session.userId so we use that).
+
+
+
+
+
     try {
       const cardOwnerId = session?.ownerId ?? dto.ownerUserId;
       if (cardOwnerId) {
@@ -1503,14 +1468,7 @@ export class EncounterService {
     };
   }
 
-  /**
-   * Retorna o userId real dono do PC quando o caller usa `'system'` (auto-end).
-   * Caller humano (DM/player) continua passando o próprio userId — o ownership
-   * check downstream (`ensureCharacterOwnership`) então valida normalmente.
-   *
-   * Sem isso, `'system'` falharia em `ensureCharacterOwnership` e XP/gold
-   * ficariam silenciosamente em `warnings[]`.
-   */
+
   private async resolveEffectiveOwner(
     characterId: string,
     callerUserId: string,
@@ -1591,17 +1549,7 @@ export class EncounterService {
       .replace(/\s+/g, " ");
   }
 
-  /**
-   * Spec 027 (M2 follow-up) — payload estruturado pra post-combat narrative.
-   *
-   * Resume o resultado do encounter em fatos curtos (PT-BR) que o Narrator
-   * lê via scene_context.recent_events. Inclui:
-   *  - outcome canônico (victory|defeat|retreat|negotiation)
-   *  - lista de NPCs derrotados (nome + tipo + slug pro DM citar pelo nome)
-   *  - HP final do PC (current/max/percent) pra calibrar tom narrativo
-   *  - totais consolidados de XP / gold / items
-   *  - summary em 1 frase como fato (não prosa)
-   */
+
   private async buildEncounterOutcomeSummary(
     encounter: EncounterEntity,
     outcome: string,
@@ -1782,12 +1730,12 @@ export class EncounterService {
   ): Promise<EncounterParticipantEntity[]> {
     const encounter = await this.getById(encounterId);
 
-    // Validate all positions are in bounds
+
     for (const pos of positions) {
       this.validatePositionBounds(pos.x, pos.y, encounter);
     }
 
-    // Check for duplicates within the batch itself
+
     const cellKeys = new Set<string>();
     for (const pos of positions) {
       const key = `${pos.x},${pos.y}`;
@@ -1797,7 +1745,7 @@ export class EncounterService {
       cellKeys.add(key);
     }
 
-    // Check against existing positioned participants not in this batch
+
     const batchIds = new Set(positions.map((p) => p.participantId));
     const existingParticipants = await this.participantRepo.find({
       where: { encounterId },
@@ -1814,7 +1762,7 @@ export class EncounterService {
       }
     }
 
-    // Apply all positions
+
     const updated: EncounterParticipantEntity[] = [];
     for (const pos of positions) {
       const p = existingParticipants.find((pp) => pp.id === pos.participantId);
@@ -1827,7 +1775,7 @@ export class EncounterService {
     return this.participantRepo.save(updated);
   }
 
-  // --- Position Validation Helpers ---
+
 
   private validatePositionBounds(
     x: number,
@@ -1880,14 +1828,7 @@ export class EncounterService {
     return this.participantRepo.save(p);
   }
 
-  /**
-   * Spec 012 — Heroic Inspiration: player "arma" pra próximo d20 test ter
-   * advantage. Requer que `character_state.inspiration=true` esteja ativo
-   * (DM já concedeu). Consumo ocorre no próximo attack/save/check do
-   * participant (combat.service).
-   *
-   * Retorna {ok, inspirationArmed, hasInspiration} pro cliente refletir.
-   */
+
   async armInspiration(
     participantId: string,
     arm: boolean,
@@ -1925,10 +1866,7 @@ export class EncounterService {
     return { ok: true, inspirationArmed: arm, hasInspiration };
   }
 
-  /**
-   * Spec 012 — DM concede/remove Inspiração pra um PC. Caller (controller)
-   * deve validar que authUser é DM da sessão. Retorna estado atualizado.
-   */
+
   async grantInspiration(
     participantId: string,
     grant: boolean,
@@ -1948,7 +1886,7 @@ export class EncounterService {
       };
     }
     const result = await this.stateService.setInspiration(p.characterId, grant);
-    // Se DM remove, desarma automaticamente no encounter também.
+
     if (!grant && p.inspirationArmed) {
       p.inspirationArmed = false;
       await this.participantRepo.save(p);
@@ -1967,13 +1905,7 @@ export class EncounterService {
     return p;
   }
 
-  /**
-   * Premissa weapons-in-hand — Sacar/Guardar arma em combate com consumo
-   * de free object interaction (RAW 2024: 1× por turno). Fora do turno do
-   * participant, rejeita (ação exigiria reaction/ready — não suportado aqui).
-   * Se free já foi usada, rejeita com código `FREE_INTERACTION_EXHAUSTED`
-   * (cliente pode oferecer consumir action em V2).
-   */
+
   async swapHand(
     userId: string,
     encounterId: string,
@@ -2020,7 +1952,7 @@ export class EncounterService {
       };
     }
 
-    // Delega pro inventory service (aplica validações 2H+shield, dual-wield light, etc.)
+
     await this.inventoryService.setHand(userId, p.characterId, equipmentId, {
       hand,
     });
@@ -2032,12 +1964,7 @@ export class EncounterService {
     };
   }
 
-  /**
-   * Spec 003 T062 — DM altera `controlledBy` do participante.
-   * Apenas DM da sessão tem permissão (CONTROL_CHANGE_FORBIDDEN).
-   * Retorna {previousMode, newMode, effectiveFrom} para o frontend decidir
-   * quando a mudança vale (imediato vs próximo turno).
-   */
+
   async updateControlMode(
     encounterId: string,
     participantId: string,
@@ -2049,14 +1976,14 @@ export class EncounterService {
     newMode: "pc" | "ai" | "dm";
     effectiveFrom: "immediate" | "next_turn_of_participant";
   }> {
-    // Spec 006: normalizar 'human' → 'pc'
+
     const mode: "pc" | "ai" | "dm" = rawMode === "human" ? "pc" : rawMode;
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
     if (!encounter) throw new NotFoundException("Encontro nao encontrado.");
 
-    // Permissão: DM da sessão
+
     const session = await this.sessionService.getById(encounter.sessionId);
     if (!session) throw new NotFoundException("Sessao nao encontrada.");
     if (session.ownerId !== authUserId) {

@@ -150,7 +150,7 @@ function parseEntryObject(obj: EntryObject): string[] {
     }
 
     default: {
-      // Fallback: try to parse entries or items
+
       if (obj.entries) {
         if (obj.name) {
           lines.push(`**${stripTags(obj.name)}**`);

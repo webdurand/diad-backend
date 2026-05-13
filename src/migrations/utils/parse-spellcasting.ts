@@ -5,32 +5,7 @@ import type {
   InnateUsage,
 } from "../../models/game-engine/interfaces/monster-typed";
 
-/**
- * Parses a monster's Spellcasting or Innate Spellcasting `special_ability`
- * block into a structured `MonsterSpellcasting`.
- *
- * Supported SRD patterns:
- *
- * **Standard spellcasting** (e.g. Archmage, Mage):
- *   "The archmage is an 18th-level spellcaster. Its spellcasting ability is
- *    Intelligence (spell save DC 18, +10 to hit with spell attacks). The
- *    archmage has the following wizard spells prepared:
- *      Cantrips (at will): fire bolt, light, mage hand, prestidigitation
- *      1st level (4 slots): detect magic, identify, mage armor, magic missile
- *      2nd level (3 slots): ...
- *   "
- *
- * **Innate spellcasting** (e.g. Dragons, certain Dragons):
- *   "The dragon's innate spellcasting ability is Charisma (spell save DC 21).
- *    It can innately cast the following spells, requiring no material components:
- *      At will: detect magic, scrying
- *      3/day each: fireball, lightning bolt
- *      1/day each: dominate person
- *   "
- *
- * Returns `null` when the block can't be parsed — caller should leave the row
- * NULL and the runtime will report the monster as having no spells.
- */
+
 
 const ABILITY_MAP: Record<string, "int" | "wis" | "cha"> = {
   intelligence: "int",
@@ -62,10 +37,7 @@ const INNATE_USAGE_MAP: Record<string, InnateUsage> = {
   "3/day": "3/day",
 };
 
-/**
- * Very light spell-name → slug: lowercase, strip parentheticals, replace
- * non-alphanumerics with hyphens, collapse runs of hyphens, trim.
- */
+
 function slugifySpellName(name: string): string {
   return name
     .trim()
@@ -224,5 +196,5 @@ function extractSpellSlugs(raw: string): string[] {
     .filter(Boolean);
 }
 
-// re-export for tests that want to exercise slug behavior directly
+
 export { slugifySpellName };

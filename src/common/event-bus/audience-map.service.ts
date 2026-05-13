@@ -33,18 +33,7 @@ interface AudienceMapEntry {
   subChannel?: string | null;
 }
 
-/**
- * Spec 017 — Resolve audience list para um (campaignId, eventCategory, eventType).
- *
- * 1. Consulta `audience_routing` (defaults globais).
- * 2. Aplica `campaign_audience_overrides` se existir e a entry global for
- *    `overrideable = true` (entries `overrideable = false` ignoram override
- *    — preserva Princípio X v1.4.0).
- * 3. Cache in-memory com TTL 60s por (campaignId, eventCategory, eventType).
- *
- * Cache invalidation manual via `invalidate(campaignId)` quando override
- * cross-cutting muda — para spec 022 ou patch endpoint futuro.
- */
+
 @Injectable()
 export class AudienceMapService {
   private readonly cache = new Map<string, CacheEntry>();
@@ -59,13 +48,7 @@ export class AudienceMapService {
     this.logger.setContext(AudienceMapService.name);
   }
 
-  /**
-   * Resolve audiences a partir do envelope (campaignId, category, type).
-   *
-   * Retorna array vazio se o eventType não estiver na audience_routing —
-   * EventBusService rejeita antes de chegar aqui (catalog gate), mas o
-   * fallback graceful garante que o bus nunca crashe por config faltante.
-   */
+
   async resolve(envelope: {
     scope: { campaignId: string };
     eventCategory: EventCategory;
@@ -95,10 +78,7 @@ export class AudienceMapService {
     return audiences;
   }
 
-  /**
-   * Snapshot resolved da matriz inteira pra uma campanha — usado pelo
-   * endpoint GET /campaigns/:id/audience-map.
-   */
+
   async getCampaignMap(campaignId: string): Promise<AudienceMapEntry[]> {
     const [defaults, overrides] = await Promise.all([
       this.routingRepo.find(),
@@ -127,11 +107,7 @@ export class AudienceMapService {
     });
   }
 
-  /**
-   * Invalida cache pra uma campanha (todas categorias/types). Chamado
-   * quando override muda — endpoint PATCH futuro publica também
-   * `WorldEvent.audience_map_changed`.
-   */
+
   invalidate(campaignId: string): void {
     const prefix = `${campaignId}::`;
     for (const key of this.cache.keys()) {
@@ -139,7 +115,7 @@ export class AudienceMapService {
     }
   }
 
-  /** Limpa cache total — útil em testes. */
+
   clearCache(): void {
     this.cache.clear();
   }

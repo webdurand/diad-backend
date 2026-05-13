@@ -1,27 +1,13 @@
-/**
- * Spec 024 follow-up — coletor incremental de narração a partir de stream SSE
- * passthrough do diad-agents. Reúne `content`/`token`/`text` dos eventos
- * `type ∈ {text, narration, narration_token, token}` para persistir como
- * `session_messages.kind=narration` server-side, sem depender do cliente.
- *
- * Uso típico (acoplado ao callback `onChunk` do AiProxyService.pipeStream):
- *
- *   const collector = new SseNarrationCollector();
- *   await aiProxyService.pipeStream(path, body, res, (c) => collector.feed(c));
- *   const narration = collector.finalize();
- *
- * Aceita chunks parciais (split mid-event) e múltiplos eventos por chunk.
- * Tolerante a JSON malformado e tipos desconhecidos — apenas ignora.
- */
+
 
 const NARRATION_TYPES = new Set([
   "text",
   "narration",
   "narration_token",
   "token",
-  // Spec 026 Pillar 4 — pipeline multi-agent emite chunks tipo `narrator`
-  // (vide diad-agents/src/routers/narrative.py). Tratamos igual a `text`
-  // pra que persistência server-authoritative cubra ambos os pipelines.
+
+
+
   "narrator",
 ]);
 
@@ -32,11 +18,7 @@ export interface CollectedChoice {
   intentHint?: string;
 }
 
-/**
- * Shape persistido em `session_messages.content` quando kind='dice_roll'.
- * Espelha `DiceRollCardProps` do frontend — qualquer mudança aqui exige
- * acompanhar `diad-frontend/components/solo/DiceRollCard.tsx`.
- */
+
 export interface CollectedDiceRoll {
   rollId: string;
   kind: string;
@@ -92,15 +74,12 @@ export class SseNarrationCollector {
   private narratorDoneFired = false;
   private onNarratorDoneCb: ((narration: string) => void) | null = null;
 
-  /** Registra callback chamado uma única vez quando o evento SSE
-   * `narrator_done` é detectado. Permite persistir a narração antes do
-   * `stream.end` (que aguarda Archivist + judges + decisions, ~30s).
-   * Sem isso, lazy combat extract dispara com `session_messages` velho. */
+
   onNarratorDone(cb: (narration: string) => void): void {
     this.onNarratorDoneCb = cb;
   }
 
-  /** Snapshot da narração acumulada até o momento (sem destruir buffer). */
+
   getNarration(): string {
     return this.narration;
   }
@@ -125,24 +104,19 @@ export class SseNarrationCollector {
     return this.narration;
   }
 
-  /** Última lista de choices emitida pelo upstream (pode estar vazia). */
+
   getChoices(): CollectedChoice[] {
     return this.choices;
   }
 
-  /**
-   * Rolls de skill check / saving throw / attack roll capturados do stream,
-   * já com `resolved` populado. Rolls que ficaram pendentes (request sem
-   * resolved) são omitidos pra não poluir o histórico com cards "rolando
-   * pra sempre" no resume.
-   */
+
   getDiceRolls(): CollectedDiceRoll[] {
     return Array.from(this.diceRolls.values()).filter(
       (r) => r.resolved !== undefined,
     );
   }
 
-  /** Canon beats emitidos pelo agents para persistir na timeline do turno. */
+
   getTurnOutcomes(): CollectedTurnOutcome[] {
     return this.turnOutcomes;
   }
@@ -175,7 +149,7 @@ export class SseNarrationCollector {
         try {
           cb(this.narration);
         } catch {
-          // Side-channel — nunca derrubar o stream.
+
         }
       }
       return;
@@ -217,7 +191,7 @@ export class SseNarrationCollector {
             typeof c.intentHint === "string" ? c.intentHint : undefined,
         });
       }
-      // Última lista emitida ganha (turn pode emitir sentinel + final).
+
       if (collected.length > 0) this.choices = collected;
       return;
     }
@@ -355,7 +329,7 @@ export class SseNarrationCollector {
     if (rawD20 === null || total === null || !verdict) return;
 
     const existing = this.diceRolls.get(rollId);
-    if (!existing) return; // resolved sem request prévio — ignora.
+    if (!existing) return;
     existing.resolved = {
       rawD20,
       rawD20Disadv:

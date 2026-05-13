@@ -1,10 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-/**
- * Clocks de tensão deixam de ser progresso do mundo e viram progresso da
- * aventura. Rows com game_session_id NULL são templates do mundo; rows com
- * game_session_id preenchido são instâncias mutáveis da sessão.
- */
+
 export class ScopeClocksToSessions1790300000000 implements MigrationInterface {
   name = "ScopeClocksToSessions1790300000000";
 
@@ -25,8 +21,8 @@ export class ScopeClocksToSessions1790300000000 implements MigrationInterface {
         ON clocks(game_session_id)
     `);
 
-    // Preserva progresso legado na aventura mais recente do mundo e cria uma
-    // cópia limpa como template para futuras aventuras.
+
+
     await queryRunner.query(`
       CREATE TEMP TABLE tmp_clock_session_backfill AS
       SELECT c.id AS clock_id, latest.id AS game_session_id

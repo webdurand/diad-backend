@@ -8,17 +8,7 @@ import { EncounterSnapshotService } from "./encounter-snapshot.service";
 import { AiProxyService } from "src/models/ai-proxy/ai-proxy.service";
 import type { GameEventData } from "../interfaces/result.type";
 
-/**
- * Orquestra Legendary Actions após o turno de um PC. RAW MM: monstro lendário
- * pode gastar até 3 pontos lendários no fim de qualquer turno que não seja o
- * dele próprio. Aqui só disparamos pra turno de PC pra simplificar.
- *
- * Fluxo:
- *  1. Lista monstros lendários vivos com pontos disponíveis
- *  2. Pra cada um, chama agents pra decidir (rule-based)
- *  3. Se decidir gastar: spend points + emite event de uso (resolução do
- *     efeito real fica pendente — V2 conecta com resolveAttack/cast-spell)
- */
+
 @Injectable()
 export class LegendaryActionsCoordinator {
   private readonly logger = new Logger(LegendaryActionsCoordinator.name);
@@ -95,8 +85,8 @@ export class LegendaryActionsCoordinator {
           decision.actionName,
         );
         events.push(...spendRes.events);
-        // Resolução do efeito real (attack/save) fica pra V2.
-        // Por ora, evento `legendary_action_used` já carrega actionName + cost.
+
+
       } catch (err) {
         this.logger.warn(
           `legendary.process_failed monsterId=${monster.id}: ${(err as Error).message}`,

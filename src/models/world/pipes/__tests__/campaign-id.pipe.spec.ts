@@ -1,10 +1,4 @@
-/**
- * Spec 027 (M2, AC2.10 / bug D3) — testes do CampaignIdPipe.
- *
- * Garante que rotas `/campaigns/:id/*` aceitam slug ou UUID antes de chegar
- * no handler. Bug D3 era 500 em `/campaigns/misterio-aldeia-campaign/ambiance`
- * porque slug ia direto pra `WHERE id = $1` (TypeORM).
- */
+
 import { NotFoundException } from "@nestjs/common";
 import { CampaignIdPipe } from "../campaign-id.pipe";
 import type { CampaignService } from "../../services/campaign.service";

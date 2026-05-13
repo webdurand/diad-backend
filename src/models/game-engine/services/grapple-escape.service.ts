@@ -32,14 +32,7 @@ export interface GrappleEscapeResult {
   actionConsumed: boolean;
 }
 
-/**
- * Spec 004 — Grapple escape (PHB cap. 9 "Grappling").
- *
- * Teste contestado: alvo Athletics OU Acrobatics vs grappler Athletics.
- * Empate: grappler vence (RAW).
- *
- * Auto-release: quando grappler fica incapacitated/morto, libera sem teste.
- */
+
 @Injectable()
 export class GrappleEscapeService {
   constructor(
@@ -71,13 +64,13 @@ export class GrappleEscapeService {
     const gD20 = this.dice.roll(20);
     const tTotal = tD20 + targetModifier;
     const gTotal = gD20 + grapplerModifier;
-    const escaped = tTotal > gTotal; // empate vai para grappler (RAW)
+    const escaped = tTotal > gTotal;
 
     target.actionUsed = true;
     const events: GameEventData[] = [];
 
     if (escaped) {
-      // Remove ConditionInstance grappled aplicada por este grappler
+
       const grappledInst = (target.conditionInstances ?? []).find(
         (ci) => ci.slug === "grappled" && ci.appliedBy === grappler.id,
       );
@@ -89,7 +82,7 @@ export class GrappleEscapeService {
         );
         events.push(...r.events);
       } else {
-        // Fallback: remove pela slug em legacy + zera vínculo
+
         target.conditions = (target.conditions ?? []).filter(
           (s) => s !== "grappled",
         );
@@ -127,7 +120,7 @@ export class GrappleEscapeService {
     };
   }
 
-  /** Libera quem estava grappled por este grappler (chamado quando grappler fica incapacitated/morto). */
+
   async releaseAllGrappledBy(
     grapplerId: string,
     encounterId: string,
@@ -162,7 +155,7 @@ export class GrappleEscapeService {
     return { events };
   }
 
-  /** Detecta se uma condição recém-aplicada incapacita um grappler ativo. */
+
   isIncapacitatingForGrappler(slug: string): boolean {
     return INCAPACITATING_SLUGS.has(slug);
   }

@@ -2,8 +2,8 @@ import { WeaponMasteryService } from "../services/weapon-mastery.service";
 import { DiceService } from "../services/dice.service";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 
-// Spec 012 Fase 0 — testes unit do WeaponMasteryService (Tier A: Graze, Sap,
-// Slow, Topple, Vex, Push). Cleave e Nick são deferred (Fase 2).
+
+
 
 function makeParticipant(
   over: Partial<EncounterParticipantEntity> = {},
@@ -229,7 +229,7 @@ describe("WeaponMasteryService", () => {
 
   describe("Topple (on hit)", () => {
     it("aplica prone quando save falha", async () => {
-      // Seed que garante save baixo vs DC alto — ability_mod=5 attacker → DC 8+2+5=15
+
       dice.setSeed(1);
       const target = makeParticipant({
         id: "p2",
@@ -275,7 +275,7 @@ describe("WeaponMasteryService", () => {
         profBonus: 3,
         damageType: "bludgeoning",
       });
-      expect(res.toppleSave!.dc).toBe(8 + 3 + 4); // = 15
+      expect(res.toppleSave!.dc).toBe(8 + 3 + 4);
     });
   });
 
@@ -292,7 +292,7 @@ describe("WeaponMasteryService", () => {
         damageType: "bludgeoning",
       });
       expect(res.applied).toEqual(["push"]);
-      expect(res.pushedTo).toEqual({ x: 4, y: 0 }); // 2 cells (=10ft) no sentido +x
+      expect(res.pushedTo).toEqual({ x: 4, y: 0 });
       expect(target.positionX).toBe(4);
       expect(savedParticipants).toContain(target);
     });
@@ -322,7 +322,7 @@ describe("WeaponMasteryService", () => {
         abilityMod: 3,
         profBonus: 2,
         damageType: "slashing",
-        // sem damageRolledAmount — cleave não tem o que aplicar
+
       });
       expect(res.cleaveSecondTarget).toBeUndefined();
     });

@@ -103,7 +103,7 @@ interface UpdateCharacterInput {
 const ABILITY_SLUGS = ["str", "dex", "con", "int", "wis", "cha"] as const;
 type AbilitySlug = (typeof ABILITY_SLUGS)[number];
 
-// Aceita tanto slugs longos (strength/dexterity/...) quanto curtos (str/dex/...).
+
 const SLUG_MAP: Record<string, AbilitySlug> = {
   strength: "str",
   dexterity: "dex",
@@ -122,10 +122,10 @@ const SLUG_MAP: Record<string, AbilitySlug> = {
 function extractEquipmentOptionLabels(
   raw: Record<string, unknown> | null | undefined,
 ): string[] {
-  // Extrai apenas labels textuais (shape { default: [strings] } ou
-  // { options: [{ label/name }] }). Shape XPHB usa { defaultData: [{A: [items], B: [...]}] }
-  // que NÃO expõe labels textuais — nesse caso retornamos [] e pulamos validação
-  // de conteúdo (materializeEquipment faz matching permissivo).
+
+
+
+
   if (!raw) return [];
   const candidates: unknown[] = [];
   const push = (v: unknown) => {
@@ -153,10 +153,10 @@ function hasStartingEquipmentOptions(
   raw: Record<string, unknown> | null | undefined,
 ): boolean {
   if (!raw) return false;
-  // Textuais
+
   if (extractEquipmentOptionLabels(raw).length > 0) return true;
-  // Shape XPHB { defaultData: [{ A: [...], B: [...] }, ...] }
-  // Groups containing only '_' (fixed lists) don't require a choice.
+
+
   const defaultData = (raw as { defaultData?: unknown }).defaultData;
   if (Array.isArray(defaultData)) {
     for (const group of defaultData) {
@@ -168,8 +168,8 @@ function hasStartingEquipmentOptions(
       }
     }
   }
-  // Objeto não-vazio em top-level (shape background { A: [...], B: [...] })
-  // '_' key = fixed list without choice; 'gold' = scalar gold amount — both skipped.
+
+
   if (!Array.isArray(raw) && Object.keys(raw).length > 0) {
     const choiceKeys = Object.keys(raw).filter((k) => /^[A-Za-z]$/.test(k));
     for (const k of choiceKeys) {
@@ -185,7 +185,7 @@ function validateEquipmentChoices(
   validLabels: string[],
 ): string[] {
   if (!providedChoices || providedChoices.length === 0) return [];
-  // Sem catálogo de opções: não há o que validar (classe/background livre).
+
   if (validLabels.length === 0) return [];
   const validSet = new Set(validLabels.map((l) => l.toLowerCase().trim()));
   return providedChoices.filter(
@@ -193,7 +193,7 @@ function validateEquipmentChoices(
   );
 }
 
-// ─── Spec 008: XPHB letter-based equipment packages ───
+
 
 const IGNORED_OPTION_KEYS = new Set([
   "additionalFromBackground",
@@ -213,8 +213,8 @@ function extractLetterOptions(
 ): LetterOptions {
   if (!raw) return { type: "none" };
 
-  // Shape XPHB classe: { defaultData: [{ A: [...], B: [...] }, ...] }
-  // PHB 2014 classes use lowercase { a: [...], b: [...] } — normalize to uppercase.
+
+
   const defaultData = (raw as { defaultData?: unknown }).defaultData;
   if (Array.isArray(defaultData) && defaultData.length > 0) {
     const groups: LetterGroup[] = [];
@@ -236,7 +236,7 @@ function extractLetterOptions(
     if (groups.length > 0) return { type: "letters", groups };
   }
 
-  // Shape XPHB background: top-level keys são letras { A: [...], B: [...] }
+
   const topKeys = Object.keys(raw).filter((k) => !IGNORED_OPTION_KEYS.has(k));
   const letterKeys = topKeys.filter((k) => /^[A-Za-z]$/.test(k));
   if (letterKeys.length > 0 && letterKeys.length === topKeys.length) {
@@ -254,7 +254,7 @@ function extractLetterOptions(
     };
   }
 
-  // Fallback: labels textuais
+
   const labels = extractEquipmentOptionLabels(raw);
   if (labels.length > 0) return { type: "labels", labels };
 
@@ -276,11 +276,11 @@ function validateLetterChoicesOrThrow(
 
   if (!providedChoices || providedChoices.length === 0) return;
 
-  // Filtrar apenas as letras (ignorar labels legacy misturadas)
+
   const letters = providedChoices.filter(isLetterChoice);
   if (letters.length === 0) return;
 
-  // Verificar contagem: uma letra por grupo
+
   if (letters.length !== groups.length) {
     const missingCode = errorCode
       .replace("INVALID_", "MISSING_")
@@ -293,7 +293,7 @@ function validateLetterChoicesOrThrow(
     });
   }
 
-  // Verificar cada letra contra o grupo correspondente
+
   for (let i = 0; i < letters.length; i++) {
     const letter = letters[i];
     const group = groups[i];
@@ -339,7 +339,7 @@ function expandItems(items: unknown[], results: ResolvedItem[]): void {
     if (!item || typeof item !== "object") continue;
     const obj = item as Record<string, unknown>;
 
-    // SRD class shape: { option_type: 'counted_reference', count, of: { index, name } }
+
     if (obj.option_type === "counted_reference" && obj.of) {
       const of = obj.of as { index?: string; name?: string };
       if (of.index || of.name) {
@@ -352,7 +352,7 @@ function expandItems(items: unknown[], results: ResolvedItem[]): void {
       continue;
     }
 
-    // SRD class shape: { option_type: 'money', count, unit }
+
     if (obj.option_type === "money" && typeof obj.count === "number") {
       results.push({
         gold: obj.count,
@@ -361,13 +361,13 @@ function expandItems(items: unknown[], results: ResolvedItem[]): void {
       continue;
     }
 
-    // SRD class shape: { option_type: 'multiple', items: [...] }
+
     if (obj.option_type === "multiple" && Array.isArray(obj.items)) {
       expandItems(obj.items as unknown[], results);
       continue;
     }
 
-    // 5etools class shape: { item: "chain mail|xphb", quantity?: N }
+
     if (typeof obj.item === "string") {
       const raw = obj.item;
       const name = raw.includes("|") ? raw.split("|")[0] : raw;
@@ -383,19 +383,19 @@ function expandItems(items: unknown[], results: ResolvedItem[]): void {
       continue;
     }
 
-    // 5etools class shape: { value: N } — gold in copper pieces
+
     if (typeof obj.value === "number" && !obj.item && !obj.name) {
       results.push({ gold: obj.value / 100, unit: "gp" });
       continue;
     }
 
-    // Background shape: { gold: N }
+
     if (typeof obj.gold === "number") {
       results.push({ gold: obj.gold, unit: "gp" });
       continue;
     }
 
-    // Background shape: { name, quantity }
+
     if (typeof obj.name === "string") {
       const name = obj.name;
       const slug = name
@@ -558,8 +558,8 @@ export class CharactersService {
       throw new BadRequestException("Nome do personagem e obrigatorio.");
     }
 
-    // Normaliza input: aceita abilityScores e equipment choices em data ou choices.
-    // Quando ambos presentes, choices vence (shape canônico interno).
+
+
     const rawData = input.data ?? {};
     const rawChoices = input.choices ?? {};
     const merged: Record<string, unknown> = { ...rawData, ...rawChoices };
@@ -572,7 +572,7 @@ export class CharactersService {
     }
     const choices = merged as unknown as CharacterChoicesData;
 
-    // Validação dura: ability scores são obrigatórios e completos (6 abilities).
+
     if (!choices.abilityScores) {
       throw new BadRequestException({
         ok: false,
@@ -600,8 +600,8 @@ export class CharactersService {
       });
     }
 
-    // Validação: equipment choices contra as opções do SRD (classe + background).
-    // Spec 008: detecta shape (letters vs labels) e valida de acordo.
+
+
     let classRawOptions: Record<string, unknown> | null | undefined;
     let bgRawOptions: Record<string, unknown> | null | undefined;
 
@@ -721,14 +721,14 @@ export class CharactersService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      // Resolve source
+
       const sourceEntity = choices.sourceCode
         ? await this.compSourceRepository.findOneBy({
             code: choices.sourceCode,
           })
         : null;
 
-      // Create character record (keep data as backup)
+
       const character = manager.create(CharacterEntity, {
         userId: input.userId,
         name: input.name.trim(),
@@ -740,7 +740,7 @@ export class CharactersService {
       const saved = await manager.save(CharacterEntity, character);
       const charId = saved.id;
 
-      // Resolve slugs
+
       const classEntity = choices.classSlug
         ? await this.classRepository.findOneBy({ slug: choices.classSlug })
         : null;
@@ -773,7 +773,7 @@ export class CharactersService {
         );
       }
 
-      // character_classes
+
       await manager.save(CharacterClassEntity, {
         character_id: charId,
         class_id: classEntity.id,
@@ -781,11 +781,11 @@ export class CharactersService {
         order: 1,
       });
 
-      // character_ability_scores
+
       const bgBonuses = choices.backgroundAbilityBonuses ?? [];
-      // Em edições onde o background NÃO dá bonuses (PHB 2014), aplica
-      // automaticamente os bonuses raciais (RAW: Hill Dwarf CON +2, etc.).
-      // Em XPHB 2024 os bonuses vêm do background via choices.backgroundAbilityBonuses.
+
+
+
       const editionGrantsBgBonuses =
         sourceEntity?.rules?.backgroundGrantsAbilityBonuses === true;
       const raceBonusMap: Record<string, number> = {};
@@ -826,7 +826,7 @@ export class CharactersService {
         }
       }
 
-      // character_skills
+
       const skillSlugs = choices.skills ?? [];
       const expertiseSlugs = new Set(choices.expertiseSkills ?? []);
       for (const slug of skillSlugs) {
@@ -838,7 +838,7 @@ export class CharactersService {
           expertise: expertiseSlugs.has(slug),
         });
       }
-      // expertise not in main skills
+
       for (const slug of expertiseSlugs) {
         if (skillSlugs.includes(slug)) continue;
         const skillEntity = await this.skillRepository.findOneBy({ slug });
@@ -850,7 +850,7 @@ export class CharactersService {
         });
       }
 
-      // character_proficiencies
+
       const raceProfSlugs = choices.raceProficiencyChoices ?? [];
       const bgProfSlugs = choices.backgroundProficiencyChoices ?? [];
       for (const slug of raceProfSlugs) {
@@ -872,7 +872,7 @@ export class CharactersService {
         });
       }
 
-      // character_spells (deduplicate: prepared takes precedence over spellbook)
+
       const cantripSlugs = choices.classCantrips ?? [];
       const preparedSlugs = choices.classPreparedSpells ?? [];
       const spellbookSlugs = choices.classSpellbook ?? [];
@@ -930,7 +930,7 @@ export class CharactersService {
         });
       }
 
-      // character_state
+
       const conScore = choices.abilityScores?.con ?? 10;
       const conBonus =
         bgBonuses.find((b) => b.abilityScoreIndex === "con")?.bonus ?? 0;
@@ -946,7 +946,7 @@ export class CharactersService {
         gp,
       });
 
-      // character_equipment (materialize starting items)
+
       if (!choices.classStartingGold) {
         await this.materializeEquipment(
           manager,
@@ -959,7 +959,7 @@ export class CharactersService {
         );
       }
 
-      // character_origin
+
       await manager.save(CharacterOriginEntity, {
         character_id: charId,
         race_id: raceEntity.id,
@@ -989,7 +989,7 @@ export class CharactersService {
         class_tool_proficiency: choices.classToolProficiency,
       });
 
-      // character_features (level 1)
+
       const levelData = await this.levelRepository.findOne({
         where: {
           class_id: classEntity.id,
@@ -1070,11 +1070,7 @@ export class CharactersService {
       : null;
   }
 
-  /**
-   * Parse formatted equipment label strings (e.g. "1x Longsword", "8 gp") or resolve
-   * XPHB letter-based packages (e.g. "A", "B") into CharacterEquipmentEntity records.
-   * Spec 008: letter choices resolve against defaultData/equipment_options JSONB.
-   */
+
   private async materializeEquipment(
     manager: import("typeorm").EntityManager,
     characterId: string,
@@ -1084,7 +1080,7 @@ export class CharactersService {
     classRawOptions?: Record<string, unknown> | null,
     bgRawOptions?: Record<string, unknown> | null,
   ): Promise<void> {
-    // 1. Class fixed starting equipment
+
     const classStarting = await this.classStartingEquipRepo.find({
       where: { class_id: classId },
     });
@@ -1111,7 +1107,7 @@ export class CharactersService {
       });
     }
 
-    // 2. Separate letter choices from legacy label choices
+
     const classLetters = classChoiceLabels.filter(isLetterChoice);
     const classLegacy = classChoiceLabels.filter((s) => !isLetterChoice(s));
     const bgLetters = backgroundChoiceLabels.filter(isLetterChoice);
@@ -1120,7 +1116,7 @@ export class CharactersService {
     let extraGold = 0;
     const parsedItems: Array<{ name: string; quantity: number }> = [];
 
-    // 2a. Resolve letter-based packages (Spec 008)
+
     const letterResolved = [
       ...resolveLetterPackageItems(classRawOptions, classLetters),
       ...resolveLetterPackageItems(bgRawOptions, bgLetters),
@@ -1133,12 +1129,12 @@ export class CharactersService {
         else if (unit === "cp") extraGold += item.gold / 100;
         else if (unit === "pp") extraGold += item.gold * 10;
       } else {
-        // Push both slug and name for lookup flexibility
+
         parsedItems.push({ name: item.name, quantity: item.quantity });
       }
     }
 
-    // 2b. Parse legacy label strings
+
     const allLabels = [...classLegacy, ...bgLegacy];
     for (const label of allLabels) {
       const parts = label.split(/,\s*/);
@@ -1172,7 +1168,7 @@ export class CharactersService {
       }
     }
 
-    // 3. Resolve names/slugs to equipment entities and create records
+
     if (parsedItems.length > 0) {
       const allEquipment = await this.equipmentRepository.find();
       const nameMap = new Map<string, (typeof allEquipment)[0]>();
@@ -1211,7 +1207,7 @@ export class CharactersService {
       }
     }
 
-    // 4. Apply extra gold from equipment choices
+
     if (extraGold > 0) {
       await manager
         .createQueryBuilder()

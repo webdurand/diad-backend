@@ -1,13 +1,6 @@
 import { InspirationService } from "./inspiration.service";
 
-/**
- * Spec 012 — Heroic Inspiration. Garante que:
- *   - isArmed retorna true/false corretamente.
- *   - consumeIfArmed é no-op quando não armed (não toca DB).
- *   - consumeIfArmed quando armed: reseta participant.inspirationArmed,
- *     chama stateService.setInspiration(false), emite evento com context.
- *   - erro ao tocar ficha não quebra consumo (encounter state persists).
- */
+
 describe("InspirationService", () => {
   function setup(
     overrides: Partial<{
@@ -59,7 +52,7 @@ describe("InspirationService", () => {
     const { svc: svc1 } = setup({ armed: true });
     const r1 = await svc1.consumeIfArmed("p1", "saving_throw");
     expect((r1.eventData?.data as any).context).toBe("saving_throw");
-    // Fresh setup pra segunda invocação (findOne mock não reset automaticamente).
+
     const { svc: svc2 } = setup({ armed: true });
     const r2 = await svc2.consumeIfArmed("p1", "ability_check");
     expect((r2.eventData?.data as any).context).toBe("ability_check");

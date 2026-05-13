@@ -77,9 +77,9 @@ import {
   transformMonstersByFile,
 } from "../../data/transformers";
 
-// ────────────────────────────────────────────────────────────────
-// Tipos auxiliares
-// ────────────────────────────────────────────────────────────────
+
+
+
 export interface SeedResult {
   entity: string;
   total: number;
@@ -89,9 +89,9 @@ export interface SeedResult {
 
 type JsonRef = { index: string; name?: string; url?: string };
 
-// ────────────────────────────────────────────────────────────────
-// Service
-// ────────────────────────────────────────────────────────────────
+
+
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -99,7 +99,7 @@ export class AdminService {
 
   constructor(@InjectDataSource() private readonly ds: DataSource) {}
 
-  // ──────────── helpers ────────────
+
 
   private loadJson<T = any>(filename: string): T {
     const filePath = path.join(this.jsonDir, filename);
@@ -173,7 +173,7 @@ export class AdminService {
     return { entity, total, success, errors };
   }
 
-  // ──────────── Fase 0 — CompSource ────────────
+
 
   async seedCompSources(): Promise<SeedResult> {
     const repo = this.ds.getRepository(CompSourceEntity);
@@ -201,7 +201,7 @@ export class AdminService {
     return this.result("comp_sources", ALL_SOURCES.length, success, errors);
   }
 
-  // ──────────── Fase 1 — Sem dependências ────────────
+
 
   async seedAbilityScores(): Promise<SeedResult> {
     const data = this.loadJson<any[]>("5e-SRD-Ability-Scores.json");
@@ -455,7 +455,7 @@ export class AdminService {
   }
 
   async seedEquipmentCategories(): Promise<SeedResult> {
-    // First: seed existing SRD categories to preserve FK compatibility
+
     const srdData = this.loadJson<any[]>("5e-SRD-Equipment-Categories.json");
     const sourceId = await this.getOrCreateSource();
     const sourceMap = await this.sourceCodeToIdMap();
@@ -480,7 +480,7 @@ export class AdminService {
       }
     }
 
-    // Second: seed 5etools item type categories (adds missing ones)
+
     const fiveToolsCategories = transformEquipmentCategories();
     for (const item of fiveToolsCategories) {
       try {
@@ -540,7 +540,7 @@ export class AdminService {
     return this.result("proficiencies", data.length, success, errors);
   }
 
-  // ──────────── Fase 2 — Dependem da Fase 1 ────────────
+
 
   async seedSkills(): Promise<SeedResult> {
     const items = transformSkills();
@@ -588,13 +588,13 @@ export class AdminService {
       try {
         const sourceId = sourceMap.get(item.source_code) ?? undefined;
 
-        // Build properties as array of { slug, name } for weapon properties
+
         const propsJsonb =
           item.properties.length > 0
             ? item.properties.map((slug) => ({ slug, name: slug }))
             : null;
 
-        // Build mastery as { slug, name } of first mastery
+
         const masteryJsonb =
           item.mastery_slugs.length > 0
             ? { slug: item.mastery_slugs[0], name: item.mastery_slugs[0] }
@@ -627,7 +627,7 @@ export class AdminService {
           { conflictPaths: ["slug"] },
         );
 
-        // equipment_category_items M2M
+
         const eqId = (await this.slugToId(EquipmentEntity, item.slug))!;
         for (const catSlug of item.category_slugs) {
           const catId = catMap.get(catSlug);
@@ -730,7 +730,7 @@ export class AdminService {
     return this.result("rules", data.length, success, errors);
   }
 
-  // ──────────── Fase 3 — Classes e Races ────────────
+
 
   async seedClasses(): Promise<SeedResult> {
     const items = transformClasses();
@@ -774,7 +774,7 @@ export class AdminService {
 
         const classId = (await this.slugToId(ClassEntity, item.slug))!;
 
-        // class_saving_throws
+
         for (const abilitySlug of item.saving_throw_slugs) {
           const abilityId = abilityMap.get(abilitySlug);
           if (!abilityId) continue;
@@ -784,7 +784,7 @@ export class AdminService {
           );
         }
 
-        // class_proficiencies
+
         for (const profSlug of item.proficiency_slugs) {
           const profId = profMap.get(profSlug);
           if (!profId) continue;
@@ -835,7 +835,7 @@ export class AdminService {
 
         const raceId = (await this.slugToId(RaceEntity, item.slug))!;
 
-        // race_languages
+
         for (const langSlug of item.language_slugs) {
           const langId = langMap.get(langSlug);
           if (!langId) continue;
@@ -853,7 +853,7 @@ export class AdminService {
     return this.result("races", items.length, success, errors);
   }
 
-  // ──────────── Fase 4 — Subclasses, Subraces, Traits, Backgrounds ──────────
+
 
   async seedSubclasses(): Promise<SeedResult> {
     const items = transformSubclasses5e();
@@ -942,7 +942,7 @@ export class AdminService {
     let totalTraits = 0;
     let success = 0;
 
-    // Collect traits from all races' entries
+
     const raceItems = transformRaces();
     const allTraits: Array<{
       slug: string;
@@ -971,7 +971,7 @@ export class AdminService {
       allTraits.push(...extracted);
     }
 
-    // Collect traits from subraces
+
     const subraceItems = transformSubraces();
     for (const sub of subraceItems) {
       const extracted = extractTraitsFromSubrace({
@@ -988,7 +988,7 @@ export class AdminService {
       }
     }
 
-    // Deduplicate traits by slug (keep first occurrence)
+
     const seenSlugs = new Set<string>();
     const uniqueTraits: typeof allTraits = [];
     for (const t of allTraits) {
@@ -999,7 +999,7 @@ export class AdminService {
     }
     totalTraits = uniqueTraits.length;
 
-    // Passe 1 — insert all traits
+
     for (const item of uniqueTraits) {
       try {
         await this.ds
@@ -1035,7 +1035,7 @@ export class AdminService {
       }
     }
 
-    // Passe 2 — race_traits junctions
+
     const traitMap = await this.slugToIdMap(TraitEntity);
     for (const item of allTraits) {
       const traitId = traitMap.get(item.slug);
@@ -1054,7 +1054,7 @@ export class AdminService {
       }
     }
 
-    // Passe 3 — subrace_traits junctions
+
     for (const link of subraceTraitLinks) {
       const traitId = traitMap.get(link.trait_slug);
       const subraceId = subraceMap.get(link.subrace_slug);
@@ -1110,7 +1110,7 @@ export class AdminService {
           { conflictPaths: ["slug"] },
         );
 
-        // Skill + tool proficiencies via junction table
+
         const bgId = (await this.slugToId(BackgroundEntity, item.slug))!;
         const allProfSlugs = [
           ...item.skill_proficiency_slugs,
@@ -1168,7 +1168,7 @@ export class AdminService {
     return this.result("optional_features", items.length, success, errors);
   }
 
-  // ──────────── Fase 5 — Features, Spells, MagicItems, Monsters ─────────────
+
 
   async seedFeatures(): Promise<SeedResult> {
     const items = transformFeatures();
@@ -1241,7 +1241,7 @@ export class AdminService {
       ranged: AttackTypeEnum.Ranged,
     };
 
-    // Pass 1: upsert all spells
+
     for (const item of items) {
       try {
         const schoolId = item.school_slug
@@ -1309,7 +1309,7 @@ export class AdminService {
       }
     }
 
-    // Pass 2: spell-class mappings from sources.json
+
     const spellMap = await this.slugToIdMap(SpellEntity);
     const mappings = loadSpellClassMappings();
     let mappingCount = 0;
@@ -1326,7 +1326,7 @@ export class AdminService {
         );
         mappingCount++;
       } catch {
-        // skip duplicates or missing FKs
+
       }
     }
 
@@ -1512,7 +1512,7 @@ export class AdminService {
     return this.result("monsters", total, success, errors);
   }
 
-  // ──────────── Fase 6 — Levels ────────────
+
 
   async seedLevels(): Promise<SeedResult> {
     const items = transformLevels();
@@ -1528,7 +1528,7 @@ export class AdminService {
       try {
         const classId = classMap.get(item.class_slug) ?? undefined;
 
-        // slug nao e unique em levels — find+update ou insert
+
         const existing = await levelRepo.findOne({
           where: { slug: item.slug },
         });
@@ -1573,7 +1573,7 @@ export class AdminService {
           levelId = result.identifiers[0].id;
         }
 
-        // level_features
+
         for (const featureSlug of item.feature_slugs) {
           const featureId = featureMap.get(featureSlug);
           if (!featureId) continue;

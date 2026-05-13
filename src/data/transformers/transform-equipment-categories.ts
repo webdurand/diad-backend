@@ -8,7 +8,7 @@ export interface TransformedEquipmentCategory {
   source_code: string;
 }
 
-// Human-readable names for 5etools item type codes
+
 const TYPE_NAME_MAP: Record<string, string> = {
   M: "Melee Weapon",
   R: "Ranged Weapon",
@@ -54,7 +54,7 @@ export function transformEquipmentCategories(): TransformedEquipmentCategory[] {
   );
   const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
 
-  // Deduplicate by preferring XPHB source, falling back to first occurrence
+
   const itemTypes: { abbreviation: string; name: string; source: string }[] =
     data.itemType ?? [];
 
@@ -64,7 +64,7 @@ export function transformEquipmentCategories(): TransformedEquipmentCategory[] {
     const abbr = t.abbreviation;
     const slug = ITEM_TYPE_MAP[abbr] ?? abbr.toLowerCase();
 
-    // Prefer XPHB source over others
+
     if (!seen.has(slug) || t.source === "XPHB") {
       seen.set(slug, {
         slug,
@@ -74,7 +74,7 @@ export function transformEquipmentCategories(): TransformedEquipmentCategory[] {
     }
   }
 
-  // Add any entries from the ITEM_TYPE_MAP that aren't covered by itemType
+
   for (const [code, slug] of Object.entries(ITEM_TYPE_MAP)) {
     if (!seen.has(slug)) {
       seen.set(slug, {

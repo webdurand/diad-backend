@@ -52,7 +52,7 @@ export class LootService {
     const items = table.items ?? [];
 
     for (const item of items) {
-      // Roll drop chance
+
       const roll = Math.random();
       if (roll > item.dropChance) continue;
 
@@ -67,7 +67,7 @@ export class LootService {
       });
     }
 
-    // Mark as looted
+
     await this.lootTableRepo.update(lootTableId, { isLooted: true });
 
     const events: GameEventData[] = droppedItems.map((item) => ({

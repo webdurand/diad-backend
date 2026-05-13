@@ -1,7 +1,4 @@
-/**
- * Metadata por error code — httpStatus, defaultTitle (en-US estável), defaultHint (PT-BR).
- * Source of truth: contracts/error-codes-catalog.json.
- */
+
 
 import { ErrorCode } from "./error-codes.catalog";
 
@@ -13,7 +10,7 @@ export interface ErrorCodeMetadata {
 }
 
 export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
-  // auth
+
   [ErrorCode.AUTH_TOKEN_MISSING]: {
     httpStatus: 401,
     defaultTitle: "Authentication token missing",
@@ -39,7 +36,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "auth",
   },
 
-  // agent
+
   [ErrorCode.AGENT_UPSTREAM_ERROR]: {
     httpStatus: 502,
     defaultTitle: "Upstream agent service failed",
@@ -71,7 +68,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "agent",
   },
 
-  // campaign
+
   [ErrorCode.CAMPAIGN_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Campaign not found",
@@ -91,7 +88,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "campaign",
   },
 
-  // session
+
   [ErrorCode.SESSION_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Session not found",
@@ -105,7 +102,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "session",
   },
 
-  // combat
+
   [ErrorCode.COMBAT_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Combat not found",
@@ -125,7 +122,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "combat",
   },
 
-  // character
+
   [ErrorCode.CHARACTER_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Character not found",
@@ -139,7 +136,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "character",
   },
 
-  // spell
+
   [ErrorCode.SPELL_SLOT_UNAVAILABLE]: {
     httpStatus: 409,
     defaultTitle: "Spell slot unavailable",
@@ -153,7 +150,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "spell",
   },
 
-  // validation
+
   [ErrorCode.VALIDATION_INVALID_PAYLOAD]: {
     httpStatus: 400,
     defaultTitle: "Validation failed",
@@ -167,7 +164,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "validation",
   },
 
-  // system
+
   [ErrorCode.SYSTEM_INTERNAL_ERROR]: {
     httpStatus: 500,
     defaultTitle: "Internal server error",
@@ -193,7 +190,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "system",
   },
 
-  // event bus (spec 017)
+
   [ErrorCode.EVENT_TYPE_NOT_REGISTERED]: {
     httpStatus: 422,
     defaultTitle: "Event type not registered",
@@ -209,7 +206,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "event-bus",
   },
 
-  // world / ambiance (spec 019)
+
   [ErrorCode.WEATHER_INVALID_BIOME]: {
     httpStatus: 422,
     defaultTitle: "Invalid biome",
@@ -236,7 +233,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "spell",
   },
 
-  // tool surface completion (spec 020)
+
   [ErrorCode.ENCOUNTER_CREATE_FAILED]: {
     httpStatus: 422,
     defaultTitle: "Failed to create encounter from narrative",
@@ -463,7 +460,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "encounter",
   },
 
-  // session-recap (spec 024)
+
   [ErrorCode.SUMMARIZE_LLM_TIMEOUT]: {
     httpStatus: 504,
     defaultTitle: "Hot-recap LLM call timed out",
@@ -500,7 +497,7 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "session-recap",
   },
 
-  // deterministic DM refactor (spec 027)
+
   [ErrorCode.IDEMPOTENCY_CACHE_MISS_AFTER_RACE]: {
     httpStatus: 409,
     defaultTitle: "Idempotency cache missed after concurrent race",

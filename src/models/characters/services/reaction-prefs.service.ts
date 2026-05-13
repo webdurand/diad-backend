@@ -15,14 +15,7 @@ import {
   getCharacterState,
 } from "src/shared/character-guard";
 
-/**
- * Spec 016 M5 — Reaction prefs service.
- *
- * Merge: defaults da(s) classe(s) do PC + overrides em
- * `character_state.reaction_prefs`. Player override sempre vence.
- *
- * Ver `specs/016-play-shell-foundation/spec.md` §8.2.
- */
+
 export interface ReactionPrefEntry {
   reactionName: string;
   state: ReactionState;
@@ -90,7 +83,7 @@ export class ReactionPrefsService {
         source: overridden ? "override" : "default",
       });
     }
-    // Custom overrides sem default correspondente (raro, mas suportado).
+
     for (const [name, state] of Object.entries(overrides)) {
       if (seen.has(name)) continue;
       merged.push({

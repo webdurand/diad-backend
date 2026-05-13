@@ -1,13 +1,4 @@
-/**
- * Spec 020 — roll_loot_table.
- *
- * Wrapper HTTP-friendly do LootService existente, com 3 modos:
- *   1. table_slug → puxa LootTableEntity por slug, single-shot (marca isLooted)
- *   2. cr_band → gera tabela transient ad-hoc (não persiste, não bloqueia rerolls)
- *   3. monster_slug → loot canônico do monstro (V1: ad-hoc por CR do monstro)
- *
- * Emite SocialEvent.loot_rolled (audience: HUD, CompanionAI, Narrator).
- */
+
 
 import { Injectable, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -146,7 +137,7 @@ export class LootRollService {
       });
       await this.eventBus.publish(envelope);
     } catch {
-      /* best-effort */
+
     }
 
     return result;
@@ -168,7 +159,7 @@ export class LootRollService {
   }
 
   private async rollBySlug(slug: string): Promise<LootRollResult> {
-    // LootTableEntity uses `name` as the human-friendly identifier (no `slug` col).
+
     const table = await this.tableRepo.findOne({ where: { name: slug } });
     if (!table) {
       throw new DomainException(
@@ -254,8 +245,8 @@ export class LootRollService {
   }
 
   private async rollByMonster(monsterSlug: string): Promise<LootRollResult> {
-    // V1: tabelas por monster_slug não existem como first-class entity.
-    // Caller deve usar cr_band; retornar erro semântico.
+
+
     throw new DomainException(
       ErrorCode.MONSTER_HAS_NO_LOOT,
       `Monstro '${monsterSlug}' sem loot canônico. Use cr_band ad-hoc.`,

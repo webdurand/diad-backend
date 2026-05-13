@@ -1,15 +1,4 @@
-/**
- * Spec 005 Addendum — Spell Condition Catalog.
- *
- * Spells que aplicam ConditionInstance no alvo via saving throw.
- * O DB seed não contém mapping spell→condition (Hold Person não declara
- * "paralyzed", Web não declara "restrained", etc.). Este catálogo
- * hardcoda o mapping RAW.
- *
- * Consumido por castSpellInCombat após o bloco de damage: para cada target,
- * se entry encontrada, rola save e aplica ConditionInstance via
- * ConditionLifecycleService.
- */
+
 import type {
   ConditionSlug,
   SaveAbility,
@@ -19,7 +8,7 @@ import type {
 export interface SpellConditionEntry {
   conditionSlug: ConditionSlug;
   saveAbility: SaveAbility;
-  /** Duração em rounds (10 rounds ≈ 1 minuto). */
+
   durationRounds: number;
   requiresConcentration: boolean;
   repeatSaveTiming: RepeatSaveTiming;
@@ -82,8 +71,8 @@ const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
     requiresConcentration: false,
     repeatSaveTiming: "never",
   },
-  // Spec 012 Lote B — polymorph é transformation (statblock swap), não condition.
-  // Wire dedicado em spell-casting.service via TransformationService.enterForm.
+
+
   maze: {
     conditionSlug: "incapacitated",
     saveAbility: "int",
@@ -135,10 +124,7 @@ const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
   },
 };
 
-/**
- * Retorna a condição que a spell aplica via saving throw, ou null se a spell
- * não está mapeada neste catálogo (sem bloqueio do cast).
- */
+
 export function getSpellCondition(
   spellSlug: string,
 ): SpellConditionEntry | null {
