@@ -48,8 +48,40 @@ describe("MovementLockService", () => {
     expect(service.normalize({ active: true })).toMatchObject({
       active: true,
       reason: "Conversa importante em andamento.",
-      exitActionLabel: "Encerrar conversa",
+      exitActionLabel: "Sair da conversa",
       source: "director",
+    });
+  });
+
+  it("derives an active lock from the scene interlocutor when snapshot lock is missing", async () => {
+    const { service } = makeService({
+      id: "scene-1",
+      sessionId: "sess-1",
+      locationId: "loc-1",
+      poiId: "poi-1",
+      currentInterlocutorNpcId: "npc-1",
+      contextSnapshot: {},
+    });
+
+    const activeLock = await service.getActiveForSession("sess-1");
+
+    expect(activeLock).toMatchObject({
+      sceneId: "scene-1",
+      locationId: "loc-1",
+      poiId: "poi-1",
+      movementLock: {
+        active: true,
+        reason: "Conversa importante em andamento.",
+        exitActionLabel: "Sair da conversa",
+        interlocutorNpcId: "npc-1",
+        source: "system",
+        anchor: {
+          sceneId: "scene-1",
+          locationId: "loc-1",
+          poiId: "poi-1",
+          interlocutorNpcId: "npc-1",
+        },
+      },
     });
   });
 
@@ -65,7 +97,7 @@ describe("MovementLockService", () => {
     const lock = await service.setForActiveScene("sess-1", {
       active: true,
       reason: "O capitão exige resposta.",
-      exitActionLabel: "Encerrar conversa",
+      exitActionLabel: "Sair da conversa",
       interlocutorNpcId: "npc-1",
       source: "director",
     });
@@ -73,7 +105,7 @@ describe("MovementLockService", () => {
     expect(lock).toMatchObject({
       active: true,
       reason: "O capitão exige resposta.",
-      exitActionLabel: "Encerrar conversa",
+      exitActionLabel: "Sair da conversa",
       interlocutorNpcId: "npc-1",
       source: "director",
     });

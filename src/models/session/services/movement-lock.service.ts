@@ -44,7 +44,7 @@ export interface ActiveMovementLock {
 }
 
 const DEFAULT_REASON = "Conversa importante em andamento.";
-const DEFAULT_EXIT_ACTION = "Encerrar conversa";
+const DEFAULT_EXIT_ACTION = "Sair da conversa";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
@@ -91,12 +91,42 @@ export class MovementLockService {
     };
   }
 
+  getForScene(
+    scene: Pick<
+      SceneEntity,
+      | "id"
+      | "locationId"
+      | "poiId"
+      | "currentInterlocutorNpcId"
+      | "contextSnapshot"
+    >,
+  ): MovementLockState | null {
+    const explicitLock = this.normalize(scene.contextSnapshot?.movementLock);
+    if (explicitLock) return explicitLock;
+    if (!scene.currentInterlocutorNpcId) return null;
+
+    return {
+      active: true,
+      reason: DEFAULT_REASON,
+      exitActionLabel: DEFAULT_EXIT_ACTION,
+      interlocutorNpcId: scene.currentInterlocutorNpcId,
+      anchor: this.buildAnchor(
+        scene,
+        null,
+        undefined,
+        scene.currentInterlocutorNpcId,
+      ),
+      source: "system",
+      createdAt: new Date().toISOString(),
+    };
+  }
+
   async getActiveForSession(
     sessionId: string,
   ): Promise<ActiveMovementLock | null> {
     const scene = await this.getActiveScene(sessionId);
     if (!scene) return null;
-    const lock = this.normalize(scene.contextSnapshot?.movementLock);
+    const lock = this.getForScene(scene);
     if (!lock) return null;
     return {
       sceneId: scene.id,
@@ -191,7 +221,14 @@ export class MovementLockService {
   private async getActiveScene(sessionId: string): Promise<SceneEntity | null> {
     return this.sceneRepo.findOne({
       where: { sessionId, isActive: true },
-      select: ["id", "sessionId", "locationId", "poiId", "contextSnapshot"],
+      select: [
+        "id",
+        "sessionId",
+        "locationId",
+        "poiId",
+        "currentInterlocutorNpcId",
+        "contextSnapshot",
+      ],
     });
   }
 

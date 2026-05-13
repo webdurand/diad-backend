@@ -16,7 +16,7 @@ const activeLock = {
   movementLock: {
     active: true,
     reason: "Você está preso nesta conversa.",
-    exitActionLabel: "Encerrar conversa",
+    exitActionLabel: "Sair da conversa",
     source: "director",
     createdAt: "2026-01-01T00:00:00.000Z",
   },
@@ -24,6 +24,7 @@ const activeLock = {
 
 const makeMovementLockService = () => ({
   getActiveForSession: jest.fn().mockResolvedValue(activeLock),
+  getForScene: jest.fn().mockReturnValue(activeLock.movementLock),
   buildBlockedMessage: jest
     .fn()
     .mockReturnValue(
@@ -126,5 +127,52 @@ describe("movement lock blocking", () => {
       message:
         "Você está preso nesta conversa; encerre a interação antes de se deslocar.",
     });
+  });
+
+  it("returns movement lock from available POIs when the active scene has an interlocutor", async () => {
+    const currentScene = {
+      id: "scene-1",
+      locationId: "loc-1",
+      location: { id: "loc-1", name: "Mata", type: "wilderness" },
+      poi: null,
+      currentInterlocutorNpcId: "npc-1",
+      contextSnapshot: {},
+    };
+    const movementLockService = makeMovementLockService();
+    const service = new MoveToPoiService(
+      {} as any,
+      {
+        find: jest.fn().mockResolvedValue([
+          {
+            npcId: "npc-1",
+            presenceRole: "interlocutor",
+            npc: { name: "Vento Queimado", title: null },
+          },
+        ]),
+      } as any,
+      { listKnownByLocation: jest.fn().mockResolvedValue([]) } as any,
+      { getActive: jest.fn().mockResolvedValue(currentScene) } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      movementLockService as any,
+      makeLogger() as any,
+    );
+
+    const result = await service.listAvailablePois("sess-1");
+
+    expect(movementLockService.getForScene).toHaveBeenCalledWith(currentScene);
+    expect(result.movementLock).toMatchObject({
+      active: true,
+      exitActionLabel: "Sair da conversa",
+    });
+    expect(result.npcsPresent).toEqual([
+      {
+        id: "npc-1",
+        name: "Vento Queimado",
+        title: null,
+        presenceRole: "interlocutor",
+      },
+    ]);
   });
 });

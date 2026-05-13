@@ -283,9 +283,7 @@ export class MoveToPoiService {
       currentPoi: currentScene.poi
         ? this.toAvailablePoi(currentScene.poi)
         : null,
-      movementLock: this.movementLockService.normalize(
-        currentScene.contextSnapshot?.movementLock,
-      ),
+      movementLock: this.movementLockService.getForScene(currentScene),
       npcsPresent: sceneNpcs
         .filter((sceneNpc) => sceneNpc.npc)
         .map((sceneNpc) => ({

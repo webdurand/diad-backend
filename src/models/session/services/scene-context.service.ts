@@ -458,9 +458,7 @@ export class SceneContextService {
       npcsPresent,
       nearbyNpcs,
       currentInterlocutor,
-      movementLock: this.movementLockService.normalize(
-        scene.contextSnapshot?.movementLock,
-      ),
+      movementLock: this.movementLockService.getForScene(scene),
       mentionedEntities: [],
     };
 
