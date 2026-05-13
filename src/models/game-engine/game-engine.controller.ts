@@ -541,9 +541,28 @@ export class GameEngineController {
   @Header("Cache-Control", "no-store, no-cache, must-revalidate")
   async getEncounter(@Param("id") id: string) {
     const encounter = await this.encounterService.getById(id);
+    const areas = await this.persistentArea.listByEncounter(id);
     return {
       ok: true as const,
-      value: toEnrichedEncounterResponse(encounter),
+      value: toEnrichedEncounterResponse(encounter, {
+        tileEffects: areas.map((area) => ({
+          id: area.id,
+          encounterId: area.encounterId,
+          sourceSpellSlug: area.sourceSpell,
+          sourceParticipantId: area.casterParticipantId,
+          effectKind: area.effectKind,
+          shapeKind: area.shapeKind,
+          originCell: area.originCell,
+          radiusCells: area.radiusCells,
+          durationRoundsRemaining: area.durationRoundsRemaining,
+          saveDc: area.saveDc,
+          saveAbility: area.saveAbility,
+          isDifficultTerrain: area.isDifficultTerrain,
+          speedMultiplier: area.speedMultiplier,
+          sourceConcentration: area.sourceConcentration,
+          narrativeDescriptor: area.narrativeDescriptor,
+        })),
+      }),
       events: [],
     };
   }
@@ -1283,7 +1302,12 @@ export class GameEngineController {
 
       triggerEventId?: string;
 
-      aoeOriginCell?: { x: number; y: number };
+      aoeOriginCell?: {
+        x: number;
+        y: number;
+        direction?: "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
+        end?: { x: number; y: number } | null;
+      };
 
       metamagic?: {
         type:
@@ -1298,6 +1322,12 @@ export class GameEngineController {
       };
 
       polymorphBeastSlug?: string;
+
+      summonMonsterSlug?: string;
+
+      summonPosition?: { x: number; y: number };
+
+      summonControlMode?: "shared-turn" | "own-initiative" | "ai-controlled";
     },
   ) {
     const result = await this.spellCastingService.castSpellInCombat({
@@ -1314,6 +1344,9 @@ export class GameEngineController {
       aoeOriginCell: body.aoeOriginCell,
       metamagic: body.metamagic,
       polymorphBeastSlug: body.polymorphBeastSlug,
+      summonMonsterSlug: body.summonMonsterSlug,
+      summonPosition: body.summonPosition,
+      summonControlMode: body.summonControlMode,
     });
 
 

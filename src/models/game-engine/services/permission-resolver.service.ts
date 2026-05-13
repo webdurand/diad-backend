@@ -41,6 +41,18 @@ export class PermissionResolver {
     const isDm = await this.isCampaignDm(campaignId, authUserId);
 
     if (participant.type !== "pc" || !participant.characterId) {
+      if (
+        participant.controlledBy === "pc" &&
+        participant.linkedCasterParticipantId
+      ) {
+        const summonOwner = await this.resolveLinkedCasterOwner(
+          participant.linkedCasterParticipantId,
+          authUserId,
+          campaignId,
+        );
+        if (summonOwner === authUserId) return summonOwner;
+        if (isDm) return summonOwner;
+      }
       if (isDm) return authUserId;
       throw new ForbiddenException(
         "Apenas o DM pode controlar este participante.",
@@ -57,6 +69,26 @@ export class PermissionResolver {
     if (isDm) return characterOwner;
 
     throw new ForbiddenException("Voce nao controla este personagem.");
+  }
+
+  private async resolveLinkedCasterOwner(
+    casterParticipantId: string,
+    authUserId: string,
+    campaignId: string | undefined,
+  ): Promise<string> {
+    const caster = await this.encounterService.getParticipant(
+      casterParticipantId,
+    );
+    if (caster.type !== "pc" || !caster.characterId) {
+      throw new ForbiddenException(
+        "Invocacao sem conjurador controlavel pelo jogador.",
+      );
+    }
+    return this.encounterService.resolveCharacterOwner(
+      caster.characterId,
+      authUserId,
+      campaignId,
+    );
   }
 
 

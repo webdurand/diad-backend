@@ -5,10 +5,10 @@ import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { DiceService } from "./dice.service";
 import {
-  TILE_EFFECT_CATALOG,
   getTileEffectDefinition,
-  type TileEffectDefinition,
+  type TileEffectDirection,
   type TileEffectKind,
+  type TileEffectOriginCell,
   type TileEffectTrigger,
   type ConditionSlug,
 } from "./tile-effect-catalog";
@@ -20,7 +20,7 @@ export interface CreatePersistentAreaInput {
   casterParticipantId: string | null;
   sourceSpell: string;
   shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
-  originCell: { x: number; y: number };
+  originCell: TileEffectOriginCell;
   radiusCells: number;
   damageDice: string;
   damageType: string;
@@ -37,7 +37,7 @@ export interface CreateFromCatalogInput {
   casterParticipantId: string;
   spellSlug: TileEffectKind;
   slotLevel: number;
-  originCell: { x: number; y: number };
+  originCell: TileEffectOriginCell;
   saveDc: number;
 }
 
@@ -49,6 +49,47 @@ export interface ResolveResult {
 }
 
 type SaveModifierFn = (ability: SaveAbility) => Promise<{ modifier: number }>;
+
+const LINE_DIRECTIONS: Record<TileEffectDirection, { dx: number; dy: number }> =
+  {
+    N: { dx: 0, dy: -1 },
+    NE: { dx: 1, dy: -1 },
+    E: { dx: 1, dy: 0 },
+    SE: { dx: 1, dy: 1 },
+    S: { dx: 0, dy: 1 },
+    SW: { dx: -1, dy: 1 },
+    W: { dx: -1, dy: 0 },
+    NW: { dx: -1, dy: -1 },
+  };
+
+function normalizeLineDirection(
+  direction: TileEffectOriginCell["direction"],
+): TileEffectDirection {
+  return direction && direction in LINE_DIRECTIONS
+    ? direction
+    : "E";
+}
+
+function cellsOnLine(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): Array<{ x: number; y: number }> {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+  const cells: Array<{ x: number; y: number }> = [];
+  const seen = new Set<string>();
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(start.x + (dx * i) / steps);
+    const y = Math.round(start.y + (dy * i) / steps);
+    const key = `${x},${y}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      cells.push({ x, y });
+    }
+  }
+  return cells;
+}
 
 
 @Injectable()
@@ -150,6 +191,12 @@ export class PersistentAreaService {
       auraFollowsCaster: def.auraFollowsCaster ?? false,
     });
     return this.areas.save(entity);
+  }
+
+  async listByEncounter(
+    encounterId: string,
+  ): Promise<PersistentAreaEffectEntity[]> {
+    return this.areas.find({ where: { encounterId } });
   }
 
 
@@ -351,8 +398,8 @@ export class PersistentAreaService {
               slug: partial.conditionApplied,
             });
           }
-          continue;
         }
+        continue;
       }
 
       const legacy = await this.tickDamageForArea(
@@ -651,6 +698,8 @@ export class PersistentAreaService {
 
   async removeByCasterConcentrationBreak(
     casterParticipantId: string,
+    reason: "concentration_broken" | "concentration_replaced" =
+      "concentration_broken",
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
     const areas = await this.areas.find({
@@ -666,7 +715,7 @@ export class PersistentAreaService {
           sourceSpell: a.sourceSpell,
           effectKind: a.effectKind,
           casterId: casterParticipantId,
-          reason: "concentration_broken",
+          reason,
           narrativeDescriptor: a.narrativeDescriptor,
         },
       });
@@ -728,9 +777,27 @@ export class PersistentAreaService {
       );
     }
     if (area.shapeKind === "line") {
+      if (area.originCell.end) {
+        return cellsOnLine(area.originCell, area.originCell.end).some(
+          (cell) => cell.x === x && cell.y === y,
+        );
+      }
+      const direction = LINE_DIRECTIONS[
+        normalizeLineDirection(area.originCell.direction)
+      ];
+      const length = Math.max(1, area.radiusCells);
 
+      if (direction.dx === 0) {
+        return dx === 0 && dy * direction.dy >= 0 && Math.abs(dy) < length;
+      }
 
-      return Math.abs(dx) <= area.radiusCells && Math.abs(dy) <= 0;
+      if (direction.dy === 0) {
+        return dy === 0 && dx * direction.dx >= 0 && Math.abs(dx) < length;
+      }
+
+      const stepX = dx / direction.dx;
+      const stepY = dy / direction.dy;
+      return stepX === stepY && stepX >= 0 && stepX < length;
     }
     return Math.max(Math.abs(dx), Math.abs(dy)) <= area.radiusCells;
   }

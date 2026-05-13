@@ -20,7 +20,12 @@ export interface TileEffectSnapshot {
   sourceParticipantId: string | null;
   effectKind: string | null;
   shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
-  originCell: { x: number; y: number };
+  originCell: {
+    x: number;
+    y: number;
+    direction?: "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW" | null;
+    end?: { x: number; y: number } | null;
+  };
   radiusCells: number;
   durationRoundsRemaining: number | null;
   saveDc: number | null;

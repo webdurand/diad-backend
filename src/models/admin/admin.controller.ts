@@ -5,6 +5,8 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  Req,
+  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import { AdminService, SeedResult } from "./admin.service";
@@ -16,6 +18,13 @@ import { SeedCharacterDto } from "./dto/seed-character.dto";
 import { AuthGuard } from "../auth/auth.guard";
 import { AdminGuard } from "../auth/admin.guard";
 import { NonProductionGuard } from "../auth/non-production.guard";
+import type { AuthRequest } from "../auth/auth.types";
+
+function getUserId(req: AuthRequest): string {
+  const id = req.user?.id;
+  if (!id) throw new UnauthorizedException("Sessao ausente.");
+  return id;
+}
 
 @Controller("admin")
 @UseGuards(AuthGuard, AdminGuard)
@@ -35,11 +44,14 @@ export class AdminController {
   @UseGuards(NonProductionGuard)
   async seedCharacter(
     @Body() dto: SeedCharacterDto,
+    @Req() req: AuthRequest,
   ): Promise<SeedCharacterResult> {
     this.logger.log(
       `▶ Seed character: ${dto.classSlug}/${dto.subclassSlug} L${dto.level}`,
     );
-    return this.seedCharacterService.seed(dto);
+    return this.seedCharacterService.seed(dto, {
+      authenticatedUserId: getUserId(req),
+    });
   }
 
 

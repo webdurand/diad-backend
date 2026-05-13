@@ -28,6 +28,8 @@ export type SummonControlMode =
 
   | "ai-controlled";
 
+export type SummonConcentrationBreakBehavior = "dismiss" | "turn-hostile";
+
 export interface SummonSpawnDto {
 
   casterParticipantId: string;
@@ -44,6 +46,8 @@ export interface SummonSpawnDto {
   durationRoundsTotal?: number | null;
 
   concentrationLinked?: boolean;
+
+  concentrationBreakBehavior?: SummonConcentrationBreakBehavior;
 
   source: SummonSource;
 }

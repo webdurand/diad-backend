@@ -5,11 +5,29 @@ import type { SaveAbility } from "../interfaces/combat.interfaces";
 export type TileEffectKind =
   | "grease"
   | "web"
+  | "fog-cloud"
   | "spike-growth"
   | "wall-of-fire"
   | "cloud-of-daggers"
   | "sleet-storm"
   | "spirit-guardians";
+
+export type TileEffectDirection =
+  | "N"
+  | "NE"
+  | "E"
+  | "SE"
+  | "S"
+  | "SW"
+  | "W"
+  | "NW";
+
+export interface TileEffectOriginCell {
+  x: number;
+  y: number;
+  direction?: TileEffectDirection | null;
+  end?: { x: number; y: number } | null;
+}
 
 export type ConditionSlug = "prone" | "restrained" | "blinded";
 
@@ -149,6 +167,25 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
       },
       narrativeDescriptor:
         "Teias densas se estendem entre o chão e o teto, agarrando quem entra.",
+    },
+
+
+
+    "fog-cloud": {
+      spellSlug: "fog-cloud",
+      shapeKind: "sphere",
+      defaultRadiusCells: (slot) => 4 + Math.max(0, slot - 1) * 4,
+      isDifficultTerrain: false,
+      durationRoundsAtSlot: () => 600,
+      sourceConcentration: true,
+      triggers: [],
+      tactical: {
+        tags: ["control", "obscurement", "vision-block", "fog"],
+        tacticalValue: 6,
+        beneficiaryFaction: "caster",
+      },
+      narrativeDescriptor:
+        "Névoa espessa obscurece a área; silhuetas somem a poucos passos.",
     },
 
 
@@ -319,5 +356,6 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
 export function getTileEffectDefinition(
   slug: string,
 ): TileEffectDefinition | null {
-  return TILE_EFFECT_CATALOG[slug as TileEffectKind] ?? null;
+  const normalized = slug.trim().toLowerCase().replace(/-(phb|xphb|srd52)$/, "");
+  return TILE_EFFECT_CATALOG[normalized as TileEffectKind] ?? null;
 }

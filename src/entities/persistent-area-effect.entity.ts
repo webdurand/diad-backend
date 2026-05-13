@@ -12,6 +12,7 @@ import { EncounterEntity } from "./encounter.entity";
 import type { SaveAbility } from "../models/game-engine/interfaces/combat.interfaces";
 import type {
   TileEffectKind,
+  TileEffectOriginCell,
   TileEffectTrigger,
   TileEffectTactical,
 } from "../models/game-engine/services/tile-effect-catalog";
@@ -46,7 +47,7 @@ export class PersistentAreaEffectEntity {
   shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
 
   @Column({ name: "origin_cell", type: "jsonb" })
-  originCell: { x: number; y: number };
+  originCell: TileEffectOriginCell;
 
   @Column({ name: "radius_cells", type: "int" })
   radiusCells: number;

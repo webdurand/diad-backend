@@ -315,6 +315,53 @@ describe("ActionsService", () => {
       expect(firebolt).toBeDefined();
       expect(firebolt!.damage?.dice).toBe("2d10");
       expect(firebolt!.source).toBe("spell");
+      expect(firebolt!.automationStatus).toBe("ready");
+      expect(firebolt!.behaviorKind).toBe("attack_damage");
+    });
+
+    it("should hide spells outside the finite automation catalog", async () => {
+      const spell = {
+        id: "spell-unmodeled",
+        slug: "unmodeled-spell",
+        name: "Unmodeled Spell",
+        level: 1,
+        description: ["This spell is not released for combat automation."],
+        casting_time: "1 action",
+        range: "60 feet",
+        concentration: false,
+        ritual: false,
+        attack_type: "ranged",
+        damage: {
+          damage_type: { name: "Force" },
+          damage_at_slot_level: { "1": "1d4" },
+        },
+        dc: null,
+        school: null,
+        components: { V: true, S: true },
+        duration: "Instantaneous",
+      };
+
+      setupActions({
+        classSlug: "wizard",
+        level: 5,
+        int: 16,
+        spells: [
+          {
+            id: "cs-unmodeled",
+            character_id: "char-1",
+            spell_id: spell.id,
+            source: "class",
+            status: SpellStatusEnum.Prepared,
+            always_prepared: true,
+            spell,
+          },
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const hidden = result.actions.find((a) => a.name === "Unmodeled Spell");
+
+      expect(hidden).toBeUndefined();
     });
   });
 

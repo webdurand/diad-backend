@@ -11,18 +11,30 @@ import { Repository } from "typeorm";
 import {
   UserEntity,
   CharacterEntity,
+  CharacterClassEntity,
   ClassEntity,
   SubclassEntity,
+  CharacterSpellEntity,
+  CharacterStateEntity,
   CharacterEquipmentEntity,
   EquipmentEntity,
+  SpellClassEntity,
+  SpellEntity,
 } from "src/entities";
-import { EquipmentSourceEnum } from "src/entities/enums";
+import {
+  EquipmentSourceEnum,
+  SpellSourceEnum,
+  SpellStatusEnum,
+} from "src/entities/enums";
 import { CharactersService } from "../../characters/services/characters.service";
 import { CharacterSheetService } from "../../characters/services/character-sheet.service";
 import {
   SeedCharacterDto,
   SupportedClassSlug,
+  SupportedSpellLoadout,
 } from "../dto/seed-character.dto";
+import { getAbilityModifier } from "src/shared/srd-utils";
+import { isSpellAutomationReady } from "src/models/game-engine/services/spell-automation-catalog";
 
 export interface SeedCharacterResult {
   id: string;
@@ -55,6 +67,22 @@ const PRIMARY_ABILITY_INDEX: Record<SupportedClassSlug, number> = {
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 const E2E_DEFAULT_USER_EMAIL = "e2e-harness@diad.local";
 
+const SPELL_LAB_SPELLCASTING_ABILITY_INDEX: Partial<
+  Record<SupportedClassSlug, number>
+> = {
+  bard: 5,
+  cleric: 4,
+  druid: 4,
+  paladin: 5,
+  ranger: 4,
+  sorcerer: 5,
+  warlock: 5,
+  wizard: 3,
+};
+
+interface SeedCharacterOptions {
+  authenticatedUserId?: string;
+}
 
 interface ClassSpellDefaults {
   cantrips?: string[];
@@ -187,6 +215,14 @@ export class SeedCharacterService {
     private readonly equipmentRepo: Repository<EquipmentEntity>,
     @InjectRepository(CharacterEquipmentEntity)
     private readonly characterEquipRepo: Repository<CharacterEquipmentEntity>,
+    @InjectRepository(CharacterClassEntity)
+    private readonly characterClassRepo: Repository<CharacterClassEntity>,
+    @InjectRepository(CharacterStateEntity)
+    private readonly characterStateRepo: Repository<CharacterStateEntity>,
+    @InjectRepository(CharacterSpellEntity)
+    private readonly characterSpellRepo: Repository<CharacterSpellEntity>,
+    @InjectRepository(SpellClassEntity)
+    private readonly spellClassRepo: Repository<SpellClassEntity>,
   ) {}
 
 
@@ -306,12 +342,28 @@ export class SeedCharacterService {
     await this.characterEquipRepo.save(pick);
   }
 
-  async seed(dto: SeedCharacterDto): Promise<SeedCharacterResult> {
+  async seed(
+    dto: SeedCharacterDto,
+    options: SeedCharacterOptions = {},
+  ): Promise<SeedCharacterResult> {
+    const isSpellLab = dto.seedMode === "spell-lab";
+    this.validateSeedMode(dto);
+
     const classEntity = await this.resolveClass(dto.classSlug);
-    await this.resolveSubclass(dto.subclassSlug, classEntity.id);
-    const ownerUserId = await this.resolveOwner(dto.ownerUserId);
+    const subclassEntity = await this.resolveSubclass(
+      dto.subclassSlug,
+      classEntity.id,
+    );
+    const ownerUserId = await this.resolveOwner(
+      dto.ownerUserId,
+      isSpellLab ? options.authenticatedUserId : undefined,
+    );
     const abilityScores = this.buildAbilityScores(dto);
-    const name = dto.name ?? `${dto.classSlug}-L${dto.level}-e2e`;
+    const name =
+      dto.name ??
+      (isSpellLab
+        ? `SpellLab-${dto.classSlug}-L${dto.level}-${Date.now()}`
+        : `${dto.classSlug}-L${dto.level}-e2e`);
 
     await this.ensureNameUnique(ownerUserId, name);
 
@@ -351,7 +403,15 @@ export class SeedCharacterService {
       await this.equipHandBySlug(character.id, dto.offHandSlug, "off");
     }
 
-    if (dto.level > 1) {
+    if (isSpellLab) {
+      await this.configureSpellLabCharacter({
+        characterId: character.id,
+        classEntity,
+        subclassEntity,
+        dto,
+        abilityScores,
+      });
+    } else if (dto.level > 1) {
 
 
       throw new NotImplementedException({
@@ -375,6 +435,177 @@ export class SeedCharacterService {
     };
   }
 
+  private async configureSpellLabCharacter(params: {
+    characterId: string;
+    classEntity: ClassEntity;
+    subclassEntity: SubclassEntity;
+    dto: SeedCharacterDto;
+    abilityScores: Record<string, number>;
+  }): Promise<void> {
+    const { characterId, classEntity, subclassEntity, dto, abilityScores } =
+      params;
+
+    const characterClass = await this.characterClassRepo.findOne({
+      where: { character_id: characterId, class_id: classEntity.id },
+    });
+    if (!characterClass) {
+      throw new NotFoundException({
+        code: "SPELL_LAB_CLASS_ROW_NOT_FOUND",
+        message: `Classe ${classEntity.slug} nao encontrada no personagem ${characterId}.`,
+      });
+    }
+
+    characterClass.class_level = dto.level;
+    characterClass.subclass_id = subclassEntity.id;
+    await this.characterClassRepo.save(characterClass);
+
+    await this.replaceSpellLabSpells(
+      characterId,
+      classEntity,
+      dto.classSlug,
+      dto.spellLoadout ?? "all-class-spells",
+    );
+    await this.markSpellLabCharacter(
+      characterId,
+      dto.spellLoadout ?? "all-class-spells",
+    );
+    await this.configureSpellLabState(
+      characterId,
+      classEntity.hit_die,
+      dto.level,
+      abilityScores,
+    );
+  }
+
+  private async replaceSpellLabSpells(
+    characterId: string,
+    classEntity: ClassEntity,
+    classSlug: SupportedClassSlug,
+    spellLoadout: SupportedSpellLoadout,
+  ): Promise<void> {
+    const links = await this.spellClassRepo.find({
+      where: { class_id: classEntity.id },
+      relations: ["spell"],
+    });
+
+    const bySpellId = new Map(
+      links
+        .map((link) => link.spell)
+        .filter((spell): spell is SpellEntity => !!spell)
+        .filter(
+          (spell) =>
+            spellLoadout === "all-class-spells" ||
+            isSpellAutomationReady(spell.slug),
+        )
+        .map((spell) => [spell.id, spell]),
+    );
+
+    const spells = [...bySpellId.values()].sort(
+      (a, b) => a.level - b.level || a.name.localeCompare(b.name),
+    );
+
+    if (spells.length === 0) {
+      throw new BadRequestException({
+        code: "SPELL_LAB_NO_SPELLS_FOUND",
+        field: "spellLoadout",
+        message: `Nenhuma magia encontrada para ${classEntity.slug} com loadout ${spellLoadout}.`,
+      });
+    }
+
+    await this.characterSpellRepo.delete({ character_id: characterId });
+    await this.characterSpellRepo.save(
+      spells.map((spell) => ({
+        character_id: characterId,
+        spell_id: spell.id,
+        source: SpellSourceEnum.Class,
+        status: this.getSpellLabStatus(classSlug, spell.level),
+        always_prepared: true,
+      })),
+    );
+  }
+
+  private async markSpellLabCharacter(
+    characterId: string,
+    spellLoadout: SupportedSpellLoadout,
+  ): Promise<void> {
+    const character = await this.characterRepo.findOne({
+      where: { id: characterId },
+    });
+    if (!character) return;
+    character.data = {
+      ...(character.data ?? {}),
+      seedMode: "spell-lab",
+      devMode: "spell-lab",
+      spellLoadout,
+      ignoresPreparationLimit: true,
+    };
+    await this.characterRepo.save(character);
+  }
+
+  private getSpellLabStatus(
+    classSlug: SupportedClassSlug,
+    spellLevel: number,
+  ): SpellStatusEnum {
+    if (spellLevel === 0) return SpellStatusEnum.Known;
+    if (classSlug === "wizard") return SpellStatusEnum.Spellbook;
+    return SpellStatusEnum.Prepared;
+  }
+
+  private async configureSpellLabState(
+    characterId: string,
+    hitDie: number,
+    level: number,
+    abilityScores: Record<string, number>,
+  ): Promise<void> {
+    const conMod = getAbilityModifier(abilityScores.con ?? 10);
+    const levelOneHp = hitDie + conMod;
+    const fixedHpPerLevel = Math.floor(hitDie / 2) + 1 + conMod;
+    const maxHp = levelOneHp + (level - 1) * fixedHpPerLevel;
+    const maxHpBonus = Math.max(0, maxHp - levelOneHp);
+
+    const state = await this.characterStateRepo.findOne({
+      where: { character_id: characterId },
+    });
+    await this.characterStateRepo.save({
+      ...(state ?? {}),
+      character_id: characterId,
+      current_hp: maxHp,
+      max_hp_bonus: maxHpBonus,
+      spell_slots_used: {},
+      hit_dice_used: {},
+    });
+  }
+
+  private validateSeedMode(dto: SeedCharacterDto): void {
+    const isSpellLab = dto.seedMode === "spell-lab";
+
+    if (!isSpellLab && dto.spellLoadout) {
+      throw new BadRequestException({
+        code: "SPELL_LOADOUT_REQUIRES_SPELL_LAB",
+        field: "spellLoadout",
+        message: "spellLoadout so pode ser usado com seedMode='spell-lab'.",
+      });
+    }
+
+    if (!isSpellLab) return;
+
+    if (dto.level !== 20) {
+      throw new BadRequestException({
+        code: "SPELL_LAB_REQUIRES_LEVEL_20",
+        field: "level",
+        message: "O modo spell-lab cria apenas personagens L20.",
+      });
+    }
+
+    if (!SPELL_LAB_SPELLCASTING_ABILITY_INDEX[dto.classSlug]) {
+      throw new BadRequestException({
+        code: "SPELL_LAB_UNSUPPORTED_CLASS",
+        field: "classSlug",
+        message: `A classe "${dto.classSlug}" nao tem spell lab L20 no v1.`,
+      });
+    }
+  }
+
   private async resolveClass(slug: SupportedClassSlug): Promise<ClassEntity> {
     const entity = await this.classRepo.findOneBy({ slug });
     if (!entity) {
@@ -390,7 +621,7 @@ export class SeedCharacterService {
   private async resolveSubclass(
     slug: string,
     classId: string,
-  ): Promise<SubclassEntity | null> {
+  ): Promise<SubclassEntity> {
     const entity = await this.subclassRepo.findOneBy({ slug });
     if (!entity) {
       throw new BadRequestException({
@@ -409,14 +640,18 @@ export class SeedCharacterService {
     return entity;
   }
 
-  private async resolveOwner(explicitId: string | undefined): Promise<string> {
-    if (explicitId) {
-      const user = await this.userRepo.findOneBy({ id: explicitId });
+  private async resolveOwner(
+    explicitId: string | undefined,
+    authenticatedUserId?: string,
+  ): Promise<string> {
+    const requestedUserId = explicitId ?? authenticatedUserId;
+    if (requestedUserId) {
+      const user = await this.userRepo.findOneBy({ id: requestedUserId });
       if (!user) {
         throw new NotFoundException({
           code: "OWNER_USER_NOT_FOUND",
           field: "ownerUserId",
-          message: `Usuário ${explicitId} não encontrado.`,
+          message: `Usuário ${requestedUserId} não encontrado.`,
         });
       }
       return user.id;
@@ -435,7 +670,11 @@ export class SeedCharacterService {
   }
 
   private buildAbilityScores(dto: SeedCharacterDto): Record<string, number> {
-    const array = dto.abilityArray ?? this.allocateStandardArray(dto.classSlug);
+    const array =
+      dto.abilityArray ??
+      (dto.seedMode === "spell-lab"
+        ? this.allocateSpellLabArray(dto.classSlug)
+        : this.allocateStandardArray(dto.classSlug));
     return {
       str: array[0],
       dex: array[1],
@@ -444,6 +683,18 @@ export class SeedCharacterService {
       wis: array[4],
       cha: array[5],
     };
+  }
+
+
+  private allocateSpellLabArray(classSlug: SupportedClassSlug): number[] {
+    const spellAbilityIdx = SPELL_LAB_SPELLCASTING_ABILITY_INDEX[classSlug];
+    if (spellAbilityIdx == null) {
+      return this.allocateStandardArray(classSlug);
+    }
+
+    const result = [10, 14, 16, 10, 10, 10];
+    result[spellAbilityIdx] = 20;
+    return result;
   }
 
 

@@ -27,6 +27,12 @@ import {
 } from "src/shared/srd-utils";
 import { classifyFeatureForActions } from "./feature-classification";
 import { ensureCharacterReadAccess } from "src/shared/character-guard";
+import {
+  getSpellAutomationEntry,
+  type SpellAutomationBehaviorKind,
+  type SpellAutomationStatus,
+} from "src/models/game-engine/services/spell-automation-catalog";
+import { getTileEffectDefinition } from "src/models/game-engine/services/tile-effect-catalog";
 
 
 
@@ -82,6 +88,9 @@ export interface ActionBlock {
   requiresConcentration?: boolean;
   isRitual?: boolean;
   castingTime?: string;
+  automationStatus?: SpellAutomationStatus;
+  behaviorKind?: SpellAutomationBehaviorKind;
+  automationTags?: string[];
 
   aoe?: {
     originType: "self" | "point" | "fixed";
@@ -288,12 +297,17 @@ export class ActionsService {
     );
 
 
+    const includeUnmodeledSpells =
+      character.data?.seedMode === "spell-lab" ||
+      character.data?.devMode === "spell-lab";
+
     this.buildSpellActions(
       charSpells,
       charClasses,
       spellSaveDc,
       spellAttackBonus,
       totalLevel,
+      includeUnmodeledSpells,
       allActions,
     );
 
@@ -591,12 +605,16 @@ export class ActionsService {
     spellSaveDc: Record<string, number>,
     spellAttackBonus: Record<string, number>,
     totalLevel: number,
+    includeUnmodeledSpells: boolean,
     out: ActionBlock[],
   ) {
 
     const activeSpells = charSpells.filter(
       (cs) =>
-        cs.spell.level === 0 || cs.status === "prepared" || cs.always_prepared,
+        (cs.spell.level === 0 ||
+          cs.status === "prepared" ||
+          cs.always_prepared) &&
+        (includeUnmodeledSpells || !!getSpellAutomationEntry(cs.spell.slug)),
     );
 
 
@@ -610,6 +628,7 @@ export class ActionsService {
 
     for (const cs of activeSpells) {
       const spell = cs.spell;
+      const automation = getSpellAutomationEntry(spell.slug);
       const castingTime = (spell.casting_time ?? "").toLowerCase();
       let timing: ActionTiming = "action";
       if (castingTime.includes("bonus")) timing = "bonus_action";
@@ -699,6 +718,13 @@ export class ActionsService {
         requiresConcentration: spell.concentration ?? false,
         isRitual: spell.ritual ?? false,
         castingTime: spell.casting_time,
+        ...(automation
+          ? {
+              automationStatus: automation.status,
+              behaviorKind: automation.behaviorKind,
+              automationTags: automation.automationTags,
+            }
+          : {}),
       };
 
 
@@ -732,6 +758,31 @@ export class ActionsService {
           sizeFt: aoeRaw.size,
           rangeFt,
         };
+      }
+
+      if (!action.aoe && automation?.behaviorKind === "persistent_area") {
+        const tileDef = getTileEffectDefinition(spell.slug);
+        if (tileDef) {
+          const rangeStr = spell.range ?? "Self";
+          const isSelf =
+            tileDef.auraFollowsCaster === true ||
+            rangeStr.toLowerCase().includes("self");
+          const rangeMatch = rangeStr.match(/(\d+)/);
+          const rangeFt = isSelf
+            ? 0
+            : rangeMatch
+              ? parseInt(rangeMatch[1], 10)
+              : 0;
+          action.aoe = {
+            originType: isSelf ? "self" : "point",
+            shape: tileDef.shapeKind,
+            sizeFt: Math.max(
+              5,
+              tileDef.defaultRadiusCells(spell.level ?? 1) * 5,
+            ),
+            rangeFt,
+          };
+        }
       }
 
       if (spell.attack_type) {

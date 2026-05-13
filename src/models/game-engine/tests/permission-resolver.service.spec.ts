@@ -12,12 +12,19 @@ function mockServices(
 
   multiplayerHumanCount: number = 2,
 ) {
+  const participantById = new Map<string, any>();
+  participantById.set(participant.id, participant);
+  if (participant.__linkedCaster) {
+    participantById.set(participant.__linkedCaster.id, participant.__linkedCaster);
+  }
   const encounterService: any = {
-    getParticipant: jest.fn(async () => participant),
+    getParticipant: jest.fn(async (id: string) => participantById.get(id)),
     getById: jest.fn(async () => encounter),
     resolveCharacterOwner: jest.fn(
       async (_cid: string, fallback: string) =>
-        participant.__ownerUserId ?? fallback,
+        participant.__ownerByCharacterId?.[_cid] ??
+        participant.__ownerUserId ??
+        fallback,
     ),
   };
   const sessionService: any = {
@@ -187,6 +194,81 @@ describe("PermissionResolver", () => {
 
     await expect(
       resolver.resolveMutationOwner("m-2", "user-other", "enc-1"),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows PC owner to mutate a summon linked to their caster", async () => {
+    const participant = {
+      id: "summon-1",
+      type: "monster",
+      monsterId: "mon-1",
+      encounterId: "enc-1",
+      controlledBy: "pc",
+      linkedCasterParticipantId: "caster-1",
+      __linkedCaster: {
+        id: "caster-1",
+        type: "pc",
+        characterId: "char-caster",
+        encounterId: "enc-1",
+      },
+      __ownerByCharacterId: {
+        "char-caster": "user-owner",
+      },
+    };
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(participant, encounter, session);
+    const resolver = new PermissionResolver(
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    );
+
+    const result = await resolver.resolveMutationOwner(
+      "summon-1",
+      "user-owner",
+      "enc-1",
+    );
+    expect(result).toBe("user-owner");
+  });
+
+  it("rejects a non-owner trying to mutate a PC-controlled summon", async () => {
+    const participant = {
+      id: "summon-1",
+      type: "monster",
+      monsterId: "mon-1",
+      encounterId: "enc-1",
+      controlledBy: "pc",
+      linkedCasterParticipantId: "caster-1",
+      __linkedCaster: {
+        id: "caster-1",
+        type: "pc",
+        characterId: "char-caster",
+        encounterId: "enc-1",
+      },
+      __ownerByCharacterId: {
+        "char-caster": "user-owner",
+      },
+    };
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(participant, encounter, session);
+    const resolver = new PermissionResolver(
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    );
+
+    await expect(
+      resolver.resolveMutationOwner("summon-1", "user-other", "enc-1"),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 

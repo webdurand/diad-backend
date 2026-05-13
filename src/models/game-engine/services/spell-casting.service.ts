@@ -42,12 +42,19 @@ import { substituteSpellcastingMod } from "./spellcasting-mod";
 import { getSpellCondition } from "./spell-condition-catalog";
 import { ConditionLifecycleService } from "./condition-lifecycle.service";
 import { SummoningService } from "./summoning.service";
+import type {
+  SummonConcentrationBreakBehavior,
+  SummonControlMode,
+  SummonSource,
+} from "../interfaces/summoning.interfaces";
 import { PersistentAreaService } from "./persistent-area.service";
 import {
-  TILE_EFFECT_CATALOG,
+  getTileEffectDefinition,
   type TileEffectKind,
+  type TileEffectOriginCell,
 } from "./tile-effect-catalog";
 import { TransformationService } from "./transformation.service";
+import { ConcentrationService } from "./concentration.service";
 
 
 
@@ -112,7 +119,7 @@ export interface CastSpellInCombatDto {
 
   triggerEventId?: string;
 
-  aoeOriginCell?: { x: number; y: number };
+  aoeOriginCell?: TileEffectOriginCell;
 
   metamagic?: {
     type:
@@ -129,6 +136,12 @@ export interface CastSpellInCombatDto {
   };
 
   polymorphBeastSlug?: string;
+
+  summonMonsterSlug?: string;
+
+  summonPosition?: { x: number; y: number };
+
+  summonControlMode?: SummonControlMode;
 }
 
 export interface CombatSpellResult extends SpellCastResult {
@@ -162,6 +175,7 @@ export class SpellCastingService {
     private readonly monsterSpellcasting: MonsterSpellcastingService,
     private readonly effectInstanceService: EffectInstanceService,
     private readonly conditionLifecycle: ConditionLifecycleService,
+    private readonly concentration: ConcentrationService,
     private readonly summoning: SummoningService,
     private readonly persistentArea: PersistentAreaService,
     private readonly transformation: TransformationService,
@@ -176,6 +190,8 @@ export class SpellCastingService {
       "summon-beast": { 2: "wolf", 3: "wolf", 4: "panther", 5: "brown-bear" },
       "conjure-animals": { 3: "wolf", 4: "wolf", 5: "brown-bear" },
       "conjure-woodland-beings": { 4: "giant-spider" },
+      "conjure-elemental": { 5: "fire-elemental" },
+      "summon-elemental": { 4: "air-elemental" },
       "find-familiar": { 1: "giant-owl" },
       "spiritual-weapon": { 2: "giant-badger" },
     };
@@ -188,6 +204,25 @@ export class SpellCastingService {
       ] ??
       null
     );
+  }
+
+  private getSummonSourceForSpell(spellSlug: string): SummonSource {
+    const sourceBySpell: Record<string, SummonSource> = {
+      "find-familiar": "find-familiar-spell",
+      "conjure-animals": "conjure-animals-spell",
+      "conjure-woodland-beings": "conjure-woodland-beings-spell",
+      "conjure-elemental": "summon-elemental-spell",
+      "summon-elemental": "summon-elemental-spell",
+      "summon-beast": "summon-beast-spell",
+      "spiritual-weapon": "spiritual-weapon-spell",
+    };
+    return sourceBySpell[spellSlug] ?? "summon-beast-spell";
+  }
+
+  private getSummonConcentrationBreakBehavior(
+    spellSlug: string,
+  ): SummonConcentrationBreakBehavior {
+    return spellSlug === "conjure-elemental" ? "turn-hostile" : "dismiss";
   }
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
@@ -946,10 +981,13 @@ export class SpellCastingService {
 
 
 
+    const concentrationEvents: GameEventData[] = [];
     if (spellResult.concentration) {
       if (participant.isConcentrating) {
         spellResult.previousConcentration =
           participant.concentratingOn ?? undefined;
+        const breakRes = await this.concentration.break(participant, "replaced");
+        concentrationEvents.push(...breakRes.events);
       }
       participant.isConcentrating = true;
       participant.concentratingOn = dto.spellSlug;
@@ -961,10 +999,9 @@ export class SpellCastingService {
 
     const summonEvents: import("../interfaces/result.type").GameEventData[] =
       [];
-    const summonMonsterSlug = this.getSummonMonsterForSpell(
-      dto.spellSlug,
-      dto.slotLevel,
-    );
+    const summonMonsterSlug =
+      dto.summonMonsterSlug ??
+      this.getSummonMonsterForSpell(dto.spellSlug, dto.slotLevel);
     if (summonMonsterSlug) {
       try {
         const summon = await this.summoning.spawnSummon(dto.encounterId, {
@@ -972,22 +1009,18 @@ export class SpellCastingService {
           monsterSlug: summonMonsterSlug,
           displayName: `${dto.spellSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} (${summonMonsterSlug})`,
           position:
-            participant.positionX != null && participant.positionY != null
+            dto.summonPosition ??
+            (participant.positionX != null && participant.positionY != null
               ? { x: participant.positionX + 1, y: participant.positionY }
-              : undefined,
-          faction: "ally",
+              : undefined),
+          faction: participant.faction ?? "ally",
+          controlMode: dto.summonControlMode ?? "own-initiative",
           concentrationLinked: spellResult.concentration === true,
+          concentrationBreakBehavior: this.getSummonConcentrationBreakBehavior(
+            dto.spellSlug,
+          ),
           durationRoundsTotal: spellResult.concentration ? 10 : 60,
-          source:
-            dto.spellSlug === "find-familiar"
-              ? "find-familiar-spell"
-              : dto.spellSlug === "conjure-animals"
-                ? "conjure-animals-spell"
-                : dto.spellSlug === "summon-beast"
-                  ? "summon-beast-spell"
-                  : dto.spellSlug === "spiritual-weapon"
-                    ? "spiritual-weapon-spell"
-                    : "summon-beast-spell",
+          source: this.getSummonSourceForSpell(dto.spellSlug),
         });
         summonEvents.push({
           event_type: "summon_spawned",
@@ -1012,7 +1045,11 @@ export class SpellCastingService {
 
 
     const targetsHit: CombatSpellResult["targetsHit"] = [];
-    const events = [...(castResult.events ?? []), ...summonEvents];
+    const events = [
+      ...(castResult.events ?? []),
+      ...concentrationEvents,
+      ...summonEvents,
+    ];
 
 
     if (metamagicAppliedType) {
@@ -1217,8 +1254,10 @@ export class SpellCastingService {
 
 
 
-    const slugNorm = dto.spellSlug.toLowerCase().replace(/-(phb|xphb)$/, "");
-    const tileDef = TILE_EFFECT_CATALOG[slugNorm as TileEffectKind];
+    const slugNorm = dto.spellSlug
+      .toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "");
+    const tileDef = getTileEffectDefinition(slugNorm);
     if (
       tileDef &&
       participant.positionX != null &&
@@ -1251,10 +1290,11 @@ export class SpellCastingService {
         }
       }
 
+      const tileEffectKind = tileDef.spellSlug as TileEffectKind;
       const area = await this.persistentArea.createFromCatalog({
         encounterId: dto.encounterId,
         casterParticipantId: participant.id,
-        spellSlug: slugNorm as TileEffectKind,
+        spellSlug: tileEffectKind,
         slotLevel: dto.slotLevel ?? 1,
         originCell,
         saveDc,

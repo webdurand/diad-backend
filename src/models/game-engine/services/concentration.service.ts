@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
+import { EncounterEntity } from "src/entities/encounter.entity";
 import type {
   AppliedEffect,
   ConditionInstance,
@@ -35,6 +36,8 @@ export class ConcentrationService {
     private readonly participants: Repository<EncounterParticipantEntity>,
     @InjectRepository(PersistentAreaEffectEntity)
     private readonly areas: Repository<PersistentAreaEffectEntity>,
+    @InjectRepository(EncounterEntity)
+    private readonly encounters: Repository<EncounterEntity>,
   ) {}
 
 
@@ -147,6 +150,8 @@ export class ConcentrationService {
             tactical: area?.tacticalMetadata,
           },
         });
+      } else if (eff.kind === "summon") {
+        await this.resolveSummonConcentrationBreak(caster, eff, reason, events);
       }
     }
     if (targets.length) await this.participants.save(targets);
@@ -263,6 +268,81 @@ export class ConcentrationService {
       data: { reason, spellName: prev },
     });
     return { events };
+  }
+
+  private async resolveSummonConcentrationBreak(
+    caster: EncounterParticipantEntity,
+    effect: AppliedEffect,
+    reason: ConcentrationBreakReason,
+    events: GameEventData[],
+  ): Promise<void> {
+    const summon = await this.participants.findOne({
+      where: { id: effect.refId },
+    });
+    if (!summon || summon.linkedCasterParticipantId !== caster.id) return;
+
+    const behavior =
+      effect.metadata?.concentrationBreakBehavior === "turn-hostile"
+        ? "turn-hostile"
+        : "dismiss";
+
+    if (behavior === "turn-hostile") {
+      summon.controlledBy = "ai";
+      summon.faction = caster.faction === "ally" ? "enemy" : "ally";
+      summon.linkedCasterParticipantId = null;
+      await this.participants.save(summon);
+      events.push({
+        event_type: "summon_control_lost",
+        actor_participant_id: caster.id,
+        target_participant_id: summon.id,
+        data: {
+          reason,
+          summonId: summon.id,
+          displayName: summon.displayName,
+          faction: summon.faction,
+          controlledBy: summon.controlledBy,
+        },
+      });
+      return;
+    }
+
+    await this.removeFromTurnOrder(summon);
+    await this.participants.remove(summon);
+    events.push({
+      event_type: "summon_dismissed",
+      actor_participant_id: caster.id,
+      target_participant_id: summon.id,
+      data: {
+        reason,
+        summonId: summon.id,
+        displayName: summon.displayName,
+      },
+    });
+  }
+
+  private async removeFromTurnOrder(
+    participant: EncounterParticipantEntity,
+  ): Promise<void> {
+    const encounter = await this.encounters.findOne({
+      where: { id: participant.encounterId },
+    });
+    if (!encounter || !Array.isArray(encounter.turnOrder)) return;
+
+    const removeIndex = encounter.turnOrder.indexOf(participant.id);
+    if (removeIndex < 0) return;
+
+    encounter.turnOrder = encounter.turnOrder.filter(
+      (id) => id !== participant.id,
+    );
+    if (removeIndex < encounter.currentTurnIndex) {
+      encounter.currentTurnIndex = Math.max(0, encounter.currentTurnIndex - 1);
+    } else if (removeIndex === encounter.currentTurnIndex) {
+      encounter.currentTurnIndex = Math.min(
+        encounter.currentTurnIndex,
+        Math.max(0, encounter.turnOrder.length - 1),
+      );
+    }
+    await this.encounters.save(encounter);
   }
 
   async breakDueToDeath(

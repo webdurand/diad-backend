@@ -7,6 +7,7 @@ import {
 import { createMockRepository } from "../../../shared/test-utils/mock-repositories";
 import { SeedCharacterService } from "./seed-character.service";
 import { SeedCharacterDto } from "../dto/seed-character.dto";
+import { SpellStatusEnum } from "src/entities/enums";
 
 describe("SeedCharacterService", () => {
   let service: SeedCharacterService;
@@ -16,6 +17,10 @@ describe("SeedCharacterService", () => {
   let characterRepo: ReturnType<typeof createMockRepository>;
   let classRepo: ReturnType<typeof createMockRepository>;
   let subclassRepo: ReturnType<typeof createMockRepository>;
+  let characterClassRepo: ReturnType<typeof createMockRepository>;
+  let characterStateRepo: ReturnType<typeof createMockRepository>;
+  let characterSpellRepo: ReturnType<typeof createMockRepository>;
+  let spellClassRepo: ReturnType<typeof createMockRepository>;
 
   const validDto: SeedCharacterDto = {
     classSlug: "wizard",
@@ -24,7 +29,7 @@ describe("SeedCharacterService", () => {
     edition: "XPHB",
   };
 
-  const mockClass = { id: "class-wizard", slug: "wizard" };
+  const mockClass = { id: "class-wizard", slug: "wizard", hit_die: 6 };
   const mockSubclass = {
     id: "sub-evoc",
     slug: "evocation",
@@ -41,7 +46,14 @@ describe("SeedCharacterService", () => {
   };
 
   beforeEach(() => {
-    charactersService = { create: jest.fn().mockResolvedValue(mockCharacter) };
+    charactersService = {
+      create: jest.fn().mockImplementation((input) =>
+        Promise.resolve({
+          ...mockCharacter,
+          name: input.name,
+        }),
+      ),
+    };
     characterSheetService = {
       computeSheet: jest.fn().mockResolvedValue(mockSheet),
     };
@@ -49,6 +61,10 @@ describe("SeedCharacterService", () => {
     characterRepo = createMockRepository();
     classRepo = createMockRepository();
     subclassRepo = createMockRepository();
+    characterClassRepo = createMockRepository();
+    characterStateRepo = createMockRepository();
+    characterSpellRepo = createMockRepository();
+    spellClassRepo = createMockRepository();
 
     classRepo.findOneBy = jest.fn().mockResolvedValue(mockClass);
     subclassRepo.findOneBy = jest.fn().mockResolvedValue(mockSubclass);
@@ -58,6 +74,55 @@ describe("SeedCharacterService", () => {
       return Promise.resolve(null);
     });
     characterRepo.findOne = jest.fn().mockResolvedValue(null);
+    characterClassRepo.findOne = jest.fn().mockResolvedValue({
+      id: "cc-1",
+      character_id: "char-1",
+      class_id: "class-wizard",
+      class_level: 1,
+    });
+    characterStateRepo.findOne = jest.fn().mockResolvedValue({
+      id: "state-1",
+      character_id: "char-1",
+      current_hp: 8,
+      max_hp_bonus: 0,
+      spell_slots_used: {},
+      hit_dice_used: {},
+    });
+    characterSpellRepo.save = jest.fn().mockImplementation((entity) =>
+      Promise.resolve(entity),
+    );
+    spellClassRepo.find = jest.fn().mockResolvedValue([
+      {
+        class_id: "class-wizard",
+        spell_id: "spell-fire-bolt",
+        spell: {
+          id: "spell-fire-bolt",
+          slug: "fire-bolt",
+          name: "Fire Bolt",
+          level: 0,
+        },
+      },
+      {
+        class_id: "class-wizard",
+        spell_id: "spell-magic-missile",
+        spell: {
+          id: "spell-magic-missile",
+          slug: "magic-missile",
+          name: "Magic Missile",
+          level: 1,
+        },
+      },
+      {
+        class_id: "class-wizard",
+        spell_id: "spell-fireball",
+        spell: {
+          id: "spell-fireball",
+          slug: "fireball",
+          name: "Fireball",
+          level: 3,
+        },
+      },
+    ]);
 
     service = new SeedCharacterService(
       charactersService as never,
@@ -71,6 +136,10 @@ describe("SeedCharacterService", () => {
         save: jest.fn().mockResolvedValue({}),
         find: jest.fn().mockResolvedValue([]),
       } as never,
+      characterClassRepo as never,
+      characterStateRepo as never,
+      characterSpellRepo as never,
+      spellClassRepo as never,
     );
   });
 
@@ -154,6 +223,131 @@ describe("SeedCharacterService", () => {
 
 
       expect(createCall.data.classEquipmentChoices).toEqual(["A"]);
+    });
+  });
+
+  describe("spell-lab", () => {
+    const spellLabDto: SeedCharacterDto = {
+      classSlug: "wizard",
+      subclassSlug: "evocation",
+      level: 20,
+      edition: "XPHB",
+      seedMode: "spell-lab",
+      name: "SpellLab Wizard L20",
+    };
+
+    beforeEach(() => {
+      characterSheetService.computeSheet = jest.fn().mockResolvedValue({
+        ...mockSheet,
+        totalLevel: 20,
+        spellSlots: [
+          { level: 1, total: 4, used: 0 },
+          { level: 2, total: 3, used: 0 },
+          { level: 3, total: 3, used: 0 },
+          { level: 4, total: 3, used: 0 },
+          { level: 5, total: 3, used: 0 },
+          { level: 6, total: 2, used: 0 },
+          { level: 7, total: 2, used: 0 },
+          { level: 8, total: 1, used: 0 },
+          { level: 9, total: 1, used: 0 },
+        ],
+      });
+    });
+
+    it("cria Wizard L20 sem cair no stub de level-up", async () => {
+      const result = await service.seed(spellLabDto, {
+        authenticatedUserId: "user-e2e",
+      });
+
+      expect(result.name).toBe("SpellLab Wizard L20");
+      expect(result.sheetSummary.level).toBe(20);
+      expect(result.sheetSummary.spellSlots).toEqual([
+        4, 3, 3, 3, 3, 2, 2, 1, 1,
+      ]);
+      expect(characterClassRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          class_level: 20,
+          subclass_id: "sub-evoc",
+        }),
+      );
+    });
+
+    it("usa o usuario autenticado como owner padrao", async () => {
+      userRepo.findOneBy = jest.fn().mockImplementation(({ id, email }) => {
+        if (id === "user-auth") {
+          return Promise.resolve({ id: "user-auth", email: "me@diad.local" });
+        }
+        if (email === "e2e-harness@diad.local") {
+          return Promise.resolve(mockUser);
+        }
+        return Promise.resolve(null);
+      });
+
+      await service.seed(spellLabDto, { authenticatedUserId: "user-auth" });
+
+      const createCall = charactersService.create.mock.calls[0][0];
+      expect(createCall.userId).toBe("user-auth");
+    });
+
+    it("grava cantrips, spellbook e override de disponibilidade", async () => {
+      await service.seed(spellLabDto, {
+        authenticatedUserId: "user-e2e",
+      });
+
+      expect(characterSpellRepo.delete).toHaveBeenCalledWith({
+        character_id: "char-1",
+      });
+      const savedRows = characterSpellRepo.save.mock.calls[0][0];
+      expect(savedRows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            spell_id: "spell-fire-bolt",
+            status: SpellStatusEnum.Known,
+            always_prepared: true,
+          }),
+          expect.objectContaining({
+            spell_id: "spell-magic-missile",
+            status: SpellStatusEnum.Spellbook,
+            always_prepared: true,
+          }),
+        ]),
+      );
+    });
+
+    it("filtra o loadout para magias ready quando solicitado", async () => {
+      spellClassRepo.find = jest.fn().mockResolvedValue([
+        {
+          class_id: "class-wizard",
+          spell_id: "spell-fireball",
+          spell: {
+            id: "spell-fireball",
+            slug: "fireball",
+            name: "Fireball",
+            level: 3,
+          },
+        },
+        {
+          class_id: "class-wizard",
+          spell_id: "spell-unmodeled",
+          spell: {
+            id: "spell-unmodeled",
+            slug: "unmodeled-spell",
+            name: "Unmodeled Spell",
+            level: 4,
+          },
+        },
+      ]);
+
+      await service.seed(
+        { ...spellLabDto, spellLoadout: "all-ready-spells" },
+        { authenticatedUserId: "user-e2e" },
+      );
+
+      const savedRows = characterSpellRepo.save.mock.calls[0][0];
+      expect(savedRows).toHaveLength(1);
+      expect(savedRows[0]).toEqual(
+        expect.objectContaining({ spell_id: "spell-fireball" }),
+      );
     });
   });
 

@@ -686,6 +686,14 @@ export class CombatService {
           targetHpAfter = r.hpAfter;
           targetDefeated = r.defeated;
           await this.participantRepo.save(target);
+          if (targetDefeated) {
+            await this.removeDefeatedSummon(
+              encounter,
+              target,
+              events,
+              "hp-zero",
+            );
+          }
         }
       }
 
@@ -1234,6 +1242,9 @@ export class CombatService {
       range: a.range,
       spellLevel: a.spellLevel,
       requiresConcentration: a.requiresConcentration,
+      automationStatus: a.automationStatus,
+      behaviorKind: a.behaviorKind,
+      automationTags: a.automationTags,
       aoe: a.aoe,
       save,
       sequence: a.sequence,
@@ -1577,6 +1588,45 @@ export class CombatService {
     if (encounter.currentTurnIndex >= encounter.turnOrder.length) {
       encounter.currentTurnIndex = 0;
     }
+  }
+
+  private async removeDefeatedSummon(
+    encounter: EncounterEntity,
+    participant: EncounterParticipantEntity,
+    events: GameEventData[],
+    reason: "hp-zero" | "damage",
+  ): Promise<void> {
+    if (!participant.linkedCasterParticipantId || !participant.isDefeated) {
+      return;
+    }
+
+    const removedIndex = encounter.turnOrder?.indexOf(participant.id) ?? -1;
+    if (removedIndex >= 0) {
+      encounter.turnOrder = encounter.turnOrder.filter(
+        (id) => id !== participant.id,
+      );
+      if (removedIndex < encounter.currentTurnIndex) {
+        encounter.currentTurnIndex = Math.max(0, encounter.currentTurnIndex - 1);
+      } else if (removedIndex === encounter.currentTurnIndex) {
+        encounter.currentTurnIndex = Math.min(
+          encounter.currentTurnIndex,
+          Math.max(0, encounter.turnOrder.length - 1),
+        );
+      }
+      await this.encounterRepo.save(encounter);
+    }
+
+    await this.participantRepo.remove(participant);
+    events.push({
+      event_type: "summon_dismissed",
+      actor_participant_id: participant.linkedCasterParticipantId,
+      target_participant_id: participant.id,
+      data: {
+        reason,
+        summonId: participant.id,
+        displayName: participant.displayName,
+      },
+    });
   }
 
 
@@ -2821,6 +2871,7 @@ export class CombatService {
             },
           });
         }
+        await this.removeDefeatedSummon(encounter, target, events, "hp-zero");
       }
 
 
@@ -2867,8 +2918,19 @@ export class CombatService {
                 await this.participantRepo.save(secondTarget);
               }
             } else {
-              this.applyDamageToMonster(secondTarget, cleaveDmg);
+              const cleaveResult = this.applyDamageToMonster(
+                secondTarget,
+                cleaveDmg,
+              );
               await this.participantRepo.save(secondTarget);
+              if (cleaveResult.defeated) {
+                await this.removeDefeatedSummon(
+                  encounter,
+                  secondTarget,
+                  events,
+                  "hp-zero",
+                );
+              }
             }
             events.push({
               event_type: "damage_applied",
@@ -2953,6 +3015,14 @@ export class CombatService {
               source: "weapon-mastery:graze",
             },
           });
+          if (targetDefeated) {
+            await this.removeDefeatedSummon(
+              encounter,
+              target,
+              events,
+              "hp-zero",
+            );
+          }
 
           damageRollResult = {
             rolls: [],
@@ -3493,6 +3563,10 @@ export class CombatService {
 
       const breakRes = await this.concentration.breakDueToDeath(target);
       events.push(...breakRes.events);
+    }
+
+    if (defeated) {
+      await this.removeDefeatedSummon(encounter, target, events, "hp-zero");
     }
 
     await this.eventService.emit(encounter.sessionId, encounterId, events);

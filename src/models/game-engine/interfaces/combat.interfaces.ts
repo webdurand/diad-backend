@@ -139,6 +139,17 @@ export interface TurnActionBlock {
   range?: string;
   spellLevel?: number;
   requiresConcentration?: boolean;
+  automationStatus?: "ready";
+  behaviorKind?:
+    | "attack_damage"
+    | "save_damage"
+    | "healing"
+    | "buff"
+    | "condition"
+    | "mark"
+    | "persistent_area"
+    | "summon";
+  automationTags?: string[];
 
   aoe?: AreaEffect;
 
@@ -338,7 +349,8 @@ export interface ConditionInstance {
 export type AppliedEffectKind =
   | "condition"
   | "persistent-area"
-  | "effect-instance";
+  | "effect-instance"
+  | "summon";
 
 
 export interface AppliedEffect {
@@ -351,6 +363,8 @@ export interface AppliedEffect {
   targetParticipantId: string | null;
 
   description: string;
+
+  metadata?: Record<string, unknown>;
 }
 
 

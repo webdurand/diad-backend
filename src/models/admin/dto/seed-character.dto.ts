@@ -33,6 +33,15 @@ export type SupportedClassSlug = (typeof SUPPORTED_CLASS_SLUGS)[number];
 const SUPPORTED_LEVELS = [1, 3, 9, 10, 11, 13, 15, 20] as const;
 export type SupportedLevel = (typeof SUPPORTED_LEVELS)[number];
 
+const SUPPORTED_SEED_MODES = ["spell-lab"] as const;
+export type SupportedSeedMode = (typeof SUPPORTED_SEED_MODES)[number];
+
+const SUPPORTED_SPELL_LOADOUTS = [
+  "all-class-spells",
+  "all-ready-spells",
+] as const;
+export type SupportedSpellLoadout = (typeof SUPPORTED_SPELL_LOADOUTS)[number];
+
 
 export class SeedCharacterDto {
   @IsIn(SUPPORTED_CLASS_SLUGS as unknown as string[])
@@ -67,6 +76,13 @@ export class SeedCharacterDto {
   @IsUUID()
   ownerUserId?: string;
 
+  @IsOptional()
+  @IsIn(SUPPORTED_SEED_MODES as unknown as string[])
+  seedMode?: SupportedSeedMode;
+
+  @IsOptional()
+  @IsIn(SUPPORTED_SPELL_LOADOUTS as unknown as string[])
+  spellLoadout?: SupportedSpellLoadout;
 
   @IsOptional()
   @IsArray()

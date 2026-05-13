@@ -9,6 +9,7 @@ export interface EnrichedParticipantResponse {
   type: "pc" | "monster" | "npc";
   characterId: string | null;
   monsterId: string | null;
+  linkedCasterParticipantId: string | null;
   displayName: string;
   faction: string;
 
@@ -112,9 +113,33 @@ export interface EnrichedEncounterResponse {
   mapData: unknown;
 
   participants: EnrichedParticipantResponse[];
+  tileEffects: EnrichedTileEffectResponse[];
 
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EnrichedTileEffectResponse {
+  id: string;
+  encounterId: string;
+  sourceSpellSlug: string;
+  sourceParticipantId: string | null;
+  effectKind: string | null;
+  shapeKind: "sphere" | "cube" | "cylinder" | "line" | "cone";
+  originCell: {
+    x: number;
+    y: number;
+    direction?: "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW" | null;
+    end?: { x: number; y: number } | null;
+  };
+  radiusCells: number;
+  durationRoundsRemaining: number | null;
+  saveDc: number | null;
+  saveAbility: string | null;
+  isDifficultTerrain: boolean;
+  speedMultiplier: number | null;
+  sourceConcentration: boolean;
+  narrativeDescriptor: string | null;
 }
 
 
@@ -133,6 +158,7 @@ function mapParticipant(
     type: p.type,
     characterId: p.characterId ?? null,
     monsterId: p.monsterId ?? null,
+    linkedCasterParticipantId: p.linkedCasterParticipantId ?? null,
     displayName: p.displayName,
     faction: p.faction,
 
@@ -229,6 +255,7 @@ function mapParticipant(
 
 export function toEnrichedEncounterResponse(
   encounter: EncounterEntity,
+  opts?: { tileEffects?: EnrichedTileEffectResponse[] },
 ): EnrichedEncounterResponse {
   const isActive = encounter.status !== "preparing";
   const turnOrder = encounter.turnOrder ?? [];
@@ -252,6 +279,7 @@ export function toEnrichedEncounterResponse(
     mapData: encounter.mapData ?? {},
 
     participants: (encounter.participants ?? []).map(mapParticipant),
+    tileEffects: opts?.tileEffects ?? [],
 
     createdAt:
       encounter.createdAt instanceof Date

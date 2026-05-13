@@ -8,6 +8,7 @@ describe("tile-effect-catalog", () => {
   const slugs: TileEffectKind[] = [
     "grease",
     "web",
+    "fog-cloud",
     "spike-growth",
     "wall-of-fire",
     "cloud-of-daggers",
@@ -24,7 +25,7 @@ describe("tile-effect-catalog", () => {
       expect(typeof def.defaultRadiusCells(1)).toBe("number");
       expect(typeof def.isDifficultTerrain).toBe("boolean");
       expect(typeof def.sourceConcentration).toBe("boolean");
-      expect(def.triggers.length).toBeGreaterThanOrEqual(1);
+      expect(Array.isArray(def.triggers)).toBe(true);
     });
 
     it.each(slugs)(
@@ -119,6 +120,26 @@ describe("tile-effect-catalog", () => {
     it("is NOT concentration broken by damage — RAW: full duration 10min (100 rounds)", () => {
       expect(def.sourceConcentration).toBe(true);
       expect(def.durationRoundsAtSlot(2)).toBeGreaterThanOrEqual(100);
+    });
+  });
+
+  describe("Fog Cloud (PHB 2024)", () => {
+    const def = TILE_EFFECT_CATALOG["fog-cloud"];
+
+    it("is a 20ft radius sphere at level 1 and scales by 20ft per slot", () => {
+      expect(def.shapeKind).toBe("sphere");
+      expect(def.defaultRadiusCells(1)).toBe(4);
+      expect(def.defaultRadiusCells(2)).toBe(8);
+    });
+
+    it("is concentration up to 1 hour and visual/control only", () => {
+      expect(def.sourceConcentration).toBe(true);
+      expect(def.durationRoundsAtSlot(1)).toBe(600);
+      expect(def.isDifficultTerrain).toBe(false);
+      expect(def.triggers).toEqual([]);
+      expect(def.tactical.tags).toEqual(
+        expect.arrayContaining(["obscurement", "vision-block"]),
+      );
     });
   });
 
