@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import {
   GameErrorCode,
   GameResult,
@@ -30,6 +31,7 @@ export class GenericActionsService {
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     private readonly diceService: DiceService,
     private readonly conditionEffects: ConditionEffectsService,
+    private readonly sheetService: CharacterSheetService,
   ) {}
 
   async execute(
@@ -60,7 +62,7 @@ export class GenericActionsService {
     }
 
 
-    const asBonus = dto.asBonusAction === true;
+    const asBonus = await this.shouldUseBonusAction(participant, dto);
     if (asBonus) {
       if (participant.bonusActionUsed) {
         return failure(GameErrorCode.NO_ACTION_AVAILABLE);
@@ -96,6 +98,36 @@ export class GenericActionsService {
       p.bonusActionUsed = true;
     } else {
       p.actionUsed = true;
+    }
+  }
+
+  private async shouldUseBonusAction(
+    participant: EncounterParticipantEntity,
+    dto: GenericActionDto,
+  ): Promise<boolean> {
+    if (dto.asBonusAction === true) return true;
+    if (dto.asBonusAction === false) return false;
+    if (!["dash", "disengage", "hide"].includes(dto.kind)) return false;
+    if (!participant.actionUsed) return false;
+    if (
+      participant.type !== "pc" ||
+      !participant.characterId ||
+      !dto.ownerUserId
+    ) {
+      return false;
+    }
+
+    try {
+      const sheet = await this.sheetService.computeSheet(
+        dto.ownerUserId,
+        participant.characterId,
+      );
+      return (sheet.classes ?? []).some((c) => {
+        const classSlug = (c.slug ?? "").replace(/-phb$|-xphb$/, "");
+        return classSlug === "rogue" && c.level >= 2;
+      });
+    } catch {
+      return false;
     }
   }
 

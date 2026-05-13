@@ -410,7 +410,7 @@ export class ClassFeatureExecutorService {
     target.currentHp = newHp;
     await this.participantRepo.save(target);
 
-    paladin.actionUsed = true;
+    paladin.bonusActionUsed = true;
     await this.participantRepo.save(paladin);
 
     await this.stateService.incrementFeatureUses(

@@ -69,13 +69,17 @@ function makeService(
   };
   const diceService = new DiceService();
   const conditionEffects = new ConditionEffectsService();
+  const sheetService = {
+    computeSheet: jest.fn().mockResolvedValue({ classes: [] }),
+  };
   const svc = new GenericActionsService(
     encounterRepo as unknown as import("typeorm").Repository<EncounterEntity>,
     participantRepo as unknown as import("typeorm").Repository<EncounterParticipantEntity>,
     diceService,
     conditionEffects,
+    sheetService as never,
   );
-  return { svc, encounterRepo, participantRepo };
+  return { svc, encounterRepo, participantRepo, sheetService };
 }
 
 describe("GenericActionsService", () => {
@@ -200,6 +204,61 @@ describe("GenericActionsService", () => {
       expect(actor.conditions).not.toContain("hidden");
       expect(actor.actionUsed).toBe(true);
       spy.mockRestore();
+    });
+  });
+
+  describe("cunning action", () => {
+    it("permite Rogue L2+ usar Dash como bonus action depois da action", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        faction: "ally",
+        characterId: "char-a",
+        actionUsed: true,
+      });
+      const { svc, sheetService } = makeService(makeEncounter(["a"]), {
+        a: actor,
+      });
+      sheetService.computeSheet.mockResolvedValue({
+        classes: [{ slug: "rogue", level: 2 }],
+      });
+
+      const r = await svc.execute("enc-1", {
+        kind: "dash",
+        participantId: "a",
+        ownerUserId: "owner-1",
+      });
+
+      expect(r.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(actor.bonusActionUsed).toBe(true);
+      expect(actor.hasDashed).toBe(true);
+      expect(actor.movementRemaining).toBe(60);
+    });
+
+    it("mantem NO_ACTION_AVAILABLE para nao-Rogue com action ja usada", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        faction: "ally",
+        characterId: "char-a",
+        actionUsed: true,
+      });
+      const { svc, sheetService } = makeService(makeEncounter(["a"]), {
+        a: actor,
+      });
+      sheetService.computeSheet.mockResolvedValue({
+        classes: [{ slug: "fighter", level: 2 }],
+      });
+
+      const r = await svc.execute("enc-1", {
+        kind: "dash",
+        participantId: "a",
+        ownerUserId: "owner-1",
+      });
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe("NO_ACTION_AVAILABLE");
+      expect(actor.bonusActionUsed).toBe(false);
+      expect(actor.hasDashed).toBe(false);
     });
   });
 

@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import { PartiesService } from "../parties.service";
 
 describe("PartiesService", () => {
@@ -175,7 +171,11 @@ describe("PartiesService", () => {
 
     await expect(
       service.activate("campaign-1", "user-1", "companion-1"),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "PARTY_ACTIVATION_REQUIRES_SAFE_ZONE",
+      }),
+    });
   });
 
   it("blocks activation when two companions are already active", async () => {
@@ -205,6 +205,10 @@ describe("PartiesService", () => {
 
     await expect(
       service.activate("campaign-1", "user-1", "companion-1"),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "PARTY_ACTIVE_LIMIT_REACHED",
+      }),
+    });
   });
 });

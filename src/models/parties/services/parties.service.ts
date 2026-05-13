@@ -165,7 +165,7 @@ export class PartiesService {
     if (activeCount >= 2) {
       throw new ConflictException({
         ok: false,
-        code: "PARTY_FULL",
+        code: "PARTY_ACTIVE_LIMIT_REACHED",
         message: "A party ja tem 2 companions ativos.",
       });
     }
@@ -318,7 +318,7 @@ export class PartiesService {
     if (!location || (!tags.includes("safe_zone") && !allowsRest)) {
       throw new ForbiddenException({
         ok: false,
-        code: "ACTIVATION_REQUIRES_REST",
+        code: "PARTY_ACTIVATION_REQUIRES_SAFE_ZONE",
         message: "Troca de companions exige long rest ou safe zone.",
       });
     }

@@ -1215,12 +1215,12 @@ export class GameEngineController {
   ) {
     const authUserId = getUserId(req);
 
-    await this.permissionResolver.resolveMutationOwner(
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
       dto.participantId,
       authUserId,
       id,
     );
-    return this.genericActionsService.execute(id, dto);
+    return this.genericActionsService.execute(id, { ...dto, ownerUserId });
   }
 
 

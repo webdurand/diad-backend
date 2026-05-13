@@ -121,7 +121,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     displayName: "Imposição de Mãos",
     classSlug: "paladin",
     requiredLevel: 1,
-    actionCost: "action",
+    actionCost: "bonus",
     targetShape: "single-creature",
     targetRange: 5,
     resolution: "full",
