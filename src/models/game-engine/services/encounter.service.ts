@@ -291,6 +291,7 @@ export class EncounterService {
     await Promise.all(
       pcParticipants.map(async (p) => {
         const ownerId = ownerMap.get(p.characterId!);
+        (p as any).ownerUserId = ownerId ?? null;
         if (!ownerId) return;
         try {
           const sheet = await this.sheetService.computeSheet(
@@ -341,6 +342,15 @@ export class EncounterService {
         }
       }),
     );
+
+    for (const p of encounter.participants ?? []) {
+      if (!p.linkedCasterParticipantId) continue;
+      const caster = pcParticipants.find(
+        (pc) => pc.id === p.linkedCasterParticipantId,
+      );
+      if (!caster?.characterId) continue;
+      (p as any).ownerUserId = ownerMap.get(caster.characterId) ?? null;
+    }
   }
 
   async listBySession(sessionId: string): Promise<EncounterEntity[]> {

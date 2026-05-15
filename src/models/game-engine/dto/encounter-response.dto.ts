@@ -8,6 +8,7 @@ export interface EnrichedParticipantResponse {
   encounterId: string;
   type: "pc" | "monster" | "npc";
   characterId: string | null;
+  ownerUserId: string | null;
   monsterId: string | null;
   linkedCasterParticipantId: string | null;
   displayName: string;
@@ -157,6 +158,8 @@ function mapParticipant(
     encounterId: p.encounterId,
     type: p.type,
     characterId: p.characterId ?? null,
+    ownerUserId:
+      typeof pAny.ownerUserId === "string" ? pAny.ownerUserId : null,
     monsterId: p.monsterId ?? null,
     linkedCasterParticipantId: p.linkedCasterParticipantId ?? null,
     displayName: p.displayName,
