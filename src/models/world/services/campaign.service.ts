@@ -15,6 +15,7 @@ import {
 } from "src/entities/campaign.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { randomBytes } from "crypto";
+import { PhaseService } from "./phase.service";
 
 export type BoundedCountKind = "scenes" | "npcs" | "locations";
 
@@ -29,6 +30,7 @@ export interface CreateCampaignDto {
   scope?: "solo" | "party";
   isDraft?: boolean;
   generationSeed?: Record<string, unknown>;
+  storyFirstEnabled?: boolean;
   npcRosterPolicy?: NpcRosterPolicy;
 }
 
@@ -131,7 +133,7 @@ export class CampaignService {
       dmMode: dto.dmMode ?? "ai",
       scope: dto.scope ?? "solo",
       isDraft: dto.isDraft ?? false,
-      generationSeed: dto.generationSeed,
+      generationSeed: this.buildGenerationSeed(dto),
       npcRosterPolicy:
         dto.npcRosterPolicy ??
         (dto.dmMode !== "human" && (dto.scope ?? "solo") === "solo"
@@ -156,6 +158,24 @@ export class CampaignService {
     await this.playerRepo.save(dmPlayer);
 
     return saved;
+  }
+
+  private buildGenerationSeed(
+    dto: CreateCampaignDto,
+  ): Record<string, unknown> | undefined {
+    const seed = { ...(dto.generationSeed ?? {}) };
+    if (dto.storyFirstEnabled !== undefined) {
+      seed.storyFirstEnabled = dto.storyFirstEnabled;
+    }
+    if (dto.storyFirstEnabled === true && !seed.storySeed) {
+      seed.storySeed = PhaseService.buildDefaultStorySeed({
+        name: dto.name,
+        description: dto.description,
+        setting: dto.setting,
+        theme: dto.theme,
+      });
+    }
+    return Object.keys(seed).length > 0 ? seed : undefined;
   }
 
   async listByUser(userId: string): Promise<CampaignEntity[]> {

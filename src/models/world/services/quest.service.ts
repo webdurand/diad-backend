@@ -7,7 +7,15 @@ import { QuestPrerequisiteEntity } from "src/entities/quest-prerequisite.entity"
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
+import { EventAudience } from "src/common/event-bus/event-envelope.types";
 import { randomBytes } from "crypto";
+
+const MISSION_AUDIENCES: EventAudience[] = [
+  "Narrator",
+  "Director",
+  "HUD",
+  "CompanionAI",
+];
 
 export interface CreateQuestDto {
   name: string;
@@ -113,6 +121,58 @@ export class QuestService {
         },
         payload,
         narrativeDescriptor,
+      });
+      await this.eventBus.publish(envelope);
+    } catch {
+
+    }
+  }
+
+  private async publishMissionProgressAdvanced(
+    gameSessionId: string,
+    quest: QuestEntity,
+    objective: QuestObjectiveEntity,
+    oldProgress: number,
+    newProgress: number,
+    narrativeDescriptor: string | null,
+  ): Promise<void> {
+    try {
+      const session = await this.sessionRepo.findOne({
+        where: { id: gameSessionId },
+        select: { id: true, campaignId: true },
+      });
+      if (!session?.campaignId) return;
+      await this.sessionRepo.update(gameSessionId, {
+        turnsSinceMissionProgress: 0,
+      });
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "mission_progress_advanced",
+        source: {
+          service: "diad-backend",
+          module: "QuestService.advanceObjective",
+        },
+        scope: {
+          campaignId: session.campaignId,
+          sessionId: gameSessionId,
+        },
+        payload: {
+          sessionId: gameSessionId,
+          questId: quest.id,
+          questSlug: quest.slug,
+          objectiveId: objective.id,
+          objectiveDescription: objective.description,
+          objectiveStatus: objective.status,
+          oldProgress,
+          newProgress,
+          completedConditions:
+            objective.status === "completed"
+              ? [`objective_completed:${objective.id}`]
+              : [],
+        },
+        audiences: MISSION_AUDIENCES,
+        narrativeDescriptor:
+          narrativeDescriptor ?? `Missão avançou: ${objective.description}`,
       });
       await this.eventBus.publish(envelope);
     } catch {
@@ -255,8 +315,13 @@ export class QuestService {
       });
     }
 
+    const oldProgress = target.progressCount ?? 0;
     target.status = newStatus;
+    if (newStatus === "completed") {
+      target.progressCount = Math.max(oldProgress + 1, 1);
+    }
     if (evidence) target.advanceEvidence = evidence;
+    if (evidence) target.lastNarrativeDescriptor = evidence.slice(0, 240);
     await this.objectiveRepo.save(target);
 
     if (newStatus === "completed") {
@@ -345,6 +410,16 @@ export class QuestService {
           evidence: evidence ?? null,
         },
         evidence ?? `Quest falhada: ${quest.name}`,
+      );
+    }
+    if (quest.isMainQuest && newStatus === "completed") {
+      await this.publishMissionProgressAdvanced(
+        gameSessionId,
+        quest,
+        target,
+        oldProgress,
+        target.progressCount ?? oldProgress,
+        evidence ?? null,
       );
     }
 

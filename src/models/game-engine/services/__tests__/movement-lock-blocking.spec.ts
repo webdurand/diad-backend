@@ -50,6 +50,7 @@ describe("movement lock blocking", () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
       movementLockService as any,
       makeLogger() as any,
     );
@@ -73,6 +74,7 @@ describe("movement lock blocking", () => {
     const movementLockService = makeMovementLockService();
     const service = new MoveToLocationService(
       sessionRepo as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

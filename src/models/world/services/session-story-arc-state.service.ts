@@ -7,6 +7,7 @@ export type StoryArcPhase = "hook" | "development" | "climax" | "resolution";
 
 export interface UpsertStoryArcStateDto {
   currentPhase?: StoryArcPhase;
+  currentPhaseIndex?: number;
   phaseNotes?: Record<string, string>;
 }
 
@@ -37,6 +38,8 @@ export class SessionStoryArcStateService {
     const state = await this.getOrCreate(gameSessionId, storyArcId);
     if (patch.currentPhase !== undefined)
       state.currentPhase = patch.currentPhase;
+    if (patch.currentPhaseIndex !== undefined)
+      state.currentPhaseIndex = patch.currentPhaseIndex;
     if (patch.phaseNotes !== undefined) state.phaseNotes = patch.phaseNotes;
     return this.repo.save(state);
   }

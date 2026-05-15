@@ -41,6 +41,12 @@ export class QuestObjectiveEntity {
   @Column({ name: "progress_count", type: "int", default: 0 })
   progressCount: number;
 
+  @Column({ type: "int", default: 0 })
+  priority: number;
+
+  @Column({ name: "last_narrative_descriptor", type: "varchar", length: 240, nullable: true })
+  lastNarrativeDescriptor?: string | null;
+
   @Column({ name: "advance_evidence", type: "text", nullable: true })
   advanceEvidence?: string;
 }

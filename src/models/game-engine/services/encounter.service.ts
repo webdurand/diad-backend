@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   forwardRef,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -26,6 +27,8 @@ import { SceneContextCacheService } from "src/models/session/services/scene-cont
 import { DiceService } from "./dice.service";
 import { EventService } from "./event.service";
 import { SessionService } from "./session.service";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { CampaignService } from "src/models/world/services/campaign.service";
 import { GameClockService } from "src/models/world/services/game-clock.service";
 import { CapstonesService } from "./capstones.service";
@@ -117,6 +120,8 @@ export class EncounterService {
     private readonly gameClockService: GameClockService,
     private readonly sessionMessageService: SessionMessageService,
     private readonly sceneContextCache: SceneContextCacheService,
+    @Optional() private readonly eventBus?: EventBusService,
+    @Optional() private readonly envelopeFactory?: EventEnvelopeFactory,
   ) {}
 
   async create(
@@ -903,6 +908,11 @@ export class EncounterService {
         },
       },
     ]);
+    await this.publishEncounterEnded(
+      encounter,
+      "victory",
+      { totalXp, xpPerCharacter },
+    );
 
     return { totalXp, xpPerCharacter };
   }
@@ -1390,6 +1400,11 @@ export class EncounterService {
       },
     ];
     await this.eventService.emit(encounter.sessionId, encounterId, events);
+    await this.publishEncounterEnded(encounter, dto.outcome, {
+      xpApplied,
+      goldApplied,
+      itemsApplied,
+    });
 
 
 
@@ -1494,6 +1509,50 @@ export class EncounterService {
       );
     }
     return character.userId;
+  }
+
+  private async publishEncounterEnded(
+    encounter: EncounterEntity,
+    outcome: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this.eventBus || !this.envelopeFactory) return;
+    const session = await this.sessionService
+      .getById(encounter.sessionId)
+      .catch(() => null);
+    if (!session?.campaignId) return;
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "EncounterEvent",
+        eventType: "encounter_ended",
+        source: {
+          service: "diad-backend",
+          module: "EncounterService.publishEncounterEnded",
+        },
+        scope: {
+          campaignId: session.campaignId,
+          sessionId: encounter.sessionId,
+          encounterId: encounter.id,
+        },
+        aggregateId: encounter.id,
+        payload: {
+          sessionId: encounter.sessionId,
+          encounterId: encounter.id,
+          encounterName: encounter.name,
+          outcome,
+          ...payload,
+        },
+        audiences: ["CombatAgent", "Narrator", "Director", "HUD", "CompanionAI"],
+        narrativeDescriptor: `Encontro encerrado: ${encounter.name}`,
+      });
+      await this.eventBus.publish(envelope);
+    } catch (err) {
+      this.logger.warn(
+        `encounter_ended publish failed (encounter=${encounter.id}): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   private async syncDefeatedNpcStates(

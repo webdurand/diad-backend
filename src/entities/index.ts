@@ -73,6 +73,8 @@ import { PendingGuardDispatchEntity } from "./pending-guard-dispatch.entity";
 import { FactionEntity } from "./faction.entity";
 import { FactionRelationEntity } from "./faction-relation.entity";
 import { StoryArcEntity } from "./story-arc.entity";
+import { PhaseEntity } from "./phase.entity";
+import { PhaseTransitionEntity } from "./phase-transition.entity";
 import { QuestEntity } from "./quest.entity";
 import { QuestObjectiveEntity } from "./quest-objective.entity";
 import { QuestPrerequisiteEntity } from "./quest-prerequisite.entity";
@@ -189,6 +191,8 @@ export {
   FactionEntity,
   FactionRelationEntity,
   StoryArcEntity,
+  PhaseEntity,
+  PhaseTransitionEntity,
   QuestEntity,
   QuestObjectiveEntity,
   QuestPrerequisiteEntity,
@@ -301,6 +305,8 @@ export const ENTITIES = [
   FactionEntity,
   FactionRelationEntity,
   StoryArcEntity,
+  PhaseEntity,
+  PhaseTransitionEntity,
   QuestEntity,
   QuestObjectiveEntity,
   QuestPrerequisiteEntity,

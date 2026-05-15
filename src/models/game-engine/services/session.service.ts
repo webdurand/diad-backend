@@ -13,6 +13,7 @@ import { FactionEntity } from "src/entities/faction.entity";
 import { SceneService } from "src/models/session/services/scene.service";
 import { QuestService } from "src/models/world/services/quest.service";
 import type { CreateQuestDto } from "src/models/world/services/quest.service";
+import { PhaseService } from "src/models/world/services/phase.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 const STARTING_LOCATION_TYPE_PRIORITY: Record<string, number> = {
@@ -26,6 +27,13 @@ const STARTING_LOCATION_TYPE_PRIORITY: Record<string, number> = {
   room: 8,
   dungeon_room: 9,
 };
+
+const SESSION_ACCESS_CACHE_TTL_MS = 5_000;
+
+interface SessionAccessCacheEntry {
+  session: GameSessionEntity;
+  expiresAt: number;
+}
 
 export interface CreateSessionDto {
   name: string;
@@ -49,6 +57,8 @@ export interface UpdateSessionDto {
 
 @Injectable()
 export class SessionService {
+  private readonly accessCache = new Map<string, SessionAccessCacheEntry>();
+
   constructor(
     @InjectRepository(GameSessionEntity)
     private readonly sessionRepo: Repository<GameSessionEntity>,
@@ -70,6 +80,7 @@ export class SessionService {
     private readonly factionRepo: Repository<FactionEntity>,
     private readonly sceneService: SceneService,
     private readonly questService: QuestService,
+    private readonly phaseService: PhaseService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(SessionService.name);
@@ -109,9 +120,40 @@ export class SessionService {
       await this.bootstrapInitialScene(saved.id, campaign);
       await this.initializeCanonicalNpcStates(saved.id, campaign.id);
       await this.materializeQuestsFromTemplate(saved.id, campaign);
+      if (this.isStoryFirstCampaign(campaign)) {
+        await this.phaseService.bootstrapStoryFirst(saved.id, campaign);
+      }
     }
 
     return saved;
+  }
+
+  private isStoryFirstCampaign(campaign: CampaignEntity): boolean {
+    const seed = campaign.generationSeed ?? {};
+    const userInputs =
+      seed.userInputs && typeof seed.userInputs === "object"
+        ? (seed.userInputs as Record<string, unknown>)
+        : {};
+    const aiAdditions =
+      seed.aiAdditions && typeof seed.aiAdditions === "object"
+        ? (seed.aiAdditions as Record<string, unknown>)
+        : {};
+    return (
+      seed.storyFirstEnabled === true ||
+      typeof seed.storySeed === "object" ||
+      typeof seed.story_arc === "object" ||
+      typeof seed.storyArc === "object" ||
+      Array.isArray(seed.quests) ||
+      Array.isArray(seed.questsTemplate) ||
+      typeof userInputs.story_arc === "object" ||
+      typeof userInputs.storyArc === "object" ||
+      Array.isArray(userInputs.quests) ||
+      Array.isArray(userInputs.questsTemplate) ||
+      typeof aiAdditions.story_arc === "object" ||
+      typeof aiAdditions.storyArc === "object" ||
+      Array.isArray(aiAdditions.quests) ||
+      Array.isArray(aiAdditions.questsTemplate)
+    );
   }
 
   private async initializeCanonicalNpcStates(
@@ -184,7 +226,25 @@ export class SessionService {
     campaign: CampaignEntity,
   ): Promise<void> {
     const seed = campaign.generationSeed ?? {};
-    const template = seed.questsTemplate;
+    const userInputs =
+      seed.userInputs && typeof seed.userInputs === "object"
+        ? (seed.userInputs as Record<string, unknown>)
+        : {};
+    const aiAdditions =
+      seed.aiAdditions && typeof seed.aiAdditions === "object"
+        ? (seed.aiAdditions as Record<string, unknown>)
+        : {};
+    const template = Array.isArray(seed.questsTemplate)
+      ? seed.questsTemplate
+      : Array.isArray(seed.quests)
+        ? seed.quests
+        : Array.isArray(userInputs.questsTemplate)
+          ? userInputs.questsTemplate
+          : Array.isArray(userInputs.quests)
+            ? userInputs.quests
+            : Array.isArray(aiAdditions.questsTemplate)
+              ? aiAdditions.questsTemplate
+              : aiAdditions.quests;
     if (!Array.isArray(template) || template.length === 0) return;
 
     const [canonicalNpcs, locations, factions] = await Promise.all([
@@ -375,7 +435,9 @@ export class SessionService {
     if (dto.activeEncounterId !== undefined)
       session.activeEncounterId = dto.activeEncounterId ?? undefined;
     if (dto.scene !== undefined) session.scene = dto.scene;
-    return this.sessionRepo.save(session);
+    const saved = await this.sessionRepo.save(session);
+    this.invalidateAccessCache(sessionId);
+    return saved;
   }
 
   async addCharacter(
@@ -387,6 +449,7 @@ export class SessionService {
       session.characterIds = [...session.characterIds, characterId];
     }
     const saved = await this.sessionRepo.save(session);
+    this.invalidateAccessCache(sessionId);
 
 
 
@@ -432,6 +495,7 @@ export class SessionService {
 
 
 
+    this.invalidateAccessCache(sessionId);
     await this.sessionRepo.delete(sessionId);
   }
 
@@ -443,7 +507,9 @@ export class SessionService {
     session.characterIds = session.characterIds.filter(
       (id) => id !== characterId,
     );
-    return this.sessionRepo.save(session);
+    const saved = await this.sessionRepo.save(session);
+    this.invalidateAccessCache(sessionId);
+    return saved;
   }
 
   async setActiveEncounter(
@@ -453,6 +519,7 @@ export class SessionService {
     await this.sessionRepo.update(sessionId, {
       activeEncounterId: encounterId,
     });
+    this.invalidateAccessCache(sessionId);
   }
 
   async ensureOwnership(
@@ -470,14 +537,59 @@ export class SessionService {
     sessionId: string,
     userId: string,
   ): Promise<GameSessionEntity> {
+    const cached = this.getCachedAccess(sessionId, userId);
+    if (cached) return cached;
+
     const session = await this.getById(sessionId);
-    if (session.ownerId === userId) return session;
+    if (session.ownerId === userId) {
+      this.setCachedAccess(sessionId, userId, session);
+      return session;
+    }
     if (session.campaignId) {
       const player = await this.campaignPlayerRepo.findOne({
         where: { campaignId: session.campaignId, userId, isActive: true },
       });
-      if (player) return session;
+      if (player) {
+        this.setCachedAccess(sessionId, userId, session);
+        return session;
+      }
     }
     throw new NotFoundException("Sessao nao encontrada.");
+  }
+
+  private getCachedAccess(
+    sessionId: string,
+    userId: string,
+  ): GameSessionEntity | null {
+    const key = this.accessCacheKey(sessionId, userId);
+    const cached = this.accessCache.get(key);
+    if (!cached) return null;
+    if (cached.expiresAt <= Date.now()) {
+      this.accessCache.delete(key);
+      return null;
+    }
+    return cached.session;
+  }
+
+  private setCachedAccess(
+    sessionId: string,
+    userId: string,
+    session: GameSessionEntity,
+  ): void {
+    this.accessCache.set(this.accessCacheKey(sessionId, userId), {
+      session,
+      expiresAt: Date.now() + SESSION_ACCESS_CACHE_TTL_MS,
+    });
+  }
+
+  private invalidateAccessCache(sessionId: string): void {
+    const prefix = `${sessionId}:`;
+    for (const key of this.accessCache.keys()) {
+      if (key.startsWith(prefix)) this.accessCache.delete(key);
+    }
+  }
+
+  private accessCacheKey(sessionId: string, userId: string): string {
+    return `${sessionId}:${userId}`;
   }
 }

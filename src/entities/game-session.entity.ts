@@ -94,6 +94,12 @@ export class GameSessionEntity {
   @Column({ name: "travel_state", type: "jsonb", nullable: true })
   travelState?: SessionTravelState | null;
 
+  @Column({ name: "turns_since_mission_progress", type: "int", default: 0 })
+  turnsSinceMissionProgress: number;
+
+  @Column({ name: "pull_score", type: "float", nullable: true })
+  pullScore?: number | null;
+
   @Column({ name: "ended_at", type: "timestamptz", nullable: true })
   endedAt?: Date;
 

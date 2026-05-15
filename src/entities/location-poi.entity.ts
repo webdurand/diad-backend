@@ -43,6 +43,9 @@ export class LocationPoiEntity {
   @Column({ type: "varchar", default: "area" })
   type: string;
 
+  @Column({ type: "varchar", length: 24, default: "wild" })
+  kind: "safe" | "wild" | "objective" | "social";
+
   @Column({ type: "text", nullable: true })
   description?: string;
 
@@ -69,6 +72,12 @@ export class LocationPoiEntity {
 
   @Column({ name: "sort_order", type: "int", default: 0 })
   sortOrder: number;
+
+  @Column({ name: "phase_index", type: "smallint", nullable: true })
+  phaseIndex?: number | null;
+
+  @Column({ name: "narrative_role", type: "varchar", nullable: true })
+  narrativeRole?: string | null;
 
   @Column({ type: "jsonb", default: () => "'{}'::jsonb" })
   properties: Record<string, any>;

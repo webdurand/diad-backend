@@ -99,6 +99,12 @@ export class NpcEntity {
   @Column({ type: "jsonb", default: [] })
   tags: string[];
 
+  @Column({ name: "phase_index", type: "smallint", nullable: true })
+  phaseIndex?: number | null;
+
+  @Column({ name: "narrative_role", type: "varchar", nullable: true })
+  narrativeRole?: string | null;
+
   @Column({ name: "monster_id", type: "uuid", nullable: true })
   monsterId?: string;
 

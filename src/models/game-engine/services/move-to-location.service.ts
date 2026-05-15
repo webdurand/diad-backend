@@ -7,6 +7,7 @@ import {
 } from "src/entities/game-session.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { LocationEntity } from "src/entities/location.entity";
+import { SessionStoryArcStateEntity } from "src/entities/session-story-arc-state.entity";
 import { LocationService } from "src/models/world/services/location.service";
 import { SceneService } from "src/models/session/services/scene.service";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
@@ -54,6 +55,7 @@ export interface AvailableTravel {
   travelTime: string | null;
   description: string | null;
   isLocked: boolean;
+  unlockedAtPhase: number | null;
   requirements: Record<string, any>;
 }
 
@@ -143,6 +145,8 @@ export class MoveToLocationService {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     @InjectRepository(LocationConnectionEntity)
     private readonly connectionRepo: Repository<LocationConnectionEntity>,
+    @InjectRepository(SessionStoryArcStateEntity)
+    private readonly arcStateRepo: Repository<SessionStoryArcStateEntity>,
     private readonly locationService: LocationService,
     private readonly sceneService: SceneService,
     private readonly eventBus: EventBusService,
@@ -239,7 +243,8 @@ export class MoveToLocationService {
           },
         );
       }
-      if (connection.isLocked) {
+      const currentPhaseIndex = await this.getCurrentPhaseIndex(session.id);
+      if (!connection.isAccessibleAtPhase(currentPhaseIndex)) {
         throw new DomainException(
           ErrorCode.LOCATION_REQUIREMENTS_NOT_MET,
           `Conexão bloqueada — requirements não atendidos.`,
@@ -248,6 +253,8 @@ export class MoveToLocationService {
               fromLocationId,
               toLocationId: target.id,
               requirements: connection.requirements,
+              unlockedAtPhase: connection.unlockedAtPhase ?? null,
+              currentPhaseIndex,
             },
             hint: "Director narra obstáculo (porta trancada, ponte caída, etc).",
           },
@@ -283,6 +290,7 @@ export class MoveToLocationService {
       where: { fromLocationId: scene.locationId, isHidden: false },
       relations: ["toLocation"],
     });
+    const currentPhaseIndex = await this.getCurrentPhaseIndex(sessionId);
 
     return connections.map((c) => ({
       connectionId: c.id,
@@ -291,7 +299,8 @@ export class MoveToLocationService {
       toLocationType: c.toLocation?.type ?? "unknown",
       travelTime: c.travelTime ?? null,
       description: c.description ?? null,
-      isLocked: c.isLocked,
+      isLocked: !c.isAccessibleAtPhase(currentPhaseIndex),
+      unlockedAtPhase: c.unlockedAtPhase ?? null,
       requirements: c.requirements ?? {},
     }));
   }
@@ -377,6 +386,7 @@ export class MoveToLocationService {
     }
 
     const availableTravels = await this.listAvailableTravels(input.sessionId);
+    const currentPhaseIndex = await this.getCurrentPhaseIndex(input.sessionId);
 
     if (!fromLocationId) {
       return {
@@ -392,8 +402,12 @@ export class MoveToLocationService {
       relations: ["toLocation"],
     });
     if (directConnection) {
-      const directTravel = this.toAvailableTravel(directConnection, target);
-      if (directConnection.isLocked) {
+      const directTravel = this.toAvailableTravel(
+        directConnection,
+        target,
+        currentPhaseIndex,
+      );
+      if (!directConnection.isAccessibleAtPhase(currentPhaseIndex)) {
         return {
           status: "blocked",
           destination: toResolveLocation(target),
@@ -584,6 +598,7 @@ export class MoveToLocationService {
   private toAvailableTravel(
     connection: LocationConnectionEntity,
     toLocation: LocationEntity,
+    currentPhaseIndex = 1,
   ): AvailableTravel {
     return {
       connectionId: connection.id,
@@ -592,9 +607,18 @@ export class MoveToLocationService {
       toLocationType: toLocation.type,
       travelTime: connection.travelTime ?? null,
       description: connection.description ?? null,
-      isLocked: connection.isLocked,
+      isLocked: !connection.isAccessibleAtPhase(currentPhaseIndex),
+      unlockedAtPhase: connection.unlockedAtPhase ?? null,
       requirements: connection.requirements ?? {},
     };
+  }
+
+  private async getCurrentPhaseIndex(sessionId: string): Promise<number> {
+    const state = await this.arcStateRepo.findOne({
+      where: { gameSessionId: sessionId },
+      order: { updatedAt: "DESC" },
+    });
+    return state?.currentPhaseIndex ?? 1;
   }
 
   private async resolveTargetLoose(

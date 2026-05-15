@@ -374,6 +374,13 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Conexão é locked e requirements não atendidos (key, spell, etc). Director deve narrar obstáculo.",
     domain: "world",
   },
+  [ErrorCode.PHASE_GATE_PENDING_CONFIRMATION]: {
+    httpStatus: 409,
+    defaultTitle: "Phase advance requires explicit confirmation",
+    defaultHint:
+      "Re-envie POST com body { confirmed: true } para confirmar; ou ignore para continuar na fase atual.",
+    domain: "world",
+  },
   [ErrorCode.SCENE_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Scene not found",

@@ -1,6 +1,7 @@
 import {
   Injectable,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -15,6 +16,8 @@ import {
 } from "src/entities/narrative-decision.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { EventLogService } from "src/models/session/services/event-log.service";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { NpcService } from "src/models/world/services/npc.service";
 import { LocationService } from "src/models/world/services/location.service";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
@@ -58,6 +61,8 @@ export class NarrativeDecisionService {
     private readonly eventLog: EventLogService,
     private readonly npcService: NpcService,
     private readonly locationService: LocationService,
+    @Optional() private readonly eventBus?: EventBusService,
+    @Optional() private readonly envelopeFactory?: EventEnvelopeFactory,
   ) {}
 
   async create(
@@ -122,7 +127,50 @@ export class NarrativeDecisionService {
       actorCharacterId: undefined,
     });
 
+    await this.publishNarrativeDecisionMade(session, saved);
+
     return saved;
+  }
+
+  private async publishNarrativeDecisionMade(
+    session: Pick<GameSessionEntity, "id" | "campaignId">,
+    decision: NarrativeDecisionEntity,
+  ): Promise<void> {
+    if (!session.campaignId || !this.eventBus || !this.envelopeFactory) return;
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "narrative_decision_made",
+        source: {
+          service: "diad-backend",
+          module: "NarrativeDecisionService.create",
+        },
+        scope: {
+          campaignId: session.campaignId,
+          sessionId: session.id,
+          ...(decision.sceneId ? { sceneId: decision.sceneId } : {}),
+        },
+        payload: {
+          sessionId: session.id,
+          narrativeDecisionId: decision.id,
+          decisionId: decision.id,
+          decisionText: decision.decisionText,
+          impactWeight: decision.impactWeight,
+          tags: decision.tags,
+          affectedEntityType: decision.affectedEntityType ?? null,
+          affectedEntityId: decision.affectedEntityId ?? null,
+        },
+        audiences: ["Director", "CompanionAI", "HUD"],
+        narrativeDescriptor: decision.decisionText.slice(0, 120),
+        metadata: {
+          narrativeWeight: decision.impactWeight,
+          tags: ["decision", ...decision.tags],
+        },
+      });
+      await this.eventBus.publish(envelope);
+    } catch {
+      // EventBus is observable but must not block persistence of the decision.
+    }
   }
 
   async listBySession(

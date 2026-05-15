@@ -13,6 +13,8 @@ import {
   FactionRelationEntity,
   LocationPoiEntity,
   StoryArcEntity,
+  PhaseEntity,
+  PhaseTransitionEntity,
   QuestEntity,
   QuestObjectiveEntity,
   QuestPrerequisiteEntity,
@@ -34,6 +36,7 @@ import {
   ClockEntity,
   SceneEntity,
   SceneNpcEntity,
+  SessionEventEntity,
 
   GameSessionEntity,
   SessionNpcStateEntity,
@@ -57,7 +60,11 @@ import { LocationPoiService } from "./services/location-poi.service";
 import { NpcService } from "./services/npc.service";
 import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
+import { PhaseService } from "./services/phase.service";
 import { StoryArcService } from "./services/story-arc.service";
+import { MissionPullListener } from "./listeners/mission-pull.listener";
+import { MissionPanelCacheListener } from "./listeners/mission-panel-cache.listener";
+import { PhaseGateListener } from "./listeners/phase-gate.listener";
 import { NpcRelationshipService } from "./services/npc-relationship.service";
 
 import { AmbianceService } from "./services/ambiance.service";
@@ -88,6 +95,8 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       FactionEntity,
       FactionRelationEntity,
       StoryArcEntity,
+      PhaseEntity,
+      PhaseTransitionEntity,
       QuestEntity,
       QuestObjectiveEntity,
       QuestPrerequisiteEntity,
@@ -106,6 +115,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       ClockEntity,
       SceneEntity,
       SceneNpcEntity,
+      SessionEventEntity,
       GameSessionEntity,
       SessionNpcStateEntity,
       SessionFactionStateEntity,
@@ -133,6 +143,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     NpcService,
     FactionService,
     QuestService,
+    PhaseService,
     StoryArcService,
     NpcRelationshipService,
 
@@ -151,6 +162,9 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     QuestDefeatListener,
     GainReputationListener,
     QuestRewardListener,
+    MissionPullListener,
+    MissionPanelCacheListener,
+    PhaseGateListener,
   ],
   exports: [
     CampaignService,
@@ -159,6 +173,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     NpcService,
     FactionService,
     QuestService,
+    PhaseService,
     StoryArcService,
     NpcRelationshipService,
 
@@ -180,11 +195,17 @@ export class WorldModule implements OnModuleInit {
     private readonly questDefeatListener: QuestDefeatListener,
     private readonly gainReputationListener: GainReputationListener,
     private readonly questRewardListener: QuestRewardListener,
+    private readonly missionPullListener: MissionPullListener,
+    private readonly missionPanelCacheListener: MissionPanelCacheListener,
+    private readonly phaseGateListener: PhaseGateListener,
   ) {}
 
   onModuleInit(): void {
     this.eventBus.registerListener(this.questDefeatListener);
     this.eventBus.registerListener(this.gainReputationListener);
     this.eventBus.registerListener(this.questRewardListener);
+    this.eventBus.registerListener(this.missionPullListener);
+    this.eventBus.registerListener(this.missionPanelCacheListener);
+    this.eventBus.registerListener(this.phaseGateListener);
   }
 }

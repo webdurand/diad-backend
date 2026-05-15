@@ -25,10 +25,18 @@ interface LoginInput {
   password: string;
 }
 
+const AUTH_USER_CACHE_TTL_MS = 30_000;
+
+interface CachedAuthUser {
+  user: UserEntity;
+  expiresAt: number;
+}
+
 @Injectable()
 export class AuthService {
   private readonly cookieName = "diad_session";
   private readonly cookieMaxAgeMs = 7 * 24 * 60 * 60 * 1000;
+  private readonly userCache = new Map<string, CachedAuthUser>();
 
   constructor(
     @InjectRepository(UserEntity)
@@ -106,12 +114,20 @@ export class AuthService {
 
   async getUserFromToken(token: string): Promise<UserEntity> {
     const payload = this.verifyToken(token);
+    const cached = this.userCache.get(payload.id);
+    if (cached && cached.expiresAt > Date.now()) return cached.user;
+    if (cached) this.userCache.delete(payload.id);
+
     const user = await this.userRepository.findOne({
       where: { id: payload.id },
     });
     if (!user) {
       throw new UnauthorizedException("Usuario nao encontrado.");
     }
+    this.userCache.set(payload.id, {
+      user,
+      expiresAt: Date.now() + AUTH_USER_CACHE_TTL_MS,
+    });
     return user;
   }
 

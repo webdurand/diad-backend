@@ -26,6 +26,7 @@ import { CampaignService } from "./services/campaign.service";
 import { SessionService } from "../game-engine/services/session.service";
 import { NpcService } from "./services/npc.service";
 import { QuestService } from "./services/quest.service";
+import { PhaseService } from "./services/phase.service";
 import {
   SessionNpcStateService,
   type UpsertNpcStateDto,
@@ -65,6 +66,7 @@ export class SessionScopedWorldController {
     private readonly campaignService: CampaignService,
     private readonly npcService: NpcService,
     private readonly questService: QuestService,
+    private readonly phaseService: PhaseService,
     private readonly npcStateService: SessionNpcStateService,
     private readonly factionStateService: SessionFactionStateService,
     private readonly arcStateService: SessionStoryArcStateService,
@@ -80,6 +82,33 @@ export class SessionScopedWorldController {
       await this.campaignService.ensureDmOwnership(session.campaignId, userId);
     }
     return { campaignId: session.campaignId };
+  }
+
+
+  @Get(":sessionId/main-quest")
+  async getMainQuest(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.phaseService.getMainQuest(sessionId);
+  }
+
+  @Post(":sessionId/phase/advance")
+  async advancePhase(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Body() body: { confirmed?: boolean },
+    @Headers("traceparent") traceparent?: string,
+  ) {
+    const userId = getUserId(req);
+    await this.sessionService.ensureAccess(sessionId, userId);
+    return this.phaseService.advancePhase(
+      sessionId,
+      userId,
+      body.confirmed === true,
+      extractTraceId(traceparent),
+    );
   }
 
 

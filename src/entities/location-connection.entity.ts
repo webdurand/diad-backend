@@ -40,6 +40,15 @@ export class LocationConnectionEntity {
   @Column({ name: "is_locked", type: "boolean", default: false })
   isLocked: boolean;
 
+  @Column({ name: "unlocked_at_phase", type: "smallint", nullable: true })
+  unlockedAtPhase?: number | null;
+
   @Column({ type: "jsonb", default: {} })
   requirements: Record<string, any>;
+
+  isAccessibleAtPhase(currentPhaseIndex: number): boolean {
+    if (this.isLocked) return false;
+    if (!this.unlockedAtPhase) return true;
+    return currentPhaseIndex >= this.unlockedAtPhase;
+  }
 }

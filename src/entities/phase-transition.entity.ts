@@ -6,15 +6,12 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Unique,
-  UpdateDateColumn,
 } from "typeorm";
 import { GameSessionEntity } from "./game-session.entity";
 import { StoryArcEntity } from "./story-arc.entity";
 
-@Entity("session_story_arc_state")
-@Unique(["gameSessionId", "storyArcId"])
-export class SessionStoryArcStateEntity {
+@Entity("phase_transitions")
+export class PhaseTransitionEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
@@ -34,18 +31,22 @@ export class SessionStoryArcStateEntity {
   @JoinColumn({ name: "story_arc_id" })
   storyArc: StoryArcEntity;
 
-  @Column({ name: "current_phase", type: "varchar", default: "hook" })
-  currentPhase: "hook" | "development" | "climax" | "resolution";
+  @Column({ name: "from_phase_index", type: "smallint" })
+  fromPhaseIndex: number;
 
-  @Column({ name: "current_phase_index", type: "smallint", default: 1 })
-  currentPhaseIndex: number;
+  @Column({ name: "to_phase_index", type: "smallint" })
+  toPhaseIndex: number;
 
-  @Column({ name: "phase_notes", type: "jsonb", default: {} })
-  phaseNotes: Record<string, string>;
+  @Column({
+    name: "transition_beat_narrative_seed",
+    type: "text",
+    nullable: true,
+  })
+  transitionBeatNarrativeSeed?: string | null;
+
+  @Column({ name: "confirmed_by_user_id", type: "uuid", nullable: true })
+  confirmedByUserId?: string | null;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
-
-  @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
-  updatedAt: Date;
 }

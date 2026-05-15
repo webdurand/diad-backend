@@ -40,6 +40,9 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "quest_advanced",
     "quest_completed",
     "quest_failed",
+    "main_quest_assigned",
+    "phase_gate_pending",
+    "phase_changed",
   ]),
   NarrativeEvent: new Set([
     "dialog_chosen",
@@ -62,6 +65,8 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
 
     "npc_witnessed_event",
     "guard_dispatched",
+    "mission_progress_advanced",
+    "director_pull_injected",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",

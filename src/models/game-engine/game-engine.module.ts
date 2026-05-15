@@ -18,6 +18,12 @@ import {
   CampaignPlayerEntity,
   CampaignPartyMemberEntity,
   FactionEntity,
+  StoryArcEntity,
+  PhaseEntity,
+  PhaseTransitionEntity,
+  QuestEntity,
+  QuestObjectiveEntity,
+  SessionStoryArcStateEntity,
   UserEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
@@ -166,6 +172,12 @@ import { DialogueActionService } from "./services/dialogue-action.service";
       CampaignPlayerEntity,
       CampaignPartyMemberEntity,
       FactionEntity,
+      StoryArcEntity,
+      PhaseEntity,
+      PhaseTransitionEntity,
+      QuestEntity,
+      QuestObjectiveEntity,
+      SessionStoryArcStateEntity,
       UserEntity,
 
       RestSessionEntity,
