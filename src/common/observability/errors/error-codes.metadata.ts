@@ -402,6 +402,37 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "A abertura cinemática foi pulada para preservar o início da sessão.",
     domain: "narrative",
   },
+  [ErrorCode.BOOKEND_NPC_REFERENCE_VIOLATION]: {
+    httpStatus: 422,
+    defaultTitle: "Bookend referenced an NPC that is not alive",
+    defaultHint:
+      "O writer será retentado uma vez sem referenciar NPCs mortos; depois cai em fallback mínimo.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_PLANNER_TIMEOUT]: {
+    httpStatus: 504,
+    defaultTitle: "Bookend planner timed out",
+    defaultHint: "A sessão continua com fallback curto de capítulo.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_WRITER_TIMEOUT]: {
+    httpStatus: 504,
+    defaultTitle: "Bookend writer timed out",
+    defaultHint: "A sessão continua com fallback curto de capítulo.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_ARTIFACT_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Bookend artifact not found",
+    defaultHint: "O bookend solicitado não existe mais ou não pertence à sessão.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_DECISION_INCONSISTENT]: {
+    httpStatus: 409,
+    defaultTitle: "Bookend decision inconsistent",
+    defaultHint: "Outro dispatcher processou a mesma transição; reidrate o estado.",
+    domain: "narrative",
+  },
   [ErrorCode.SCENE_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Scene not found",

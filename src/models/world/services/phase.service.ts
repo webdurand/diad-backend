@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, Repository } from "typeorm";
 import { CampaignEntity } from "src/entities/campaign.entity";
@@ -13,6 +18,7 @@ import {
   PhaseEntity,
 } from "src/entities/phase.entity";
 import { PhaseTransitionEntity } from "src/entities/phase-transition.entity";
+import { BookendArtifactEntity } from "src/entities/bookend-artifact.entity";
 import { QuestEntity } from "src/entities/quest.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 import { SessionEventEntity } from "src/entities/session-event.entity";
@@ -144,6 +150,7 @@ export interface MissionPanelPayload {
     name: string;
     completedAt: string;
   }>;
+  bookendsCount: number;
 }
 
 interface MissionPanelCacheEntry {
@@ -180,6 +187,9 @@ export class PhaseService {
     private readonly questService: QuestService,
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
+    @Optional()
+    @InjectRepository(BookendArtifactEntity)
+    private readonly bookendArtifactRepo?: Repository<BookendArtifactEntity>,
   ) {}
 
   evaluateGate(
@@ -324,6 +334,10 @@ export class PhaseService {
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
     const progress = this.evaluateGate(phase.completionConditions, facts);
     const phaseHistory = await this.loadPhaseHistory(sessionId, storyArc.id);
+    const bookendsCount =
+      (await this.bookendArtifactRepo?.count({
+        where: { gameSessionId: sessionId },
+      })) ?? 0;
 
     const payload: MissionPanelPayload = {
       quest: {
@@ -356,6 +370,7 @@ export class PhaseService {
         pullScore: session.pullScore ?? null,
       },
       phaseHistory,
+      bookendsCount,
     };
     this.setCachedMainQuest(sessionId, payload);
     return payload;

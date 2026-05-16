@@ -44,6 +44,7 @@ import {
   ChaosFactorService,
   type ChaosSource,
 } from "./services/chaos-factor.service";
+import { BookendArtifactService } from "../bookends/services/bookend-artifact.service";
 import { isDmOmniscient } from "./services/npc-projection";
 import type { CreateQuestDto, UpdateQuestDto } from "./services/quest.service";
 
@@ -71,6 +72,7 @@ export class SessionScopedWorldController {
     private readonly factionStateService: SessionFactionStateService,
     private readonly arcStateService: SessionStoryArcStateService,
     private readonly chaosFactorService: ChaosFactorService,
+    private readonly bookendArtifactService: BookendArtifactService,
   ) {}
 
   private async ensureDm(
@@ -109,6 +111,45 @@ export class SessionScopedWorldController {
       body.confirmed === true,
       extractTraceId(traceparent),
     );
+  }
+
+  @Get(":sessionId/bookends")
+  async listBookends(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return {
+      sessionId,
+      bookends: await this.bookendArtifactService.listBySession(sessionId),
+    };
+  }
+
+  @Get(":sessionId/bookends/:bookendId")
+  async getBookend(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Param("bookendId") bookendId: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.bookendArtifactService.getById(sessionId, bookendId);
+  }
+
+  @Post(":sessionId/bookends/:bookendId/mark-skipped")
+  async markBookendSkipped(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Param("bookendId") bookendId: string,
+    @Body() body: { elapsedMs?: number },
+    @Headers("traceparent") traceparent?: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.bookendArtifactService.markSkipped({
+      sessionId,
+      id: bookendId,
+      elapsedMs: Math.max(0, body.elapsedMs ?? 0),
+      traceId: extractTraceId(traceparent),
+    });
   }
 
 

@@ -15,6 +15,7 @@ import {
   StoryArcEntity,
   PhaseEntity,
   PhaseTransitionEntity,
+  BookendArtifactEntity,
   QuestEntity,
   QuestObjectiveEntity,
   QuestPrerequisiteEntity,
@@ -79,6 +80,12 @@ import { NpcWealthController } from "./npc-wealth.controller";
 import { CompanionTemplatesController } from "./companion-templates.controller";
 import { CompanionTemplateService } from "./services/companion-template.service";
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
+import { BookendDecisionService } from "../bookends/services/bookend-decision.service";
+import { NpcStateSnapshotService } from "../bookends/services/npc-state-snapshot.service";
+import { AgentBookendGenerationService } from "../bookends/services/agent-bookend-generation.service";
+import { BookendEventPublisherService } from "../bookends/services/bookend-event-publisher.service";
+import { BookendRendererService } from "../bookends/services/bookend-renderer.service";
+import { BookendArtifactService } from "../bookends/services/bookend-artifact.service";
 
 @Module({
   imports: [
@@ -97,6 +104,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       StoryArcEntity,
       PhaseEntity,
       PhaseTransitionEntity,
+      BookendArtifactEntity,
       QuestEntity,
       QuestObjectiveEntity,
       QuestPrerequisiteEntity,
@@ -157,6 +165,12 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionStoryArcStateService,
     NpcWealthService,
     CompanionTemplateService,
+    BookendDecisionService,
+    NpcStateSnapshotService,
+    AgentBookendGenerationService,
+    BookendEventPublisherService,
+    BookendRendererService,
+    BookendArtifactService,
 
     CampaignIdPipe,
     QuestDefeatListener,
@@ -187,6 +201,11 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionStoryArcStateService,
     NpcWealthService,
     CompanionTemplateService,
+    BookendDecisionService,
+    NpcStateSnapshotService,
+    BookendEventPublisherService,
+    BookendRendererService,
+    BookendArtifactService,
   ],
 })
 export class WorldModule implements OnModuleInit {

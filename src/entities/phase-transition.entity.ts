@@ -44,6 +44,16 @@ export class PhaseTransitionEntity {
   })
   transitionBeatNarrativeSeed?: string | null;
 
+  @Column({ name: "bookend_status", type: "varchar", length: 24, default: "pending" })
+  bookendStatus: "pending" | "rendering" | "ready" | "failed";
+
+  @Column({
+    name: "bookend_payload_snapshot",
+    type: "jsonb",
+    nullable: true,
+  })
+  bookendPayloadSnapshot?: Record<string, unknown> | null;
+
   @Column({ name: "confirmed_by_user_id", type: "uuid", nullable: true })
   confirmedByUserId?: string | null;
 

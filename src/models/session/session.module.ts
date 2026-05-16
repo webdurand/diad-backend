@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, OnModuleInit } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   SceneEntity,
@@ -34,6 +34,8 @@ import { SessionRecapService } from "./services/session-recap.service";
 import { SessionResumeService } from "./services/session-resume.service";
 import { MovementLockService } from "./services/movement-lock.service";
 import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-cold-open-hook.use-case";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { BookendOrchestratorListener } from "../bookends/services/bookend-orchestrator.listener";
 
 @Module({
   imports: [
@@ -73,6 +75,7 @@ import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-c
     SessionResumeService,
     MovementLockService,
     GenerateColdOpenHookUseCase,
+    BookendOrchestratorListener,
   ],
   exports: [
     SceneService,
@@ -87,4 +90,13 @@ import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-c
     GenerateColdOpenHookUseCase,
   ],
 })
-export class SessionModule {}
+export class SessionModule implements OnModuleInit {
+  constructor(
+    private readonly eventBus: EventBusService,
+    private readonly bookendOrchestrator: BookendOrchestratorListener,
+  ) {}
+
+  onModuleInit(): void {
+    this.eventBus.registerListener(this.bookendOrchestrator);
+  }
+}
