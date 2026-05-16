@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
   HttpCode,
   HttpStatus,
@@ -52,6 +53,11 @@ export class AdminController {
     return this.seedCharacterService.seed(dto, {
       authenticatedUserId: getUserId(req),
     });
+  }
+
+  @Get("opening-archetypes")
+  async listOpeningArchetypes() {
+    return this.adminService.listOpeningArchetypes();
   }
 
 

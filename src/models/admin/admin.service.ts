@@ -50,6 +50,7 @@ import {
   FeatTypeEnum,
   ProficiencyTypeEnum,
   AttackTypeEnum,
+  OpeningArchetypeEntity,
 } from "../../entities";
 import { ALL_SOURCES } from "../../data/sources";
 import {
@@ -98,6 +99,31 @@ export class AdminService {
   private readonly jsonDir = path.resolve(process.cwd(), "src/data/json");
 
   constructor(@InjectDataSource() private readonly ds: DataSource) {}
+
+  async listOpeningArchetypes(): Promise<
+    Array<{
+      key: string;
+      promptShape: string;
+      requiredSlots: string[];
+      optionalSlots: string[];
+      bannedPhrases: string[];
+      isActive: boolean;
+      since: string;
+    }>
+  > {
+    const rows = await this.ds.getRepository(OpeningArchetypeEntity).find({
+      order: { key: "ASC" },
+    });
+    return rows.map((row) => ({
+      key: row.key,
+      promptShape: row.promptShape,
+      requiredSlots: row.requiredSlots ?? [],
+      optionalSlots: row.optionalSlots ?? [],
+      bannedPhrases: row.bannedPhrases ?? [],
+      isActive: row.isActive,
+      since: row.since,
+    }));
+  }
 
 
 

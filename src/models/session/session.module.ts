@@ -18,6 +18,7 @@ import {
   QuestEntity,
   SessionNpcStateEntity,
   SessionStoryArcStateEntity,
+  OpeningArchetypeEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { WorldModule } from "../world/world.module";
@@ -32,6 +33,7 @@ import { SessionMessageService } from "./services/session-message.service";
 import { SessionRecapService } from "./services/session-recap.service";
 import { SessionResumeService } from "./services/session-resume.service";
 import { MovementLockService } from "./services/movement-lock.service";
+import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-cold-open-hook.use-case";
 
 @Module({
   imports: [
@@ -53,6 +55,7 @@ import { MovementLockService } from "./services/movement-lock.service";
       QuestEntity,
       SessionNpcStateEntity,
       SessionStoryArcStateEntity,
+      OpeningArchetypeEntity,
     ]),
     AuthModule,
     WorldModule,
@@ -69,6 +72,7 @@ import { MovementLockService } from "./services/movement-lock.service";
     SessionRecapService,
     SessionResumeService,
     MovementLockService,
+    GenerateColdOpenHookUseCase,
   ],
   exports: [
     SceneService,
@@ -80,6 +84,7 @@ import { MovementLockService } from "./services/movement-lock.service";
     SessionRecapService,
     SessionResumeService,
     MovementLockService,
+    GenerateColdOpenHookUseCase,
   ],
 })
 export class SessionModule {}

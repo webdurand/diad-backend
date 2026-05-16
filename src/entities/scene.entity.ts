@@ -11,6 +11,7 @@ import { LocationEntity } from "./location.entity";
 import { LocationPoiEntity } from "./location-poi.entity";
 import { NpcEntity } from "./npc.entity";
 import type { ArcBeat } from "./campaign.entity";
+import type { ColdOpenHookSnapshot } from "src/models/cold-open/domain/opening-archetype.types";
 
 @Entity("scenes")
 export class SceneEntity {
@@ -63,6 +64,9 @@ export class SceneEntity {
 
   @Column({ name: "context_snapshot", type: "jsonb", default: {} })
   contextSnapshot: Record<string, any>;
+
+  @Column({ name: "cold_open_hook", type: "jsonb", nullable: true })
+  coldOpenHook?: ColdOpenHookSnapshot | null;
 
   @Column({ name: "started_at", type: "timestamptz", nullable: true })
   startedAt?: Date;

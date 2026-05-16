@@ -83,6 +83,7 @@ import { LootTableItemEntity } from "./loot-table-item.entity";
 import { EncounterTemplateEntity } from "./encounter-template.entity";
 import { EncounterJoinRequestEntity } from "./encounter-join-request.entity";
 import { SceneEntity } from "./scene.entity";
+import { OpeningArchetypeEntity } from "./opening-archetype.entity";
 import { SceneNpcEntity } from "./scene-npc.entity";
 import { SessionEventEntity } from "./session-event.entity";
 import { SessionMessageEntity } from "./session-message.entity";
@@ -201,6 +202,7 @@ export {
   EncounterTemplateEntity,
   EncounterJoinRequestEntity,
   SceneEntity,
+  OpeningArchetypeEntity,
   SceneNpcEntity,
   SessionEventEntity,
   SessionMessageEntity,
@@ -315,6 +317,7 @@ export const ENTITIES = [
   EncounterTemplateEntity,
   EncounterJoinRequestEntity,
   SceneEntity,
+  OpeningArchetypeEntity,
   SceneNpcEntity,
   SessionEventEntity,
   SessionMessageEntity,

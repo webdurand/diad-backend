@@ -27,6 +27,7 @@ import {
 } from "./movement-lock.service";
 import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
 import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
+import type { ColdOpenHookSnapshot } from "src/models/cold-open/domain/opening-archetype.types";
 
 
 export interface SceneContext {
@@ -36,6 +37,7 @@ export interface SceneContext {
     title?: string;
     description?: string;
     mood?: string;
+    coldOpenHook?: ColdOpenHookSnapshot | null;
     location?: {
       id?: string;
       name: string;
@@ -462,6 +464,7 @@ export class SceneContextService {
         title: scene.title,
         description: scene.description,
         mood: scene.mood,
+        coldOpenHook: scene.coldOpenHook ?? null,
         location: scene.location
           ? {
               id: scene.location.id,

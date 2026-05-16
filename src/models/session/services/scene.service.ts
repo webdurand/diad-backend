@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { SceneEntity } from "src/entities/scene.entity";
@@ -12,6 +12,8 @@ import { SceneContextCacheService } from "./scene-context-cache.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
+import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
+import { GenerateColdOpenHookUseCase } from "src/models/cold-open/application/generate-cold-open-hook.use-case";
 
 export interface CreateSceneDto {
   locationId?: string;
@@ -55,6 +57,8 @@ export class SceneService {
     private readonly logger: DiadLogger,
     private readonly npcStateService: SessionNpcStateService,
     private readonly poiService: LocationPoiService,
+    @Optional()
+    private readonly coldOpen?: GenerateColdOpenHookUseCase,
   ) {
     this.logger.setContext(SceneService.name);
   }
@@ -116,6 +120,8 @@ export class SceneService {
     });
     const saved = await this.sceneRepo.save(scene);
 
+    await this.tryGenerateColdOpen(saved);
+
     await this.publishSceneChanged({
       sessionId,
       campaignId: campaign?.id ?? null,
@@ -130,6 +136,34 @@ export class SceneService {
     });
 
     return saved;
+  }
+
+  private async tryGenerateColdOpen(scene: SceneEntity): Promise<void> {
+    if (scene.sceneNumber !== 1 || !this.coldOpen) return;
+
+    const timeout = Symbol("cold-open-timeout");
+    const result = await Promise.race([
+      this.coldOpen.execute(scene),
+      new Promise<typeof timeout>((resolve) => {
+        setTimeout(() => resolve(timeout), 200);
+      }),
+    ]).catch((err: unknown) => {
+      this.logger.warn("scene.cold_open.generation_failed", {
+        "scene.id": scene.id,
+        "session.id": scene.sessionId,
+        "error.code": ErrorCode.COLD_OPEN_SLOT_RESOLUTION_FAILED,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    });
+
+    if (result === timeout) {
+      this.logger.warn("scene.cold_open.generation_timeout", {
+        "scene.id": scene.id,
+        "session.id": scene.sessionId,
+        "error.code": ErrorCode.COLD_OPEN_GENERATION_TIMEOUT,
+      });
+    }
   }
 
   private async publishSceneChanged(payload: {

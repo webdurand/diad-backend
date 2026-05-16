@@ -381,6 +381,27 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Re-envie POST com body { confirmed: true } para confirmar; ou ignore para continuar na fase atual.",
     domain: "world",
   },
+  [ErrorCode.COLD_OPEN_NO_ARCHETYPE_MATCH]: {
+    httpStatus: 422,
+    defaultTitle: "No cold open archetype matched",
+    defaultHint:
+      "Verifique perfis de voz, tags de personagem e arquétipos ativos antes de iniciar a primeira cena.",
+    domain: "narrative",
+  },
+  [ErrorCode.COLD_OPEN_SLOT_RESOLUTION_FAILED]: {
+    httpStatus: 422,
+    defaultTitle: "Cold open slot resolution failed",
+    defaultHint:
+      "O arquétipo selecionado exige slots que não existem no contexto da cena.",
+    domain: "narrative",
+  },
+  [ErrorCode.COLD_OPEN_GENERATION_TIMEOUT]: {
+    httpStatus: 504,
+    defaultTitle: "Cold open generation timed out",
+    defaultHint:
+      "A abertura cinemática foi pulada para preservar o início da sessão.",
+    domain: "narrative",
+  },
   [ErrorCode.SCENE_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Scene not found",

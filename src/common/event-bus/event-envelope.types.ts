@@ -15,6 +15,7 @@ export const EVENT_AUDIENCES = [
   "Director",
   "CompanionAI",
   "HUD",
+  "Archivist",
 ] as const;
 
 export type EventAudience = (typeof EVENT_AUDIENCES)[number];
