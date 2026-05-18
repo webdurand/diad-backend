@@ -5,7 +5,10 @@ import {
   BOOKEND_SAMPLING,
   type GeneratedBookendProse,
 } from "../domain/bookend.types";
-import type { BookendGenerationPort, BookendGenerationRequest } from "../application/render-bookend-ceremony.use-case";
+import type {
+  BookendGenerationPort,
+  BookendGenerationRequest,
+} from "../application/render-bookend-ceremony.use-case";
 
 const BOOKEND_WRITER_TIMEOUT_MS = 8_000;
 
@@ -51,6 +54,10 @@ export class AgentBookendGenerationService implements BookendGenerationPort {
           hiddenSecretSeed: request.hiddenSecretSeed ?? null,
           xpTriggerState: request.xpTriggerState ?? null,
           twoBeatRequired: request.twoBeatRequired === true,
+          currentIdentityTags: request.currentIdentityTags ?? [],
+          chronicleDiary: request.chronicleDiary ?? [],
+          bondResolved: request.bondResolved ?? null,
+          bondEmerging: request.bondEmerging ?? null,
           sampling: BOOKEND_SAMPLING[request.kind],
           cacheControl: { type: "ephemeral", ttl: "1h" },
         }),

@@ -29,9 +29,7 @@ import { PcPersonaService } from "src/models/characters/services/pc-persona.serv
 import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 import type { ColdOpenHookSnapshot } from "src/models/cold-open/domain/opening-archetype.types";
 
-
 export interface SceneContext {
-
   scene: {
     id?: string;
     title?: string;
@@ -54,7 +52,6 @@ export interface SceneContext {
     };
   };
   npcsPresent: Array<{
-
     id: string;
     name: string;
     title?: string;
@@ -69,13 +66,11 @@ export interface SceneContext {
     dialogueStyle?: string;
   }>;
 
-
   recentEvents: Array<{
     eventType: string;
     summary: string;
     sequence: number;
   }>;
-
 
   partyKnowledge: Array<{
     entityType: string;
@@ -83,24 +78,22 @@ export interface SceneContext {
     knowledgeValue?: string;
   }>;
 
-
   locationChain: Array<{ name: string; type: string; description?: string }>;
   worldLore?: string;
-
 
   recentChronicles: Array<{
     title: string;
     content: string;
     significance: number;
+    tier?: string;
+    legacyTags?: string[];
   }>;
-
 
   storyArc?: {
     name: string;
     currentPhase: string;
     phaseNotes: Record<string, string>;
   };
-
 
   playerCharacter?: PCPersona | null;
 
@@ -217,7 +210,6 @@ export class SceneContextService {
   private async assembleContextUncached(
     sceneId: string,
   ): Promise<SceneContext> {
-
     const scene = await this.sceneRepo.findOne({
       where: { id: sceneId },
       relations: ["location", "session", "poi", "currentInterlocutorNpc"],
@@ -229,7 +221,6 @@ export class SceneContextService {
     const sessionId = scene.sessionId;
     const locationId = scene.locationId;
     const campaignId = scene.location?.campaignId;
-
 
     const [
       session,
@@ -286,7 +277,6 @@ export class SceneContextService {
       .map((sn) => sn.npc.id);
     const allSceneNpcIds = sceneNpcs.map((sn) => sn.npcId);
     const characterIds = session?.characterIds ?? [];
-
 
     const [npcStates, partyKnowledgeRaw, arcState, playerCharacter] =
       await Promise.all([
@@ -360,6 +350,8 @@ export class SceneContextService {
         title: c.title,
         content: c.content,
         significance: c.significance,
+        tier: c.tier,
+        legacyTags: c.legacyTags ?? [],
       }));
 
     let storyArc: SceneContext["storyArc"];
@@ -503,8 +495,6 @@ export class SceneContextService {
     locationId?: string,
   ): Promise<Array<{ name: string; type: string; description?: string }>> {
     if (!locationId) return [];
-
-
 
     const rows: Array<{
       name: string;

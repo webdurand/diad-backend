@@ -7,11 +7,15 @@ import { PartyKnowledgeEntity } from "src/entities/party-knowledge.entity";
 export interface CreateChronicleDto {
   campaignId: string;
   sessionId?: string;
+  phaseId?: string | null;
+  phaseIndex?: number | null;
   entryDate?: string;
   title: string;
   content: string;
   entityChanges?: Record<string, any>;
   significance?: number;
+  legacyTags?: string[];
+  tierLocked?: boolean;
 }
 
 export interface RecordKnowledgeDto {
@@ -32,19 +36,22 @@ export class ChronicleService {
     private readonly knowledgeRepo: Repository<PartyKnowledgeEntity>,
   ) {}
 
-
-
   async createChronicle(
     dto: CreateChronicleDto,
   ): Promise<CampaignChronicleEntity> {
     const entry = this.chronicleRepo.create({
       campaignId: dto.campaignId,
       sessionId: dto.sessionId,
+      phaseId: dto.phaseId ?? null,
+      phaseIndex: dto.phaseIndex ?? null,
       entryDate: dto.entryDate,
       title: dto.title,
       content: dto.content,
       entityChanges: dto.entityChanges ?? {},
       significance: dto.significance ?? 5,
+      tier: "active",
+      legacyTags: dto.legacyTags ?? [],
+      tierLocked: dto.tierLocked === true,
     });
     return this.chronicleRepo.save(entry);
   }
@@ -58,6 +65,7 @@ export class ChronicleService {
       .createQueryBuilder("c")
       .where("c.campaign_id = :campaignId", { campaignId })
       .andWhere("c.significance >= :min", { min: minSignificance })
+      .andWhere("c.tier IN (:...tiers)", { tiers: ["active", "diary"] })
       .orderBy("c.significance", "DESC")
       .addOrderBy("c.created_at", "DESC")
       .take(limit)
@@ -71,8 +79,6 @@ export class ChronicleService {
       where: { sessionId },
     });
   }
-
-
 
   async recordKnowledge(
     dto: RecordKnowledgeDto,

@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, Repository } from "typeorm";
 import { CampaignEntity } from "src/entities/campaign.entity";
+import { CharacterEntity } from "src/entities/character.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { NpcEntity } from "src/entities/npc.entity";
@@ -59,6 +60,7 @@ export interface GateFacts {
   locationVisitedIds?: Set<string>;
   combatCompletedIds?: Set<string>;
   arcBeatsReached?: Set<string>;
+  nlTriggerSatisfiedKeys?: Set<string>;
 }
 
 export interface GateEvaluation {
@@ -158,6 +160,16 @@ export interface MissionPanelPayload {
     completedAt: string;
   }>;
   bookendsCount: number;
+  identity?: {
+    currentTags: string[];
+    history: Array<{
+      added: string[];
+      removed: string[];
+      appliedAt: string;
+      phaseTransitionId: string;
+      rationale?: string;
+    }>;
+  };
 }
 
 interface MissionPanelCacheEntry {
@@ -197,6 +209,9 @@ export class PhaseService {
     @Optional()
     @InjectRepository(BookendArtifactEntity)
     private readonly bookendArtifactRepo?: Repository<BookendArtifactEntity>,
+    @Optional()
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo?: Repository<CharacterEntity>,
   ) {}
 
   evaluateGate(
@@ -210,7 +225,9 @@ export class PhaseService {
     for (const condition of conditions) {
       if (this.isConditionSatisfied(condition, facts)) {
         satisfiedCount += 1;
-        const kind = Object.keys(condition)[0];
+        const kind = condition.naturalLanguage
+          ? "naturalLanguage"
+          : Object.keys(condition)[0];
         if (kind && !satisfiedKinds.includes(kind)) satisfiedKinds.push(kind);
       }
     }
@@ -226,13 +243,15 @@ export class PhaseService {
   selectActiveObjective(
     objectives: QuestObjectiveEntity[],
   ): QuestObjectiveEntity | null {
-    return objectives
-      .filter((objective) => objective.status === "active")
-      .sort((a, b) => {
-        const priority = (b.priority ?? 0) - (a.priority ?? 0);
-        if (priority !== 0) return priority;
-        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-      })[0] ?? null;
+    return (
+      objectives
+        .filter((objective) => objective.status === "active")
+        .sort((a, b) => {
+          const priority = (b.priority ?? 0) - (a.priority ?? 0);
+          if (priority !== 0) return priority;
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+        })[0] ?? null
+    );
   }
 
   async bootstrapStoryFirst(
@@ -297,10 +316,14 @@ export class PhaseService {
     });
     await this.assignObjectivePriorities(objectives);
 
-    const optionalObjective = objectives.find((objective) => objective.isOptional);
+    const optionalObjective = objectives.find(
+      (objective) => objective.isOptional,
+    );
     const firstPhase = phases.find((phase) => phase.index === 1);
     if (firstPhase && optionalObjective) {
-      const deprecates = this.normalizeDeprecates(firstPhase.deprecatesOnAdvance);
+      const deprecates = this.normalizeDeprecates(
+        firstPhase.deprecatesOnAdvance,
+      );
       if (!deprecates.lostObjectives.includes(optionalObjective.id)) {
         firstPhase.deprecatesOnAdvance = {
           ...deprecates,
@@ -336,12 +359,15 @@ export class PhaseService {
 
     const activeObjective = this.selectActiveObjective(quest.objectives ?? []);
     if (!activeObjective) {
-      throw new NotFoundException("Objetivo ativo da missão principal não encontrado.");
+      throw new NotFoundException(
+        "Objetivo ativo da missão principal não encontrado.",
+      );
     }
 
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
     const progress = this.evaluateGate(phase.completionConditions, facts);
     const phaseHistory = await this.loadPhaseHistory(sessionId, storyArc.id);
+    const identity = await this.loadIdentityState(session);
     const bookendsCount =
       (await this.bookendArtifactRepo?.count({
         where: { gameSessionId: sessionId },
@@ -362,7 +388,8 @@ export class PhaseService {
         priority: activeObjective.priority ?? 0,
         sortOrder: activeObjective.sortOrder ?? 0,
         progressCount: activeObjective.progressCount ?? 0,
-        lastNarrativeDescriptor: activeObjective.lastNarrativeDescriptor ?? null,
+        lastNarrativeDescriptor:
+          activeObjective.lastNarrativeDescriptor ?? null,
       },
       currentPhase: this.toPhaseDto(phase),
       phaseProgress: {
@@ -379,6 +406,7 @@ export class PhaseService {
       },
       phaseHistory,
       bookendsCount,
+      ...(identity ? { identity } : {}),
     };
     this.setCachedMainQuest(sessionId, payload);
     return payload;
@@ -445,7 +473,11 @@ export class PhaseService {
       );
     }
 
-    const pending = await this.buildPendingPayload(sessionId, fromPhase, toPhase);
+    const pending = await this.buildPendingPayload(
+      sessionId,
+      fromPhase,
+      toPhase,
+    );
     if (!confirmed) {
       await this.publishPhaseGatePending(
         session,
@@ -504,7 +536,11 @@ export class PhaseService {
     const evaluation = this.evaluateGate(toPhase.unlockConditions, facts);
     if (evaluation.status !== "pending") return null;
 
-    const pending = await this.buildPendingPayload(sessionId, fromPhase, toPhase);
+    const pending = await this.buildPendingPayload(
+      sessionId,
+      fromPhase,
+      toPhase,
+    );
     await this.publishPhaseGatePending(
       session,
       fromPhase,
@@ -587,16 +623,23 @@ export class PhaseService {
     storyArc: StoryArcEntity;
     state: SessionStoryArcStateEntity;
   }> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+    });
     if (!session) throw new NotFoundException("Sessão não encontrada.");
     if (!session.campaignId) {
       throw new NotFoundException("Sessão sem campanha vinculada.");
     }
 
     const storyArc = await this.storyArcRepo.findOne({
-      where: { campaignId: session.campaignId, isMainArc: true, isActive: true },
+      where: {
+        campaignId: session.campaignId,
+        isMainArc: true,
+        isActive: true,
+      },
     });
-    if (!storyArc) throw new NotFoundException("Arco principal não encontrado.");
+    if (!storyArc)
+      throw new NotFoundException("Arco principal não encontrado.");
 
     let state = await this.stateRepo.findOne({
       where: { gameSessionId: sessionId, storyArcId: storyArc.id },
@@ -622,7 +665,9 @@ export class PhaseService {
     storyArcId: string,
     state: SessionStoryArcStateEntity,
   ): Promise<GateFacts> {
-    const quests = await this.questRepo.find({ where: { gameSessionId: sessionId } });
+    const quests = await this.questRepo.find({
+      where: { gameSessionId: sessionId },
+    });
     const questIds = quests.map((quest) => quest.id);
     const [objectives, phases, events] = await Promise.all([
       questIds.length > 0
@@ -660,16 +705,20 @@ export class PhaseService {
       decisionIds: eventFacts.decisionIds,
       locationVisitedIds: eventFacts.locationVisitedIds,
       combatCompletedIds: eventFacts.combatCompletedIds,
+      nlTriggerSatisfiedKeys: eventFacts.nlTriggerSatisfiedKeys,
     };
   }
 
-  private collectEventFacts(events: SessionEventEntity[]): Required<
+  private collectEventFacts(
+    events: SessionEventEntity[],
+  ): Required<
     Pick<
       GateFacts,
       | "clockFilledIds"
       | "decisionIds"
       | "locationVisitedIds"
       | "combatCompletedIds"
+      | "nlTriggerSatisfiedKeys"
     >
   > {
     const facts = {
@@ -677,6 +726,7 @@ export class PhaseService {
       decisionIds: new Set<string>(),
       locationVisitedIds: new Set<string>(),
       combatCompletedIds: new Set<string>(),
+      nlTriggerSatisfiedKeys: new Set<string>(),
     };
 
     for (const event of events) {
@@ -705,6 +755,13 @@ export class PhaseService {
           payload.id,
           event.aggregateId,
         ]);
+      } else if (event.eventType === "nl_trigger_evaluated") {
+        if (payload.satisfied === true) {
+          this.addFirstString(facts.nlTriggerSatisfiedKeys, [
+            payload.conditionKey,
+            payload.naturalLanguage,
+          ]);
+        }
       }
     }
 
@@ -796,6 +853,27 @@ export class PhaseService {
     }));
   }
 
+  private async loadIdentityState(
+    session: GameSessionEntity,
+  ): Promise<MissionPanelPayload["identity"] | null> {
+    const pcId = session.characterIds?.[0];
+    if (!pcId) return null;
+    if (!this.characterRepo) return null;
+    const pc = await this.characterRepo.findOne({
+      where: { id: pcId },
+      select: ["id", "currentIdentityTags", "identityTagsHistory"],
+    });
+    if (!pc) return null;
+    return {
+      currentTags: Array.isArray(pc.currentIdentityTags)
+        ? pc.currentIdentityTags
+        : [],
+      history: Array.isArray(pc.identityTagsHistory)
+        ? pc.identityTagsHistory.slice(-5)
+        : [],
+    };
+  }
+
   private async assignObjectivePriorities(
     objectives: QuestObjectiveEntity[],
   ): Promise<void> {
@@ -875,7 +953,12 @@ export class PhaseService {
     return PhaseService.buildDefaultStorySeed(campaign);
   }
 
-  static buildDefaultStorySeed(campaign: Pick<CampaignEntity, "name" | "description" | "theme" | "setting">): StorySeed {
+  static buildDefaultStorySeed(
+    campaign: Pick<
+      CampaignEntity,
+      "name" | "description" | "theme" | "setting"
+    >,
+  ): StorySeed {
     const setting = campaign.setting ?? "um mundo inquieto";
     const theme = campaign.theme ?? "segredos antigos";
     return {
@@ -885,7 +968,8 @@ export class PhaseService {
         "Algo na história pessoal do protagonista ressoa com essa ameaça, tornando a investigação mais íntima do que parece.",
       antagonistForce: theme,
       stakes: {
-        personal: "O protagonista perde a chance de dar sentido ao próprio passado.",
+        personal:
+          "O protagonista perde a chance de dar sentido ao próprio passado.",
         world: "A comunidade ao redor paga o preço de uma ameaça sem nome.",
       },
       toneAnchors: ["misterioso", "íntimo", "heroico"],
@@ -950,6 +1034,17 @@ export class PhaseService {
     condition: Record<string, unknown>,
     facts: GateFacts,
   ): boolean {
+    const naturalLanguage = this.stringOrNull(condition.naturalLanguage);
+    if (naturalLanguage) {
+      const conditionKey =
+        this.stringOrNull(condition.conditionKey) ??
+        this.stringOrNull(condition.key) ??
+        this.normalizeConditionKey(naturalLanguage);
+      return Boolean(
+        conditionKey && facts.nlTriggerSatisfiedKeys?.has(conditionKey),
+      );
+    }
+
     const entries = Object.entries(condition);
     if (entries.length === 0) return false;
     return entries.every(([kind, value]) => {
@@ -961,7 +1056,9 @@ export class PhaseService {
           if (id === "main") return facts.mainQuestCompleted === true;
           return Boolean(id && facts.questStatuses?.get(id) === "completed");
         case "objective_completed":
-          return Boolean(id && facts.objectiveStatuses?.get(id) === "completed");
+          return Boolean(
+            id && facts.objectiveStatuses?.get(id) === "completed",
+          );
         case "objective_progressed":
           if (id === "any") {
             return [...(facts.objectiveProgress?.values() ?? [])].some(
@@ -970,8 +1067,8 @@ export class PhaseService {
           }
           return Boolean(
             id &&
-              ((facts.objectiveProgress?.get(id) ?? 0) > 0 ||
-                facts.objectiveStatuses?.get(id) === "completed"),
+            ((facts.objectiveProgress?.get(id) ?? 0) > 0 ||
+              facts.objectiveStatuses?.get(id) === "completed"),
           );
         case "clock_filled":
           return Boolean(id && facts.clockFilledIds?.has(id));
@@ -987,6 +1084,22 @@ export class PhaseService {
           return false;
       }
     });
+  }
+
+  private stringOrNull(value: unknown): string | null {
+    return typeof value === "string" && value.trim().length > 0
+      ? value.trim()
+      : null;
+  }
+
+  private normalizeConditionKey(value: string): string {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80);
   }
 
   private toPhaseDto(phase: PhaseEntity): PhaseDto {
@@ -1094,7 +1207,9 @@ export class PhaseService {
         phaseTransitionId: transition.id,
         fromPhase: this.toPhaseDto(fromPhase),
         toPhase: this.toPhaseDto(toPhase),
-        transitionBeatNarrativeSeed: toPhase.transitionBeatNarrativeSeed ?? null,
+        chaosFactor: session.chaosFactor,
+        transitionBeatNarrativeSeed:
+          toPhase.transitionBeatNarrativeSeed ?? null,
         ...bookendDecision,
       },
       audiences: STORY_AUDIENCES,
@@ -1150,7 +1265,9 @@ export class PhaseService {
   }
 }
 
-function calculateGapMinutes(lastActivityAt: Date | string | undefined): number {
+function calculateGapMinutes(
+  lastActivityAt: Date | string | undefined,
+): number {
   if (!lastActivityAt) return 0;
   const last = new Date(lastActivityAt).getTime();
   if (!Number.isFinite(last)) return 0;

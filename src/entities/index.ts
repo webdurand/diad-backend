@@ -86,6 +86,7 @@ import { SceneEntity } from "./scene.entity";
 import { OpeningArchetypeEntity } from "./opening-archetype.entity";
 import { BookendArtifactEntity } from "./bookend-artifact.entity";
 import { DiegeticRitualEntity } from "./diegetic-ritual.entity";
+import { DowntimeTurnEntity } from "./downtime-turn.entity";
 import { SceneNpcEntity } from "./scene-npc.entity";
 import { SessionEventEntity } from "./session-event.entity";
 import { SessionMessageEntity } from "./session-message.entity";
@@ -207,6 +208,7 @@ export {
   OpeningArchetypeEntity,
   BookendArtifactEntity,
   DiegeticRitualEntity,
+  DowntimeTurnEntity,
   SceneNpcEntity,
   SessionEventEntity,
   SessionMessageEntity,
@@ -324,6 +326,7 @@ export const ENTITIES = [
   OpeningArchetypeEntity,
   BookendArtifactEntity,
   DiegeticRitualEntity,
+  DowntimeTurnEntity,
   SceneNpcEntity,
   SessionEventEntity,
   SessionMessageEntity,

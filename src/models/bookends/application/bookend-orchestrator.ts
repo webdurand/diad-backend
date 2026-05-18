@@ -75,7 +75,8 @@ export class BookendOrchestrator {
       beatsExecuted: arrayOfStrings(fromPhase.arcBeats),
       traceId,
     });
-    const hiddenLayerContext = await this.loadHiddenLayerContext(phaseTransitionId);
+    const hiddenLayerContext =
+      await this.loadHiddenLayerContext(phaseTransitionId);
     const baseInput = this.buildRenderInput(
       {
         sessionId,
@@ -91,14 +92,16 @@ export class BookendOrchestrator {
     await this.renderOne("intro", baseInput);
 
     const gapMinutes = numberOrDefault(payload.gapMinutes, 0);
-    const shouldShowPreviously = this.deps.decisionService.shouldShowPreviously({
-      gapMinutes,
-      sceneNumber: numberOrDefault(payload.sceneNumber, 2),
-      crossDay: payload.crossDay === true,
-      phaseChangedSinceLastSession:
-        payload.phaseChangedSinceLastSession === true,
-      previouslySeen: payload.previouslySeen === true,
-    });
+    const shouldShowPreviously = this.deps.decisionService.shouldShowPreviously(
+      {
+        gapMinutes,
+        sceneNumber: numberOrDefault(payload.sceneNumber, 2),
+        crossDay: payload.crossDay === true,
+        phaseChangedSinceLastSession:
+          payload.phaseChangedSinceLastSession === true,
+        previouslySeen: payload.previouslySeen === true,
+      },
+    );
     if (!shouldShowPreviously) return;
 
     const previous = await this.deps.previouslyOnUseCase.execute({ sessionId });
@@ -130,7 +133,9 @@ export class BookendOrchestrator {
     phaseTransitionId: string,
   ): Promise<BookendHiddenLayerContext | null> {
     if (!this.deps.hiddenLayerContextPort) return null;
-    return this.deps.hiddenLayerContextPort.loadBookendContext(phaseTransitionId);
+    return this.deps.hiddenLayerContextPort.loadBookendContext(
+      phaseTransitionId,
+    );
   }
 
   private buildRenderInput(
@@ -146,6 +151,10 @@ export class BookendOrchestrator {
       diegeticRitualResolved: context.diegeticRitualResolved ?? null,
       hiddenSecretSeed: context.closingSeed?.hiddenSecretSeed ?? null,
       xpTriggerState: context.xpTriggerState ?? null,
+      currentIdentityTags: context.currentIdentityTags ?? [],
+      chronicleDiary: context.chronicleDiary ?? [],
+      bondResolved: context.bondResolved ?? null,
+      bondEmerging: context.bondEmerging ?? null,
     };
   }
 

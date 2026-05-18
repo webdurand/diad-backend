@@ -61,6 +61,15 @@ export interface BookendHiddenLayerContext {
   diegeticRitualResolved?: DiegeticRitualKey | null;
   xpTriggerState?: XpTriggerState | null;
   twoBeat?: TwoBeatAudit | null;
+  currentIdentityTags?: string[];
+  chronicleDiary?: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    legacyTags: string[];
+  }>;
+  bondResolved?: string | null;
+  bondEmerging?: Record<string, unknown> | null;
 }
 
 export interface DiegeticRitualDefinition {

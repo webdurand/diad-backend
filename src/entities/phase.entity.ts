@@ -42,6 +42,13 @@ export interface PhaseDeprecatesOnAdvance {
   deprecatedPois: string[];
 }
 
+export interface PhaseBondHistoryEntry {
+  phaseTransitionId: string;
+  bondResolved: string | null;
+  bondEmerging: Record<string, unknown> | null;
+  recordedAt: string;
+}
+
 @Entity("phases")
 @Unique(["storyArcId", "index"])
 export class PhaseEntity {
@@ -106,6 +113,9 @@ export class PhaseEntity {
     nullable: true,
   })
   closingSeed?: ClosingSeedSnapshot | null;
+
+  @Column({ name: "bond_history", type: "jsonb", default: [] })
+  bondHistory: PhaseBondHistoryEntry[];
 
   @Column({ name: "is_reversible", type: "boolean", default: false })
   isReversible: boolean;

@@ -17,6 +17,8 @@ import {
   PhaseTransitionEntity,
   BookendArtifactEntity,
   DiegeticRitualEntity,
+  DowntimeTurnEntity,
+  CampaignChronicleEntity,
   QuestEntity,
   QuestObjectiveEntity,
   QuestPrerequisiteEntity,
@@ -32,14 +34,13 @@ import {
   MonsterEntity,
   EquipmentEntity,
   MagicItemEntity,
-
   WeatherEntity,
   GameClockEntity,
   ClockEntity,
   SceneEntity,
   SceneNpcEntity,
+  SessionMessageEntity,
   SessionEventEntity,
-
   GameSessionEntity,
   SessionNpcStateEntity,
   SessionFactionStateEntity,
@@ -92,6 +93,11 @@ import { StoryHiddenLayerEventPublisherService } from "../story-hidden-layer/ser
 import { StoryHiddenLayerService } from "../story-hidden-layer/services/story-hidden-layer.service";
 import { CommitClosingSeedListener } from "../story-hidden-layer/listeners/commit-closing-seed.listener";
 import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/derive-phase-outcome.listener";
+import { NarrativeMemoryService } from "../narrative-memory/services/narrative-memory.service";
+import { RollChaosFactorListener } from "../narrative-memory/listeners/roll-chaos-factor.listener";
+import { TierChronicleEntriesListener } from "../narrative-memory/listeners/tier-chronicle-entries.listener";
+import { EvolveDowntimeListener } from "../narrative-memory/listeners/evolve-downtime.listener";
+import { EvaluateNaturalLanguageTriggerListener } from "../narrative-memory/listeners/evaluate-natural-language-trigger.listener";
 
 @Module({
   imports: [
@@ -112,6 +118,8 @@ import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/deri
       PhaseTransitionEntity,
       BookendArtifactEntity,
       DiegeticRitualEntity,
+      DowntimeTurnEntity,
+      CampaignChronicleEntity,
       QuestEntity,
       QuestObjectiveEntity,
       QuestPrerequisiteEntity,
@@ -130,6 +138,7 @@ import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/deri
       ClockEntity,
       SceneEntity,
       SceneNpcEntity,
+      SessionMessageEntity,
       SessionEventEntity,
       GameSessionEntity,
       SessionNpcStateEntity,
@@ -181,6 +190,7 @@ import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/deri
     AgentClosingSeedPlannerService,
     StoryHiddenLayerEventPublisherService,
     StoryHiddenLayerService,
+    NarrativeMemoryService,
 
     CampaignIdPipe,
     QuestDefeatListener,
@@ -191,6 +201,10 @@ import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/deri
     PhaseGateListener,
     CommitClosingSeedListener,
     DerivePhaseOutcomeListener,
+    RollChaosFactorListener,
+    TierChronicleEntriesListener,
+    EvolveDowntimeListener,
+    EvaluateNaturalLanguageTriggerListener,
   ],
   exports: [
     CampaignService,
@@ -221,6 +235,7 @@ import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/deri
     AgentClosingSeedPlannerService,
     StoryHiddenLayerEventPublisherService,
     StoryHiddenLayerService,
+    NarrativeMemoryService,
   ],
 })
 export class WorldModule implements OnModuleInit {
@@ -234,6 +249,10 @@ export class WorldModule implements OnModuleInit {
     private readonly phaseGateListener: PhaseGateListener,
     private readonly commitClosingSeedListener: CommitClosingSeedListener,
     private readonly derivePhaseOutcomeListener: DerivePhaseOutcomeListener,
+    private readonly rollChaosFactorListener: RollChaosFactorListener,
+    private readonly tierChronicleEntriesListener: TierChronicleEntriesListener,
+    private readonly evolveDowntimeListener: EvolveDowntimeListener,
+    private readonly evaluateNaturalLanguageTriggerListener: EvaluateNaturalLanguageTriggerListener,
   ) {}
 
   onModuleInit(): void {
@@ -245,5 +264,9 @@ export class WorldModule implements OnModuleInit {
     this.eventBus.registerListener(this.phaseGateListener);
     this.eventBus.registerListener(this.commitClosingSeedListener);
     this.eventBus.registerListener(this.derivePhaseOutcomeListener);
+    this.eventBus.registerListener(this.rollChaosFactorListener);
+    this.eventBus.registerListener(this.tierChronicleEntriesListener);
+    this.eventBus.registerListener(this.evolveDowntimeListener);
+    this.eventBus.registerListener(this.evaluateNaturalLanguageTriggerListener);
   }
 }

@@ -29,6 +29,15 @@ export interface RenderBookendInput {
   hiddenSecretSeed?: string | null;
   xpTriggerState?: XpTriggerState | null;
   twoBeatRequired?: boolean;
+  currentIdentityTags?: string[];
+  chronicleDiary?: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    legacyTags: string[];
+  }>;
+  bondResolved?: string | null;
+  bondEmerging?: Record<string, unknown> | null;
 }
 
 export interface BookendGenerationRequest extends RenderBookendInput {
@@ -41,7 +50,10 @@ export interface BookendArtifactRepositoryPort {
 }
 
 export interface NpcStateSnapshotPort {
-  getSnapshot(sessionId: string, phaseTransitionId?: string | null): Promise<NpcStateSnapshot>;
+  getSnapshot(
+    sessionId: string,
+    phaseTransitionId?: string | null,
+  ): Promise<NpcStateSnapshot>;
 }
 
 export interface BookendGenerationPort {

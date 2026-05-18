@@ -1,12 +1,10 @@
 import type { EventCategory, EventEnvelope } from "./event-envelope.types";
 
-
 export interface EventListener {
   readonly name: string;
   readonly categories: readonly EventCategory[];
   handle(envelope: EventEnvelope): Promise<void>;
 }
-
 
 const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
   EncounterEvent: new Set([
@@ -43,6 +41,7 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "main_quest_assigned",
     "phase_gate_pending",
     "phase_changed",
+    "chaos_factor_evolved",
   ]),
   NarrativeEvent: new Set([
     "dialog_chosen",
@@ -76,6 +75,10 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "guard_dispatched",
     "mission_progress_advanced",
     "director_pull_injected",
+    "identity_tags_changed",
+    "chronicle_tier_changed",
+    "downtime_executed",
+    "nl_trigger_evaluated",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",

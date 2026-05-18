@@ -4,13 +4,16 @@ import { EventEnvelope } from "src/common/event-bus/event-envelope.types";
 const SESSION_ID = "22222222-2222-4222-8222-222222222222";
 const CAMPAIGN_ID = "33333333-3333-4333-8333-333333333333";
 
-function makeEnvelope(eventType: string): EventEnvelope {
+function makeEnvelope(
+  eventType: string,
+  eventCategory: EventEnvelope["eventCategory"] = "WorldEvent",
+): EventEnvelope {
   return {
     eventId: "11111111-1111-4111-8111-111111111111",
     version: 1,
     aggregateId: SESSION_ID,
     timestamp: new Date().toISOString(),
-    eventCategory: "WorldEvent",
+    eventCategory,
     eventType,
     source: {
       service: "diad-backend",
@@ -29,6 +32,19 @@ describe("MissionPanelCacheListener", () => {
     const listener = new MissionPanelCacheListener(phaseService as any);
 
     await listener.handle(makeEnvelope("phase_changed"));
+
+    expect(phaseService.invalidateMainQuestCache).toHaveBeenCalledWith(
+      SESSION_ID,
+    );
+  });
+
+  it("invalidates main quest cache when identity tags change", async () => {
+    const phaseService = { invalidateMainQuestCache: jest.fn() };
+    const listener = new MissionPanelCacheListener(phaseService as any);
+
+    await listener.handle(
+      makeEnvelope("identity_tags_changed", "NarrativeEvent"),
+    );
 
     expect(phaseService.invalidateMainQuestCache).toHaveBeenCalledWith(
       SESSION_ID,

@@ -30,6 +30,15 @@ export interface BookendPayload {
   hiddenSecretSeed?: string | null;
   xpTriggerState?: XpTriggerState | null;
   twoBeatRequired?: boolean;
+  currentIdentityTags?: string[];
+  chronicleDiary?: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    legacyTags: string[];
+  }>;
+  bondResolved?: string | null;
+  bondEmerging?: Record<string, unknown> | null;
 }
 
 export interface BookendArtifactMetadata {

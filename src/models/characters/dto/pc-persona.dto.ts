@@ -1,5 +1,3 @@
-
-
 export type PCPersonaAlignment =
   | "lawful-good"
   | "neutral-good"
@@ -57,11 +55,17 @@ export interface PCPersona {
   currentHpPercent: number;
   conditionsActive: string[];
   keyEquipmentSummary: PCPersonaEquipmentItem[];
+  currentIdentityTags?: string[];
+  identityTagsHistory?: Array<{
+    added: string[];
+    removed: string[];
+    appliedAt: string;
+    phaseTransitionId: string;
+    rationale?: string;
+  }>;
   voiceHints?: PCPersonaVoiceHints;
 }
 
-
 export const PERSONA_BACKSTORY_CHAR_CAP = 2000;
-
 
 export const PERSONA_KEY_EQUIPMENT_CAP = 5;

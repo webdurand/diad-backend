@@ -3,12 +3,14 @@ import { SceneEntity } from "src/entities/scene.entity";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 
-function makeService(overrides: {
-  dataSource?: any;
-  eventBus?: any;
-  envelopeFactory?: any;
-  bookendArtifactRepo?: any;
-} = {}): PhaseService {
+function makeService(
+  overrides: {
+    dataSource?: any;
+    eventBus?: any;
+    envelopeFactory?: any;
+    bookendArtifactRepo?: any;
+  } = {},
+): PhaseService {
   return new PhaseService(
     {} as any,
     {} as any,
@@ -74,9 +76,34 @@ describe("PhaseService", () => {
       sortOrder: 1,
     } as QuestObjectiveEntity;
 
-    expect(
-      service.selectActiveObjective([low, tieLater, tieEarlier])?.id,
-    ).toBe("earlier");
+    expect(service.selectActiveObjective([low, tieLater, tieEarlier])?.id).toBe(
+      "earlier",
+    );
+  });
+
+  it("treats satisfied natural language triggers as gate progress", () => {
+    const service = makeService();
+
+    const result = service.evaluateGate(
+      {
+        any: [
+          {
+            conditionKey: "pc_reconheceu_traicao",
+            naturalLanguage: "o PC reconheceu publicamente a traição",
+          },
+        ],
+      },
+      {
+        nlTriggerSatisfiedKeys: new Set(["pc_reconheceu_traicao"]),
+      },
+    );
+
+    expect(result).toEqual({
+      status: "pending",
+      satisfiedCount: 1,
+      totalConditions: 1,
+      satisfiedKinds: ["naturalLanguage"],
+    });
   });
 
   it("publishes phase_changed with real bookend decision fields", async () => {

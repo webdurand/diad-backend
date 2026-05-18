@@ -1,6 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { CampaignChronicleEntity } from "src/entities/campaign-chronicle.entity";
+import { CharacterEntity } from "src/entities/character.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
 import { PhaseEntity } from "src/entities/phase.entity";
 import { PhaseTransitionEntity } from "src/entities/phase-transition.entity";
 import { SessionStoryArcStateEntity } from "src/entities/session-story-arc-state.entity";
@@ -40,11 +43,23 @@ export class StoryHiddenLayerService
     @InjectRepository(PhaseTransitionEntity)
     private readonly transitionRepo: Repository<PhaseTransitionEntity>,
     private readonly events: StoryHiddenLayerEventPublisherService,
+    @Optional()
+    @InjectRepository(GameSessionEntity)
+    private readonly sessionRepo?: Repository<GameSessionEntity>,
+    @Optional()
+    @InjectRepository(CharacterEntity)
+    private readonly characterRepo?: Repository<CharacterEntity>,
+    @Optional()
+    @InjectRepository(CampaignChronicleEntity)
+    private readonly chronicleRepo?: Repository<CampaignChronicleEntity>,
   ) {}
 
   async getCurrent(sessionId: string): Promise<ActiveXpTriggerState> {
-    const state = await this.stateRepo.findOne({ where: { gameSessionId: sessionId } });
-    if (!state) throw new NotFoundException("Estado narrativo da sessão não encontrado.");
+    const state = await this.stateRepo.findOne({
+      where: { gameSessionId: sessionId },
+    });
+    if (!state)
+      throw new NotFoundException("Estado narrativo da sessão não encontrado.");
     const phase = await this.phaseRepo.findOne({
       where: { storyArcId: state.storyArcId, index: state.currentPhaseIndex },
       select: ["id", "index"],
@@ -125,7 +140,8 @@ export class StoryHiddenLayerService
     );
     await this.events.publishPhaseOutcomeDerived({
       sessionId: input.sessionId,
-      campaignId: input.campaignId ?? transition.gameSession?.campaignId ?? null,
+      campaignId:
+        input.campaignId ?? transition.gameSession?.campaignId ?? null,
       phaseTransitionId: transition.id,
       phaseIndex: transition.fromPhaseIndex,
       outcomeTier,
@@ -140,6 +156,7 @@ export class StoryHiddenLayerService
       diegeticRitualResolved,
       xpTriggerState,
       twoBeat: transition.twoBeat ?? null,
+      ...(await this.loadMemoryContext(transition, phase)),
     };
   }
 
@@ -166,6 +183,55 @@ export class StoryHiddenLayerService
         transition.xpTriggerState ?? createEmptyXpTriggerState(),
       ),
       twoBeat: transition.twoBeat ?? null,
+      ...(await this.loadMemoryContext(transition, phase ?? null)),
+    };
+  }
+
+  private async loadMemoryContext(
+    transition: PhaseTransitionEntity,
+    phase: PhaseEntity | null,
+  ): Promise<Partial<BookendHiddenLayerContext>> {
+    if (!this.sessionRepo || !this.characterRepo || !this.chronicleRepo) {
+      return {};
+    }
+    const session = await this.sessionRepo.findOne({
+      where: { id: transition.gameSessionId },
+      select: ["id", "campaignId", "characterIds"],
+    });
+    const pcId = session?.characterIds?.[0];
+    const [pc, diary] = await Promise.all([
+      pcId
+        ? this.characterRepo.findOne({
+            where: { id: pcId },
+            select: ["id", "currentIdentityTags"],
+          })
+        : Promise.resolve(null),
+      this.chronicleRepo.find({
+        where: {
+          sessionId: transition.gameSessionId,
+          tier: "diary",
+        },
+        order: { significance: "DESC", createdAt: "DESC" },
+        take: 5,
+      }),
+    ]);
+    const bondEntry = Array.isArray(phase?.bondHistory)
+      ? (phase?.bondHistory.find(
+          (entry) => entry.phaseTransitionId === transition.id,
+        ) ?? phase?.bondHistory.at(-1))
+      : null;
+    return {
+      currentIdentityTags: Array.isArray(pc?.currentIdentityTags)
+        ? pc.currentIdentityTags
+        : [],
+      chronicleDiary: diary.map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        summary: entry.content,
+        legacyTags: entry.legacyTags ?? [],
+      })),
+      bondResolved: bondEntry?.bondResolved ?? null,
+      bondEmerging: bondEntry?.bondEmerging ?? null,
     };
   }
 }
