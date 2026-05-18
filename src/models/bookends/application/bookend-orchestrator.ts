@@ -1,4 +1,5 @@
 import type { EventEnvelope } from "src/common/event-bus/event-envelope.types";
+import type { BookendHiddenLayerContext } from "src/models/story-hidden-layer/domain/hidden-layer.types";
 import type { BookendKind } from "../domain/bookend.types";
 import type { BookendDecisionService } from "../services/bookend-decision.service";
 import type {
@@ -18,6 +19,11 @@ export interface BookendOrchestratorDeps {
   eventPublisher: {
     publishPhaseCompleted(input: PhaseCompletedInput): Promise<void>;
     publishPreviouslyShown(input: PreviouslyShownInput): Promise<void>;
+  };
+  hiddenLayerContextPort?: {
+    loadBookendContext(
+      phaseTransitionId: string,
+    ): Promise<BookendHiddenLayerContext | null>;
   };
   sleep?: (ms: number) => Promise<void>;
 }
@@ -69,20 +75,20 @@ export class BookendOrchestrator {
       beatsExecuted: arrayOfStrings(fromPhase.arcBeats),
       traceId,
     });
+    const hiddenLayerContext = await this.loadHiddenLayerContext(phaseTransitionId);
+    const baseInput = this.buildRenderInput(
+      {
+        sessionId,
+        campaignId,
+        phaseTransitionId,
+        traceId,
+      },
+      hiddenLayerContext,
+    );
 
-    await this.renderOne("outro", {
-      sessionId,
-      campaignId,
-      phaseTransitionId,
-      traceId,
-    });
+    await this.renderOne("outro", baseInput);
     await this.sleep(SILENCE_BEAT_MS);
-    await this.renderOne("intro", {
-      sessionId,
-      campaignId,
-      phaseTransitionId,
-      traceId,
-    });
+    await this.renderOne("intro", baseInput);
 
     const gapMinutes = numberOrDefault(payload.gapMinutes, 0);
     const shouldShowPreviously = this.deps.decisionService.shouldShowPreviously({
@@ -97,10 +103,7 @@ export class BookendOrchestrator {
 
     const previous = await this.deps.previouslyOnUseCase.execute({ sessionId });
     await this.renderOne("previously_on", {
-      sessionId,
-      campaignId,
-      phaseTransitionId,
-      traceId,
+      ...baseInput,
       recapText: previous?.prose ?? null,
     });
     await this.deps.eventPublisher.publishPreviouslyShown({
@@ -116,7 +119,34 @@ export class BookendOrchestrator {
     kind: BookendKind,
     input: Omit<RenderBookendInput, "kind">,
   ): Promise<unknown> {
-    return this.deps.renderUseCase.execute({ ...input, kind });
+    return this.deps.renderUseCase.execute({
+      ...input,
+      kind,
+      twoBeatRequired: kind === "outro",
+    });
+  }
+
+  private async loadHiddenLayerContext(
+    phaseTransitionId: string,
+  ): Promise<BookendHiddenLayerContext | null> {
+    if (!this.deps.hiddenLayerContextPort) return null;
+    return this.deps.hiddenLayerContextPort.loadBookendContext(phaseTransitionId);
+  }
+
+  private buildRenderInput(
+    input: Omit<RenderBookendInput, "kind">,
+    context: BookendHiddenLayerContext | null,
+  ): Omit<RenderBookendInput, "kind"> {
+    if (!context) return input;
+    return {
+      ...input,
+      outcomeTier: context.outcomeTier ?? null,
+      closingSeedFocus: context.closingSeed?.focus ?? null,
+      closingSeedCrossroad: context.closingSeed?.crossroad ?? null,
+      diegeticRitualResolved: context.diegeticRitualResolved ?? null,
+      hiddenSecretSeed: context.closingSeed?.hiddenSecretSeed ?? null,
+      xpTriggerState: context.xpTriggerState ?? null,
+    };
   }
 
   private sleep(ms: number): Promise<void> {

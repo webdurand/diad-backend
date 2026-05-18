@@ -31,6 +31,10 @@ import { EventAudience } from "src/common/event-bus/event-envelope.types";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
+import {
+  createEmptyXpTriggerState,
+  normalizeXpTriggerState,
+} from "src/models/story-hidden-layer/domain/hidden-layer.types";
 import { QuestService } from "./quest.service";
 
 const PULL_THRESHOLD = 3;
@@ -250,6 +254,7 @@ export class PhaseService {
           currentPhase: "hook",
           currentPhaseIndex: 1,
           phaseNotes: {},
+          xpTriggerState: createEmptyXpTriggerState(),
         }),
       );
     }
@@ -466,6 +471,7 @@ export class PhaseService {
       toPhase,
       userId,
       fromPhase,
+      normalizeXpTriggerState(state.xpTriggerState),
     );
     this.invalidateMainQuestCache(sessionId);
     await this.publishPhaseChanged(
@@ -516,6 +522,7 @@ export class PhaseService {
     toPhase: PhaseEntity,
     userId: string,
     fromPhase: PhaseEntity,
+    xpTriggerState = createEmptyXpTriggerState(),
   ): Promise<PhaseTransitionEntity> {
     let transition: PhaseTransitionEntity | null = null;
     await this.dataSource.transaction(async (manager) => {
@@ -525,6 +532,7 @@ export class PhaseService {
         .set({
           currentPhaseIndex: toPhase.index,
           currentPhase: this.indexToLegacyPhase(toPhase.index),
+          xpTriggerState: createEmptyXpTriggerState(),
         })
         .where("game_session_id = :sessionId", { sessionId })
         .andWhere("story_arc_id = :storyArcId", { storyArcId })
@@ -563,6 +571,7 @@ export class PhaseService {
           toPhaseIndex: toPhase.index,
           transitionBeatNarrativeSeed: toPhase.transitionBeatNarrativeSeed,
           confirmedByUserId: userId,
+          xpTriggerState,
         }),
       );
     });
@@ -600,6 +609,7 @@ export class PhaseService {
           currentPhase: "hook",
           currentPhaseIndex: 1,
           phaseNotes: {},
+          xpTriggerState: createEmptyXpTriggerState(),
         }),
       );
     }

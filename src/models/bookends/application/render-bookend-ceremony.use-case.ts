@@ -7,6 +7,11 @@ import {
   type GeneratedBookendProse,
   type NpcStateSnapshot,
 } from "../domain/bookend.types";
+import type {
+  DiegeticRitualKey,
+  OutcomeTier,
+  XpTriggerState,
+} from "src/models/story-hidden-layer/domain/hidden-layer.types";
 
 export const FALLBACK_BOOKEND_PROSE = "Capítulo encerrado.";
 
@@ -17,6 +22,13 @@ export interface RenderBookendInput {
   traceId?: string;
   campaignId?: string;
   recapText?: string | null;
+  outcomeTier?: OutcomeTier | null;
+  closingSeedFocus?: string | null;
+  closingSeedCrossroad?: string | null;
+  diegeticRitualResolved?: DiegeticRitualKey | null;
+  hiddenSecretSeed?: string | null;
+  xpTriggerState?: XpTriggerState | null;
+  twoBeatRequired?: boolean;
 }
 
 export interface BookendGenerationRequest extends RenderBookendInput {

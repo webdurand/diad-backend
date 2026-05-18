@@ -53,6 +53,28 @@ describe("BookendOrchestrator", () => {
           order.push("previously_on_shown");
         }),
       },
+      hiddenLayerContextPort: {
+        loadBookendContext: jest.fn(async () => ({
+          outcomeTier: "BITTERSWEET",
+          closingSeed: {
+            focus: "A dívida moral com Helena cobra preço",
+            crossroad: "Maguin escolhe entre o livro e Helena?",
+            diegeticRitualHint: "vigil",
+            biasedOutcomeTier: "BITTERSWEET",
+            hiddenSecretSeed: "O livro contém o nome verdadeiro de Mara.",
+            commitedAtPhaseIndex: 1,
+            generatedAt: "2026-05-18T12:00:00.000Z",
+          },
+          diegeticRitualResolved: "vigil",
+          xpTriggerState: {
+            objective_met: true,
+            belief_expressed: true,
+            flaw_struggled: true,
+            bond_progressed: false,
+            secret_revealed: false,
+          },
+        })),
+      },
       sleep: jest.fn(async (ms: number) => {
         order.push(`silence:${ms}`);
       }),
@@ -69,7 +91,15 @@ describe("BookendOrchestrator", () => {
       "previously_on_shown",
     ]);
     expect(renderUseCase.execute).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "outro", traceId: TRACE_ID }),
+      expect.objectContaining({
+        kind: "outro",
+        traceId: TRACE_ID,
+        outcomeTier: "BITTERSWEET",
+        closingSeedFocus: "A dívida moral com Helena cobra preço",
+        diegeticRitualResolved: "vigil",
+        hiddenSecretSeed: "O livro contém o nome verdadeiro de Mara.",
+        twoBeatRequired: true,
+      }),
     );
   });
 });

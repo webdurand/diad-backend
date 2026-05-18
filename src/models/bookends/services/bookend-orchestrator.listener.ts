@@ -3,6 +3,7 @@ import type { EventListener } from "src/common/event-bus/event-bus.types";
 import type { EventEnvelope } from "src/common/event-bus/event-envelope.types";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 import { SessionRecapService } from "src/models/session/services/session-recap.service";
+import { StoryHiddenLayerService } from "src/models/story-hidden-layer/services/story-hidden-layer.service";
 import { BookendOrchestrator } from "../application/bookend-orchestrator";
 import { BuildPreviouslyOnUseCase } from "../application/build-previously-on.use-case";
 import { BookendDecisionService } from "./bookend-decision.service";
@@ -19,6 +20,7 @@ export class BookendOrchestratorListener implements EventListener {
     private readonly renderer: BookendRendererService,
     private readonly recapService: SessionRecapService,
     private readonly eventPublisher: BookendEventPublisherService,
+    private readonly hiddenLayer: StoryHiddenLayerService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(BookendOrchestratorListener.name);
@@ -36,6 +38,7 @@ export class BookendOrchestratorListener implements EventListener {
         renderUseCase: this.renderer,
         previouslyOnUseCase: new BuildPreviouslyOnUseCase(this.recapService),
         eventPublisher: this.eventPublisher,
+        hiddenLayerContextPort: this.hiddenLayer,
       });
       await orchestrator.renderForPhaseChanged(envelope);
     } catch (err) {

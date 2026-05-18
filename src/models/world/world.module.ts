@@ -16,6 +16,7 @@ import {
   PhaseEntity,
   PhaseTransitionEntity,
   BookendArtifactEntity,
+  DiegeticRitualEntity,
   QuestEntity,
   QuestObjectiveEntity,
   QuestPrerequisiteEntity,
@@ -86,6 +87,11 @@ import { AgentBookendGenerationService } from "../bookends/services/agent-booken
 import { BookendEventPublisherService } from "../bookends/services/bookend-event-publisher.service";
 import { BookendRendererService } from "../bookends/services/bookend-renderer.service";
 import { BookendArtifactService } from "../bookends/services/bookend-artifact.service";
+import { AgentClosingSeedPlannerService } from "../story-hidden-layer/services/agent-closing-seed-planner.service";
+import { StoryHiddenLayerEventPublisherService } from "../story-hidden-layer/services/story-hidden-layer-event-publisher.service";
+import { StoryHiddenLayerService } from "../story-hidden-layer/services/story-hidden-layer.service";
+import { CommitClosingSeedListener } from "../story-hidden-layer/listeners/commit-closing-seed.listener";
+import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/derive-phase-outcome.listener";
 
 @Module({
   imports: [
@@ -105,6 +111,7 @@ import { BookendArtifactService } from "../bookends/services/bookend-artifact.se
       PhaseEntity,
       PhaseTransitionEntity,
       BookendArtifactEntity,
+      DiegeticRitualEntity,
       QuestEntity,
       QuestObjectiveEntity,
       QuestPrerequisiteEntity,
@@ -171,6 +178,9 @@ import { BookendArtifactService } from "../bookends/services/bookend-artifact.se
     BookendEventPublisherService,
     BookendRendererService,
     BookendArtifactService,
+    AgentClosingSeedPlannerService,
+    StoryHiddenLayerEventPublisherService,
+    StoryHiddenLayerService,
 
     CampaignIdPipe,
     QuestDefeatListener,
@@ -179,6 +189,8 @@ import { BookendArtifactService } from "../bookends/services/bookend-artifact.se
     MissionPullListener,
     MissionPanelCacheListener,
     PhaseGateListener,
+    CommitClosingSeedListener,
+    DerivePhaseOutcomeListener,
   ],
   exports: [
     CampaignService,
@@ -206,6 +218,9 @@ import { BookendArtifactService } from "../bookends/services/bookend-artifact.se
     BookendEventPublisherService,
     BookendRendererService,
     BookendArtifactService,
+    AgentClosingSeedPlannerService,
+    StoryHiddenLayerEventPublisherService,
+    StoryHiddenLayerService,
   ],
 })
 export class WorldModule implements OnModuleInit {
@@ -217,6 +232,8 @@ export class WorldModule implements OnModuleInit {
     private readonly missionPullListener: MissionPullListener,
     private readonly missionPanelCacheListener: MissionPanelCacheListener,
     private readonly phaseGateListener: PhaseGateListener,
+    private readonly commitClosingSeedListener: CommitClosingSeedListener,
+    private readonly derivePhaseOutcomeListener: DerivePhaseOutcomeListener,
   ) {}
 
   onModuleInit(): void {
@@ -226,5 +243,7 @@ export class WorldModule implements OnModuleInit {
     this.eventBus.registerListener(this.missionPullListener);
     this.eventBus.registerListener(this.missionPanelCacheListener);
     this.eventBus.registerListener(this.phaseGateListener);
+    this.eventBus.registerListener(this.commitClosingSeedListener);
+    this.eventBus.registerListener(this.derivePhaseOutcomeListener);
   }
 }

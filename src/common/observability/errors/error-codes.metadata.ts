@@ -433,6 +433,41 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Outro dispatcher processou a mesma transição; reidrate o estado.",
     domain: "narrative",
   },
+  [ErrorCode.CLOSING_SEED_COMMIT_FAILED]: {
+    httpStatus: 502,
+    defaultTitle: "Haiku planner failed to generate closingSeed",
+    defaultHint:
+      "Phase.closingSeed fica null; bookend roda em modo degradado até retry manual.",
+    domain: "narrative",
+  },
+  [ErrorCode.CLOSING_SEED_LEAKAGE_DETECTED]: {
+    httpStatus: 500,
+    defaultTitle: "Player payload contains hidden closing seed fields",
+    defaultHint:
+      "DTO whitelist falhou. Investigue imediatamente para não revelar mistério da fase.",
+    domain: "narrative",
+  },
+  [ErrorCode.OUTCOME_TIER_DERIVATION_INVALID]: {
+    httpStatus: 422,
+    defaultTitle: "Malformed xpTriggerState",
+    defaultHint:
+      "Campos booleanos ausentes ou inválidos; fallback seguro é FAILURE.",
+    domain: "narrative",
+  },
+  [ErrorCode.DIEGETIC_RITUAL_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Diegetic ritual key not found",
+    defaultHint:
+      "Validador de paridade Python/TS deve acusar catálogo quebrado; fallback neutro é oath.",
+    domain: "narrative",
+  },
+  [ErrorCode.TWO_BEAT_STRUCTURE_VIOLATION]: {
+    httpStatus: 422,
+    defaultTitle: "Bookend output missing required two-beat headers",
+    defaultHint:
+      "Retente uma vez com hint estruturado; segunda falha usa fallback single-beat.",
+    domain: "narrative",
+  },
   [ErrorCode.SCENE_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Scene not found",

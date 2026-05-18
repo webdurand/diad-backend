@@ -9,6 +9,12 @@ import {
 } from "typeorm";
 import { GameSessionEntity } from "./game-session.entity";
 import { StoryArcEntity } from "./story-arc.entity";
+import type {
+  DiegeticRitualKey,
+  OutcomeTier,
+  TwoBeatAudit,
+  XpTriggerState,
+} from "src/models/story-hidden-layer/domain/hidden-layer.types";
 
 @Entity("phase_transitions")
 export class PhaseTransitionEntity {
@@ -53,6 +59,31 @@ export class PhaseTransitionEntity {
     nullable: true,
   })
   bookendPayloadSnapshot?: Record<string, unknown> | null;
+
+  @Column({ name: "outcome_tier", type: "varchar", length: 24, nullable: true })
+  outcomeTier?: OutcomeTier | null;
+
+  @Column({
+    name: "xp_trigger_state",
+    type: "jsonb",
+    nullable: true,
+  })
+  xpTriggerState?: XpTriggerState | null;
+
+  @Column({
+    name: "diegetic_ritual_resolved",
+    type: "varchar",
+    length: 32,
+    nullable: true,
+  })
+  diegeticRitualResolved?: DiegeticRitualKey | null;
+
+  @Column({
+    name: "two_beat",
+    type: "jsonb",
+    nullable: true,
+  })
+  twoBeat?: TwoBeatAudit | null;
 
   @Column({ name: "confirmed_by_user_id", type: "uuid", nullable: true })
   confirmedByUserId?: string | null;

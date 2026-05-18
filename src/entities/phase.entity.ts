@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { StoryArcEntity } from "./story-arc.entity";
+import type { ClosingSeedSnapshot } from "src/models/story-hidden-layer/domain/hidden-layer.types";
 
 export type PhaseEmotionalArc =
   | "rise"
@@ -18,6 +19,7 @@ export type PhaseEmotionalArc =
   | "man-in-hole"
   | "icarus"
   | "oedipus"
+  | "return"
   | "flat";
 
 export type PhaseArcBeat =
@@ -97,6 +99,13 @@ export class PhaseEntity {
       `'{ "lostObjectives": [], "migratingNpcs": [], "deprecatedPois": [] }'::jsonb`,
   })
   deprecatesOnAdvance: PhaseDeprecatesOnAdvance;
+
+  @Column({
+    name: "closing_seed",
+    type: "jsonb",
+    nullable: true,
+  })
+  closingSeed?: ClosingSeedSnapshot | null;
 
   @Column({ name: "is_reversible", type: "boolean", default: false })
   isReversible: boolean;

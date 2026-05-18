@@ -1,4 +1,9 @@
 import type { EventAudience } from "src/common/event-bus/event-envelope.types";
+import type {
+  DiegeticRitualKey,
+  OutcomeTier,
+  XpTriggerState,
+} from "src/models/story-hidden-layer/domain/hidden-layer.types";
 
 export type BookendKind = "outro" | "intro" | "previously_on";
 
@@ -18,6 +23,13 @@ export interface BookendPayload {
   archetypeKey: string;
   voiceProfile?: string;
   bannedPhrases?: string[];
+  outcomeTier?: OutcomeTier | null;
+  closingSeedFocus?: string | null;
+  closingSeedCrossroad?: string | null;
+  diegeticRitualResolved?: DiegeticRitualKey | null;
+  hiddenSecretSeed?: string | null;
+  xpTriggerState?: XpTriggerState | null;
+  twoBeatRequired?: boolean;
 }
 
 export interface BookendArtifactMetadata {
@@ -31,6 +43,8 @@ export interface BookendArtifactMetadata {
   continuityJudge?: {
     closingAntiSlopPass?: boolean;
     bookendStateConsistency?: boolean;
+    closingEssencePass?: boolean;
+    twoBeatStructurePass?: boolean;
   };
   [key: string]: unknown;
 }
