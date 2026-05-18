@@ -7,6 +7,8 @@ import {
 } from "../domain/bookend.types";
 import type { BookendGenerationPort, BookendGenerationRequest } from "../application/render-bookend-ceremony.use-case";
 
+const BOOKEND_WRITER_TIMEOUT_MS = 8_000;
+
 @Injectable()
 export class AgentBookendGenerationService implements BookendGenerationPort {
   private readonly agentBaseUrl: string;
@@ -30,7 +32,7 @@ export class AgentBookendGenerationService implements BookendGenerationPort {
       {
         method: "POST",
         upstreamService: "diad-agents",
-        timeoutMs: request.kind === "previously_on" ? 4_000 : 6_000,
+        timeoutMs: BOOKEND_WRITER_TIMEOUT_MS,
         headers: {
           "Content-Type": "application/json",
           "X-Internal-Token": this.internalToken,

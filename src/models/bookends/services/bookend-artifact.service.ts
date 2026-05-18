@@ -68,6 +68,8 @@ export class BookendArtifactService {
 }
 
 function toDto(artifact: BookendArtifactEntity): BookendArtifactDto {
+  const publicMetadata = { ...(artifact.metadata ?? {}) };
+  delete publicMetadata.plannerPayloadSnapshot;
   return {
     id: artifact.id,
     gameSessionId: artifact.gameSessionId,
@@ -75,7 +77,7 @@ function toDto(artifact: BookendArtifactEntity): BookendArtifactDto {
     kind: artifact.kind,
     prose: artifact.prose,
     npcsReferenced: artifact.npcsReferenced ?? [],
-    metadata: artifact.metadata ?? {},
+    metadata: publicMetadata,
     skippedByUser: artifact.skippedByUser,
     createdAt: artifact.createdAt.toISOString(),
   };

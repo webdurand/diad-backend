@@ -57,6 +57,14 @@ function makeDeps(
   };
 }
 
+function makeThrowingDeps(): RenderBookendCeremonyDeps {
+  const deps = makeDeps([]);
+  deps.generationPort.render = jest.fn(async () => {
+    throw new Error("agents down");
+  });
+  return deps;
+}
+
 describe("RenderBookendCeremonyUseCase", () => {
   it("rejeita NPC fora do snapshot, retenta 1x com hint e persiste sucesso", async () => {
     const deps = makeDeps([
@@ -109,6 +117,25 @@ describe("RenderBookendCeremonyUseCase", () => {
       expect.objectContaining({
         code: "BOOKEND_NPC_REFERENCE_VIOLATION",
         invalidNpcIds: [DEAD_NPC_ID],
+      }),
+    );
+  });
+
+  it("gera fallback minimo quando agents falha antes do tool-use", async () => {
+    const deps = makeThrowingDeps();
+    const useCase = new RenderBookendCeremonyUseCase(deps);
+
+    const artifact = await useCase.execute({
+      sessionId: SESSION_ID,
+      phaseTransitionId: TRANSITION_ID,
+      kind: "outro",
+    });
+
+    expect(artifact.prose).toBe(FALLBACK_BOOKEND_PROSE);
+    expect(deps.eventPublisher.publishFailed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "BOOKEND_WRITER_TIMEOUT",
+        invalidNpcIds: [],
       }),
     );
   });

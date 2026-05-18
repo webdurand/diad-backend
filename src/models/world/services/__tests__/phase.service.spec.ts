@@ -1,7 +1,14 @@
 import { PhaseService } from "../phase.service";
+import { SceneEntity } from "src/entities/scene.entity";
+import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 
-function makeService(): PhaseService {
+function makeService(overrides: {
+  dataSource?: any;
+  eventBus?: any;
+  envelopeFactory?: any;
+  bookendArtifactRepo?: any;
+} = {}): PhaseService {
   return new PhaseService(
     {} as any,
     {} as any,
@@ -13,10 +20,11 @@ function makeService(): PhaseService {
     {} as any,
     {} as any,
     {} as any,
+    overrides.dataSource ?? ({} as any),
     {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
+    overrides.eventBus ?? ({} as any),
+    overrides.envelopeFactory ?? ({} as any),
+    overrides.bookendArtifactRepo ?? ({} as any),
   );
 }
 
@@ -70,4 +78,77 @@ describe("PhaseService", () => {
       service.selectActiveObjective([low, tieLater, tieEarlier])?.id,
     ).toBe("earlier");
   });
+
+  it("publishes phase_changed with real bookend decision fields", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-05-17T12:00:00.000Z"));
+    const sceneRepo = {
+      findOne: jest.fn(async () => ({ sceneNumber: 5 })),
+    };
+    const messageRepo = {
+      findOne: jest.fn(async () => ({
+        createdAt: new Date("2026-05-17T11:20:00.000Z"),
+      })),
+    };
+    const dataSource = {
+      getRepository: jest.fn((entity) => {
+        if (entity === SceneEntity) return sceneRepo;
+        if (entity === SessionMessageEntity) return messageRepo;
+        throw new Error("unexpected repository");
+      }),
+    };
+    const eventBus = { publish: jest.fn(async () => undefined) };
+    const envelopeFactory = { build: jest.fn((input) => input) };
+    const bookendArtifactRepo = { count: jest.fn(async () => 0) };
+    const service = makeService({
+      dataSource,
+      eventBus,
+      envelopeFactory,
+      bookendArtifactRepo,
+    });
+
+    await (service as any).publishPhaseChanged(
+      {
+        id: "session-1",
+        campaignId: "campaign-1",
+        updatedAt: new Date("2026-05-17T11:10:00.000Z"),
+      },
+      phase(1, "Partida"),
+      phase(2, "Retorno"),
+      { id: "transition-1" },
+      "0af7651916cd43dd8448eb211c80319c",
+    );
+
+    expect(eventBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          phaseTransitionId: "transition-1",
+          gapMinutes: 40,
+          sceneNumber: 5,
+          crossDay: false,
+          phaseChangedSinceLastSession: true,
+          previouslySeen: false,
+        }),
+      }),
+    );
+    jest.useRealTimers();
+  });
 });
+
+function phase(index: number, name: string) {
+  return {
+    id: `phase-${index}`,
+    storyArcId: "arc-1",
+    index,
+    name,
+    description: null,
+    emotionalArc: "rise",
+    arcBeats: [],
+    unlockConditions: {},
+    completionConditions: {},
+    transitionBeatNarrativeSeed: null,
+    deprecatesOnAdvance: {},
+    isReversible: false,
+    createdAt: new Date("2026-05-17T10:00:00.000Z"),
+    updatedAt: new Date("2026-05-17T10:00:00.000Z"),
+  };
+}

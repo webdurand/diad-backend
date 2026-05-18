@@ -10,6 +10,7 @@ import { CampaignEntity } from "src/entities/campaign.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { NpcEntity } from "src/entities/npc.entity";
+import { SceneEntity } from "src/entities/scene.entity";
 import {
   PhaseArcBeat,
   PhaseConditionSet,
@@ -22,6 +23,7 @@ import { BookendArtifactEntity } from "src/entities/bookend-artifact.entity";
 import { QuestEntity } from "src/entities/quest.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 import { SessionEventEntity } from "src/entities/session-event.entity";
+import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { SessionStoryArcStateEntity } from "src/entities/session-story-arc-state.entity";
 import { StoryArcEntity } from "src/entities/story-arc.entity";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
@@ -33,6 +35,7 @@ import { QuestService } from "./quest.service";
 
 const PULL_THRESHOLD = 3;
 const MAIN_QUEST_CACHE_TTL_MS = 30_000;
+const PREVIOUSLY_ON_GAP_MINUTES = 30;
 const STORY_AUDIENCES: EventAudience[] = [
   "Narrator",
   "Director",
@@ -1064,6 +1067,10 @@ export class PhaseService {
     traceId?: string,
   ): Promise<void> {
     if (!session.campaignId) return;
+    const bookendDecision = await this.buildBookendDecisionPayload(
+      session,
+      transition,
+    );
     const envelope = this.envelopeFactory.build({
       eventCategory: "WorldEvent",
       eventType: "phase_changed",
@@ -1078,6 +1085,7 @@ export class PhaseService {
         fromPhase: this.toPhaseDto(fromPhase),
         toPhase: this.toPhaseDto(toPhase),
         transitionBeatNarrativeSeed: toPhase.transitionBeatNarrativeSeed ?? null,
+        ...bookendDecision,
       },
       audiences: STORY_AUDIENCES,
       narrativeDescriptor:
@@ -1086,4 +1094,69 @@ export class PhaseService {
     });
     await this.eventBus.publish(envelope);
   }
+
+  private async buildBookendDecisionPayload(
+    session: GameSessionEntity,
+    transition: PhaseTransitionEntity,
+  ): Promise<{
+    gapMinutes: number;
+    sceneNumber: number;
+    crossDay: boolean;
+    phaseChangedSinceLastSession: boolean;
+    previouslySeen: boolean;
+  }> {
+    const [lastScene, lastMessage, previouslyCount] = await Promise.all([
+      this.dataSource.getRepository(SceneEntity).findOne({
+        where: { sessionId: session.id, isActive: true },
+        order: { sceneNumber: "DESC" },
+        select: ["sceneNumber"],
+      }),
+      this.dataSource.getRepository(SessionMessageEntity).findOne({
+        where: { sessionId: session.id },
+        order: { sequenceNumber: "DESC" },
+        select: ["createdAt"],
+      }),
+      this.bookendArtifactRepo?.count({
+        where: {
+          gameSessionId: session.id,
+          phaseTransitionId: transition.id,
+          kind: "previously_on",
+        },
+      }) ?? Promise.resolve(0),
+    ]);
+
+    const lastActivityAt = lastMessage?.createdAt ?? session.updatedAt;
+    const gapMinutes = calculateGapMinutes(lastActivityAt);
+    const crossDay = isDifferentUtcDay(lastActivityAt, new Date());
+
+    return {
+      gapMinutes,
+      sceneNumber: lastScene?.sceneNumber ?? 2,
+      crossDay,
+      phaseChangedSinceLastSession:
+        gapMinutes >= PREVIOUSLY_ON_GAP_MINUTES || crossDay,
+      previouslySeen: previouslyCount > 0,
+    };
+  }
+}
+
+function calculateGapMinutes(lastActivityAt: Date | string | undefined): number {
+  if (!lastActivityAt) return 0;
+  const last = new Date(lastActivityAt).getTime();
+  if (!Number.isFinite(last)) return 0;
+  return Math.max(0, Math.round((Date.now() - last) / 60_000));
+}
+
+function isDifferentUtcDay(
+  left: Date | string | undefined,
+  right: Date,
+): boolean {
+  if (!left) return false;
+  const date = new Date(left);
+  if (!Number.isFinite(date.getTime())) return false;
+  return (
+    date.getUTCFullYear() !== right.getUTCFullYear() ||
+    date.getUTCMonth() !== right.getUTCMonth() ||
+    date.getUTCDate() !== right.getUTCDate()
+  );
 }

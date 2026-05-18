@@ -70,7 +70,8 @@ export class RenderBookendCeremonyUseCase {
       input.sessionId,
       input.phaseTransitionId,
     );
-    const first = await this.deps.generationPort.render({ ...input, snapshot });
+    const first = await this.renderOrFallback(input, snapshot, startedAt);
+    if ("fallback" in first) return first.fallback;
     const firstInvalid = this.findInvalidNpcReferences(
       first.npcsReferenced,
       snapshot,
@@ -81,11 +82,15 @@ export class RenderBookendCeremonyUseCase {
     }
 
     const retryHint = buildNpcRetryHint(firstInvalid);
-    const second = await this.deps.generationPort.render({
-      ...input,
+    const second = await this.renderOrFallback(
+      {
+        ...input,
+        retryHint,
+      },
       snapshot,
-      retryHint,
-    });
+      startedAt,
+    );
+    if ("fallback" in second) return second.fallback;
     const secondInvalid = this.findInvalidNpcReferences(
       second.npcsReferenced,
       snapshot,
@@ -96,6 +101,25 @@ export class RenderBookendCeremonyUseCase {
     }
 
     return this.persistFallback(input, secondInvalid, startedAt);
+  }
+
+  private async renderOrFallback(
+    input: RenderBookendInput & { retryHint?: string },
+    snapshot: NpcStateSnapshot,
+    startedAt: number,
+  ): Promise<GeneratedBookendProse | { fallback: BookendArtifactRecord }> {
+    try {
+      return await this.deps.generationPort.render({ ...input, snapshot });
+    } catch {
+      return {
+        fallback: await this.persistFallback(
+          input,
+          [],
+          startedAt,
+          ErrorCode.BOOKEND_WRITER_TIMEOUT,
+        ),
+      };
+    }
   }
 
   private findInvalidNpcReferences(
@@ -140,6 +164,7 @@ export class RenderBookendCeremonyUseCase {
     input: RenderBookendInput,
     invalidNpcIds: string[],
     startedAt: number,
+    code: string = ErrorCode.BOOKEND_NPC_REFERENCE_VIOLATION,
   ): Promise<BookendArtifactRecord> {
     const artifact = await this.deps.artifactRepository.save({
       gameSessionId: input.sessionId,
@@ -164,7 +189,7 @@ export class RenderBookendCeremonyUseCase {
       kind: input.kind,
       traceId: input.traceId,
       campaignId: input.campaignId,
-      code: ErrorCode.BOOKEND_NPC_REFERENCE_VIOLATION,
+      code,
       invalidNpcIds,
     });
     return artifact;
