@@ -16,6 +16,10 @@ export interface CollectedChoice {
   label: string;
   icon?: string;
   intentHint?: string;
+  continuityTag?: string;
+  isBeacon?: boolean;
+  combatIntent?: "none" | "attack" | "negotiate" | "flee" | "hide";
+  isCombatTrigger?: boolean;
 }
 
 
@@ -189,6 +193,21 @@ export class SseNarrationCollector {
           icon: typeof c.icon === "string" ? c.icon : undefined,
           intentHint:
             typeof c.intentHint === "string" ? c.intentHint : undefined,
+          continuityTag:
+            typeof c.continuityTag === "string" ? c.continuityTag : undefined,
+          isBeacon: typeof c.isBeacon === "boolean" ? c.isBeacon : undefined,
+          combatIntent:
+            c.combatIntent === "none" ||
+            c.combatIntent === "attack" ||
+            c.combatIntent === "negotiate" ||
+            c.combatIntent === "flee" ||
+            c.combatIntent === "hide"
+              ? c.combatIntent
+              : undefined,
+          isCombatTrigger:
+            typeof c.isCombatTrigger === "boolean"
+              ? c.isCombatTrigger
+              : undefined,
         });
       }
 

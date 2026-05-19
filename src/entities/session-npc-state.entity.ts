@@ -14,8 +14,15 @@ import { NpcEntity } from "./npc.entity";
 import { LocationEntity } from "./location.entity";
 import { LocationPoiEntity } from "./location-poi.entity";
 
+export type SessionNpcPosture =
+  | "peaceful"
+  | "uneasy"
+  | "drawing_weapon"
+  | "combat";
+
 @Entity("session_npc_state")
 @Unique(["gameSessionId", "npcId"])
+@Index(["gameSessionId", "posture"])
 export class SessionNpcStateEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;
@@ -41,6 +48,9 @@ export class SessionNpcStateEntity {
 
   @Column({ type: "varchar", default: "neutral" })
   disposition: "friendly" | "neutral" | "hostile" | "indifferent";
+
+  @Column({ type: "varchar", default: "peaceful" })
+  posture: SessionNpcPosture;
 
   @Column({ name: "current_location_id", type: "uuid", nullable: true })
   currentLocationId?: string;

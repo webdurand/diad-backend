@@ -23,6 +23,15 @@ export interface MaterializeRandomEncounterInput {
   difficulty: "low" | "moderate" | "high";
   biome?: string;
   reasonChain?: string[];
+  partyContext?: {
+    partySize: number;
+    allyPcIds?: string[];
+    allyNpcIds?: string[];
+    npcWitnessIds?: string[];
+    distanceM?: number;
+    encircled?: boolean;
+    surpriseState?: string;
+  };
   traceId?: string;
 }
 
@@ -30,6 +39,7 @@ export type MaterializeRandomEncounterResult =
   StartEncounterFromNarrativeResult & {
     monsterSlugs: string[];
     npcIds: string[];
+    reasonChain: string[];
   };
 
 @Injectable()
@@ -56,8 +66,9 @@ export class RandomEncounterMaterializerService {
       );
     }
 
+    const scaled = this.applyPartyScaling(input);
     const monstersBySlug = new Map<string, MonsterEntity>();
-    for (const slug of new Set(input.monsterSlugs)) {
+    for (const slug of new Set(scaled.monsterSlugs)) {
       const monster = await this.monsterRepo.findOne({ where: { slug } });
       if (!monster) {
         throw new DomainException(
@@ -70,7 +81,7 @@ export class RandomEncounterMaterializerService {
     }
 
     const npcIds: string[] = [];
-    for (const slug of input.monsterSlugs) {
+    for (const slug of scaled.monsterSlugs) {
       const monster = monstersBySlug.get(slug)!;
       const npc = await this.npcService.create(input.campaignId, {
         name: monster.name,
@@ -91,7 +102,7 @@ export class RandomEncounterMaterializerService {
       targetNpcIds: npcIds,
       autoPlaceTokens: true,
       surpriseRound: false,
-      narrativeTrigger: this.buildTrigger(input),
+      narrativeTrigger: this.buildTrigger(scaled),
       traceId: input.traceId,
     });
 
@@ -112,14 +123,15 @@ export class RandomEncounterMaterializerService {
         },
         payload: {
           encounterId: startResult.encounterId,
-          monsterSlugs: input.monsterSlugs,
+          monsterSlugs: scaled.monsterSlugs,
           npcIds,
           biome: input.biome ?? null,
           difficulty: input.difficulty,
           partySize: input.partySize ?? 1,
-          reasonChain: input.reasonChain ?? [],
+          partyContext: input.partyContext ?? null,
+          reasonChain: scaled.reasonChain,
         },
-        narrativeDescriptor: this.buildTrigger(input),
+        narrativeDescriptor: this.buildTrigger(scaled),
       });
       await this.eventBus.publish(envelope);
     } catch (err) {
@@ -129,12 +141,30 @@ export class RandomEncounterMaterializerService {
 
     return {
       ...startResult,
-      monsterSlugs: input.monsterSlugs,
+      monsterSlugs: scaled.monsterSlugs,
       npcIds,
+      reasonChain: scaled.reasonChain,
     };
   }
 
-  private buildTrigger(input: MaterializeRandomEncounterInput): string {
+  private applyPartyScaling(
+    input: MaterializeRandomEncounterInput,
+  ): MaterializeRandomEncounterInput & { reasonChain: string[] } {
+    const partySize = input.partyContext?.partySize ?? input.partySize ?? 1;
+    if (partySize < 3 || input.monsterSlugs.length === 0) {
+      return { ...input, reasonChain: input.reasonChain ?? [] };
+    }
+    return {
+      ...input,
+      monsterSlugs: [...input.monsterSlugs, input.monsterSlugs[0]],
+      reasonChain: [
+        ...(input.reasonChain ?? []),
+        `party_context_scaling:+1_unit_for_party_size_${partySize}`,
+      ],
+    };
+  }
+
+  private buildTrigger(input: Pick<MaterializeRandomEncounterInput, "monsterSlugs">): string {
     const counts = new Map<string, number>();
     for (const slug of input.monsterSlugs) {
       counts.set(slug, (counts.get(slug) ?? 0) + 1);

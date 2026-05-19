@@ -65,6 +65,7 @@ import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
 import { PhaseService } from "./services/phase.service";
 import { StoryArcService } from "./services/story-arc.service";
+import { CompassScenesListener } from "./listeners/compass-scenes.listener";
 import { MissionPullListener } from "./listeners/mission-pull.listener";
 import { MissionPanelCacheListener } from "./listeners/mission-panel-cache.listener";
 import { PhaseGateListener } from "./listeners/phase-gate.listener";
@@ -196,6 +197,7 @@ import { EvaluateNaturalLanguageTriggerListener } from "../narrative-memory/list
     QuestDefeatListener,
     GainReputationListener,
     QuestRewardListener,
+    CompassScenesListener,
     MissionPullListener,
     MissionPanelCacheListener,
     PhaseGateListener,
@@ -244,6 +246,7 @@ export class WorldModule implements OnModuleInit {
     private readonly questDefeatListener: QuestDefeatListener,
     private readonly gainReputationListener: GainReputationListener,
     private readonly questRewardListener: QuestRewardListener,
+    private readonly compassScenesListener: CompassScenesListener,
     private readonly missionPullListener: MissionPullListener,
     private readonly missionPanelCacheListener: MissionPanelCacheListener,
     private readonly phaseGateListener: PhaseGateListener,
@@ -259,6 +262,7 @@ export class WorldModule implements OnModuleInit {
     this.eventBus.registerListener(this.questDefeatListener);
     this.eventBus.registerListener(this.gainReputationListener);
     this.eventBus.registerListener(this.questRewardListener);
+    this.eventBus.registerListener(this.compassScenesListener);
     this.eventBus.registerListener(this.missionPullListener);
     this.eventBus.registerListener(this.missionPanelCacheListener);
     this.eventBus.registerListener(this.phaseGateListener);

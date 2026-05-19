@@ -78,6 +78,27 @@ describe("SseNarrationCollector", () => {
     expect(c.finalize()).toBe("");
   });
 
+  it("preserva metadados de choices para beacon e combat trigger", () => {
+    const c = new SseNarrationCollector();
+    c.feed(
+      `data: {"type":"choices","choices":[{"id":"c1","label":"Atacar","intentHint":"attack","continuityTag":"main_thread","isBeacon":true,"combatIntent":"attack","isCombatTrigger":true}]}\n\n`,
+    );
+    c.finalize();
+
+    expect(c.getChoices()).toEqual([
+      {
+        id: "c1",
+        label: "Atacar",
+        icon: undefined,
+        intentHint: "attack",
+        continuityTag: "main_thread",
+        isBeacon: true,
+        combatIntent: "attack",
+        isCombatTrigger: true,
+      },
+    ]);
+  });
+
   it("captura turn_outcome sem misturar na narração", () => {
     const c = new SseNarrationCollector();
     c.feed(
