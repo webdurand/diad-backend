@@ -118,6 +118,7 @@ describe("movement lock blocking", () => {
       makeLogger() as any,
       { remainingForScene: jest.fn().mockResolvedValue(3) } as any,
       { generate: jest.fn().mockReturnValue([]) } as any,
+      { generate: jest.fn().mockReturnValue([]) } as any,
       { computeSheet: jest.fn() } as any,
     );
 
@@ -163,6 +164,7 @@ describe("movement lock blocking", () => {
       movementLockService as any,
       makeLogger() as any,
       { remainingForScene: jest.fn().mockResolvedValue(3) } as any,
+      { generate: jest.fn().mockReturnValue([]) } as any,
       { generate: jest.fn().mockReturnValue([]) } as any,
       { computeSheet: jest.fn() } as any,
     );

@@ -13,6 +13,11 @@ interface ResolvedCandidate {
   slots: Record<string, string>;
 }
 
+export interface ResolvedFocalNpc {
+  id: string;
+  name: string;
+}
+
 function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
   for (const value of values) {
     const trimmed = value?.trim();
@@ -59,6 +64,20 @@ function resolveSlot(slot: string, context: SlotResolutionContext): string | nul
     return firstNonEmpty(npc.description, npc.title, npc.race, "um rosto marcado por urgência");
   }
 
+  return null;
+}
+
+export function resolveInitialFocalNpc(
+  slot: string | null | undefined,
+  context: SlotResolutionContext,
+): ResolvedFocalNpc | null {
+  if (!slot) return null;
+  const npc = firstNpc(context);
+  if (!npc?.id) return null;
+  if (slot === "npc.encounter.focal" || /^npc\.[a-z_]+\.name$/.test(slot)) {
+    const name = firstNonEmpty(npc.name, "Interlocutor");
+    return name ? { id: npc.id, name } : null;
+  }
   return null;
 }
 

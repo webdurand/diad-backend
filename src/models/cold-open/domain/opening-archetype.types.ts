@@ -28,6 +28,8 @@ export interface OpeningArchetype {
   readonly fewShotExample: string | null;
   readonly isActive: boolean;
   readonly since: string;
+  readonly opensInDialogue: boolean;
+  readonly initialFocalNpcSlot: string | null;
 }
 
 export interface ColdOpenHookSnapshot {
@@ -36,6 +38,8 @@ export interface ColdOpenHookSnapshot {
   readonly slots: Readonly<Record<string, string>>;
   readonly generatedAt: string;
   readonly openingLineDraft: string | null;
+  readonly initialFocalNpcId?: string | null;
+  readonly initialFocalNpcSlot?: string | null;
   readonly scoringTrace: {
     readonly candidates: ReadonlyArray<{
       readonly key: string;
@@ -56,6 +60,7 @@ export interface SlotResolutionContext {
     class?: string | null;
   };
   npcs: Array<{
+    id?: string | null;
     name?: string | null;
     title?: string | null;
     race?: string | null;

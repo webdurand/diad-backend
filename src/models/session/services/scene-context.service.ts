@@ -28,6 +28,7 @@ import {
 import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
 import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 import type { ColdOpenHookSnapshot } from "src/models/cold-open/domain/opening-archetype.types";
+import { getDialogueWeight, type DialogueWeight } from "src/shared/dialogue-weight";
 
 
 export interface SceneContext {
@@ -63,6 +64,7 @@ export interface SceneContext {
     race?: string;
     status: "alive" | "dead" | "missing" | "unknown";
     disposition: string;
+    dialogueWeight?: DialogueWeight;
     presenceRole?: "present" | "interlocutor" | "companion";
     currentPoiId?: string | null;
     personalityBig5: Record<string, number>;
@@ -335,6 +337,7 @@ export class SceneContextService {
         race: sn.npc.race,
         status: statusByNpc.get(sn.npc.id) ?? "alive",
         disposition: dispositionByNpc.get(sn.npc.id) ?? "neutral",
+        dialogueWeight: getDialogueWeight(sn.npc),
         presenceRole: sn.presenceRole,
         currentPoiId: currentPoiByNpc.get(sn.npc.id) ?? scene.poiId ?? null,
         personalityBig5: sn.npc.personalityBig5 as Record<string, number>,

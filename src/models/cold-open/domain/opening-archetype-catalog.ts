@@ -18,6 +18,8 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "Goma sente o gosto metálico do sangue antes de ouvir o grito. Uma flecha treme na madeira ao lado do rosto. O arqueiro recarregou.",
     isActive: true,
     since: "037",
+    opensInDialogue: false,
+    initialFocalNpcSlot: null,
   },
   {
     key: "misterio_camara_vazia",
@@ -43,6 +45,8 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "A Câmara de Projetos deveria fumar com vinte mãos no trabalho. Maguin entra: roldanas giram sozinhas, planos rasgados batem no chão. Uma cadeira ainda quente.",
     isActive: true,
     since: "037",
+    opensInDialogue: false,
+    initialFocalNpcSlot: null,
   },
   {
     key: "perda_irrecuperavel",
@@ -65,6 +69,8 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "O cofre ainda está fechado. A chave de cobre, não. No veludo, só a marca limpa onde ela repousou por anos.",
     isActive: true,
     since: "037",
+    opensInDialogue: false,
+    initialFocalNpcSlot: null,
   },
   {
     key: "encontro_fatidico",
@@ -83,6 +89,8 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "Maguin cruza o olhar do velho antes de qualquer palavra. Óleo preto nas mãos, nenhum sorriso. Entre vocês, um plano rasgado pregado na parede.",
     isActive: true,
     since: "037",
+    opensInDialogue: true,
+    initialFocalNpcSlot: "npc.encounter.focal",
   },
   {
     key: "retorno_inesperado",
@@ -101,6 +109,8 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "A torre da infância não está em ruínas. Está acesa. E alguém lá dentro usa a mesma canção que seu mestre assobiava.",
     isActive: true,
     since: "037",
+    opensInDialogue: false,
+    initialFocalNpcSlot: null,
   },
   {
     key: "descoberta_proibida",
@@ -119,6 +129,8 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "Sob a tampa do relicário há um mapa que se desenha sozinho. A tinta segue o pulso de Maguin.",
     isActive: true,
     since: "037",
+    opensInDialogue: false,
+    initialFocalNpcSlot: null,
   },
   {
     key: "divida_cobrada",
@@ -137,6 +149,8 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "A mulher conhece seu nome e o valor exato da sua bolsa. O contrato na mesa tem sua assinatura, mas você nunca o viu.",
     isActive: true,
     since: "037",
+    opensInDialogue: true,
+    initialFocalNpcSlot: "npc.encounter.focal",
   },
   {
     key: "perseguicao_imediata",
@@ -155,5 +169,7 @@ export const OPENING_ARCHETYPES: OpeningArchetype[] = [
       "O apito corta a feira. Três botas pesadas viram a esquina. A viela à direita acabou de ser fechada por uma carroça.",
     isActive: true,
     since: "037",
+    opensInDialogue: false,
+    initialFocalNpcSlot: null,
   },
 ];

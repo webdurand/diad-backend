@@ -73,6 +73,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     session?: Record<string, any> | null;
     sceneService?: { getActive: jest.Mock };
     gameEventRepo?: { findOne: jest.Mock };
+    openModeActionGenerator?: { generate: jest.Mock };
     sessionMessageService?: {
       append?: jest.Mock;
       getMaxSequenceNumber?: jest.Mock;
@@ -168,6 +169,15 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
         ],
       }),
     };
+    const openModeActionGenerator: any = opts.openModeActionGenerator ?? {
+      generate: jest.fn().mockReturnValue([
+        {
+          actionId: "investigate_scene",
+          type: "investigate_scene",
+          label: "Investigar a cena",
+        },
+      ]),
+    };
     return new AiProxyController(
       aiProxyService,
       resumeService,
@@ -180,6 +190,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       sessionRepo,
       metaQueryService,
       dialogueActionGenerator,
+      openModeActionGenerator,
       characterSheetService,
     );
   }
@@ -303,6 +314,52 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       );
 
       expect(result.sceneMode).toBe("combat");
+    });
+
+    it("gera ações open-mode alvo-first quando a cena está aberta", async () => {
+      const openModeActionGenerator = {
+        generate: jest.fn().mockReturnValue([
+          {
+            actionId: "talk_npc_npc-1",
+            type: "talk_npc",
+            label: "Falar com Goma",
+            payload: { npcId: "npc-1" },
+          },
+        ]),
+      };
+      const controller = makeController({
+        pipeStream: makePipeStream(),
+        openModeActionGenerator,
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true },
+        },
+      });
+
+      const result = await (controller as any).buildBimodalState(
+        SESSION_ID,
+        USER_ID,
+        {
+          activeSceneId: "scene-1",
+          sceneContext: {
+            scene: { id: "scene-1" },
+            npcsPresent: [{ id: "npc-1", name: "Goma", dialogueWeight: "plot" }],
+          },
+        },
+      );
+
+      expect(openModeActionGenerator.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          npcsPresent: [expect.objectContaining({ id: "npc-1" })],
+          characterSkills: ["persuasion"],
+        }),
+      );
+      expect(result.availableActions).toEqual([
+        expect.objectContaining({ type: "talk_npc", label: "Falar com Goma" }),
+      ]);
     });
 
     it("não emite estado bimodal quando feature flag está desligada", async () => {

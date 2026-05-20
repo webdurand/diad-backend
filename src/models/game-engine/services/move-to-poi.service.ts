@@ -24,6 +24,7 @@ import {
   DialogueActionGeneratorService,
   type DialogueAction,
 } from "./dialogue-action-generator.service";
+import { OpenModeActionGeneratorService } from "./open-mode-action-generator.service";
 
 export interface MoveToPoiInput {
   sessionId: string;
@@ -126,6 +127,7 @@ export class MoveToPoiService {
     private readonly logger: DiadLogger,
     private readonly metaQueryService: MetaQueryService,
     private readonly dialogueActionGenerator: DialogueActionGeneratorService,
+    private readonly openModeActionGenerator: OpenModeActionGeneratorService,
     private readonly characterSheetService: CharacterSheetService,
   ) {
     this.logger.setContext(MoveToPoiService.name);
@@ -345,6 +347,9 @@ export class MoveToPoiService {
         sceneMode,
         npcsPresent,
         focalNpcId: currentScene.currentInterlocutorNpcId ?? null,
+        interactables: Array.isArray(currentScene.contextSnapshot?.interactables)
+          ? currentScene.contextSnapshot.interactables
+          : [],
         characterSkills,
         characterKnownFacts,
       }),
@@ -363,6 +368,7 @@ export class MoveToPoiService {
     sceneMode: SceneMode;
     npcsPresent: AvailablePoisEnvelope["npcsPresent"];
     focalNpcId: string | null;
+    interactables?: Array<Record<string, any>>;
     characterSkills: string[];
     characterKnownFacts: string[];
   }): DialogueAction[] {
@@ -380,12 +386,15 @@ export class MoveToPoiService {
       });
     }
 
-    return input.npcsPresent.map((npc) => ({
-      actionId: `dialogue_start_${npc.id}`,
-      type: "topic",
-      label: `Falar com ${npc.name}`,
-      payload: { npcId: npc.id },
-    }));
+    if (input.sceneMode === "open") {
+      return this.openModeActionGenerator.generate({
+        npcsPresent: input.npcsPresent,
+        interactables: input.interactables,
+        characterSkills: input.characterSkills,
+      });
+    }
+
+    return [];
   }
 
   private async loadProficientSkillSlugs(

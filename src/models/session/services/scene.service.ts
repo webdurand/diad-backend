@@ -14,6 +14,7 @@ import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factor
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { GenerateColdOpenHookUseCase } from "src/models/cold-open/application/generate-cold-open-hook.use-case";
+import type { ColdOpenHookSnapshot } from "src/models/cold-open/domain/opening-archetype.types";
 
 export interface CreateSceneDto {
   locationId?: string;
@@ -122,7 +123,17 @@ export class SceneService {
     });
     const saved = await this.sceneRepo.save(scene);
 
-    await this.tryGenerateColdOpen(saved);
+    const coldOpenHook = await this.tryGenerateColdOpen(saved);
+    let currentInterlocutorNpcId = dto.currentInterlocutorNpcId ?? null;
+    if (coldOpenHook?.initialFocalNpcId) {
+      await this.addNpcToScene(
+        saved.id,
+        coldOpenHook.initialFocalNpcId,
+        "interlocutor",
+      );
+      saved.currentInterlocutorNpcId = coldOpenHook.initialFocalNpcId;
+      currentInterlocutorNpcId = coldOpenHook.initialFocalNpcId;
+    }
 
     await this.publishSceneChanged({
       sessionId,
@@ -132,7 +143,7 @@ export class SceneService {
       sceneNumber: nextNumber,
       locationId: resolvedLocationId,
       poiId: resolvedPoiId,
-      currentInterlocutorNpcId: dto.currentInterlocutorNpcId ?? null,
+      currentInterlocutorNpcId,
       arcBeat: arcBeat ?? null,
       reason: dto.reason ?? null,
     });
@@ -140,8 +151,10 @@ export class SceneService {
     return saved;
   }
 
-  private async tryGenerateColdOpen(scene: SceneEntity): Promise<void> {
-    if (scene.sceneNumber !== 1 || !this.coldOpen) return;
+  private async tryGenerateColdOpen(
+    scene: SceneEntity,
+  ): Promise<ColdOpenHookSnapshot | null> {
+    if (scene.sceneNumber !== 1 || !this.coldOpen) return null;
 
     const timeout = Symbol("cold-open-timeout");
     const result = await Promise.race([
@@ -165,7 +178,9 @@ export class SceneService {
         "session.id": scene.sessionId,
         "error.code": ErrorCode.COLD_OPEN_GENERATION_TIMEOUT,
       });
+      return null;
     }
+    return result;
   }
 
   private async publishSceneChanged(payload: {

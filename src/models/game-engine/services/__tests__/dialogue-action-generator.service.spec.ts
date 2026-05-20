@@ -20,6 +20,12 @@ describe("DialogueActionGeneratorService", () => {
         expect.objectContaining({ actionId: "skill_persuasion", label: "Persuadir" }),
         expect.objectContaining({ actionId: "skill_insight", label: "Ler intenção" }),
         expect.objectContaining({ actionId: "topic_rumor_amulet", label: "Perguntar sobre amuleto" }),
+        expect.objectContaining({ actionId: "social_ask_more", type: "social", label: "Pedir mais informações" }),
+        expect.objectContaining({ actionId: "social_question", type: "social", label: "Questionar" }),
+        expect.objectContaining({ actionId: "social_convince", type: "social", label: "Convencer" }),
+        expect.objectContaining({ actionId: "social_change_topic", type: "social", label: "Mudar de assunto" }),
+        expect.objectContaining({ actionId: "social_greet", type: "social", label: "Cumprimentar" }),
+        expect.objectContaining({ actionId: "social_farewell", type: "social", label: "Despedir-se" }),
         expect.objectContaining({ actionId: "reply_free_text", type: "reply_free_text" }),
         expect.objectContaining({ actionId: "exit_dialogue", type: "exit_dialogue" }),
         expect.objectContaining({ actionId: "meta_query", type: "meta_query" }),
@@ -29,5 +35,25 @@ describe("DialogueActionGeneratorService", () => {
       "traitor",
     );
     expect(JSON.stringify(actions)).not.toContain("knowledgeScope");
+  });
+
+  it("omite cumprimento quando o diálogo não está no primeiro turno", () => {
+    const actions = service.generate({
+      characterSkills: [],
+      characterKnownFacts: [],
+      includeGreeting: false,
+      npc: {
+        id: "npc-goma",
+        name: "Goma",
+      },
+    });
+
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ actionId: "social_ask_more" }),
+        expect.objectContaining({ actionId: "social_farewell" }),
+      ]),
+    );
+    expect(actions.some((action) => action.actionId === "social_greet")).toBe(false);
   });
 });

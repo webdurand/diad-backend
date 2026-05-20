@@ -93,6 +93,7 @@ function buildService(opts: {
   const cache = new SceneContextCacheService();
   const movementLockService = {
     normalize: jest.fn((value: unknown) => value ?? null),
+    getForScene: jest.fn(() => null),
   };
   const service = new SceneContextService(
     sceneRepo as unknown as Repository<SceneEntity>,

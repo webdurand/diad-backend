@@ -29,6 +29,7 @@ import {
   DialogueActionGeneratorService,
   type DialogueAction,
 } from "../game-engine/services/dialogue-action-generator.service";
+import { OpenModeActionGeneratorService } from "../game-engine/services/open-mode-action-generator.service";
 import {
   SseNarrationCollector,
   type CollectedChoice,
@@ -108,6 +109,7 @@ export class AiProxyController {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     private readonly metaQueryService: MetaQueryService,
     private readonly dialogueActionGenerator: DialogueActionGeneratorService,
+    private readonly openModeActionGenerator: OpenModeActionGeneratorService,
     private readonly characterSheetService: CharacterSheetService,
   ) {}
 
@@ -356,6 +358,11 @@ export class AiProxyController {
     const npcsPresent = Array.isArray(sceneContext?.npcsPresent)
       ? sceneContext.npcsPresent
       : [];
+    const interactables = Array.isArray(sceneContext?.interactables)
+      ? sceneContext.interactables
+      : Array.isArray(scene.contextSnapshot?.interactables)
+        ? scene.contextSnapshot.interactables
+        : [];
     const metaQueryRemaining = sceneId
       ? await this.metaQueryService.remainingForScene(sessionId, sceneId)
       : 3;
@@ -372,6 +379,7 @@ export class AiProxyController {
         sceneMode,
         focalNpcId,
         npcsPresent,
+        interactables,
         characterSkills,
         characterKnownFacts,
       }),
@@ -383,6 +391,7 @@ export class AiProxyController {
     sceneMode: SceneMode;
     focalNpcId: string | null;
     npcsPresent: Array<Record<string, any>>;
+    interactables?: Array<Record<string, any>>;
     characterSkills: string[];
     characterKnownFacts: string[];
   }): DialogueAction[] {
@@ -399,12 +408,14 @@ export class AiProxyController {
         },
       });
     }
-    return input.npcsPresent.map((npc) => ({
-      actionId: `dialogue_start_${npc.id}`,
-      type: "topic",
-      label: `Falar com ${npc.name}`,
-      payload: { npcId: npc.id },
-    }));
+    if (input.sceneMode === "open") {
+      return this.openModeActionGenerator.generate({
+        npcsPresent: input.npcsPresent,
+        interactables: input.interactables,
+        characterSkills: input.characterSkills,
+      });
+    }
+    return [];
   }
 
   private async loadProficientSkillSlugs(

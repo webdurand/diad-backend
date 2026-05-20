@@ -1,8 +1,12 @@
 import { Injectable } from "@nestjs/common";
 
 export type DialogueActionType =
+  | "talk_npc"
+  | "examine_interactable"
+  | "investigate_scene"
   | "skill"
   | "topic"
+  | "social"
   | "reply_free_text"
   | "exit_dialogue"
   | "meta_query";
@@ -17,6 +21,7 @@ export interface DialogueAction {
 export interface DialogueActionGenerationInput {
   characterSkills: string[];
   characterKnownFacts: string[];
+  includeGreeting?: boolean;
   npc: {
     id: string;
     name: string;
@@ -39,11 +44,34 @@ const TOPIC_LABELS: Record<string, string> = {
   rumor_amulet: "Perguntar sobre amuleto",
 };
 
+const SOCIAL_ACTIONS: Array<{
+  key: string;
+  label: string;
+  firstTurnOnly?: boolean;
+}> = [
+  { key: "social_ask_more", label: "Pedir mais informações" },
+  { key: "social_question", label: "Questionar" },
+  { key: "social_convince", label: "Convencer" },
+  { key: "social_change_topic", label: "Mudar de assunto" },
+  { key: "social_greet", label: "Cumprimentar", firstTurnOnly: true },
+  { key: "social_farewell", label: "Despedir-se" },
+];
+
 @Injectable()
 export class DialogueActionGeneratorService {
   generate(input: DialogueActionGenerationInput): DialogueAction[] {
     const actions: DialogueAction[] = [];
     const seen = new Set<string>();
+
+    for (const social of SOCIAL_ACTIONS) {
+      if (social.firstTurnOnly && input.includeGreeting === false) continue;
+      this.pushOnce(actions, seen, {
+        actionId: social.key,
+        type: "social",
+        label: social.label,
+        payload: { intent: social.key, npcId: input.npc.id },
+      });
+    }
 
     for (const skill of input.characterSkills ?? []) {
       const normalized = this.normalizeSlug(skill);
