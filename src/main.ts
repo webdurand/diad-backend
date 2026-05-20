@@ -3,14 +3,21 @@ import { ValidationPipe } from "@nestjs/common";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
 import cookieParser from "cookie-parser";
+import { json, urlencoded } from "express";
 import { GlobalExceptionFilter } from "./common/observability/errors/global-exception.filter";
 import { ProblemFactory } from "./common/observability/errors/problem.factory";
 import { ValidationException } from "./common/observability/errors/diad-exception";
 import { ErrorCode } from "./common/observability/errors/error-codes.catalog";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    bodyParser: false,
+  });
   app.useLogger(app.get(Logger));
+  const bodyLimit = process.env.REQUEST_BODY_LIMIT ?? "2mb";
+  app.use(json({ limit: bodyLimit }));
+  app.use(urlencoded({ extended: true, limit: bodyLimit }));
   app.use(cookieParser());
   const allowedOrigins = [
     "http://localhost:9001",
