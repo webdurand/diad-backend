@@ -30,6 +30,7 @@ import {
   MonsterEntity,
   EquipmentEntity,
   MagicItemEntity,
+  LoreEntryEntity,
 
   WeatherEntity,
   GameClockEntity,
@@ -79,6 +80,7 @@ import { NpcWealthController } from "./npc-wealth.controller";
 import { CompanionTemplatesController } from "./companion-templates.controller";
 import { CompanionTemplateService } from "./services/companion-template.service";
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
+import { WorldSeedMaterializationService } from "./services/world-seed-materialization.service";
 
 @Module({
   imports: [
@@ -109,6 +111,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
       MonsterEntity,
       EquipmentEntity,
       MagicItemEntity,
+      LoreEntryEntity,
 
       WeatherEntity,
       GameClockEntity,
@@ -157,6 +160,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionStoryArcStateService,
     NpcWealthService,
     CompanionTemplateService,
+    WorldSeedMaterializationService,
 
     CampaignIdPipe,
     QuestDefeatListener,
@@ -187,6 +191,7 @@ import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
     SessionStoryArcStateService,
     NpcWealthService,
     CompanionTemplateService,
+    WorldSeedMaterializationService,
   ],
 })
 export class WorldModule implements OnModuleInit {

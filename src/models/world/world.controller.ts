@@ -26,6 +26,10 @@ import {
   type CreateNpcRelationshipDto,
   type UpdateNpcRelationshipDto,
 } from "./services/npc-relationship.service";
+import {
+  WorldSeedMaterializationService,
+  type WorldSeedMaterializeBody,
+} from "./services/world-seed-materialization.service";
 
 import { AmbianceService } from "./services/ambiance.service";
 import { WeatherService, type Biome } from "./services/weather.service";
@@ -109,6 +113,7 @@ export class WorldController {
 
     private readonly storyArcService: StoryArcService,
     private readonly npcRelationshipService: NpcRelationshipService,
+    private readonly worldSeedMaterializationService: WorldSeedMaterializationService,
   ) {}
 
 
@@ -253,6 +258,16 @@ export class WorldController {
   ) {
     await this.campaignService.ensureDmOwnership(id, getUserId(req));
     return this.campaignService.setGenerationSeed(id, body.seed);
+  }
+
+  @Post(":id/world-seed/materialize")
+  async materializeWorldSeed(
+    @Req() req: AuthRequest,
+    @Param("id", CampaignIdPipe) id: string,
+    @Body() body: WorldSeedMaterializeBody,
+  ) {
+    await this.campaignService.ensureDmOwnership(id, getUserId(req));
+    return this.worldSeedMaterializationService.materialize(id, body);
   }
 
 
