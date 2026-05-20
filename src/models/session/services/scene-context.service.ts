@@ -37,6 +37,8 @@ export interface SceneContext {
     title?: string;
     description?: string;
     mood?: string;
+    currentInterlocutorNpcId?: string | null;
+    socialCollective?: boolean;
     coldOpenHook?: ColdOpenHookSnapshot | null;
     location?: {
       id?: string;
@@ -66,6 +68,7 @@ export interface SceneContext {
     personalityBig5: Record<string, number>;
     motivation?: string;
     knowledgeScope: string[];
+    tags: string[];
     dialogueStyle?: string;
   }>;
 
@@ -337,6 +340,7 @@ export class SceneContextService {
         personalityBig5: sn.npc.personalityBig5 as Record<string, number>,
         motivation: sn.npc.motivation,
         knowledgeScope: sn.npc.knowledgeScope,
+        tags: sn.npc.tags ?? [],
         dialogueStyle: sn.npc.dialogueStyle,
       }));
 
@@ -464,6 +468,8 @@ export class SceneContextService {
         title: scene.title,
         description: scene.description,
         mood: scene.mood,
+        currentInterlocutorNpcId: scene.currentInterlocutorNpcId ?? null,
+        socialCollective: scene.socialCollective === true,
         coldOpenHook: scene.coldOpenHook ?? null,
         location: scene.location
           ? {

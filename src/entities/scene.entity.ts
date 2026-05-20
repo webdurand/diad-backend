@@ -47,6 +47,9 @@ export class SceneEntity {
   @JoinColumn({ name: "current_interlocutor_npc_id" })
   currentInterlocutorNpc?: NpcEntity;
 
+  @Column({ name: "social_collective", type: "boolean", default: false })
+  socialCollective: boolean;
+
   @Column({ name: "scene_number", type: "int" })
   sceneNumber: number;
 

@@ -17,6 +17,8 @@ import { EventLogService } from "./services/event-log.service";
 import { ChronicleService } from "./services/chronicle.service";
 import { SceneContextService } from "./services/scene-context.service";
 import { SessionMessageService } from "./services/session-message.service";
+import { MetaQueryService } from "./services/meta-query.service";
+import { FocalSwapService } from "./services/focal-swap.service";
 import type {
   CreateSceneDto,
   ScenePresenceRole,
@@ -48,6 +50,8 @@ export class SessionController {
     private readonly chronicleService: ChronicleService,
     private readonly sceneContextService: SceneContextService,
     private readonly sessionMessageService: SessionMessageService,
+    private readonly metaQueryService: MetaQueryService,
+    private readonly focalSwapService: FocalSwapService,
   ) {}
 
 
@@ -172,6 +176,17 @@ export class SessionController {
     return this.sceneService.addNpcToScene(sceneId, npcId, presenceRole);
   }
 
+  @Patch(":sessionId/scenes/:sceneId/focal-npc")
+  async swapFocalNpc(
+    @Req() req: AuthRequest,
+    @Param("sceneId") sceneId: string,
+    @Body("npcId") npcId: string,
+    @Body("characterId") characterId?: string,
+  ) {
+    getUserId(req);
+    return this.focalSwapService.swap(sceneId, npcId, characterId);
+  }
+
   @Delete(":sessionId/scenes/:sceneId/npcs/:npcId")
   async removeNpcFromScene(
     @Param("sceneId") sceneId: string,
@@ -235,6 +250,21 @@ export class SessionController {
       isVisibleToPlayers: false,
     });
     return { ok: true, cmd: body.cmd };
+  }
+
+  @Post(":sessionId/meta-query")
+  async answerMetaQuery(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Body()
+    body: {
+      sceneId: string;
+      characterId?: string;
+      question: string;
+    },
+  ) {
+    const userId = getUserId(req);
+    return this.metaQueryService.answer(sessionId, { ...body, userId });
   }
 
 

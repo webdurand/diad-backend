@@ -74,6 +74,7 @@ export class GameSessionEntity {
   config: {
     dice_seed?: number;
     critical_variant?: "double_dice" | "double_damage";
+    bimodalLoopEnabled?: boolean;
   };
 
 

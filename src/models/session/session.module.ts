@@ -19,6 +19,8 @@ import {
   SessionNpcStateEntity,
   SessionStoryArcStateEntity,
   OpeningArchetypeEntity,
+  MetaQueryAuditEntity,
+  LoreEntryEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { WorldModule } from "../world/world.module";
@@ -33,6 +35,10 @@ import { SessionMessageService } from "./services/session-message.service";
 import { SessionRecapService } from "./services/session-recap.service";
 import { SessionResumeService } from "./services/session-resume.service";
 import { MovementLockService } from "./services/movement-lock.service";
+import { MetaQueryGuard } from "./services/meta-query-guard.service";
+import { MetaQueryService } from "./services/meta-query.service";
+import { MetaQueryFactResolver } from "./services/meta-query-fact-resolver.service";
+import { FocalSwapService } from "./services/focal-swap.service";
 import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-cold-open-hook.use-case";
 
 @Module({
@@ -56,6 +62,8 @@ import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-c
       SessionNpcStateEntity,
       SessionStoryArcStateEntity,
       OpeningArchetypeEntity,
+      MetaQueryAuditEntity,
+      LoreEntryEntity,
     ]),
     AuthModule,
     WorldModule,
@@ -72,6 +80,10 @@ import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-c
     SessionRecapService,
     SessionResumeService,
     MovementLockService,
+    MetaQueryGuard,
+    MetaQueryFactResolver,
+    MetaQueryService,
+    FocalSwapService,
     GenerateColdOpenHookUseCase,
   ],
   exports: [
@@ -84,6 +96,10 @@ import { GenerateColdOpenHookUseCase } from "../cold-open/application/generate-c
     SessionRecapService,
     SessionResumeService,
     MovementLockService,
+    MetaQueryGuard,
+    MetaQueryFactResolver,
+    MetaQueryService,
+    FocalSwapService,
     GenerateColdOpenHookUseCase,
   ],
 })

@@ -101,6 +101,26 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Esta sessão não está aceitando novos jogadores.",
     domain: "session",
   },
+  [ErrorCode.SESSION_DIALOGUE_NOT_ACTIVE]: {
+    httpStatus: 409,
+    defaultTitle: "Dialogue is not active",
+    defaultHint: "Inicie uma conversa antes de usar ações de diálogo.",
+    domain: "session",
+  },
+  [ErrorCode.SESSION_SOCIAL_COLLECTIVE_REQUIRED]: {
+    httpStatus: 409,
+    defaultTitle: "Scene is not a social collective",
+    defaultHint:
+      "Troca de interlocutor só vale em diálogo coletivo com múltiplos NPCs.",
+    domain: "session",
+  },
+  [ErrorCode.SESSION_BIMODAL_LOOP_DISABLED]: {
+    httpStatus: 409,
+    defaultTitle: "Bimodal loop disabled",
+    defaultHint:
+      "A sessão precisa habilitar config.bimodalLoopEnabled para usar esse fluxo.",
+    domain: "session",
+  },
 
 
   [ErrorCode.COMBAT_NOT_FOUND]: {
@@ -334,6 +354,12 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Verificar se o NPC ainda existe nessa campanha.",
     domain: "npc",
   },
+  [ErrorCode.NPC_FOCAL_NOT_IN_SCENE]: {
+    httpStatus: 422,
+    defaultTitle: "Focal NPC is not in scene",
+    defaultHint: "Escolha um NPC presente na cena atual.",
+    domain: "npc",
+  },
   [ErrorCode.NPC_LOCATION_MISMATCH]: {
     httpStatus: 422,
     defaultTitle: "NPC cannot move to target location",
@@ -400,6 +426,19 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultTitle: "Cold open generation timed out",
     defaultHint:
       "A abertura cinemática foi pulada para preservar o início da sessão.",
+    domain: "narrative",
+  },
+  [ErrorCode.META_QUERY_RATE_LIMIT_EXCEEDED]: {
+    httpStatus: 429,
+    defaultTitle: "Meta-query limit exceeded",
+    defaultHint: "Cada cena permite até 3 perguntas meta.",
+    domain: "narrative",
+  },
+  [ErrorCode.META_QUERY_KNOWLEDGE_SCOPE_VIOLATION]: {
+    httpStatus: 422,
+    defaultTitle: "Meta-query asks for omniscient knowledge",
+    defaultHint:
+      "Pergunte sobre tática, percepção, lembrança do personagem ou regra RAW; não sobre segredos ou números ocultos.",
     domain: "narrative",
   },
   [ErrorCode.SCENE_NOT_FOUND]: {

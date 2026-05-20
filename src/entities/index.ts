@@ -115,6 +115,7 @@ import { SessionFactionStateEntity } from "./session-faction-state.entity";
 import { SessionStoryArcStateEntity } from "./session-story-arc-state.entity";
 
 import { AdminAuditLogEntity } from "./admin-audit-log.entity";
+import { MetaQueryAuditEntity } from "./meta-query-audit.entity";
 
 export {
   AbilityScoreEntity,
@@ -229,6 +230,7 @@ export {
   SessionFactionStateEntity,
   SessionStoryArcStateEntity,
   AdminAuditLogEntity,
+  MetaQueryAuditEntity,
 };
 
 export const ENTITIES = [
@@ -344,6 +346,7 @@ export const ENTITIES = [
   SessionFactionStateEntity,
   SessionStoryArcStateEntity,
   AdminAuditLogEntity,
+  MetaQueryAuditEntity,
 ];
 
 export * from "./enums";

@@ -7,15 +7,23 @@ import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationPoiService } from "src/models/world/services/location-poi.service";
 import { SceneService } from "src/models/session/services/scene.service";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
+import { MetaQueryService } from "src/models/session/services/meta-query.service";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import {
   MovementLockService,
   type MovementLockState,
 } from "src/models/session/services/movement-lock.service";
+import { getDialogueWeight, type DialogueWeight } from "src/shared/dialogue-weight";
+import { deriveSceneMode, type SceneMode } from "src/shared/scene-mode";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
+import {
+  DialogueActionGeneratorService,
+  type DialogueAction,
+} from "./dialogue-action-generator.service";
 
 export interface MoveToPoiInput {
   sessionId: string;
@@ -79,6 +87,12 @@ export interface AvailablePoi {
 }
 
 export interface AvailablePoisEnvelope {
+  sceneId: string | null;
+  sceneMode: SceneMode;
+  socialCollective: boolean;
+  focalNpcId: string | null;
+  metaQueryRemaining: number;
+  bimodalLoopEnabled: boolean;
   location: { id: string; name: string; type: string } | null;
   currentPoi: AvailablePoi | null;
   movementLock: MovementLockState | null;
@@ -87,7 +101,12 @@ export interface AvailablePoisEnvelope {
     name: string;
     title?: string | null;
     presenceRole: string;
+    dialogueWeight: DialogueWeight;
+    disposition: "unknown";
+    tags: string[];
+    knowledgeScope: string[];
   }>;
+  availableActions: DialogueAction[];
   pois: AvailablePoi[];
 }
 
@@ -105,6 +124,9 @@ export class MoveToPoiService {
     private readonly contextCache: SceneContextCacheService,
     private readonly movementLockService: MovementLockService,
     private readonly logger: DiadLogger,
+    private readonly metaQueryService: MetaQueryService,
+    private readonly dialogueActionGenerator: DialogueActionGeneratorService,
+    private readonly characterSheetService: CharacterSheetService,
   ) {
     this.logger.setContext(MoveToPoiService.name);
   }
@@ -254,25 +276,59 @@ export class MoveToPoiService {
     };
   }
 
-  async listAvailablePois(sessionId: string): Promise<AvailablePoisEnvelope> {
+  async listAvailablePois(
+    sessionId: string,
+    userId?: string,
+  ): Promise<AvailablePoisEnvelope> {
     const currentScene = await this.sceneService.getActive(sessionId);
     if (!currentScene?.locationId) {
       return {
+        sceneId: currentScene?.id ?? null,
+        sceneMode: "open",
+        socialCollective: false,
+        focalNpcId: null,
+        metaQueryRemaining: 3,
+        bimodalLoopEnabled: true,
         location: null,
         currentPoi: null,
         movementLock: null,
         npcsPresent: [],
+        availableActions: [],
         pois: [],
       };
     }
-    const [pois, sceneNpcs] = await Promise.all([
+    const [pois, sceneNpcs, session, metaQueryRemaining] = await Promise.all([
       this.poiService.listKnownByLocation(currentScene.locationId),
       this.sceneNpcRepo.find({
         where: { sceneId: currentScene.id },
         relations: ["npc"],
       }),
+      this.findSessionForEnvelope(sessionId),
+      this.metaQueryService.remainingForScene(sessionId, currentScene.id),
     ]);
+    const sceneMode = deriveSceneMode(session, currentScene);
+    const bimodalLoopEnabled = session?.config?.bimodalLoopEnabled === true;
+    const npcsPresent = sceneNpcs
+      .filter((sceneNpc) => sceneNpc.npc)
+      .map((sceneNpc) => ({
+        id: sceneNpc.npcId,
+        name: sceneNpc.npc.name,
+        title: sceneNpc.npc.title ?? null,
+        presenceRole: sceneNpc.presenceRole,
+        dialogueWeight: getDialogueWeight(sceneNpc.npc),
+        disposition: "unknown" as const,
+        tags: sceneNpc.npc.tags ?? [],
+        knowledgeScope: sceneNpc.npc.knowledgeScope ?? [],
+      }));
+    const characterSkills = await this.loadProficientSkillSlugs(session, userId);
+    const characterKnownFacts = this.extractKnownFacts(sceneNpcs);
     return {
+      sceneId: currentScene.id,
+      sceneMode,
+      socialCollective: currentScene.socialCollective === true,
+      focalNpcId: currentScene.currentInterlocutorNpcId ?? null,
+      metaQueryRemaining,
+      bimodalLoopEnabled,
       location: currentScene.location
         ? {
             id: currentScene.location.id,
@@ -284,16 +340,73 @@ export class MoveToPoiService {
         ? this.toAvailablePoi(currentScene.poi)
         : null,
       movementLock: this.movementLockService.getForScene(currentScene),
-      npcsPresent: sceneNpcs
-        .filter((sceneNpc) => sceneNpc.npc)
-        .map((sceneNpc) => ({
-          id: sceneNpc.npcId,
-          name: sceneNpc.npc.name,
-          title: sceneNpc.npc.title ?? null,
-          presenceRole: sceneNpc.presenceRole,
-        })),
+      npcsPresent,
+      availableActions: this.buildAvailableActions({
+        sceneMode,
+        npcsPresent,
+        focalNpcId: currentScene.currentInterlocutorNpcId ?? null,
+        characterSkills,
+        characterKnownFacts,
+      }),
       pois: pois.map((poi) => this.toAvailablePoi(poi)),
     };
+  }
+
+  private async findSessionForEnvelope(
+    sessionId: string,
+  ): Promise<GameSessionEntity | null> {
+    if (typeof this.sessionRepo?.findOne !== "function") return null;
+    return this.sessionRepo.findOne({ where: { id: sessionId } });
+  }
+
+  private buildAvailableActions(input: {
+    sceneMode: SceneMode;
+    npcsPresent: AvailablePoisEnvelope["npcsPresent"];
+    focalNpcId: string | null;
+    characterSkills: string[];
+    characterKnownFacts: string[];
+  }): DialogueAction[] {
+    if (input.sceneMode === "dialogue") {
+      const focal = input.npcsPresent.find((npc) => npc.id === input.focalNpcId);
+      return this.dialogueActionGenerator.generate({
+        characterSkills: input.characterSkills,
+        characterKnownFacts: input.characterKnownFacts,
+        npc: {
+          id: focal?.id ?? input.focalNpcId ?? "unknown",
+          name: focal?.name ?? "Interlocutor",
+          tags: focal?.tags ?? [],
+          knowledgeScope: focal?.knowledgeScope ?? [],
+        },
+      });
+    }
+
+    return input.npcsPresent.map((npc) => ({
+      actionId: `dialogue_start_${npc.id}`,
+      type: "topic",
+      label: `Falar com ${npc.name}`,
+      payload: { npcId: npc.id },
+    }));
+  }
+
+  private async loadProficientSkillSlugs(
+    session: GameSessionEntity | null,
+    userId?: string,
+  ): Promise<string[]> {
+    const characterId = session?.characterIds?.[0];
+    if (!characterId || !userId) return [];
+    const sheet = await this.characterSheetService.computeSheet(userId, characterId);
+    return (sheet.skills ?? [])
+      .filter((skill) => skill.proficient)
+      .map((skill) => skill.slug);
+  }
+
+  private extractKnownFacts(sceneNpcs: SceneNpcEntity[]): string[] {
+    const publicHooks = sceneNpcs.flatMap((sceneNpc) =>
+      (sceneNpc.npc?.tags ?? [])
+        .filter((tag) => tag.startsWith("public_hook:"))
+        .map((tag) => tag.slice("public_hook:".length)),
+    );
+    return [...new Set(publicHooks)];
   }
 
   private async publishPoiMoved(payload: {

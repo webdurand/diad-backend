@@ -19,6 +19,7 @@ export interface CreateSceneDto {
   locationId?: string;
   poiId?: string;
   currentInterlocutorNpcId?: string | null;
+  socialCollective?: boolean;
   title?: string;
   description?: string;
   mood?: string;
@@ -111,6 +112,7 @@ export class SceneService {
       locationId: resolvedLocationId ?? undefined,
       poiId: resolvedPoiId ?? undefined,
       currentInterlocutorNpcId: dto.currentInterlocutorNpcId ?? undefined,
+      socialCollective: dto.socialCollective ?? false,
       title: dto.title,
       description: dto.description,
       mood: dto.mood,
