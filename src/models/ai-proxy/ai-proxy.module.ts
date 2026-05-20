@@ -1,10 +1,12 @@
 import { forwardRef, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { GameEventEntity } from "src/entities/game-event.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
 import { PendingGuardDispatchEntity } from "src/entities/pending-guard-dispatch.entity";
 import { AuthModule } from "../auth/auth.module";
 import { SessionModule } from "../session/session.module";
 import { GameEngineModule } from "../game-engine/game-engine.module";
+import { CharactersModule } from "../characters/characters.module";
 import { AiProxyController } from "./ai-proxy.controller";
 import { AiProxyService } from "./ai-proxy.service";
 
@@ -12,7 +14,12 @@ import { AiProxyService } from "./ai-proxy.service";
   imports: [
     AuthModule,
     SessionModule,
-    TypeOrmModule.forFeature([GameEventEntity, PendingGuardDispatchEntity]),
+    CharactersModule,
+    TypeOrmModule.forFeature([
+      GameEventEntity,
+      PendingGuardDispatchEntity,
+      GameSessionEntity,
+    ]),
     forwardRef(() => GameEngineModule),
   ],
   controllers: [AiProxyController],

@@ -1,7 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { SceneNpcEntity } from "src/entities/scene-npc.entity";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { SceneService } from "src/models/session/services/scene.service";
@@ -48,6 +50,10 @@ export class DialogueActionService {
     @InjectRepository(SceneNpcEntity)
     private readonly sceneNpcRepo: Repository<SceneNpcEntity>,
     private readonly movementLockService: MovementLockService,
+    @Optional()
+    private readonly eventBus?: EventBusService,
+    @Optional()
+    private readonly envelopeFactory?: EventEnvelopeFactory,
   ) {}
 
   async start(
@@ -86,6 +92,13 @@ export class DialogueActionService {
         source: "system",
       },
     );
+    await this.publishDialogueEvent("dialogue_started", {
+      sessionId,
+      sceneId: scene.id,
+      npcId: input.npcId,
+      locationId: scene.locationId ?? null,
+      poiId: scene.poiId ?? null,
+    });
 
     return {
       status: "started",
@@ -123,6 +136,15 @@ export class DialogueActionService {
     await this.sceneService.update(scene.id, {
       currentInterlocutorNpcId: null,
     });
+    if (activeLock || scene.currentInterlocutorNpcId) {
+      await this.publishDialogueEvent("dialogue_exited", {
+        sessionId,
+        sceneId: scene.id,
+        npcId,
+        locationId: scene.locationId ?? null,
+        poiId: scene.poiId ?? null,
+      });
+    }
 
     return {
       status: activeLock || scene.currentInterlocutorNpcId ? "exited" : "no_dialogue",
@@ -147,5 +169,38 @@ export class DialogueActionService {
       );
     }
     return scene;
+  }
+
+  private async publishDialogueEvent(
+    eventType: "dialogue_started" | "dialogue_exited",
+    payload: {
+      sessionId: string;
+      sceneId: string;
+      npcId: string | null;
+      locationId: string | null;
+      poiId: string | null;
+    },
+  ): Promise<void> {
+    if (!this.eventBus || !this.envelopeFactory) return;
+    const envelope = this.envelopeFactory.build({
+      eventCategory: "NarrativeEvent",
+      eventType,
+      source: {
+        service: "diad-backend",
+        module: "DialogueActionService",
+      },
+      scope: {
+        campaignId: "",
+        sessionId: payload.sessionId,
+        sceneId: payload.sceneId,
+      },
+      audiences: ["Director", "Narrator", "HUD", "Archivist"],
+      narrativeDescriptor:
+        eventType === "dialogue_started"
+          ? "Diálogo iniciado."
+          : "Diálogo encerrado.",
+      payload,
+    });
+    await this.eventBus.publish(envelope);
   }
 }

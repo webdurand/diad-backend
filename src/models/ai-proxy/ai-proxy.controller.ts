@@ -24,6 +24,12 @@ import { SessionResumeService } from "../session/services/session-resume.service
 import { SessionRecapService } from "../session/services/session-recap.service";
 import { SceneService } from "../session/services/scene.service";
 import { SessionMessageService } from "../session/services/session-message.service";
+import { MetaQueryService } from "../session/services/meta-query.service";
+import {
+  DialogueActionGeneratorService,
+  type DialogueAction,
+} from "../game-engine/services/dialogue-action-generator.service";
+import { OpenModeActionGeneratorService } from "../game-engine/services/open-mode-action-generator.service";
 import {
   SseNarrationCollector,
   type CollectedChoice,
@@ -32,9 +38,12 @@ import {
 } from "./sse-narration-collector";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { GameEventEntity } from "src/entities/game-event.entity";
+import { GameSessionEntity } from "src/entities/game-session.entity";
 import { PendingGuardDispatchEntity } from "src/entities/pending-guard-dispatch.entity";
 import { StartEncounterFromNarrativeService } from "../game-engine/services/start-encounter-from-narrative.service";
 import type { AuthRequest } from "../auth/auth.types";
+import { deriveSceneMode, type SceneMode } from "src/shared/scene-mode";
+import { CharacterSheetService } from "../characters/services/character-sheet.service";
 
 const SYSTEM_HINT_EVENT_MAP: Record<string, string> = {
   post_combat: "encounter_outcome_summary",
@@ -96,6 +105,12 @@ export class AiProxyController {
     @InjectRepository(PendingGuardDispatchEntity)
     private readonly pendingGuardRepo: Repository<PendingGuardDispatchEntity>,
     private readonly startEncounterFromNarrative: StartEncounterFromNarrativeService,
+    @InjectRepository(GameSessionEntity)
+    private readonly sessionRepo: Repository<GameSessionEntity>,
+    private readonly metaQueryService: MetaQueryService,
+    private readonly dialogueActionGenerator: DialogueActionGeneratorService,
+    private readonly openModeActionGenerator: OpenModeActionGeneratorService,
+    private readonly characterSheetService: CharacterSheetService,
   ) {}
 
   private async findLatestEncounterId(
@@ -307,6 +322,130 @@ export class AiProxyController {
         `session_sync emit failed (session=${sessionId}): ${err?.message}`,
       );
     }
+  }
+
+  private async buildBimodalState(
+    sessionId: string,
+    userId: string,
+    ctx: {
+      activeSceneId?: string | null;
+      sceneContext?: Record<string, any> | null;
+    },
+  ): Promise<{
+    bimodalLoopEnabled: boolean;
+    sceneId: string | null;
+    sceneMode: SceneMode;
+    socialCollective: boolean;
+    focalNpcId: string | null;
+    availableActions: DialogueAction[];
+    metaQueryRemaining: number;
+  } | null> {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (session?.config?.bimodalLoopEnabled !== true) return null;
+
+    const sceneContext = ctx.sceneContext ?? null;
+    const scene = sceneContext?.scene ?? {};
+    const stage = sceneContext?.stage ?? {};
+    const sceneId = ctx.activeSceneId ?? scene.id ?? null;
+    const focalNpcId =
+      scene.currentInterlocutorNpcId ??
+      stage.currentInterlocutor?.id ??
+      stage.movementLock?.interlocutorNpcId ??
+      null;
+    const sceneMode = deriveSceneMode(session, {
+      currentInterlocutorNpcId: focalNpcId,
+    });
+    const npcsPresent = Array.isArray(sceneContext?.npcsPresent)
+      ? sceneContext.npcsPresent
+      : [];
+    const interactables = Array.isArray(sceneContext?.interactables)
+      ? sceneContext.interactables
+      : Array.isArray(scene.contextSnapshot?.interactables)
+        ? scene.contextSnapshot.interactables
+        : [];
+    const metaQueryRemaining = sceneId
+      ? await this.metaQueryService.remainingForScene(sessionId, sceneId)
+      : 3;
+    const characterSkills = await this.loadProficientSkillSlugs(session, userId);
+    const characterKnownFacts = this.extractKnownFacts(sceneContext);
+
+    return {
+      bimodalLoopEnabled: true,
+      sceneId,
+      sceneMode,
+      socialCollective: scene.socialCollective === true,
+      focalNpcId,
+      availableActions: this.buildBimodalActions({
+        sceneMode,
+        focalNpcId,
+        npcsPresent,
+        interactables,
+        characterSkills,
+        characterKnownFacts,
+      }),
+      metaQueryRemaining,
+    };
+  }
+
+  private buildBimodalActions(input: {
+    sceneMode: SceneMode;
+    focalNpcId: string | null;
+    npcsPresent: Array<Record<string, any>>;
+    interactables?: Array<Record<string, any>>;
+    characterSkills: string[];
+    characterKnownFacts: string[];
+  }): DialogueAction[] {
+    if (input.sceneMode === "dialogue") {
+      const focal = input.npcsPresent.find((npc) => npc.id === input.focalNpcId);
+      return this.dialogueActionGenerator.generate({
+        characterSkills: input.characterSkills,
+        characterKnownFacts: input.characterKnownFacts,
+        npc: {
+          id: focal?.id ?? input.focalNpcId ?? "unknown",
+          name: focal?.name ?? "Interlocutor",
+          tags: this.asStringArray(focal?.tags),
+          knowledgeScope: this.asStringArray(focal?.knowledgeScope),
+        },
+      });
+    }
+    if (input.sceneMode === "open") {
+      return this.openModeActionGenerator.generate({
+        npcsPresent: input.npcsPresent,
+        interactables: input.interactables,
+        characterSkills: input.characterSkills,
+      });
+    }
+    return [];
+  }
+
+  private async loadProficientSkillSlugs(
+    session: GameSessionEntity,
+    userId: string,
+  ): Promise<string[]> {
+    const characterId = session.characterIds?.[0];
+    if (!characterId) return [];
+    const sheet = await this.characterSheetService.computeSheet(userId, characterId);
+    return (sheet.skills ?? [])
+      .filter((skill) => skill.proficient)
+      .map((skill) => skill.slug);
+  }
+
+  private extractKnownFacts(sceneContext: Record<string, any> | null): string[] {
+    const partyKnowledge = Array.isArray(sceneContext?.partyKnowledge)
+      ? sceneContext.partyKnowledge
+      : [];
+    const facts: string[] = [];
+    for (const fact of partyKnowledge) {
+      if (typeof fact?.knowledgeKey === "string") facts.push(fact.knowledgeKey);
+      if (typeof fact?.knowledgeValue === "string") facts.push(fact.knowledgeValue);
+    }
+    return facts;
+  }
+
+  private asStringArray(value: unknown): string[] {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [];
   }
 
   private emitSse(
@@ -646,9 +785,26 @@ export class AiProxyController {
 
 
 
-      let sceneContextForAgent = ctx.activeSceneId
+      let sceneContextForAgent: Record<string, any> | null = ctx.activeSceneId
         ? { ...(ctx.sceneContext ?? {}), sceneId: ctx.activeSceneId }
         : ctx.sceneContext;
+
+      const bimodalState = await this.buildBimodalState(
+        sessionId,
+        req.user!.id,
+        ctx,
+      );
+      if (bimodalState) {
+        this.emitSse(
+          res,
+          { type: "bimodal_state", ...bimodalState },
+          "bimodal_state",
+        );
+        sceneContextForAgent = {
+          ...(sceneContextForAgent ?? {}),
+          bimodalState,
+        };
+      }
 
 
 
@@ -848,9 +1004,25 @@ export class AiProxyController {
 
       const ctx = await this.resumeService.assemble(sessionId);
 
-      const sceneContextForAgent = ctx.activeSceneId
+      let sceneContextForAgent: Record<string, any> | null = ctx.activeSceneId
         ? { ...(ctx.sceneContext ?? {}), sceneId: ctx.activeSceneId }
         : ctx.sceneContext;
+      const bimodalState = await this.buildBimodalState(
+        sessionId,
+        req.user!.id,
+        ctx,
+      );
+      if (bimodalState) {
+        this.emitSse(
+          res,
+          { type: "bimodal_state", ...bimodalState },
+          "bimodal_state",
+        );
+        sceneContextForAgent = {
+          ...(sceneContextForAgent ?? {}),
+          bimodalState,
+        };
+      }
 
       const collector = new SseNarrationCollector();
       const narrationClientId = `srv-narr-${randomUUID()}`;

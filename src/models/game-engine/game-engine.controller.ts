@@ -390,8 +390,14 @@ export class GameEngineController {
 
 
   @Get("sessions/:sessionId/available-pois")
-  async availablePois(@Param("sessionId") sessionId: string) {
-    const pois = await this.moveToPoiService.listAvailablePois(sessionId);
+  async availablePois(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+  ) {
+    const pois = await this.moveToPoiService.listAvailablePois(
+      sessionId,
+      getUserId(req),
+    );
     return { ok: true as const, value: pois };
   }
 

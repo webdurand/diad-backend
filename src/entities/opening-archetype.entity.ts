@@ -59,6 +59,17 @@ export class OpeningArchetypeEntity {
   @Column({ type: "varchar", length: 3, default: "037" })
   since: string;
 
+  @Column({ name: "opens_in_dialogue", type: "boolean", default: false })
+  opensInDialogue: boolean;
+
+  @Column({
+    name: "initial_focal_npc_slot",
+    type: "varchar",
+    length: 120,
+    nullable: true,
+  })
+  initialFocalNpcSlot?: string | null;
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;
 

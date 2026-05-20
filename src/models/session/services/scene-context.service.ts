@@ -28,6 +28,7 @@ import {
 import { PcPersonaService } from "src/models/characters/services/pc-persona.service";
 import { PCPersona } from "src/models/characters/dto/pc-persona.dto";
 import type { ColdOpenHookSnapshot } from "src/models/cold-open/domain/opening-archetype.types";
+import { getDialogueWeight, type DialogueWeight } from "src/shared/dialogue-weight";
 
 
 export interface SceneContext {
@@ -37,6 +38,8 @@ export interface SceneContext {
     title?: string;
     description?: string;
     mood?: string;
+    currentInterlocutorNpcId?: string | null;
+    socialCollective?: boolean;
     coldOpenHook?: ColdOpenHookSnapshot | null;
     location?: {
       id?: string;
@@ -61,11 +64,13 @@ export interface SceneContext {
     race?: string;
     status: "alive" | "dead" | "missing" | "unknown";
     disposition: string;
+    dialogueWeight?: DialogueWeight;
     presenceRole?: "present" | "interlocutor" | "companion";
     currentPoiId?: string | null;
     personalityBig5: Record<string, number>;
     motivation?: string;
     knowledgeScope: string[];
+    tags: string[];
     dialogueStyle?: string;
   }>;
 
@@ -332,11 +337,13 @@ export class SceneContextService {
         race: sn.npc.race,
         status: statusByNpc.get(sn.npc.id) ?? "alive",
         disposition: dispositionByNpc.get(sn.npc.id) ?? "neutral",
+        dialogueWeight: getDialogueWeight(sn.npc),
         presenceRole: sn.presenceRole,
         currentPoiId: currentPoiByNpc.get(sn.npc.id) ?? scene.poiId ?? null,
         personalityBig5: sn.npc.personalityBig5 as Record<string, number>,
         motivation: sn.npc.motivation,
         knowledgeScope: sn.npc.knowledgeScope,
+        tags: sn.npc.tags ?? [],
         dialogueStyle: sn.npc.dialogueStyle,
       }));
 
@@ -464,6 +471,8 @@ export class SceneContextService {
         title: scene.title,
         description: scene.description,
         mood: scene.mood,
+        currentInterlocutorNpcId: scene.currentInterlocutorNpcId ?? null,
+        socialCollective: scene.socialCollective === true,
         coldOpenHook: scene.coldOpenHook ?? null,
         location: scene.location
           ? {

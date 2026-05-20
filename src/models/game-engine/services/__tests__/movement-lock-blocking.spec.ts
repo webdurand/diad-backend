@@ -116,6 +116,10 @@ describe("movement lock blocking", () => {
       {} as any,
       movementLockService as any,
       makeLogger() as any,
+      { remainingForScene: jest.fn().mockResolvedValue(3) } as any,
+      { generate: jest.fn().mockReturnValue([]) } as any,
+      { generate: jest.fn().mockReturnValue([]) } as any,
+      { computeSheet: jest.fn() } as any,
     );
 
     const result = await service.run({
@@ -159,6 +163,10 @@ describe("movement lock blocking", () => {
       {} as any,
       movementLockService as any,
       makeLogger() as any,
+      { remainingForScene: jest.fn().mockResolvedValue(3) } as any,
+      { generate: jest.fn().mockReturnValue([]) } as any,
+      { generate: jest.fn().mockReturnValue([]) } as any,
+      { computeSheet: jest.fn() } as any,
     );
 
     const result = await service.listAvailablePois("sess-1");
@@ -169,12 +177,12 @@ describe("movement lock blocking", () => {
       exitActionLabel: "Sair da conversa",
     });
     expect(result.npcsPresent).toEqual([
-      {
+      expect.objectContaining({
         id: "npc-1",
         name: "Vento Queimado",
         title: null,
         presenceRole: "interlocutor",
-      },
+      }),
     ]);
   });
 });

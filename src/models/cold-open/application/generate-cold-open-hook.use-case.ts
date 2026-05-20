@@ -27,6 +27,7 @@ import type {
 } from "../domain/opening-archetype.types";
 import {
   renderPromptShape,
+  resolveInitialFocalNpc,
   resolveSlotsForRankedCandidates,
 } from "../domain/opening-slot-resolver";
 import { extractPcTags } from "../domain/pc-tag-extractor";
@@ -124,12 +125,17 @@ export class GenerateColdOpenHookUseCase {
       resolved.archetype.promptShape,
       resolved.slots,
     ).slice(0, 280);
+    const initialFocalNpc = resolved.archetype.opensInDialogue
+      ? resolveInitialFocalNpc(resolved.archetype.initialFocalNpcSlot, context)
+      : null;
     const hook: ColdOpenHookSnapshot = {
       archetypeKey: resolved.archetype.key,
       seed,
       slots: resolved.slots,
       generatedAt: new Date().toISOString(),
       openingLineDraft,
+      initialFocalNpcId: initialFocalNpc?.id ?? null,
+      initialFocalNpcSlot: resolved.archetype.initialFocalNpcSlot ?? null,
       scoringTrace: {
         candidates: selection.ranked.map((item) => ({
           key: item.archetype.key,
@@ -178,6 +184,8 @@ export class GenerateColdOpenHookUseCase {
       fewShotExample: row.fewShotExample ?? null,
       isActive: row.isActive,
       since: row.since,
+      opensInDialogue: row.opensInDialogue === true,
+      initialFocalNpcSlot: row.initialFocalNpcSlot ?? null,
     }));
   }
 
@@ -232,6 +240,7 @@ export class GenerateColdOpenHookUseCase {
         class: persona.class,
       },
       npcs: npcs.map((npc) => ({
+        id: npc.id,
         name: npc.name,
         title: npc.title,
         race: npc.race,
@@ -294,6 +303,8 @@ export class GenerateColdOpenHookUseCase {
         slots: input.hook.slots,
         seed: input.hook.seed,
         openingLineDraft: input.hook.openingLineDraft,
+        initialFocalNpcId: input.hook.initialFocalNpcId ?? null,
+        initialFocalNpcSlot: input.hook.initialFocalNpcSlot ?? null,
         mainQuestId: input.mainQuestId,
       },
       metadata: {

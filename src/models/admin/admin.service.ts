@@ -109,6 +109,8 @@ export class AdminService {
       bannedPhrases: string[];
       isActive: boolean;
       since: string;
+      opensInDialogue: boolean;
+      initialFocalNpcSlot: string | null;
     }>
   > {
     const rows = await this.ds.getRepository(OpeningArchetypeEntity).find({
@@ -122,6 +124,8 @@ export class AdminService {
       bannedPhrases: row.bannedPhrases ?? [],
       isActive: row.isActive,
       since: row.since,
+      opensInDialogue: row.opensInDialogue === true,
+      initialFocalNpcSlot: row.initialFocalNpcSlot ?? null,
     }));
   }
 

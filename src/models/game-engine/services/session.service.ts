@@ -41,6 +41,7 @@ export interface CreateSessionDto {
   config?: {
     dice_seed?: number;
     critical_variant?: "double_dice" | "double_damage";
+    bimodalLoopEnabled?: boolean;
   };
 }
 
@@ -112,7 +113,7 @@ export class SessionService {
       status: "lobby",
       characterIds: [],
       scene: {},
-      config: dto.config ?? {},
+      config: { bimodalLoopEnabled: true, ...(dto.config ?? {}) },
     });
     const saved = await this.sessionRepo.save(session);
 

@@ -146,10 +146,13 @@ import { LocationEntity } from "src/entities/location.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
+import { MetaQueryAuditEntity } from "src/entities/meta-query-audit.entity";
 import { MoveToLocationService } from "./services/move-to-location.service";
 import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
 import { DialogueActionService } from "./services/dialogue-action.service";
+import { DialogueActionGeneratorService } from "./services/dialogue-action-generator.service";
+import { OpenModeActionGeneratorService } from "./services/open-mode-action-generator.service";
 
 @Module({
   imports: [
@@ -194,6 +197,7 @@ import { DialogueActionService } from "./services/dialogue-action.service";
       LocationPoiEntity,
       LocationConnectionEntity,
       SessionNpcStateEntity,
+      MetaQueryAuditEntity,
     ]),
     AuthModule,
     CharactersModule,
@@ -304,6 +308,8 @@ import { DialogueActionService } from "./services/dialogue-action.service";
     MoveToPoiService,
     TravelTickService,
     DialogueActionService,
+    DialogueActionGeneratorService,
+    OpenModeActionGeneratorService,
   ],
   exports: [
     DiceService,
@@ -373,6 +379,8 @@ import { DialogueActionService } from "./services/dialogue-action.service";
 
     DiceRollService,
     StartEncounterFromNarrativeService,
+    DialogueActionGeneratorService,
+    OpenModeActionGeneratorService,
   ],
 })
 export class GameEngineModule implements OnModuleInit {

@@ -20,6 +20,8 @@ const failing: OpeningArchetype = {
   fewShotExample: null,
   isActive: true,
   since: "037",
+  opensInDialogue: false,
+  initialFocalNpcSlot: null,
 };
 
 const fallback: OpeningArchetype = {
