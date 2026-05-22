@@ -406,10 +406,12 @@ export class GameEngineController {
   async poiObservation(
     @Param("sessionId") sessionId: string,
     @Query("poiId") poiId: string,
+    @Query("force") force?: string,
   ) {
     const observation = await this.scenePoiObservationService.findOrGenerate({
       sessionId,
       poiId,
+      force: force === "true" || force === "1",
     });
     return { ok: true as const, value: observation };
   }

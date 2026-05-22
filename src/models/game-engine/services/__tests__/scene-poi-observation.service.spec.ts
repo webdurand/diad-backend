@@ -129,6 +129,48 @@ describe("ScenePoiObservationService", () => {
     );
   });
 
+  it("regenera observacao quando force=true mesmo se cache ainda esta fresh", async () => {
+    const existingText = "Algo em Taverna mudou de lugar desde sua última passada.";
+    const existing = {
+      id: "observation-1",
+      sessionId: "session-1",
+      poiId: "poi-1",
+      lastSceneId: "scene-old",
+      observationText: existingText,
+      generatedAtTurn: 1,
+      expiresAtTurn: 6,
+      freshness: "fresh",
+    };
+    const { service, observationRepo } = makeService({
+      observationRepo: {
+        findOne: jest.fn().mockResolvedValue({ ...existing }),
+        create: jest.fn((value) => value),
+        save: jest.fn(async (value) => value),
+      },
+      sceneRepo: {
+        findOne: jest.fn().mockResolvedValue({
+          id: "scene-new",
+          sceneNumber: 4,
+          sessionId: "session-1",
+          poiId: "poi-1",
+        }),
+      },
+    });
+
+    const result = await service.findOrGenerate({
+      sessionId: "session-1",
+      poiId: "poi-1",
+      force: true,
+    });
+
+    expect(result.observationText).not.toBe(existingText);
+    expect(result.freshness).toBe("fresh");
+    expect(result.generatedAtTurn).toBe(4);
+    expect(observationRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "observation-1", freshness: "fresh" }),
+    );
+  });
+
   it("rejeita POI que nao pertence a campanha da sessao", async () => {
     const { service } = makeService({
       poiRepo: {

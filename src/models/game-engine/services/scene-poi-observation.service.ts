@@ -20,6 +20,7 @@ export interface FindOrGenerateScenePoiObservationInput {
   poiId: string;
   currentTurn?: number;
   currentSceneId?: string;
+  force?: boolean;
 }
 
 export interface ScenePoiObservationDto {
@@ -89,6 +90,9 @@ export class ScenePoiObservationService {
       DEFAULT_STALE_GRACE_TURNS,
     );
 
+    const force = input.force === true;
+    const seedSalt = force ? `investigate:${currentTurn}` : "auto";
+
     const existing = await this.observationRepo.findOne({
       where: { sessionId: input.sessionId, poiId: input.poiId },
     });
@@ -98,13 +102,15 @@ export class ScenePoiObservationService {
         existing.expiresAtTurn,
         staleGraceTurns,
       );
-      if (freshness !== "expired") {
+      if (!force && freshness !== "expired") {
         return this.toDto({ ...existing, freshness });
       }
 
       existing.observationText = this.generateObservationText(
         poi,
         currentSceneId ?? input.sessionId,
+        seedSalt,
+        existing.observationText,
       );
       existing.generatedAtTurn = currentTurn;
       existing.expiresAtTurn = currentTurn + decayTurns;
@@ -120,6 +126,7 @@ export class ScenePoiObservationService {
       observationText: this.generateObservationText(
         poi,
         currentSceneId ?? input.sessionId,
+        seedSalt,
       ),
       generatedAtTurn: currentTurn,
       expiresAtTurn: currentTurn + decayTurns,
@@ -155,6 +162,8 @@ export class ScenePoiObservationService {
   private generateObservationText(
     poi: LocationPoiEntity,
     seedSource: string,
+    seedSalt: string = "auto",
+    previousText?: string,
   ): string {
     const variants = [
       `Algo em ${poi.name} mudou de lugar desde sua última passada.`,
@@ -164,9 +173,12 @@ export class ScenePoiObservationService {
       `Uma marca recente em ${poi.name} sugere que alguém esteve aqui há pouco.`,
     ];
     const seed = createHash("sha256")
-      .update(`${seedSource}:${poi.id}:${poi.name}`)
+      .update(`${seedSource}:${poi.id}:${poi.name}:${seedSalt}`)
       .digest("hex");
-    const index = parseInt(seed.slice(0, 8), 16) % variants.length;
+    let index = parseInt(seed.slice(0, 8), 16) % variants.length;
+    if (previousText && variants[index] === previousText) {
+      index = (index + 1) % variants.length;
+    }
     return variants[index];
   }
 
