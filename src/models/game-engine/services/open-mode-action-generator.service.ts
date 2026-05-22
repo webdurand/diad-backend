@@ -30,7 +30,6 @@ export class OpenModeActionGeneratorService {
     for (const npc of input.npcsPresent ?? []) {
       if (!npc.id || !npc.name) continue;
       if (npc.presenceRole === "companion") continue;
-      if (npc.dialogueWeight !== "plot" && npc.dialogueWeight !== "flavor") continue;
       this.pushOnce(actions, seen, {
         actionId: `talk_npc_${npc.id}`,
         type: "talk_npc",

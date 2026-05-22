@@ -3,7 +3,7 @@ import { OpenModeActionGeneratorService } from "../open-mode-action-generator.se
 describe("OpenModeActionGeneratorService", () => {
   const service = new OpenModeActionGeneratorService();
 
-  it("gera ações alvo-first para NPCs plot/flavor e investigação proficiente", () => {
+  it("gera ações alvo-first para qualquer NPC não-companion e investigação proficiente", () => {
     const actions = service.generate({
       characterSkills: ["perception", "athletics"],
       npcsPresent: [
@@ -22,6 +22,12 @@ describe("OpenModeActionGeneratorService", () => {
         payload: { npcId: "npc-goma" },
       }),
       expect.objectContaining({
+        actionId: "talk_npc_npc-guard",
+        type: "talk_npc",
+        label: "Falar com Guarda",
+        payload: { npcId: "npc-guard" },
+      }),
+      expect.objectContaining({
         actionId: "talk_npc_npc-sira",
         type: "talk_npc",
         label: "Falar com Sira",
@@ -34,7 +40,6 @@ describe("OpenModeActionGeneratorService", () => {
         payload: { skill: "perception" },
       }),
     ]);
-    expect(actions.map((action) => action.label)).not.toContain("Falar com Guarda");
     expect(actions.map((action) => action.label)).not.toContain("Falar com Dmurad");
   });
 
