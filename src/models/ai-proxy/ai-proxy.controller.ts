@@ -476,6 +476,7 @@ export class AiProxyController {
           code: ErrorCode;
           deprecatedHint: string;
           replacement: string;
+          idleLoopEnabled: boolean;
         };
       }
     | {
@@ -507,6 +508,7 @@ export class AiProxyController {
         code: ErrorCode.NARRATIVE_TURN_SYSTEM_HINT_LEGACY_ALIAS,
         deprecatedHint: LEGACY_DIALOGUE_OPEN_HINT,
         replacement: DIALOGUE_GREETING_HINT,
+        idleLoopEnabled,
       },
     };
   }
@@ -933,7 +935,7 @@ export class AiProxyController {
           sessionId,
           deprecatedHint: hintNormalization.warning.deprecatedHint,
           replacement: hintNormalization.warning.replacement,
-          idleLoopEnabled: false,
+          idleLoopEnabled: hintNormalization.warning.idleLoopEnabled,
         });
         this.emitSse(
           res,
