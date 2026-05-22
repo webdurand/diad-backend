@@ -6,6 +6,7 @@ import {
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
 interface ProxiedNarrativeBody {
+  turnKind?: string;
   systemHint?: string;
   intent?: string;
   sceneContext?: {
@@ -698,6 +699,42 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
 
     expect((r.res as any).flush).toHaveBeenCalled();
     expect(pipeStream).toHaveBeenCalledTimes(1);
+  });
+
+  it("narrativeStart: marca payload como start para bypass do idle skip nos agents", async () => {
+    const pipeStream = makePipeStream();
+    const controller = makeController({
+      pipeStream,
+      session: {
+        id: SESSION_ID,
+        characterIds: ["char-1"],
+        activeEncounterId: null,
+        travelState: null,
+        config: { bimodalLoopEnabled: true, idleLoopEnabled: true },
+      },
+    });
+    const req: any = { user: { id: USER_ID } };
+
+    await controller.narrativeStart(SESSION_ID, {}, req, makeRes().res);
+
+    expect(pipeStream).toHaveBeenCalledWith(
+      "/narrative/turn",
+      expect.objectContaining({
+        turnKind: "start",
+        playerInput: null,
+        sceneContext: expect.objectContaining({
+          bimodalState: expect.objectContaining({
+            idleLoopEnabled: true,
+            sceneMode: "open",
+            transitionScope: "none",
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Object),
+    );
   });
 
   it("narrativeTurn: chave é liberada no finally mesmo se pipeStream lançar", async () => {

@@ -1267,6 +1267,7 @@ export class AiProxyController {
         {
           campaignId: ctx.campaignId,
           sessionId,
+          turnKind: "start",
           playerInput: null,
           voiceProfile: body.voiceProfile,
           isResumed: ctx.isResumed,
