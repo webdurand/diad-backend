@@ -121,6 +121,34 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "A sessão precisa habilitar config.bimodalLoopEnabled para usar esse fluxo.",
     domain: "session",
   },
+  [ErrorCode.NARRATIVE_TURN_NOT_ALLOWED_IN_IDLE_OPEN]: {
+    httpStatus: 422,
+    defaultTitle: "Narrative turn not allowed in idle open mode",
+    defaultHint:
+      "O jogo está aguardando uma ação explícita do jogador.",
+    domain: "narrative",
+  },
+  [ErrorCode.NARRATIVE_TURN_SYSTEM_HINT_DEPRECATED]: {
+    httpStatus: 410,
+    defaultTitle: "Deprecated systemHint received",
+    defaultHint:
+      "Atualize o cliente para usar transition_dialogue_greeting.",
+    domain: "narrative",
+  },
+  [ErrorCode.NARRATIVE_TURN_SYSTEM_HINT_LEGACY_ALIAS]: {
+    httpStatus: 200,
+    defaultTitle: "Legacy systemHint received and aliased",
+    defaultHint:
+      "Cliente legado aceito temporariamente; atualize para o systemHint canônico.",
+    domain: "narrative",
+  },
+  [ErrorCode.NARRATIVE_TRANSITION_SCOPE_INVALID]: {
+    httpStatus: 400,
+    defaultTitle: "Invalid transitionScope value",
+    defaultHint:
+      "transitionScope deve ser greeting, arrival, departure, close, post_event, ambient ou none.",
+    domain: "narrative",
+  },
 
 
   [ErrorCode.COMBAT_NOT_FOUND]: {

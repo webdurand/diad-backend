@@ -40,6 +40,25 @@ function makeService(overrides: Record<string, any> = {}): SessionService {
 }
 
 describe("SessionService story-first bootstrap detection", () => {
+  it("creates new sessions with bimodal and idle loop enabled by default", async () => {
+    const sessionRepo = {
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => ({ id: "session-1", ...value })),
+    };
+    const service = makeService({ sessionRepo });
+
+    await service.create("user-1", { name: "Mesa solo" });
+
+    expect(sessionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          bimodalLoopEnabled: true,
+          idleLoopEnabled: true,
+        }),
+      }),
+    );
+  });
+
   it("treats AI-generated story_arc campaigns as story-first", () => {
     const service = makeService();
 

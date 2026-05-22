@@ -7,8 +7,14 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
 interface ProxiedNarrativeBody {
   systemHint?: string;
+  intent?: string;
   sceneContext?: {
     sceneId?: string;
+    transitionScope?: string;
+    bimodalState?: {
+      transitionScope?: string;
+      idleLoopEnabled?: boolean;
+    };
     recent_events?: Array<{ type: string; payload?: unknown }>;
   };
 }
@@ -380,6 +386,243 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
           sceneContext: { scene: { id: "scene-1" }, npcsPresent: [] },
         }),
       ).resolves.toBeNull();
+    });
+
+    it("deriva transitionScope deterministicamente para systemHint de transição", async () => {
+      const controller = makeController({
+        pipeStream: makePipeStream(),
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true, idleLoopEnabled: true },
+        },
+      });
+
+      const result = await (controller as any).buildBimodalState(
+        SESSION_ID,
+        USER_ID,
+        {
+          activeSceneId: "scene-1",
+          sceneContext: { scene: { id: "scene-1" }, npcsPresent: [] },
+        },
+        {
+          systemHint: "transition_dialogue_greeting",
+          playerInput: "",
+        },
+      );
+
+      expect(result).toMatchObject({
+        idleLoopEnabled: true,
+        transitionScope: "greeting",
+      });
+    });
+
+    it("deriva transitionScope=ambient para texto livre do jogador", async () => {
+      const controller = makeController({
+        pipeStream: makePipeStream(),
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true, idleLoopEnabled: true },
+        },
+      });
+
+      const result = await (controller as any).buildBimodalState(
+        SESSION_ID,
+        USER_ID,
+        {
+          activeSceneId: "scene-1",
+          sceneContext: { scene: { id: "scene-1" }, npcsPresent: [] },
+        },
+        {
+          playerInput: "Examino a porta.",
+        },
+      );
+
+      expect(result.transitionScope).toBe("ambient");
+    });
+  });
+
+  describe("narrativeTurn: open-mode idle loop guard (spec 046)", () => {
+    it("bloqueia /turn vazio em cena open idle quando idleLoopEnabled=true", async () => {
+      const pipeStream = makePipeStream();
+      const controller = makeController({
+        pipeStream,
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true, idleLoopEnabled: true },
+        },
+      });
+      const r = makeRes();
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        { playerInput: "", lastMessageId: 5 },
+        { user: { id: USER_ID } } as any,
+        r.res,
+      );
+
+      expect(r.getStatusCode()).toBe(422);
+      expect(r.writes.join("")).toContain(
+        ErrorCode.NARRATIVE_TURN_NOT_ALLOWED_IN_IDLE_OPEN,
+      );
+      expect(pipeStream).not.toHaveBeenCalled();
+    });
+
+    it("bypassa o guard para sessão pré-existente sem idleLoopEnabled explícito", async () => {
+      const pipeStream = makePipeStream();
+      const controller = makeController({
+        pipeStream,
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true },
+        },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        { playerInput: "", lastMessageId: 5 },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      expect(pipeStream.mock.calls[0][1].sceneContext?.bimodalState).toMatchObject({
+        idleLoopEnabled: false,
+        transitionScope: "none",
+      });
+    });
+
+    it("permite /turn vazio quando intent é ambient e preserva transitionScope=ambient", async () => {
+      const pipeStream = makePipeStream();
+      const controller = makeController({
+        pipeStream,
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true, idleLoopEnabled: true },
+        },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        { playerInput: "", intent: "observe_scene", lastMessageId: 5 },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      expect(pipeStream.mock.calls[0][1]).toMatchObject({
+        intent: "observe_scene",
+        sceneContext: {
+          transitionScope: "ambient",
+          bimodalState: { transitionScope: "ambient" },
+        },
+      });
+    });
+
+    it("permite systemHint de transição e encaminha transitionScope ao agent", async () => {
+      const pipeStream = makePipeStream();
+      const controller = makeController({
+        pipeStream,
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true, idleLoopEnabled: true },
+        },
+      });
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        {
+          playerInput: "",
+          systemHint: "transition_poi_arrival",
+          lastMessageId: 5,
+        },
+        { user: { id: USER_ID } } as any,
+        makeRes().res,
+      );
+
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      expect(pipeStream.mock.calls[0][1]).toMatchObject({
+        systemHint: "transition_poi_arrival",
+        sceneContext: {
+          transitionScope: "arrival",
+          bimodalState: { transitionScope: "arrival" },
+        },
+      });
+    });
+
+    it("dialogue_open legado recebe 410 quando idleLoopEnabled=true", async () => {
+      const pipeStream = makePipeStream();
+      const controller = makeController({
+        pipeStream,
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true, idleLoopEnabled: true },
+        },
+      });
+      const r = makeRes();
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        { playerInput: "", systemHint: "dialogue_open", lastMessageId: 5 },
+        { user: { id: USER_ID } } as any,
+        r.res,
+      );
+
+      expect(r.getStatusCode()).toBe(410);
+      expect(r.writes.join("")).toContain(
+        ErrorCode.NARRATIVE_TURN_SYSTEM_HINT_DEPRECATED,
+      );
+      expect(pipeStream).not.toHaveBeenCalled();
+    });
+
+    it("dialogue_open legado mapeia para transition_dialogue_greeting quando idleLoopEnabled=false", async () => {
+      const pipeStream = makePipeStream();
+      const controller = makeController({
+        pipeStream,
+        session: {
+          id: SESSION_ID,
+          characterIds: ["char-1"],
+          activeEncounterId: null,
+          travelState: null,
+          config: { bimodalLoopEnabled: true, idleLoopEnabled: false },
+        },
+      });
+      const r = makeRes();
+
+      await controller.narrativeTurn(
+        SESSION_ID,
+        { playerInput: "", systemHint: "dialogue_open", lastMessageId: 5 },
+        { user: { id: USER_ID } } as any,
+        r.res,
+      );
+
+      expect(r.writes.join("")).toContain(
+        ErrorCode.NARRATIVE_TURN_SYSTEM_HINT_LEGACY_ALIAS,
+      );
+      expect(pipeStream).toHaveBeenCalledTimes(1);
+      expect(pipeStream.mock.calls[0][1].systemHint).toBe(
+        "transition_dialogue_greeting",
+      );
     });
   });
 

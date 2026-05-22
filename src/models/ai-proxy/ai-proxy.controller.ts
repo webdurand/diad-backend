@@ -50,6 +50,34 @@ const SYSTEM_HINT_EVENT_MAP: Record<string, string> = {
   post_fate_choice: "fate_ladder_resolved",
 };
 
+const AMBIENT_INTENTS = new Set([
+  "examine_interactable",
+  "investigate_scene",
+  "observe_scene",
+]);
+
+type TransitionScope =
+  | "greeting"
+  | "arrival"
+  | "departure"
+  | "close"
+  | "post_event"
+  | "ambient"
+  | "none";
+
+const TRANSITION_SCOPE_BY_SYSTEM_HINT: Record<string, TransitionScope> = {
+  transition_dialogue_greeting: "greeting",
+  transition_poi_arrival: "arrival",
+  transition_travel_start: "departure",
+  transition_dialogue_close: "close",
+  post_combat: "post_event",
+  post_fate_choice: "post_event",
+  post_long_rest: "post_event",
+};
+
+const LEGACY_DIALOGUE_OPEN_HINT = "dialogue_open";
+const DIALOGUE_GREETING_HINT = "transition_dialogue_greeting";
+
 const IDEMPOTENCY_TTL_MS = 60_000;
 const inFlightRequests = new Map<string, number>();
 
@@ -330,17 +358,26 @@ export class AiProxyController {
     ctx: {
       activeSceneId?: string | null;
       sceneContext?: Record<string, any> | null;
+      session?: GameSessionEntity | null;
+    },
+    turn?: {
+      playerInput?: string | null;
+      intent?: string | null;
+      systemHint?: string | null;
     },
   ): Promise<{
     bimodalLoopEnabled: boolean;
+    idleLoopEnabled: boolean;
     sceneId: string | null;
     sceneMode: SceneMode;
+    transitionScope: TransitionScope;
     socialCollective: boolean;
     focalNpcId: string | null;
     availableActions: DialogueAction[];
     metaQueryRemaining: number;
   } | null> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    const session =
+      ctx.session ?? (await this.sessionRepo.findOne({ where: { id: sessionId } }));
     if (session?.config?.bimodalLoopEnabled !== true) return null;
 
     const sceneContext = ctx.sceneContext ?? null;
@@ -371,8 +408,10 @@ export class AiProxyController {
 
     return {
       bimodalLoopEnabled: true,
+      idleLoopEnabled: session.config?.idleLoopEnabled === true,
       sceneId,
       sceneMode,
+      transitionScope: this.deriveTransitionScope(turn ?? {}),
       socialCollective: scene.socialCollective === true,
       focalNpcId,
       availableActions: this.buildBimodalActions({
@@ -385,6 +424,112 @@ export class AiProxyController {
       }),
       metaQueryRemaining,
     };
+  }
+
+  private deriveTransitionScope(input: {
+    systemHint?: string | null;
+    intent?: string | null;
+    playerInput?: string | null;
+  }): TransitionScope {
+    const systemHint =
+      typeof input.systemHint === "string" ? input.systemHint.trim() : "";
+    if (systemHint && TRANSITION_SCOPE_BY_SYSTEM_HINT[systemHint]) {
+      return TRANSITION_SCOPE_BY_SYSTEM_HINT[systemHint];
+    }
+
+    const intent = typeof input.intent === "string" ? input.intent.trim() : "";
+    if (AMBIENT_INTENTS.has(intent)) return "ambient";
+
+    if (this.hasExplicitPlayerInput(input.playerInput)) return "ambient";
+
+    return "none";
+  }
+
+  private hasExplicitPlayerInput(playerInput: string | null | undefined): boolean {
+    return typeof playerInput === "string" && playerInput.trim().length > 0;
+  }
+
+  private isIdleOpenTurnBlocked(input: {
+    playerInput?: string | null;
+    bimodalState: {
+      idleLoopEnabled: boolean;
+      sceneMode: SceneMode;
+      transitionScope: TransitionScope;
+    };
+  }): boolean {
+    return (
+      input.bimodalState.idleLoopEnabled === true &&
+      input.bimodalState.sceneMode === "open" &&
+      input.bimodalState.transitionScope === "none" &&
+      !this.hasExplicitPlayerInput(input.playerInput)
+    );
+  }
+
+  private normalizeSystemHintForIdleLoop(
+    systemHint: string | null | undefined,
+    session: GameSessionEntity | null,
+  ):
+    | {
+        ok: true;
+        systemHint?: string;
+        warning?: {
+          code: ErrorCode;
+          deprecatedHint: string;
+          replacement: string;
+        };
+      }
+    | {
+        ok: false;
+        status: number;
+        code: ErrorCode;
+        content: string;
+      } {
+    const rawHint = typeof systemHint === "string" ? systemHint.trim() : "";
+    if (rawHint !== LEGACY_DIALOGUE_OPEN_HINT) {
+      return { ok: true, systemHint: rawHint || undefined };
+    }
+
+    const idleLoopEnabled = session?.config?.idleLoopEnabled === true;
+    if (idleLoopEnabled) {
+      return {
+        ok: false,
+        status: 410,
+        code: ErrorCode.NARRATIVE_TURN_SYSTEM_HINT_DEPRECATED,
+        content:
+          "systemHint dialogue_open foi removido para sessões com idleLoopEnabled=true. Use transition_dialogue_greeting.",
+      };
+    }
+
+    return {
+      ok: true,
+      systemHint: DIALOGUE_GREETING_HINT,
+      warning: {
+        code: ErrorCode.NARRATIVE_TURN_SYSTEM_HINT_LEGACY_ALIAS,
+        deprecatedHint: LEGACY_DIALOGUE_OPEN_HINT,
+        replacement: DIALOGUE_GREETING_HINT,
+      },
+    };
+  }
+
+  private emitNarrativeTurnError(
+    res: Response,
+    status: number,
+    code: ErrorCode,
+    content: string,
+    context?: Record<string, unknown>,
+  ): void {
+    res.statusCode = status;
+    this.emitSse(
+      res,
+      {
+        type: "error",
+        code,
+        content,
+        ...(context ? { context } : {}),
+      },
+      "error",
+    );
+    res.end();
   }
 
   private buildBimodalActions(input: {
@@ -682,7 +827,12 @@ export class AiProxyController {
     const idempotencyKey = buildIdempotencyKey(
       sessionId,
       body.lastMessageId,
-      body.playerInput ?? "",
+      JSON.stringify({
+        playerInput: body.playerInput ?? "",
+        intent: body.intent ?? null,
+        systemHint: body.systemHint ?? null,
+        restEventKind: body.restEventKind ?? null,
+      }),
     );
     if (!tryAcquireIdempotency(idempotencyKey)) {
       res.statusCode = 409;
@@ -713,7 +863,89 @@ export class AiProxyController {
       );
       res.setHeader("X-Session-Is-Resumed", ctx.isResumed ? "true" : "false");
 
+      const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+      const hintNormalization = this.normalizeSystemHintForIdleLoop(
+        body.systemHint,
+        session,
+      );
+      if (!hintNormalization.ok) {
+        earlyReturnReason = `blocked:${hintNormalization.code}`;
+        this.emitNarrativeTurnError(
+          res,
+          hintNormalization.status,
+          hintNormalization.code,
+          hintNormalization.content,
+          {
+            deprecatedHint: body.systemHint ?? null,
+            replacement: DIALOGUE_GREETING_HINT,
+            specVersion: "046",
+            idleLoopEnabled: session?.config?.idleLoopEnabled === true,
+          },
+        );
+        return;
+      }
+      const normalizedSystemHint = hintNormalization.systemHint;
+
+      let sceneContextForAgent: Record<string, any> | null = ctx.activeSceneId
+        ? { ...(ctx.sceneContext ?? {}), sceneId: ctx.activeSceneId }
+        : ctx.sceneContext;
+
+      const bimodalState = await this.buildBimodalState(
+        sessionId,
+        req.user!.id,
+        { ...ctx, session },
+        {
+          playerInput: body.playerInput,
+          intent: body.intent,
+          systemHint: normalizedSystemHint,
+        },
+      );
+
+      if (
+        bimodalState &&
+        this.isIdleOpenTurnBlocked({
+          playerInput: body.playerInput,
+          bimodalState,
+        })
+      ) {
+        earlyReturnReason = `blocked:${ErrorCode.NARRATIVE_TURN_NOT_ALLOWED_IN_IDLE_OPEN}`;
+        this.emitNarrativeTurnError(
+          res,
+          422,
+          ErrorCode.NARRATIVE_TURN_NOT_ALLOWED_IN_IDLE_OPEN,
+          "O jogo está aguardando uma ação explícita do jogador.",
+          {
+            sceneMode: bimodalState.sceneMode,
+            intent: body.intent ?? null,
+            hasPlayerInput: this.hasExplicitPlayerInput(body.playerInput),
+            hasSystemHint: Boolean(normalizedSystemHint),
+            idleLoopEnabled: bimodalState.idleLoopEnabled,
+          },
+        );
+        return;
+      }
+
       emitStatus("Recolhendo memórias da cena...");
+
+      if (hintNormalization.warning) {
+        this.logger.warn("narrative_turn.system_hint_legacy_alias", {
+          code: hintNormalization.warning.code,
+          sessionId,
+          deprecatedHint: hintNormalization.warning.deprecatedHint,
+          replacement: hintNormalization.warning.replacement,
+          idleLoopEnabled: false,
+        });
+        this.emitSse(
+          res,
+          {
+            type: "warning",
+            code: hintNormalization.warning.code,
+            deprecatedHint: hintNormalization.warning.deprecatedHint,
+            replacement: hintNormalization.warning.replacement,
+          },
+          "warning",
+        );
+      }
 
       if (ctx.lastMessageMismatch) {
 
@@ -780,20 +1012,6 @@ export class AiProxyController {
         res.end();
         return;
       }
-
-
-
-
-
-      let sceneContextForAgent: Record<string, any> | null = ctx.activeSceneId
-        ? { ...(ctx.sceneContext ?? {}), sceneId: ctx.activeSceneId }
-        : ctx.sceneContext;
-
-      const bimodalState = await this.buildBimodalState(
-        sessionId,
-        req.user!.id,
-        ctx,
-      );
       if (bimodalState) {
         this.emitSse(
           res,
@@ -802,6 +1020,7 @@ export class AiProxyController {
         );
         sceneContextForAgent = {
           ...(sceneContextForAgent ?? {}),
+          transitionScope: bimodalState.transitionScope,
           bimodalState,
         };
       }
@@ -812,7 +1031,7 @@ export class AiProxyController {
 
       sceneContextForAgent = (await this.injectSystemHintEvent(
         sessionId,
-        body.systemHint,
+        normalizedSystemHint,
         sceneContextForAgent as Record<string, any> | null | undefined,
       )) as typeof sceneContextForAgent;
 
@@ -823,7 +1042,7 @@ export class AiProxyController {
 
 
       const postCombatEncounterId =
-        body.systemHint === "post_combat"
+        normalizedSystemHint === "post_combat"
           ? await this.findLatestEncounterId(sessionId, "encounter_resolved")
           : null;
       const postCombatClientId = postCombatEncounterId
@@ -883,7 +1102,7 @@ export class AiProxyController {
           ...(body.intent ? { intent: body.intent } : {}),
 
 
-          ...(body.systemHint ? { systemHint: body.systemHint } : {}),
+          ...(normalizedSystemHint ? { systemHint: normalizedSystemHint } : {}),
           ...(body.restEventKind ? { restEventKind: body.restEventKind } : {}),
         },
         res,
