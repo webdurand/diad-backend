@@ -76,6 +76,9 @@ export class GameSessionEntity {
     critical_variant?: "double_dice" | "double_damage";
     bimodalLoopEnabled?: boolean;
     idleLoopEnabled?: boolean;
+    hubPoiEnabled?: boolean;
+    poiObservationDecayTurns?: number;
+    poiObservationStaleGraceTurns?: number;
   };
 
 

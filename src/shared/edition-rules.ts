@@ -25,7 +25,10 @@ export interface EditionRules {
   backgroundGrantsAbilityBonuses?: boolean;
 
 
-  exhaustionVariant?: "2014_six_levels" | "2024_ten_levels";
+  exhaustionVariant?:
+    | "2014_six_levels"
+    | "2024_six_levels"
+    | "2024_ten_levels";
 
 
   featureFallbackSource?: string;

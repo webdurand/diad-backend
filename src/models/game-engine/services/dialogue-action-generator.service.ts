@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import type { DialogueWeight } from "src/shared/dialogue-weight";
 
 export type DialogueActionType =
   | "talk_npc"
@@ -18,6 +19,12 @@ export interface DialogueAction {
   payload?: Record<string, unknown>;
 }
 
+export type DialogueActionStakes =
+  | "passive"
+  | "casual"
+  | "narrative"
+  | "high";
+
 export interface DialogueActionGenerationInput {
   characterSkills: string[];
   characterKnownFacts: string[];
@@ -27,6 +34,7 @@ export interface DialogueActionGenerationInput {
     name: string;
     tags?: string[];
     knowledgeScope?: string[];
+    dialogueWeight?: DialogueWeight;
   };
 }
 
@@ -81,7 +89,14 @@ export class DialogueActionGeneratorService {
         actionId: `skill_${normalized}`,
         type: "skill",
         label,
-        payload: { skill: normalized, npcId: input.npc.id },
+        payload: {
+          skill: normalized,
+          npcId: input.npc.id,
+          stakes: this.computeSkillStakes(
+            normalized,
+            input.npc.dialogueWeight ?? "ambient",
+          ),
+        },
       });
     }
 
@@ -90,7 +105,28 @@ export class DialogueActionGeneratorService {
         actionId: `topic_${topic}`,
         type: "topic",
         label: TOPIC_LABELS[topic] ?? `Perguntar sobre ${topic.replace(/_/g, " ")}`,
-        payload: { topic, npcId: input.npc.id },
+        payload: {
+          topic,
+          npcId: input.npc.id,
+          stakes:
+            input.npc.dialogueWeight === "plot" ? "narrative" : "casual",
+        },
+      });
+    }
+
+    const pressTopic = this.pressableTopic(input);
+    if (pressTopic) {
+      this.pushOnce(actions, seen, {
+        actionId: "talk_press_more",
+        type: "talk_npc",
+        label: "Pressionar por mais",
+        payload: {
+          action: "press",
+          npcId: input.npc.id,
+          topic: "unrevealed",
+          stakes:
+            input.npc.dialogueWeight === "plot" ? "narrative" : "casual",
+        },
       });
     }
 
@@ -126,6 +162,31 @@ export class DialogueActionGeneratorService {
       .map((tag) => this.normalizeSlug(tag.slice("public_hook:".length)))
       .filter((topic) => !this.isSecret(topic));
     return [...new Set([...scopedKnownTopics, ...publicHooks])];
+  }
+
+  private pressableTopic(input: DialogueActionGenerationInput): string | null {
+    const knownFacts = new Set(
+      (input.characterKnownFacts ?? []).map((fact) => this.normalizeSlug(fact)),
+    );
+    const topic = (input.npc.knowledgeScope ?? [])
+      .map((item) => this.normalizeSlug(item))
+      .find((item) => item && !knownFacts.has(item));
+    return topic ?? null;
+  }
+
+  private computeSkillStakes(
+    skill: string,
+    dialogueWeight: DialogueWeight,
+  ): DialogueActionStakes {
+    if (
+      dialogueWeight === "plot" &&
+      ["persuasion", "deception", "intimidation"].includes(skill)
+    ) {
+      return "high";
+    }
+    if (dialogueWeight === "plot") return "narrative";
+    if (["insight", "perception"].includes(skill)) return "passive";
+    return dialogueWeight === "flavor" ? "narrative" : "casual";
   }
 
   private pushOnce(

@@ -17,7 +17,10 @@ import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
-import { parseTravelTimeToMinutes } from "src/lib/parse-travel-time";
+import {
+  formatTravelTimeLabel,
+  parseTravelTimeToMinutes,
+} from "src/lib/parse-travel-time";
 import {
   computeTravelTurns,
   TRAVEL_DEFAULT_MINUTES_FALLBACK,
@@ -57,6 +60,29 @@ export interface AvailableTravel {
   isLocked: boolean;
   unlockedAtPhase: number | null;
   requirements: Record<string, any>;
+}
+
+export type ReachableLocationRiskLevel =
+  | "baixo"
+  | "médio"
+  | "alto"
+  | "desconhecido";
+
+export interface ReachableLocation {
+  id: string;
+  name: string;
+  travelHours: number;
+  travelLabel: string;
+  biome: string;
+  knownDangers: string[];
+  isLocked: boolean;
+  lockReason?: string;
+  riskLevel: ReachableLocationRiskLevel;
+}
+
+export interface ReachableLocationsEnvelope {
+  currentLocationId: string;
+  locations: ReachableLocation[];
 }
 
 export type TravelResolveStatus =
@@ -303,6 +329,32 @@ export class MoveToLocationService {
       unlockedAtPhase: c.unlockedAtPhase ?? null,
       requirements: c.requirements ?? {},
     }));
+  }
+
+  async listReachableLocations(
+    sessionId: string,
+  ): Promise<ReachableLocationsEnvelope> {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (!session) {
+      throw new DomainException(
+        ErrorCode.NARRATIVE_REACHABLE_LOCATIONS_SESSION_NOT_FOUND,
+        `Sessão ${sessionId} não encontrada.`,
+      );
+    }
+
+    const scene = await this.sceneService.getActive(sessionId);
+    if (!scene?.locationId) {
+      throw new DomainException(
+        ErrorCode.NARRATIVE_REACHABLE_LOCATIONS_NO_ACTIVE_SCENE,
+        "Não há cena ativa com localização para listar destinos alcançáveis.",
+      );
+    }
+
+    const travels = await this.listAvailableTravels(sessionId);
+    return {
+      currentLocationId: scene.locationId,
+      locations: travels.map((travel) => this.toReachableLocation(travel)),
+    };
   }
 
   async resolveTravel(
@@ -611,6 +663,75 @@ export class MoveToLocationService {
       unlockedAtPhase: connection.unlockedAtPhase ?? null,
       requirements: connection.requirements ?? {},
     };
+  }
+
+  private toReachableLocation(travel: AvailableTravel): ReachableLocation {
+    const travelHours = this.parseTravelHours(travel.travelTime);
+    const knownDangers = this.extractKnownDangers(travel.description);
+    return {
+      id: travel.toLocationId,
+      name: travel.toLocationName,
+      travelHours,
+      travelLabel: formatTravelTimeLabel(travel.travelTime) ?? `${travelHours}h`,
+      biome: travel.toLocationType || "unknown",
+      knownDangers,
+      isLocked: travel.isLocked,
+      lockReason: travel.isLocked
+        ? this.describeTravelLock(travel)
+        : undefined,
+      riskLevel: this.deriveReachableRiskLevel({
+        isLocked: travel.isLocked,
+        biome: travel.toLocationType,
+        knownDangers,
+        description: travel.description,
+      }),
+    };
+  }
+
+  private parseTravelHours(travelTime: string | null): number {
+    const minutes = parseTravelTimeToMinutes(travelTime);
+    if (minutes == null) return 1;
+    return Math.min(24, Math.max(1, Math.ceil(minutes / 60)));
+  }
+
+  private extractKnownDangers(description: string | null): string[] {
+    if (!description) return [];
+    return description
+      .split(/[.;\n]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  }
+
+  private describeTravelLock(travel: AvailableTravel): string {
+    if (travel.unlockedAtPhase) return "Caminho bloqueado nesta fase.";
+    if (Object.keys(travel.requirements ?? {}).length > 0) {
+      return "Requisitos da rota ainda não foram atendidos.";
+    }
+    return "Você ainda não conhece esse caminho.";
+  }
+
+  private deriveReachableRiskLevel(input: {
+    isLocked: boolean;
+    biome: string;
+    knownDangers: string[];
+    description: string | null;
+  }): ReachableLocationRiskLevel {
+    if (input.isLocked) return "desconhecido";
+    const text = [input.biome, input.description, ...input.knownDangers]
+      .join(" ")
+      .toLowerCase();
+    if (
+      /alto|letal|mortal|patrulha|drag[aã]o|maldi[cç][aã]o|emboscada|perigo/.test(
+        text,
+      )
+    ) {
+      return "alto";
+    }
+    if (input.knownDangers.length > 0 || /wilderness|dungeon|swamp/.test(text)) {
+      return "médio";
+    }
+    return "baixo";
   }
 
   private async getCurrentPhaseIndex(sessionId: string): Promise<number> {

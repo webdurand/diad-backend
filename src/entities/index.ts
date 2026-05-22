@@ -85,6 +85,7 @@ import { EncounterJoinRequestEntity } from "./encounter-join-request.entity";
 import { SceneEntity } from "./scene.entity";
 import { OpeningArchetypeEntity } from "./opening-archetype.entity";
 import { SceneNpcEntity } from "./scene-npc.entity";
+import { ScenePoiObservationEntity } from "./scene-poi-observation.entity";
 import { SessionEventEntity } from "./session-event.entity";
 import { SessionMessageEntity } from "./session-message.entity";
 import { CampaignChronicleEntity } from "./campaign-chronicle.entity";
@@ -205,6 +206,7 @@ export {
   SceneEntity,
   OpeningArchetypeEntity,
   SceneNpcEntity,
+  ScenePoiObservationEntity,
   SessionEventEntity,
   SessionMessageEntity,
   CampaignChronicleEntity,
@@ -321,6 +323,7 @@ export const ENTITIES = [
   SceneEntity,
   OpeningArchetypeEntity,
   SceneNpcEntity,
+  ScenePoiObservationEntity,
   SessionEventEntity,
   SessionMessageEntity,
   CampaignChronicleEntity,

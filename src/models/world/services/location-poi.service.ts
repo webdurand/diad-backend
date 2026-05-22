@@ -310,6 +310,8 @@ export class LocationPoiService {
       isKnownToParty: poi.isKnownToParty,
       isLocked: poi.isLocked,
       sortOrder: poi.sortOrder,
+      phaseIndex: poi.phaseIndex ?? null,
+      narrativeRole: poi.narrativeRole ?? null,
       properties: poi.properties ?? {},
     };
   }

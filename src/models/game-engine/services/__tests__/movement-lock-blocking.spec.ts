@@ -120,6 +120,7 @@ describe("movement lock blocking", () => {
       { generate: jest.fn().mockReturnValue([]) } as any,
       { generate: jest.fn().mockReturnValue([]) } as any,
       { computeSheet: jest.fn() } as any,
+      { listByPoi: jest.fn().mockResolvedValue([]) } as any,
     );
 
     const result = await service.run({
@@ -167,6 +168,7 @@ describe("movement lock blocking", () => {
       { generate: jest.fn().mockReturnValue([]) } as any,
       { generate: jest.fn().mockReturnValue([]) } as any,
       { computeSheet: jest.fn() } as any,
+      { listByPoi: jest.fn().mockResolvedValue([]) } as any,
     );
 
     const result = await service.listAvailablePois("sess-1");

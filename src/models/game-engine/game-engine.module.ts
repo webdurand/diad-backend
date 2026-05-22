@@ -25,6 +25,7 @@ import {
   QuestObjectiveEntity,
   SessionStoryArcStateEntity,
   UserEntity,
+  CharacterEquipmentEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { CharactersModule } from "../characters/characters.module";
@@ -147,12 +148,15 @@ import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { MetaQueryAuditEntity } from "src/entities/meta-query-audit.entity";
+import { ScenePoiObservationEntity } from "src/entities/scene-poi-observation.entity";
 import { MoveToLocationService } from "./services/move-to-location.service";
 import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
+import { TravelActionService } from "./services/travel-action.service";
 import { DialogueActionService } from "./services/dialogue-action.service";
 import { DialogueActionGeneratorService } from "./services/dialogue-action-generator.service";
 import { OpenModeActionGeneratorService } from "./services/open-mode-action-generator.service";
+import { ScenePoiObservationService } from "./services/scene-poi-observation.service";
 
 @Module({
   imports: [
@@ -167,6 +171,7 @@ import { OpenModeActionGeneratorService } from "./services/open-mode-action-gene
       CharacterEntity,
       CharacterStateEntity,
       CharacterClassEntity,
+      CharacterEquipmentEntity,
 
       LootTableEntity,
       LootTableItemEntity,
@@ -198,6 +203,7 @@ import { OpenModeActionGeneratorService } from "./services/open-mode-action-gene
       LocationConnectionEntity,
       SessionNpcStateEntity,
       MetaQueryAuditEntity,
+      ScenePoiObservationEntity,
     ]),
     AuthModule,
     CharactersModule,
@@ -307,9 +313,11 @@ import { OpenModeActionGeneratorService } from "./services/open-mode-action-gene
     MoveToLocationService,
     MoveToPoiService,
     TravelTickService,
+    TravelActionService,
     DialogueActionService,
     DialogueActionGeneratorService,
     OpenModeActionGeneratorService,
+    ScenePoiObservationService,
   ],
   exports: [
     DiceService,

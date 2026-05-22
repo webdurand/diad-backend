@@ -16,6 +16,9 @@ function makeService(overrides: Record<string, any> = {}): SessionService {
     revealQuest: jest.fn().mockResolvedValue({}),
   };
   const phaseService = overrides.phaseService ?? {};
+  const sessionNpcStateService = overrides.sessionNpcStateService ?? {
+    listByPoi: jest.fn().mockResolvedValue([]),
+  };
   const logger = overrides.logger ?? {
     setContext: jest.fn(),
     info: jest.fn(),
@@ -35,6 +38,7 @@ function makeService(overrides: Record<string, any> = {}): SessionService {
     sceneService as any,
     questService as any,
     phaseService as any,
+    sessionNpcStateService as any,
     logger as any,
   );
 }
@@ -54,6 +58,7 @@ describe("SessionService story-first bootstrap detection", () => {
         config: expect.objectContaining({
           bimodalLoopEnabled: true,
           idleLoopEnabled: true,
+          hubPoiEnabled: true,
         }),
       }),
     );

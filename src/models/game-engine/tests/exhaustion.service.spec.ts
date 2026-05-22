@@ -39,15 +39,15 @@ describe("ExhaustionService (Spec 004 CP9)", () => {
     });
   });
 
-  describe("2024 — 10 níveis flat (RAW XPHB p.365)", () => {
+  describe("2024 — 6 níveis flat (RAW Rules Glossary)", () => {
     it("level 0: sem penalidades", () => {
-      const m = svc.getModifiers(0, "2024_ten_levels");
+      const m = svc.getModifiers(0, "2024_six_levels");
       expect(m.d20Penalty).toBe(0);
       expect(m.speedPenaltyFt).toBe(0);
       expect(m.dead).toBe(false);
     });
     it("level 1: -2 d20s, -5 ft speed", () => {
-      const m = svc.getModifiers(1, "2024_ten_levels");
+      const m = svc.getModifiers(1, "2024_six_levels");
       expect(m.d20Penalty).toBe(-2);
       expect(m.speedPenaltyFt).toBe(-5);
 
@@ -56,25 +56,20 @@ describe("ExhaustionService (Spec 004 CP9)", () => {
       expect(m.disadvSave).toBe(false);
     });
     it("level 5: -10 d20s, -25 ft speed", () => {
-      const m = svc.getModifiers(5, "2024_ten_levels");
+      const m = svc.getModifiers(5, "2024_six_levels");
       expect(m.d20Penalty).toBe(-10);
       expect(m.speedPenaltyFt).toBe(-25);
       expect(m.dead).toBe(false);
     });
-    it("level 9: -18 d20s, -45 ft, ainda vivo", () => {
-      const m = svc.getModifiers(9, "2024_ten_levels");
-      expect(m.d20Penalty).toBe(-18);
-      expect(m.speedPenaltyFt).toBe(-45);
-      expect(m.dead).toBe(false);
-    });
-    it("level 10: morte", () => {
-      const m = svc.getModifiers(10, "2024_ten_levels");
+    it("level 6: morte", () => {
+      const m = svc.getModifiers(6, "2024_six_levels");
       expect(m.dead).toBe(true);
-      expect(m.d20Penalty).toBe(-20);
+      expect(m.d20Penalty).toBe(-12);
     });
-    it("level > 10 clamps em 10", () => {
+    it("alias legado 2024_ten_levels também clampa em 6", () => {
       const m = svc.getModifiers(15, "2024_ten_levels");
-      expect(m.d20Penalty).toBe(-20);
+      expect(m.d20Penalty).toBe(-12);
+      expect(m.speedPenaltyFt).toBe(-30);
       expect(m.dead).toBe(true);
     });
   });

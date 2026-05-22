@@ -1,6 +1,9 @@
 import { Injectable } from "@nestjs/common";
 
-export type ExhaustionVariant = "2014_six_levels" | "2024_ten_levels";
+export type ExhaustionVariant =
+  | "2014_six_levels"
+  | "2024_six_levels"
+  | "2024_ten_levels";
 
 export interface ExhaustionModifiers {
 
@@ -28,8 +31,8 @@ export class ExhaustionService {
     level: number,
     variant: ExhaustionVariant = "2014_six_levels",
   ): ExhaustionModifiers {
-    if (variant === "2024_ten_levels") {
-      const lvl = Math.max(0, Math.min(10, Math.floor(level)));
+    if (variant === "2024_six_levels" || variant === "2024_ten_levels") {
+      const lvl = Math.max(0, Math.min(6, Math.floor(level)));
 
       const d20Penalty = -2 * lvl || 0;
       const speedPenaltyFt = -5 * lvl || 0;
@@ -42,7 +45,7 @@ export class ExhaustionService {
         speedMultiplier: 1,
         speedPenaltyFt,
         maxHpMultiplier: 1,
-        dead: lvl >= 10,
+        dead: lvl >= 6,
         d20Penalty,
       };
     }

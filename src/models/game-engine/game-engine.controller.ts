@@ -105,7 +105,12 @@ import { StartEncounterFromNarrativeService } from "./services/start-encounter-f
 import { MoveToLocationService } from "./services/move-to-location.service";
 import { MoveToPoiService } from "./services/move-to-poi.service";
 import { TravelTickService } from "./services/travel-tick.service";
+import {
+  TravelActionService,
+  type TravelActionInput,
+} from "./services/travel-action.service";
 import { DialogueActionService } from "./services/dialogue-action.service";
+import { ScenePoiObservationService } from "./services/scene-poi-observation.service";
 
 import { RealtimeService } from "src/realtime/realtime.service";
 import { StartEncounterFromNarrativeDto } from "./dto/start-encounter-from-narrative.dto";
@@ -203,8 +208,10 @@ export class GameEngineController {
     private readonly moveToLocationService: MoveToLocationService,
     private readonly moveToPoiService: MoveToPoiService,
     private readonly travelTickService: TravelTickService,
+    private readonly travelActionService: TravelActionService,
     private readonly dialogueActionService: DialogueActionService,
     private readonly movementLockService: MovementLockService,
+    private readonly scenePoiObservationService: ScenePoiObservationService,
 
 
     private readonly realtime: RealtimeService,
@@ -388,6 +395,25 @@ export class GameEngineController {
     return { ok: true as const, value: travels };
   }
 
+  @Get("sessions/:sessionId/world/reachable-locations")
+  async reachableLocations(@Param("sessionId") sessionId: string) {
+    const locations =
+      await this.moveToLocationService.listReachableLocations(sessionId);
+    return { ok: true as const, value: locations };
+  }
+
+  @Get("sessions/:sessionId/world/poi-observation")
+  async poiObservation(
+    @Param("sessionId") sessionId: string,
+    @Query("poiId") poiId: string,
+  ) {
+    const observation = await this.scenePoiObservationService.findOrGenerate({
+      sessionId,
+      poiId,
+    });
+    return { ok: true as const, value: observation };
+  }
+
 
   @Get("sessions/:sessionId/available-pois")
   async availablePois(
@@ -439,6 +465,27 @@ export class GameEngineController {
     return { ok: true as const, value: result };
   }
 
+  @Post("sessions/:sessionId/dialogue/skill-roll")
+  async registerDialogueSkillRoll(
+    @Param("sessionId") sessionId: string,
+    @Body() dto: { actionId: string },
+  ) {
+    const result = await this.dialogueActionService.registerSkillRoll(
+      sessionId,
+      dto,
+    );
+    return { ok: true as const, value: result };
+  }
+
+  @Post("sessions/:sessionId/dialogue/press")
+  async pressDialogue(
+    @Param("sessionId") sessionId: string,
+    @Body() dto: { npcId?: string; topic?: string },
+  ) {
+    const result = await this.dialogueActionService.press(sessionId, dto);
+    return { ok: true as const, value: result };
+  }
+
   @Post("sessions/:sessionId/travel/tick")
   async tickTravel(@Param("sessionId") sessionId: string) {
     const result = await this.travelTickService.tick(sessionId);
@@ -448,6 +495,15 @@ export class GameEngineController {
   @Post("sessions/:sessionId/travel/arrive")
   async arriveTravel(@Param("sessionId") sessionId: string) {
     const result = await this.travelTickService.arrive(sessionId);
+    return { ok: true as const, value: result };
+  }
+
+  @Post("sessions/:sessionId/travel/action")
+  async applyTravelAction(
+    @Param("sessionId") sessionId: string,
+    @Body() dto: TravelActionInput,
+  ) {
+    const result = await this.travelActionService.apply(sessionId, dto);
     return { ok: true as const, value: result };
   }
 

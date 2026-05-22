@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomBytes } from "crypto";
-import { DataSource, EntityManager, IsNull } from "typeorm";
+import { DataSource, EntityManager, In, IsNull } from "typeorm";
 import {
   CampaignEntity,
   ClockEntity,
@@ -269,6 +269,11 @@ export class WorldSeedMaterializationService {
         content.locations,
       );
       stats.locations = locations.size;
+      const poisByLocation = await this.listPoisByLocation(
+        manager,
+        campaign.id,
+        locations,
+      );
 
       stats.connections = await this.persistConnections(
         manager,
@@ -290,6 +295,7 @@ export class WorldSeedMaterializationService {
         content.npcs,
         locations,
         body.startingLocationName,
+        poisByLocation,
       );
       stats.npcs = npcs.size;
 
@@ -576,6 +582,33 @@ export class WorldSeedMaterializationService {
     }
   }
 
+  private async listPoisByLocation(
+    manager: EntityManager,
+    campaignId: string,
+    locations: Map<string, LocationEntity>,
+  ): Promise<Map<string, LocationPoiEntity[]>> {
+    const locationIds = uniqueStrings(
+      Array.from(locations.values())
+        .map((location) => location.id)
+        .filter(Boolean),
+    );
+    if (locationIds.length === 0) return new Map();
+
+    const repo = manager.getRepository(LocationPoiEntity);
+    const pois = await repo.find({
+      where: { campaignId, locationId: In(locationIds) },
+      order: { locationId: "ASC", sortOrder: "ASC", name: "ASC" },
+    });
+
+    const byLocation = new Map<string, LocationPoiEntity[]>();
+    for (const poi of pois) {
+      const current = byLocation.get(poi.locationId) ?? [];
+      current.push(poi);
+      byLocation.set(poi.locationId, current);
+    }
+    return byLocation;
+  }
+
   private async persistConnections(
     manager: EntityManager,
     seeds: LocationConnectionSeed[],
@@ -668,11 +701,13 @@ export class WorldSeedMaterializationService {
     seeds: NpcSeed[],
     locations: Map<string, LocationEntity>,
     startingLocationName?: string | null,
+    poisByLocation: Map<string, LocationPoiEntity[]> = new Map(),
   ): Promise<Map<string, NpcEntity>> {
     const repo = manager.getRepository(NpcEntity);
     const byName = this.mapByName(await repo.find({ where: { campaignId } }));
     const fallbackLocation = this.resolveStartingLocation(locations, startingLocationName);
     const archetypes = manager.getRepository(NpcArchetypeTemplateEntity);
+    const fallbackPoiCounters = new Map<string, number>();
 
     for (const [index, seed] of seeds.entries()) {
       const name = clean(seed.name);
@@ -721,7 +756,10 @@ export class WorldSeedMaterializationService {
       npc.profileDepth =
         seed.profile_depth ?? npc.profileDepth ?? (index < 12 ? "core" : "supporting");
       npc.homeLocationId = homeLocation?.id ?? npc.homeLocationId;
-      npc.homePoiId = clean(seed.homePoiId) || npc.homePoiId;
+      npc.homePoiId =
+        clean(seed.homePoiId) ||
+        npc.homePoiId ||
+        this.pickFallbackPoiId(homeLocation?.id, poisByLocation, fallbackPoiCounters);
       npc.tags = uniqueStrings([...(npc.tags ?? []), ...tags]);
 
       const saved = await repo.save(npc);
@@ -729,6 +767,22 @@ export class WorldSeedMaterializationService {
     }
 
     return byName;
+  }
+
+  private pickFallbackPoiId(
+    locationId: string | undefined,
+    poisByLocation: Map<string, LocationPoiEntity[]>,
+    fallbackPoiCounters: Map<string, number>,
+  ): string | undefined {
+    if (!locationId) return undefined;
+    const pois = poisByLocation.get(locationId) ?? [];
+    if (pois.length === 0) return undefined;
+
+    const assignablePois = pois.filter((poi) => poi.isKnownToParty && !poi.isLocked);
+    const candidates = assignablePois.length > 0 ? assignablePois : pois;
+    const count = fallbackPoiCounters.get(locationId) ?? 0;
+    fallbackPoiCounters.set(locationId, count + 1);
+    return candidates[count % candidates.length]?.id;
   }
 
   private async persistLoreEntries(

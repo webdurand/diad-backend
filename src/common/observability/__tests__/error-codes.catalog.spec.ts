@@ -11,7 +11,7 @@ import {
 
 describe("Error Codes Catalog", () => {
   it("contém os codes do catálogo canônico", () => {
-    expect(ALL_ERROR_CODES.length).toBe(94);
+    expect(ALL_ERROR_CODES.length).toBe(112);
   });
 
   it("todos os codes seguem o regex SCREAMING_SNAKE", () => {

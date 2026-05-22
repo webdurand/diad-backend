@@ -14,6 +14,7 @@ import { SceneService } from "src/models/session/services/scene.service";
 import { QuestService } from "src/models/world/services/quest.service";
 import type { CreateQuestDto } from "src/models/world/services/quest.service";
 import { PhaseService } from "src/models/world/services/phase.service";
+import { SessionNpcStateService } from "src/models/world/services/session-npc-state.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 const STARTING_LOCATION_TYPE_PRIORITY: Record<string, number> = {
@@ -43,6 +44,7 @@ export interface CreateSessionDto {
     critical_variant?: "double_dice" | "double_damage";
     bimodalLoopEnabled?: boolean;
     idleLoopEnabled?: boolean;
+    hubPoiEnabled?: boolean;
   };
 }
 
@@ -83,6 +85,7 @@ export class SessionService {
     private readonly sceneService: SceneService,
     private readonly questService: QuestService,
     private readonly phaseService: PhaseService,
+    private readonly sessionNpcStateService: SessionNpcStateService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(SessionService.name);
@@ -117,14 +120,15 @@ export class SessionService {
       config: {
         bimodalLoopEnabled: true,
         idleLoopEnabled: true,
+        hubPoiEnabled: true,
         ...(dto.config ?? {}),
       },
     });
     const saved = await this.sessionRepo.save(session);
 
     if (campaign) {
-      await this.bootstrapInitialScene(saved.id, campaign);
       await this.initializeCanonicalNpcStates(saved.id, campaign.id);
+      await this.bootstrapInitialScene(saved.id, campaign);
       await this.materializeQuestsFromTemplate(saved.id, campaign);
       if (this.isStoryFirstCampaign(campaign)) {
         await this.phaseService.bootstrapStoryFirst(saved.id, campaign);
@@ -213,17 +217,39 @@ export class SessionService {
         }
       }
 
-      await this.sceneService.create(sessionId, {
+      const scene = await this.sceneService.create(sessionId, {
+        locationId: campaign.startingLocationId ?? undefined,
         title: campaign.name,
         reason: "session_bootstrap",
         skipBudgetIncrement: true,
       });
+      if (scene.poiId) {
+        await this.populateSceneNpcsFromPoi(sessionId, scene.id, scene.poiId);
+      }
     } catch (err) {
       this.logger.warn("session.bootstrap_initial_scene.failed", {
         "session.id": sessionId,
         "campaign.id": campaign.id,
         "error.message": err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  private async populateSceneNpcsFromPoi(
+    sessionId: string,
+    sceneId: string,
+    poiId: string,
+  ): Promise<void> {
+    const [states, existingSceneNpcs] = await Promise.all([
+      this.sessionNpcStateService.listByPoi(sessionId, poiId),
+      this.sceneService.getSceneNpcs(sceneId),
+    ]);
+    const existingNpcIds = new Set(existingSceneNpcs.map((npc) => npc.npcId));
+    for (const state of states) {
+      if (state.status !== "alive") continue;
+      if (existingNpcIds.has(state.npcId)) continue;
+      await this.sceneService.addNpcToScene(sceneId, state.npcId, "present");
+      existingNpcIds.add(state.npcId);
     }
   }
 

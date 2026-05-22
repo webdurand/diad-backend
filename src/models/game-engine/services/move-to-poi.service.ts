@@ -13,6 +13,7 @@ import {
   MovementLockService,
   type MovementLockState,
 } from "src/models/session/services/movement-lock.service";
+import { SessionNpcStateService } from "src/models/world/services/session-npc-state.service";
 import { getDialogueWeight, type DialogueWeight } from "src/shared/dialogue-weight";
 import { deriveSceneMode, type SceneMode } from "src/shared/scene-mode";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
@@ -85,6 +86,7 @@ export interface AvailablePoi {
   tags: string[];
   isDefault: boolean;
   isLocked: boolean;
+  phaseIndex: number | null;
 }
 
 export interface AvailablePoisEnvelope {
@@ -94,6 +96,7 @@ export interface AvailablePoisEnvelope {
   focalNpcId: string | null;
   metaQueryRemaining: number;
   bimodalLoopEnabled: boolean;
+  hubPoiEnabled: boolean;
   location: { id: string; name: string; type: string } | null;
   currentPoi: AvailablePoi | null;
   movementLock: MovementLockState | null;
@@ -129,6 +132,7 @@ export class MoveToPoiService {
     private readonly dialogueActionGenerator: DialogueActionGeneratorService,
     private readonly openModeActionGenerator: OpenModeActionGeneratorService,
     private readonly characterSheetService: CharacterSheetService,
+    private readonly sessionNpcStateService: SessionNpcStateService,
   ) {
     this.logger.setContext(MoveToPoiService.name);
   }
@@ -251,6 +255,11 @@ export class MoveToPoiService {
         "companion",
       );
     }
+    await this.populateSceneNpcsFromPoi(
+      input.sessionId,
+      nextScene.id,
+      targetPoi.id,
+    );
     this.contextCache.invalidate(currentScene.id);
     this.contextCache.invalidate(nextScene.id);
 
@@ -291,6 +300,7 @@ export class MoveToPoiService {
         focalNpcId: null,
         metaQueryRemaining: 3,
         bimodalLoopEnabled: true,
+        hubPoiEnabled: false,
         location: null,
         currentPoi: null,
         movementLock: null,
@@ -310,6 +320,7 @@ export class MoveToPoiService {
     ]);
     const sceneMode = deriveSceneMode(session, currentScene);
     const bimodalLoopEnabled = session?.config?.bimodalLoopEnabled === true;
+    const hubPoiEnabled = session?.config?.hubPoiEnabled === true;
     const npcsPresent = sceneNpcs
       .filter((sceneNpc) => sceneNpc.npc)
       .map((sceneNpc) => ({
@@ -331,6 +342,7 @@ export class MoveToPoiService {
       focalNpcId: currentScene.currentInterlocutorNpcId ?? null,
       metaQueryRemaining,
       bimodalLoopEnabled,
+      hubPoiEnabled,
       location: currentScene.location
         ? {
             id: currentScene.location.id,
@@ -364,6 +376,24 @@ export class MoveToPoiService {
     return this.sessionRepo.findOne({ where: { id: sessionId } });
   }
 
+  private async populateSceneNpcsFromPoi(
+    sessionId: string,
+    sceneId: string,
+    poiId: string,
+  ): Promise<void> {
+    const [states, existingSceneNpcs] = await Promise.all([
+      this.sessionNpcStateService.listByPoi(sessionId, poiId),
+      this.sceneService.getSceneNpcs(sceneId),
+    ]);
+    const existingNpcIds = new Set(existingSceneNpcs.map((npc) => npc.npcId));
+    for (const state of states) {
+      if (state.status !== "alive") continue;
+      if (existingNpcIds.has(state.npcId)) continue;
+      await this.sceneService.addNpcToScene(sceneId, state.npcId, "present");
+      existingNpcIds.add(state.npcId);
+    }
+  }
+
   private buildAvailableActions(input: {
     sceneMode: SceneMode;
     npcsPresent: AvailablePoisEnvelope["npcsPresent"];
@@ -382,6 +412,7 @@ export class MoveToPoiService {
           name: focal?.name ?? "Interlocutor",
           tags: focal?.tags ?? [],
           knowledgeScope: focal?.knowledgeScope ?? [],
+          dialogueWeight: focal?.dialogueWeight ?? "ambient",
         },
       });
     }
@@ -476,6 +507,7 @@ export class MoveToPoiService {
       tags: poi.tags ?? [],
       isDefault: poi.isDefault,
       isLocked: poi.isLocked,
+      phaseIndex: poi.phaseIndex ?? null,
     };
   }
 }

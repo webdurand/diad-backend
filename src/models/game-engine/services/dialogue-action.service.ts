@@ -17,6 +17,33 @@ export interface DialogueStartInput {
   reason?: string;
 }
 
+export interface DialogueSkillRollInput {
+  actionId: string;
+}
+
+export interface DialogueSkillRollResult {
+  used: number;
+  remaining: number;
+}
+
+export interface DialoguePressInput {
+  npcId?: string;
+  topic?: string;
+}
+
+export interface DialogueRevealResult {
+  status: "revealed";
+  sceneId: string;
+  npcId: string;
+  topic: string;
+  revelationText: string;
+  journalEntry: {
+    title: string;
+    summary: string;
+    category: "lore" | "character" | "quest" | "clue";
+  };
+}
+
 export interface DialogueExitResult {
   status: "exited" | "no_dialogue";
   sceneId: string;
@@ -42,6 +69,7 @@ export interface DialogueStartResult {
 }
 
 const EXIT_ACTION_LABEL = "Sair da conversa";
+const SKILL_ROLL_CAP_PER_DIALOGUE_TURN = 2;
 
 @Injectable()
 export class DialogueActionService {
@@ -159,6 +187,119 @@ export class DialogueActionService {
     };
   }
 
+  async registerSkillRoll(
+    sessionId: string,
+    input: DialogueSkillRollInput,
+  ): Promise<DialogueSkillRollResult> {
+    const scene = await this.getActiveSceneOrThrow(sessionId);
+    const activeLock =
+      await this.movementLockService.getActiveForSession(sessionId);
+    if (!activeLock) {
+      throw new DomainException(
+        ErrorCode.SESSION_DIALOGUE_NOT_ACTIVE,
+        "Não há diálogo ativo para consumir skill roll.",
+        { context: { sessionId, sceneId: scene.id, actionId: input.actionId } },
+      );
+    }
+
+    const currentCount =
+      typeof scene.contextSnapshot?.dialogueSkillRollCount === "number"
+        ? scene.contextSnapshot.dialogueSkillRollCount
+        : 0;
+    if (currentCount >= SKILL_ROLL_CAP_PER_DIALOGUE_TURN) {
+      throw new DomainException(
+        ErrorCode.DIALOGUE_SKILL_ROLL_CAP_EXCEEDED,
+        "Limite de 2 skill rolls por turno de diálogo atingido.",
+        {
+          context: {
+            sessionId,
+            sceneId: scene.id,
+            actionId: input.actionId,
+            used: currentCount,
+            cap: SKILL_ROLL_CAP_PER_DIALOGUE_TURN,
+          },
+          hint: "Guarda de ritmo DIAD, não regra RAW.",
+        },
+      );
+    }
+
+    const nextCount = currentCount + 1;
+    await this.sceneService.update(scene.id, {
+      contextSnapshot: {
+        ...(scene.contextSnapshot ?? {}),
+        dialogueSkillRollCount: nextCount,
+        dialogueSkillRollLastActionId: input.actionId,
+      },
+    });
+    return {
+      used: nextCount,
+      remaining: Math.max(0, SKILL_ROLL_CAP_PER_DIALOGUE_TURN - nextCount),
+    };
+  }
+
+  async press(
+    sessionId: string,
+    input: DialoguePressInput,
+  ): Promise<DialogueRevealResult> {
+    const scene = await this.getActiveSceneOrThrow(sessionId);
+    const activeLock =
+      await this.movementLockService.getActiveForSession(sessionId);
+    const npcId =
+      input.npcId ??
+      activeLock?.movementLock.interlocutorNpcId ??
+      scene.currentInterlocutorNpcId;
+    if (!activeLock || !npcId) {
+      throw new DomainException(
+        ErrorCode.SESSION_DIALOGUE_NOT_ACTIVE,
+        "Pressionar por mais exige diálogo ativo.",
+        { context: { sessionId, sceneId: scene.id } },
+      );
+    }
+
+    const sceneNpc = await this.sceneNpcRepo.findOne({
+      where: { sceneId: scene.id, npcId },
+      relations: ["npc"],
+    });
+    const knowledgeScope = sceneNpc?.npc?.knowledgeScope ?? [];
+    const topic =
+      input.topic && input.topic !== "unrevealed"
+        ? input.topic
+        : knowledgeScope[0];
+    if (!sceneNpc?.npc || !topic) {
+      throw new DomainException(
+        ErrorCode.DIALOGUE_REVEAL_NOT_AVAILABLE,
+        "Este NPC não tem revelação disponível agora.",
+        { context: { sessionId, sceneId: scene.id, npcId } },
+      );
+    }
+
+    const topicLabel = this.humanizeTopic(topic);
+    const revelationText = `${sceneNpc.npc.name} hesita antes de deixar escapar uma pista sobre ${topicLabel}.`;
+    const journalEntry = {
+      title: `Pista de ${sceneNpc.npc.name}`,
+      summary: revelationText,
+      category: "clue" as const,
+    };
+    const result: DialogueRevealResult = {
+      status: "revealed",
+      sceneId: scene.id,
+      npcId,
+      topic,
+      revelationText,
+      journalEntry,
+    };
+
+    await this.publishDialogueReveal({
+      sessionId,
+      sceneId: scene.id,
+      npcId,
+      topic,
+      revelationText,
+      journalEntry,
+    });
+    return result;
+  }
+
   private async getActiveSceneOrThrow(sessionId: string) {
     const scene = await this.sceneService.getActive(sessionId);
     if (!scene) {
@@ -202,5 +343,41 @@ export class DialogueActionService {
       payload,
     });
     await this.eventBus.publish(envelope);
+  }
+
+  private async publishDialogueReveal(payload: {
+    sessionId: string;
+    sceneId: string;
+    npcId: string;
+    topic: string;
+    revelationText: string;
+    journalEntry: DialogueRevealResult["journalEntry"];
+  }): Promise<void> {
+    if (!this.eventBus || !this.envelopeFactory) return;
+    const envelope = this.envelopeFactory.build({
+      eventCategory: "NarrativeEvent",
+      eventType: "dialogue_reveal",
+      source: {
+        service: "diad-backend",
+        module: "DialogueActionService.press",
+      },
+      scope: {
+        campaignId: "",
+        sessionId: payload.sessionId,
+        sceneId: payload.sceneId,
+      },
+      audiences: ["Narrator", "Director", "HUD", "Archivist"],
+      narrativeDescriptor: payload.revelationText,
+      payload: {
+        ...payload,
+        triggeredBy: "press_for_more",
+        stakesConsumed: 0,
+      },
+    });
+    await this.eventBus.publish(envelope);
+  }
+
+  private humanizeTopic(topic: string): string {
+    return topic.replace(/[_:-]+/g, " ").trim() || "o assunto";
   }
 }

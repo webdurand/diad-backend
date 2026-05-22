@@ -26,6 +26,7 @@ export interface CreateSceneDto {
   mood?: string;
   reason?: string;
   skipBudgetIncrement?: boolean;
+  contextSnapshot?: Record<string, any>;
 }
 
 export type ScenePresenceRole = "present" | "interlocutor" | "companion";
