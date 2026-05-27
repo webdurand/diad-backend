@@ -72,6 +72,8 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "guard_dispatched",
     "mission_progress_advanced",
     "director_pull_injected",
+    "travel_action_applied",
+    "dialogue_reveal",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",

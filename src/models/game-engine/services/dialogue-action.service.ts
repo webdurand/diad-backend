@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { SceneNpcEntity } from "src/entities/scene-npc.entity";
@@ -345,6 +345,8 @@ export class DialogueActionService {
     await this.eventBus.publish(envelope);
   }
 
+  private readonly logger = new Logger(DialogueActionService.name);
+
   private async publishDialogueReveal(payload: {
     sessionId: string;
     sceneId: string;
@@ -354,27 +356,36 @@ export class DialogueActionService {
     journalEntry: DialogueRevealResult["journalEntry"];
   }): Promise<void> {
     if (!this.eventBus || !this.envelopeFactory) return;
-    const envelope = this.envelopeFactory.build({
-      eventCategory: "NarrativeEvent",
-      eventType: "dialogue_reveal",
-      source: {
-        service: "diad-backend",
-        module: "DialogueActionService.press",
-      },
-      scope: {
-        campaignId: "",
-        sessionId: payload.sessionId,
-        sceneId: payload.sceneId,
-      },
-      audiences: ["Narrator", "Director", "HUD", "Archivist"],
-      narrativeDescriptor: payload.revelationText,
-      payload: {
-        ...payload,
-        triggeredBy: "press_for_more",
-        stakesConsumed: 0,
-      },
-    });
-    await this.eventBus.publish(envelope);
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "dialogue_reveal",
+        source: {
+          service: "diad-backend",
+          module: "DialogueActionService.press",
+        },
+        scope: {
+          campaignId: "",
+          sessionId: payload.sessionId,
+          sceneId: payload.sceneId,
+        },
+        audiences: ["Narrator", "Director", "HUD", "Archivist"],
+        narrativeDescriptor: payload.revelationText,
+        payload: {
+          ...payload,
+          triggeredBy: "press_for_more",
+          stakesConsumed: 0,
+        },
+      });
+      await this.eventBus.publish(envelope);
+    } catch (err) {
+      this.logger.warn("dialogue_reveal.publish_failed", {
+        "session.id": payload.sessionId,
+        "scene.id": payload.sceneId,
+        "npc.id": payload.npcId,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private humanizeTopic(topic: string): string {

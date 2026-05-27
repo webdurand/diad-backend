@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
@@ -605,26 +605,36 @@ export class TravelActionService {
     };
   }
 
+  private readonly logger = new Logger(TravelActionService.name);
+
   private async publishTravelAction(
     sessionId: string,
     result: TravelActionResult,
   ): Promise<void> {
     if (!this.eventBus || !this.envelopeFactory) return;
-    const envelope = this.envelopeFactory.build({
-      eventCategory: "NarrativeEvent",
-      eventType: "travel_action_applied",
-      source: {
-        service: "diad-backend",
-        module: "TravelActionService.apply",
-      },
-      scope: {
-        campaignId: "",
-        sessionId,
-      },
-      audiences: ["Narrator", "Director", "Archivist", "HUD"],
-      narrativeDescriptor: result.narrativeDescriptor,
-      payload: { ...result },
-    });
-    await this.eventBus.publish(envelope);
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "travel_action_applied",
+        source: {
+          service: "diad-backend",
+          module: "TravelActionService.apply",
+        },
+        scope: {
+          campaignId: "",
+          sessionId,
+        },
+        audiences: ["Narrator", "Director", "Archivist", "HUD"],
+        narrativeDescriptor: result.narrativeDescriptor,
+        payload: { ...result },
+      });
+      await this.eventBus.publish(envelope);
+    } catch (err) {
+      this.logger.warn("travel_action_applied.publish_failed", {
+        "session.id": sessionId,
+        "action.kind": result.outcome.kind,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
