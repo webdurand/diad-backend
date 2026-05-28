@@ -121,6 +121,81 @@ describe("MoveToPoiService POI NPC population", () => {
 });
 
 describe("MoveToPoiService POI hub envelope", () => {
+  it("auto-popula NPCs do POI atual antes de montar o hub", async () => {
+    const sceneNpcRepo = {
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          {
+            npcId: "npc-1",
+            presenceRole: "present",
+            npc: {
+              id: "npc-1",
+              name: "Capitã Nara",
+              tags: [],
+              knowledgeScope: [],
+            },
+          },
+        ]),
+    };
+    const sceneService = {
+      getActive: jest.fn().mockResolvedValue({
+        id: "scene-1",
+        locationId: "loc-1",
+        poiId: "poi-1",
+        sceneMode: "open",
+        socialCollective: false,
+        currentInterlocutorNpcId: null,
+        contextSnapshot: {},
+        location: { id: "loc-1", name: "Porto", type: "urban" },
+        poi: {
+          id: "poi-1",
+          name: "Doca",
+          type: "social",
+          description: null,
+          atmosphere: null,
+          aliases: [],
+          tags: [],
+          isDefault: true,
+          isLocked: false,
+        },
+      }),
+      getSceneNpcs: jest.fn().mockResolvedValue([]),
+      addNpcToScene: jest.fn().mockResolvedValue({}),
+    };
+    const service = makeService({
+      sessionRepo: {
+        findOne: jest.fn().mockResolvedValue({
+          id: "session-1",
+          campaignId: "campaign-1",
+          config: { hubPoiEnabled: true },
+          characterIds: [],
+        }),
+      },
+      sceneNpcRepo,
+      poiService: {
+        listKnownByLocation: jest.fn().mockResolvedValue([]),
+      },
+      sceneService,
+      sessionNpcStateService: {
+        listByPoi: jest.fn().mockResolvedValue([
+          { npcId: "npc-1", status: "alive" },
+        ]),
+      },
+    });
+
+    const result = await service.listAvailablePois("session-1", "user-1");
+
+    expect(sceneService.addNpcToScene).toHaveBeenCalledWith(
+      "scene-1",
+      "npc-1",
+      "present",
+    );
+    expect(result.npcsPresent).toEqual([
+      expect.objectContaining({ id: "npc-1", name: "Capitã Nara" }),
+    ]);
+  });
+
   it("expoe hubPoiEnabled true apenas quando a flag existe na sessao", async () => {
     const makeEnvelopeService = (config: Record<string, unknown>) =>
       makeService({

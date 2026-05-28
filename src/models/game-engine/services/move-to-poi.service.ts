@@ -309,6 +309,13 @@ export class MoveToPoiService {
         pois: [],
       };
     }
+    if (currentScene.poiId) {
+      await this.populateSceneNpcsFromPoi(
+        sessionId,
+        currentScene.id,
+        currentScene.poiId,
+      );
+    }
     const [pois, sceneNpcs, session, metaQueryRemaining] = await Promise.all([
       this.poiService.listKnownByLocation(currentScene.locationId),
       this.sceneNpcRepo.find({

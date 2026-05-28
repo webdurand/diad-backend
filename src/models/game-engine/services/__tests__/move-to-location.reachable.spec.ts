@@ -28,6 +28,7 @@ describe("MoveToLocationService.listReachableLocations", () => {
       find: jest.fn().mockResolvedValue([
         {
           id: "conn-1",
+          fromLocationId: "loc-1",
           toLocationId: "loc-2",
           toLocation: { id: "loc-2", name: "Ilha do Diabo", type: "coastal" },
           travelTime: "3",
@@ -36,6 +37,7 @@ describe("MoveToLocationService.listReachableLocations", () => {
         },
         {
           id: "conn-2",
+          fromLocationId: "loc-1",
           toLocationId: "loc-3",
           toLocation: { id: "loc-3", name: "Farol Velado", type: "supernatural" },
           travelTime: "25",
@@ -65,8 +67,11 @@ describe("MoveToLocationService.listReachableLocations", () => {
     const result = await service.listReachableLocations("session-1");
 
     expect(connectionRepo.find).toHaveBeenCalledWith({
-      where: { fromLocationId: "loc-1", isHidden: false },
-      relations: ["toLocation"],
+      where: [
+        { fromLocationId: "loc-1", isHidden: false },
+        { toLocationId: "loc-1", isHidden: false },
+      ],
+      relations: ["fromLocation", "toLocation"],
     });
     expect(result).toEqual({
       currentLocationId: "loc-1",
@@ -94,5 +99,50 @@ describe("MoveToLocationService.listReachableLocations", () => {
         }),
       ],
     });
+  });
+
+  it("trata conexões entrantes como rota de volta conhecida", async () => {
+    const service = makeService({
+      sessionRepo: {
+        findOne: jest.fn().mockResolvedValue({
+          id: "session-1",
+          campaignId: "campaign-1",
+        }),
+      },
+      connectionRepo: {
+        find: jest.fn().mockResolvedValue([
+          {
+            id: "conn-return",
+            fromLocationId: "loc-mainland",
+            fromLocation: {
+              id: "loc-mainland",
+              name: "Praia de Desembarque",
+              type: "coastal",
+            },
+            toLocationId: "loc-island",
+            travelTime: "2",
+            description: "Maré baixa.",
+            isAccessibleAtPhase: jest.fn().mockReturnValue(true),
+          },
+        ]),
+      },
+      sceneService: {
+        getActive: jest.fn().mockResolvedValue({
+          id: "scene-1",
+          locationId: "loc-island",
+        }),
+      },
+    });
+
+    const result = await service.listReachableLocations("session-1");
+
+    expect(result.locations).toEqual([
+      expect.objectContaining({
+        id: "loc-mainland",
+        name: "Praia de Desembarque",
+        travelHours: 2,
+        travelLabel: "2h",
+      }),
+    ]);
   });
 });

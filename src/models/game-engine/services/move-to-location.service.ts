@@ -256,9 +256,10 @@ export class MoveToLocationService {
     let connection: LocationConnectionEntity | null = null;
     let travelTime: string | null = null;
     if (fromLocationId) {
-      connection = await this.connectionRepo.findOne({
-        where: { fromLocationId, toLocationId: target.id },
-      });
+      connection = await this.findVisibleConnectionBetween(
+        fromLocationId,
+        target.id,
+      );
       if (!connection) {
         throw new DomainException(
           ErrorCode.LOCATION_CONNECTION_BLOCKED,
@@ -313,22 +314,42 @@ export class MoveToLocationService {
     if (!scene?.locationId) return [];
 
     const connections = await this.connectionRepo.find({
-      where: { fromLocationId: scene.locationId, isHidden: false },
-      relations: ["toLocation"],
+      where: [
+        { fromLocationId: scene.locationId, isHidden: false },
+        { toLocationId: scene.locationId, isHidden: false },
+      ],
+      relations: ["fromLocation", "toLocation"],
     });
     const currentPhaseIndex = await this.getCurrentPhaseIndex(sessionId);
 
-    return connections.map((c) => ({
-      connectionId: c.id,
-      toLocationId: c.toLocationId,
-      toLocationName: c.toLocation?.name ?? "(?)",
-      toLocationType: c.toLocation?.type ?? "unknown",
-      travelTime: c.travelTime ?? null,
-      description: c.description ?? null,
-      isLocked: !c.isAccessibleAtPhase(currentPhaseIndex),
-      unlockedAtPhase: c.unlockedAtPhase ?? null,
-      requirements: c.requirements ?? {},
-    }));
+    const seenDestinationIds = new Set<string>();
+    const travels: AvailableTravel[] = [];
+    for (const connection of connections) {
+      const destination =
+        connection.fromLocationId === scene.locationId
+          ? connection.toLocation
+          : connection.fromLocation;
+      const destinationId =
+        connection.fromLocationId === scene.locationId
+          ? connection.toLocationId
+          : connection.fromLocationId;
+      if (destinationId === scene.locationId || seenDestinationIds.has(destinationId)) {
+        continue;
+      }
+      seenDestinationIds.add(destinationId);
+      travels.push(
+        this.toAvailableTravel(
+          connection,
+          destination ?? ({
+            id: destinationId,
+            name: "(?)",
+            type: "unknown",
+          } as LocationEntity),
+          currentPhaseIndex,
+        ),
+      );
+    }
+    return travels;
   }
 
   async listReachableLocations(
@@ -449,10 +470,10 @@ export class MoveToLocationService {
       };
     }
 
-    const directConnection = await this.connectionRepo.findOne({
-      where: { fromLocationId, toLocationId: target.id },
-      relations: ["toLocation"],
-    });
+    const directConnection = await this.findVisibleConnectionBetween(
+      fromLocationId,
+      target.id,
+    );
     if (directConnection) {
       const directTravel = this.toAvailableTravel(
         directConnection,
@@ -654,7 +675,7 @@ export class MoveToLocationService {
   ): AvailableTravel {
     return {
       connectionId: connection.id,
-      toLocationId: connection.toLocationId,
+      toLocationId: toLocation.id,
       toLocationName: toLocation.name,
       toLocationType: toLocation.type,
       travelTime: connection.travelTime ?? null,
@@ -663,6 +684,25 @@ export class MoveToLocationService {
       unlockedAtPhase: connection.unlockedAtPhase ?? null,
       requirements: connection.requirements ?? {},
     };
+  }
+
+  private async findVisibleConnectionBetween(
+    fromLocationId: string,
+    toLocationId: string,
+  ): Promise<LocationConnectionEntity | null> {
+    const direct = await this.connectionRepo.findOne({
+      where: { fromLocationId, toLocationId, isHidden: false },
+      relations: ["fromLocation", "toLocation"],
+    });
+    if (direct) return direct;
+    return this.connectionRepo.findOne({
+      where: {
+        fromLocationId: toLocationId,
+        toLocationId: fromLocationId,
+        isHidden: false,
+      },
+      relations: ["fromLocation", "toLocation"],
+    });
   }
 
   private toReachableLocation(travel: AvailableTravel): ReachableLocation {
@@ -854,6 +894,13 @@ export class MoveToLocationService {
       const list = outgoing.get(connection.fromLocationId) ?? [];
       list.push(connection);
       outgoing.set(connection.fromLocationId, list);
+      const reverseList = outgoing.get(connection.toLocationId) ?? [];
+      reverseList.push({
+        ...connection,
+        fromLocationId: connection.toLocationId,
+        toLocationId: connection.fromLocationId,
+      } as LocationConnectionEntity);
+      outgoing.set(connection.toLocationId, reverseList);
     }
 
     const queue: Array<{ id: string; path: string[] }> = [
