@@ -32,6 +32,31 @@ describe("DialogueActionGeneratorService stakes", () => {
     );
   });
 
+  it("limita a 3 skills priorizando os stakes mais altos", () => {
+    const actions = service.generate({
+      characterSkills: [
+        "history",
+        "investigation",
+        "persuasion",
+        "intimidation",
+        "insight",
+      ],
+      characterKnownFacts: [],
+      npc: { id: "npc-1", name: "Goma", dialogueWeight: "plot" },
+    });
+
+    const skillIds = actions
+      .filter((action) => action.type === "skill")
+      .map((action) => action.actionId);
+    // plot NPC: persuasion/intimidation = high; demais = narrative.
+    // Top 3 por stakes; empate por ordem canônica de SKILL_LABELS.
+    expect(skillIds).toEqual([
+      "skill_persuasion",
+      "skill_intimidation",
+      "skill_insight",
+    ]);
+  });
+
   it("gera press via talk_npc quando ha knowledgeScope nao revelado", () => {
     const actions = service.generate({
       characterSkills: [],

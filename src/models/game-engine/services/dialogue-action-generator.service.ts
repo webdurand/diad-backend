@@ -71,8 +71,9 @@ export class DialogueActionGeneratorService {
     const actions: DialogueAction[] = [];
     const seen = new Set<string>();
 
-    for (const social of SOCIAL_ACTIONS) {
-      if (social.firstTurnOnly && input.includeGreeting === false) continue;
+    // Conjunto enxuto: até 3 ações sociais de conteúdo (por prioridade fixa)
+    // + "Despedir-se" sempre presente. Determinístico (sem aleatório).
+    for (const social of this.prioritizeSocial(input)) {
       this.pushOnce(actions, seen, {
         actionId: social.key,
         type: "social",
@@ -81,11 +82,14 @@ export class DialogueActionGeneratorService {
       });
     }
 
+    // Perícias: top 3 por stakes (high > narrative > casual > passive),
+    // empate pela ordem canônica de SKILL_LABELS.
+    const skillActions: DialogueAction[] = [];
     for (const skill of input.characterSkills ?? []) {
       const normalized = this.normalizeSlug(skill);
       const label = SKILL_LABELS[normalized];
       if (!label) continue;
-      this.pushOnce(actions, seen, {
+      skillActions.push({
         actionId: `skill_${normalized}`,
         type: "skill",
         label,
@@ -99,8 +103,11 @@ export class DialogueActionGeneratorService {
         },
       });
     }
+    for (const action of this.prioritizeSkills(skillActions).slice(0, 3)) {
+      this.pushOnce(actions, seen, action);
+    }
 
-    for (const topic of this.safePublicTopics(input)) {
+    for (const topic of this.safePublicTopics(input).slice(0, 3)) {
       this.pushOnce(actions, seen, {
         actionId: `topic_${topic}`,
         type: "topic",
@@ -147,6 +154,65 @@ export class DialogueActionGeneratorService {
     });
 
     return actions;
+  }
+
+  /**
+   * Ordem de prioridade fixa das ações sociais de conteúdo (cap 3) +
+   * "Despedir-se" sempre ao final. `social_greet` só entra no primeiro turno.
+   */
+  private prioritizeSocial(
+    input: DialogueActionGenerationInput,
+  ): Array<{ key: string; label: string }> {
+    const includeGreeting = input.includeGreeting !== false;
+    const byKey = new Map(SOCIAL_ACTIONS.map((action) => [action.key, action]));
+    const priority = [
+      "social_greet",
+      "social_ask_more",
+      "social_question",
+      "social_convince",
+      "social_change_topic",
+    ];
+    const content = priority
+      .filter((key) => key !== "social_greet" || includeGreeting)
+      .map((key) => byKey.get(key))
+      .filter((action): action is (typeof SOCIAL_ACTIONS)[number] =>
+        Boolean(action),
+      )
+      .slice(0, 3);
+    const farewell = byKey.get("social_farewell");
+    return farewell ? [...content, farewell] : content;
+  }
+
+  /**
+   * Ordena perícias por stakes (decrescente); empate pela ordem canônica de
+   * SKILL_LABELS, mantendo determinismo.
+   */
+  private prioritizeSkills(skillActions: DialogueAction[]): DialogueAction[] {
+    const labelOrder = Object.keys(SKILL_LABELS);
+    return [...skillActions].sort((a, b) => {
+      const rankDelta =
+        this.rankStakes(a.payload?.stakes as string | undefined) -
+        this.rankStakes(b.payload?.stakes as string | undefined);
+      if (rankDelta !== 0) return -rankDelta;
+      return (
+        labelOrder.indexOf(a.payload?.skill as string) -
+        labelOrder.indexOf(b.payload?.skill as string)
+      );
+    });
+  }
+
+  private rankStakes(stakes?: string): number {
+    switch (stakes) {
+      case "high":
+        return 3;
+      case "narrative":
+        return 2;
+      case "passive":
+        return 0;
+      case "casual":
+      default:
+        return 1;
+    }
   }
 
   private safePublicTopics(input: DialogueActionGenerationInput): string[] {
