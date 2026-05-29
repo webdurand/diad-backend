@@ -14,6 +14,7 @@ import { GameSessionEntity } from "./game-session.entity";
 import { MonsterEntity } from "./monster.entity";
 import { LocationEntity } from "./location.entity";
 import { LocationPoiEntity } from "./location-poi.entity";
+import type { NpcRoutineSlots } from "src/lib/routine-slot";
 
 export type NpcProfileDepth = "core" | "supporting" | "expanded";
 
@@ -95,6 +96,9 @@ export class NpcEntity {
   @ManyToOne(() => LocationPoiEntity, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "home_poi_id" })
   homePoi?: LocationPoiEntity;
+
+  @Column({ name: "routine_slots", type: "jsonb", nullable: true })
+  routineSlots?: NpcRoutineSlots | null;
 
   @Column({ type: "jsonb", default: [] })
   tags: string[];

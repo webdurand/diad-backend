@@ -67,6 +67,11 @@ export class AiProxyService {
     onChunk?: (chunk: Buffer) => void,
     onEnd?: () => Promise<void> | void,
     extraHeaders?: Record<string, string>,
+    onError?: (info: {
+      kind: "upstream" | "network" | "timeout";
+      status: number | null;
+      body: string;
+    }) => void | Promise<void>,
   ): Promise<void> {
     return new Promise((resolve) => {
       const url = new URL(`${this.agentBaseUrl}${path}`);
@@ -84,6 +89,52 @@ export class AiProxyService {
       let lastChunkAt: number | null = null;
       let clientClosed = false;
       let normalEndStarted = false;
+      let settled = false;
+      let timedOut = false;
+
+      const streamTimeoutMs = Number(
+        this.configService.get<string>("AI_STREAM_TIMEOUT_MS") ?? "60000",
+      );
+
+      // Single terminal failure path: notifies the caller (so it can log /
+      // persist a fallback), emits a *recoverable* typed SSE error frame that
+      // the client treats as retryable, then ends the stream exactly once.
+      const failStream = async (
+        info: {
+          kind: "upstream" | "network" | "timeout";
+          status: number | null;
+          body: string;
+        },
+        friendly: string,
+        code: string,
+      ): Promise<void> => {
+        if (settled) return;
+        settled = true;
+        try {
+          await onError?.(info);
+        } catch (cbErr: any) {
+          this.logger.warn("http.client.stream.on_error_failed", {
+            "upstream.service": "diad-agents",
+            "error.message": cbErr?.message,
+          });
+        }
+        if (!clientClosed) {
+          try {
+            res.write(
+              `data: ${JSON.stringify({
+                type: "error",
+                code,
+                content: friendly,
+                recoverable: true,
+              })}\n\n`,
+            );
+          } catch {
+            /* client already disconnected */
+          }
+        }
+        res.end();
+        resolve();
+      };
 
       const onClientClose = () => {
         if (clientClosed) return;
@@ -132,11 +183,15 @@ export class AiProxyService {
                 "upstream.service": "diad-agents",
                 "upstream.body": errorBody,
               });
-              res.write(
-                `data: ${JSON.stringify({ type: "error", content: errorBody })}\n\n`,
+              void failStream(
+                {
+                  kind: "upstream",
+                  status: proxyRes.statusCode ?? null,
+                  body: errorBody,
+                },
+                "O Mestre está indisponível neste instante. Tentando novamente…",
+                "UPSTREAM_UNAVAILABLE",
               );
-              res.end();
-              resolve();
             });
             return;
           }
@@ -180,6 +235,7 @@ export class AiProxyService {
 
           proxyRes.on("end", () => {
             normalEndStarted = true;
+            settled = true;
             this.logger.info("http.client.stream.end", {
               "upstream.service": "diad-agents",
               "url.path": url.pathname,
@@ -220,11 +276,32 @@ export class AiProxyService {
               "stream.bytes_written": bytesWritten,
               "stream.duration_ms": Date.now() - startedAt,
             });
-            res.end();
-            resolve();
+            void failStream(
+              {
+                kind: timedOut ? "timeout" : "network",
+                status: null,
+                body: err?.message ?? "",
+              },
+              timedOut
+                ? "O Mestre demorou demais para responder. Tentando novamente…"
+                : "A conexão com o Mestre falhou. Tentando novamente…",
+              timedOut ? "UPSTREAM_TIMEOUT" : "UPSTREAM_STREAM_ERROR",
+            );
           });
         },
       );
+
+      req.setTimeout(streamTimeoutMs, () => {
+        timedOut = true;
+        this.logger.warn("http.client.stream.timeout", {
+          "upstream.service": "diad-agents",
+          "url.path": url.pathname,
+          "stream.timeout_ms": streamTimeoutMs,
+          "stream.chunk_count": chunkCount,
+          "stream.bytes_written": bytesWritten,
+        });
+        req.destroy(new Error(`stream timeout after ${streamTimeoutMs}ms`));
+      });
 
       req.on("error", (err) => {
         this.logger.error("http.client.stream.network_error", err, {
@@ -234,13 +311,17 @@ export class AiProxyService {
           "stream.bytes_written": bytesWritten,
           "stream.duration_ms": Date.now() - startedAt,
         });
-        if (!clientClosed) {
-          res.write(
-            `data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`,
-          );
-        }
-        res.end();
-        resolve();
+        void failStream(
+          {
+            kind: timedOut ? "timeout" : "network",
+            status: null,
+            body: err?.message ?? "",
+          },
+          timedOut
+            ? "O Mestre demorou demais para responder. Tentando novamente…"
+            : "Não foi possível contatar o Mestre. Tentando novamente…",
+          timedOut ? "UPSTREAM_TIMEOUT" : "UPSTREAM_NETWORK_ERROR",
+        );
       });
 
       req.write(payload);

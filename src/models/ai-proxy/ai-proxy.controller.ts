@@ -1142,6 +1142,13 @@ export class AiProxyController {
           "X-Service-Key": this.aiProxyService.getServiceKey(),
           "X-User-Id": req.user!.id,
         },
+        (info) => {
+          earlyReturnReason = `upstream_${info.kind}:${info.status ?? "na"}`;
+          this.logger.warn(
+            `Narrative turn upstream failure session=${sessionId} ` +
+              `kind=${info.kind} status=${info.status ?? "na"}`,
+          );
+        },
       );
     } catch (err: any) {
       earlyReturnReason = `error:${err?.name ?? "unknown"}`;
@@ -1309,6 +1316,13 @@ export class AiProxyController {
         {
           "X-Service-Key": this.aiProxyService.getServiceKey(),
           "X-User-Id": req.user!.id,
+        },
+        (info) => {
+          earlyReturnReason = `upstream_${info.kind}:${info.status ?? "na"}`;
+          this.logger.warn(
+            `Narrative start upstream failure session=${sessionId} ` +
+              `kind=${info.kind} status=${info.status ?? "na"}`,
+          );
         },
       );
     } catch (err: any) {

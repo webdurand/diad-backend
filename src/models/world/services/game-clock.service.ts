@@ -22,6 +22,7 @@ export interface AdvanceTimeOptions {
     | "travel_arrival";
 
   traceId?: string;
+  sessionId?: string;
 }
 
 export interface AdvanceTimeResult {
@@ -124,7 +125,7 @@ export class GameClockService {
         module: "GameClockService.advanceTime",
         traceId,
       },
-      scope: { campaignId },
+      scope: { campaignId, sessionId: options.sessionId },
       payload: {
         campaignId,
         deltaHours: hours,
@@ -144,6 +145,35 @@ export class GameClockService {
       await this.eventBus.publish(envelope);
     } catch {
 
+    }
+
+    if (previousTimeOfDay !== newTimeOfDay) {
+      const periodChanged = this.factory.build({
+        eventCategory: "WorldEvent",
+        eventType: "period_changed",
+        source: {
+          service: "diad-backend",
+          module: "GameClockService.advanceTime",
+          traceId,
+        },
+        scope: { campaignId, sessionId: options.sessionId },
+        payload: {
+          campaignId,
+          previousTimeOfDay,
+          timeOfDay: newTimeOfDay,
+          previousPeriod: previousTimeOfDay,
+          newPeriod: newTimeOfDay,
+          trigger,
+          currentInGameDateTime: saved.currentInGameDateTime.toISOString(),
+        },
+        narrativeDescriptor: `Período mudou: ${previousTimeOfDay} → ${newTimeOfDay}.`,
+      });
+
+      try {
+        await this.eventBus.publish(periodChanged);
+      } catch {
+
+      }
     }
 
     return {

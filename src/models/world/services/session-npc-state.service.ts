@@ -71,6 +71,7 @@ export class SessionNpcStateService {
   ): Promise<SessionNpcStateEntity[]> {
     return this.repo.find({
       where: { gameSessionId, currentLocationId: locationId },
+      relations: ["npc", "currentPoi"],
     });
   }
 

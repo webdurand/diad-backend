@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { SceneNpcEntity } from "src/entities/scene-npc.entity";
+import { SessionEventEntity } from "src/entities/session-event.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationPoiService } from "src/models/world/services/location-poi.service";
 import { SceneService } from "src/models/session/services/scene.service";
@@ -110,6 +111,17 @@ export interface AvailablePoisEnvelope {
     tags: string[];
     knowledgeScope: string[];
   }>;
+  pendingBarks: Array<{
+    npcId: string;
+    text: string;
+    source: string;
+  }>;
+  nearbyKnownNpcs: Array<{
+    npcId: string;
+    name: string;
+    currentPoiId: string;
+    currentPoiName: string;
+  }>;
   availableActions: DialogueAction[];
   pois: AvailablePoi[];
 }
@@ -121,6 +133,8 @@ export class MoveToPoiService {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     @InjectRepository(SceneNpcEntity)
     private readonly sceneNpcRepo: Repository<SceneNpcEntity>,
+    @InjectRepository(SessionEventEntity)
+    private readonly eventRepo: Repository<SessionEventEntity>,
     private readonly poiService: LocationPoiService,
     private readonly sceneService: SceneService,
     private readonly eventBus: EventBusService,
@@ -305,6 +319,8 @@ export class MoveToPoiService {
         currentPoi: null,
         movementLock: null,
         npcsPresent: [],
+        pendingBarks: [],
+        nearbyKnownNpcs: [],
         availableActions: [],
         pois: [],
       };
@@ -342,6 +358,15 @@ export class MoveToPoiService {
       }));
     const characterSkills = await this.loadProficientSkillSlugs(session, userId);
     const characterKnownFacts = this.extractKnownFacts(sceneNpcs);
+    const [pendingBarks, nearbyKnownNpcs] = await Promise.all([
+      this.buildPendingBarks(sessionId, npcsPresent),
+      this.buildNearbyKnownNpcs(
+        sessionId,
+        currentScene.locationId,
+        currentScene.poiId ?? null,
+        new Set(npcsPresent.map((npc) => npc.id)),
+      ),
+    ]);
     return {
       sceneId: currentScene.id,
       sceneMode,
@@ -362,6 +387,8 @@ export class MoveToPoiService {
         : null,
       movementLock: this.movementLockService.getForScene(currentScene),
       npcsPresent,
+      pendingBarks,
+      nearbyKnownNpcs,
       availableActions: this.buildAvailableActions({
         sceneMode,
         npcsPresent,
@@ -374,6 +401,85 @@ export class MoveToPoiService {
       }),
       pois: pois.map((poi) => this.toAvailablePoi(poi)),
     };
+  }
+
+  private async buildPendingBarks(
+    sessionId: string,
+    npcsPresent: AvailablePoisEnvelope["npcsPresent"],
+  ): Promise<AvailablePoisEnvelope["pendingBarks"]> {
+    const presentIds = new Set(npcsPresent.map((npc) => npc.id));
+    if (presentIds.size === 0) return [];
+
+    const recentWitnessEvents = await this.eventRepo.find({
+      where: {
+        sessionId,
+        eventType: "npc_witnessed_event",
+      },
+      order: { createdAt: "DESC" },
+      take: 12,
+    });
+    for (const event of recentWitnessEvents) {
+      const witnessId = event.eventPayload?.witnessId;
+      if (typeof witnessId !== "string" || !presentIds.has(witnessId)) continue;
+      return [
+        {
+          npcId: witnessId,
+          text: this.buildWitnessBark(event),
+          source: "witness",
+        },
+      ];
+    }
+    return [];
+  }
+
+  private buildWitnessBark(event: SessionEventEntity): string {
+    const severity = Number(event.eventPayload?.severity ?? 1);
+    if (severity >= 3) return "Soube da sua façanha. Essas coisas correm rápido por aqui.";
+    if (severity === 2) return "Ouvi dizer que você esteve no meio de uma confusão séria.";
+    return "Alguém comentou que você se meteu em problema por perto.";
+  }
+
+  private async buildNearbyKnownNpcs(
+    sessionId: string,
+    locationId: string,
+    currentPoiId: string | null,
+    presentNpcIds: Set<string>,
+  ): Promise<AvailablePoisEnvelope["nearbyKnownNpcs"]> {
+    if (!currentPoiId) return [];
+    const states = await this.sessionNpcStateService.listByLocation(
+      sessionId,
+      locationId,
+    );
+    return states
+      .filter((state) => {
+        if (state.status !== "alive") return false;
+        if (!state.currentPoiId || state.currentPoiId === currentPoiId) return false;
+        if (presentNpcIds.has(state.npcId)) return false;
+        if (!state.npc || state.npc.profileDepth !== "core") return false;
+        if (!state.currentPoi?.name) return false;
+        return this.partyCanLocateNpc(state.npc.knowledgeScope, locationId, state.currentPoiId);
+      })
+      .slice(0, 6)
+      .map((state) => ({
+        npcId: state.npcId,
+        name: state.npc.name,
+        currentPoiId: state.currentPoiId!,
+        currentPoiName: state.currentPoi!.name,
+      }));
+  }
+
+  private partyCanLocateNpc(
+    knowledgeScope: string[] | undefined,
+    locationId: string,
+    poiId: string,
+  ): boolean {
+    const scope = knowledgeScope ?? [];
+    return (
+      scope.length === 0 ||
+      scope.includes("public") ||
+      scope.includes(`location:${locationId}`) ||
+      scope.includes(`poi:${poiId}`)
+    );
   }
 
   private async findSessionForEnvelope(

@@ -85,6 +85,8 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
     const clientReq: any = new EventEmitter();
     clientReq.write = jest.fn();
     clientReq.end = jest.fn();
+    clientReq.setTimeout = jest.fn();
+    clientReq.destroy = jest.fn();
 
     mockHttpRequestFn.mockImplementation((_options: any, cb?: any): any => {
 
@@ -195,7 +197,7 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
     expect(fake.res.flush).toHaveBeenCalledTimes(2);
   });
 
-  it("em statusCode != 200, emite chunk de erro e encerra", async () => {
+  it("em statusCode != 200, emite chunk de erro RECUPERÁVEL, notifica onError e encerra", async () => {
     mockHttpRequest({
       statusCode: 500,
       chunks: ["internal agent failure"],
@@ -208,12 +210,29 @@ describe("AiProxyService.pipeStream — SSE passthrough", () => {
       makeCls(),
     );
     const fake = makeFakeRes();
+    const onError = jest.fn();
 
-    await svc.pipeStream("/solo/abc/message", { message: "hi" }, fake.res);
+    await svc.pipeStream(
+      "/solo/abc/message",
+      { message: "hi" },
+      fake.res,
+      undefined,
+      undefined,
+      undefined,
+      onError,
+    );
 
     const out = fake.joinedOutput();
+    // Client gets a typed, recoverable error frame (not the raw upstream body).
     expect(out).toContain('"type":"error"');
-    expect(out).toContain("internal agent failure");
+    expect(out).toContain('"recoverable":true');
+    expect(out).not.toContain("internal agent failure");
+    // The raw upstream detail is delivered to the caller via onError instead.
+    expect(onError).toHaveBeenCalledWith({
+      kind: "upstream",
+      status: 500,
+      body: "internal agent failure",
+    });
     expect(fake.isEnded()).toBe(true);
   });
 });

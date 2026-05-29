@@ -21,6 +21,7 @@ import type {
   NpcStoryHookRelatedEntityType,
   NpcStoryHookType,
 } from "src/entities/npc-story-hook.entity";
+import type { NpcRoutineSlots } from "src/lib/routine-slot";
 
 type JsonObject = Record<string, unknown>;
 
@@ -77,6 +78,7 @@ interface NpcSeed {
   location_name?: string | null;
   homeLocationId?: string | null;
   homePoiId?: string | null;
+  routineSlots?: NpcRoutineSlots | null;
   personality_big5?: Record<string, number>;
   motivation?: string;
   knowledge_scope?: string[];
@@ -296,6 +298,7 @@ export class WorldSeedMaterializationService {
         locations,
         body.startingLocationName,
         poisByLocation,
+        campaign.contentBudget?.maxNpcs,
       );
       stats.npcs = npcs.size;
 
@@ -544,6 +547,13 @@ export class WorldSeedMaterializationService {
       poi.isSecret = isSecret;
       poi.isKnownToParty = seed.isKnownToParty ?? !isSecret;
       poi.isLocked = seed.isLocked ?? false;
+      // Spec 047: o default de `kind` no banco é "wild" — sem kind explícito todo
+      // POI nasce "wild" e os filtros de residente (`kind !== "wild"`) rejeitam
+      // todos → NPCs ficam sem home_poi_id e a cena nasce vazia. Derivamos um kind
+      // sensato: POIs acessíveis em locais civilizados viram "safe" (residentes
+      // moram lá); locais selvagens/dungeon e POIs secretos/trancados ficam "wild"
+      // (preserva encontros aleatórios). Um kind já significativo é mantido.
+      poi.kind = this.derivePoiKind(location, poi);
       poi.sortOrder = seed.sortOrder ?? index;
       poi.properties = seed.properties ?? poi.properties ?? {};
 
@@ -563,6 +573,7 @@ export class WorldSeedMaterializationService {
         firstKnown.isDefault = true;
         firstKnown.isSecret = false;
         firstKnown.isKnownToParty = true;
+        if (firstKnown.kind === "wild") firstKnown.kind = "safe";
         await repo.save(firstKnown);
         return;
       }
@@ -574,6 +585,7 @@ export class WorldSeedMaterializationService {
           name: "Area principal",
           slug: this.generateSlug("Area principal"),
           type: "area",
+          kind: "safe",
           isDefault: true,
           isKnownToParty: true,
           sortOrder: -1000,
@@ -702,14 +714,21 @@ export class WorldSeedMaterializationService {
     locations: Map<string, LocationEntity>,
     startingLocationName?: string | null,
     poisByLocation: Map<string, LocationPoiEntity[]> = new Map(),
+    maxNpcs?: number,
   ): Promise<Map<string, NpcEntity>> {
     const repo = manager.getRepository(NpcEntity);
     const byName = this.mapByName(await repo.find({ where: { campaignId } }));
     const fallbackLocation = this.resolveStartingLocation(locations, startingLocationName);
     const archetypes = manager.getRepository(NpcArchetypeTemplateEntity);
-    const fallbackPoiCounters = new Map<string, number>();
+    const allocatedSeeds = this.allocateNpcsByPoiKind(
+      seeds,
+      locations,
+      fallbackLocation,
+      poisByLocation,
+      maxNpcs,
+    );
 
-    for (const [index, seed] of seeds.entries()) {
+    for (const [index, seed] of allocatedSeeds.entries()) {
       const name = clean(seed.name);
       if (!name) continue;
 
@@ -757,9 +776,16 @@ export class WorldSeedMaterializationService {
         seed.profile_depth ?? npc.profileDepth ?? (index < 12 ? "core" : "supporting");
       npc.homeLocationId = homeLocation?.id ?? npc.homeLocationId;
       npc.homePoiId =
-        clean(seed.homePoiId) ||
-        npc.homePoiId ||
-        this.pickFallbackPoiId(homeLocation?.id, poisByLocation, fallbackPoiCounters);
+        this.cleanResidentPoiId(seed.homePoiId, poisByLocation) ||
+        this.cleanResidentPoiId(npc.homePoiId, poisByLocation) ||
+        this.pickFallbackPoiId(homeLocation?.id, poisByLocation, index) ||
+        this.pickDefaultResidentPoiId(homeLocation?.id, poisByLocation);
+      npc.routineSlots =
+        seed.routineSlots ??
+        npc.routineSlots ??
+        (npc.profileDepth === "core"
+          ? this.buildRoutineSlots(homeLocation?.id, npc.homePoiId, poisByLocation)
+          : null);
       npc.tags = uniqueStrings([...(npc.tags ?? []), ...tags]);
 
       const saved = await repo.save(npc);
@@ -769,20 +795,307 @@ export class WorldSeedMaterializationService {
     return byName;
   }
 
+  private allocateNpcsByPoiKind(
+    seeds: NpcSeed[],
+    locations: Map<string, LocationEntity>,
+    fallbackLocation: LocationEntity | undefined,
+    poisByLocation: Map<string, LocationPoiEntity[]>,
+    maxNpcs?: number,
+  ): NpcSeed[] {
+    const budget =
+      maxNpcs && Number.isFinite(maxNpcs)
+        ? Math.max(0, Math.floor(maxNpcs))
+        : Math.max(seeds.length, 12);
+    const result: NpcSeed[] = [];
+    const consumed = new Set<number>();
+    const usedNames = new Set<string>();
+    const poiCounters = new Map<string, number>();
+    const add = (seed: NpcSeed, seedIndex?: number): boolean => {
+      if (result.length >= budget) return false;
+      const name = clean(seed.name);
+      if (!name) return false;
+      const key = normalizeKey(name);
+      if (usedNames.has(key)) return false;
+      usedNames.add(key);
+      if (seedIndex !== undefined) consumed.add(seedIndex);
+      result.push(seed);
+      return true;
+    };
+    const allPois = Array.from(poisByLocation.values())
+      .flat()
+      .filter((poi) => poi.isKnownToParty && !poi.isLocked)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const socialPois = allPois.filter((poi) => poi.kind === "social");
+    const objectivePois = allPois.filter(
+      (poi) => poi.kind === "objective" && poi.phaseIndex !== null && poi.phaseIndex !== undefined,
+    );
+    const safePois = allPois.filter((poi) => poi.kind === "safe");
+
+    for (const poi of socialPois) {
+      const match = this.takeSeedForPoi(seeds, consumed, poi);
+      add(match ? match.seed : this.createAnchorNpcSeed(poi, "social"), match?.index);
+    }
+
+    for (const poi of objectivePois) {
+      const match = this.takeSeedForPoi(seeds, consumed, poi);
+      add(match ? match.seed : this.createAnchorNpcSeed(poi, "objective"), match?.index);
+    }
+
+    for (const [index, seed] of seeds.entries()) {
+      if (consumed.has(index)) continue;
+      const profileDepth = seed.profile_depth ?? (index < 12 ? "core" : undefined);
+      if (profileDepth !== "core") continue;
+      const homeLocation = this.resolveNpcHomeLocation(seed, locations, fallbackLocation);
+      add(
+        {
+          ...seed,
+          profile_depth: "core",
+          homeLocationId: seed.homeLocationId ?? homeLocation?.id,
+          homePoiId:
+            this.cleanResidentPoiId(seed.homePoiId, poisByLocation) ||
+            this.pickFallbackPoiId(homeLocation?.id, poisByLocation, index),
+        },
+        index,
+      );
+    }
+
+    for (const poi of safePois) {
+      const match = this.takeUnconsumedSeed(seeds, consumed, (seed) => {
+        const homeLocation = this.resolveNpcHomeLocation(seed, locations, fallbackLocation);
+        return homeLocation?.id === poi.locationId;
+      });
+      if (!match) continue;
+      add(
+        {
+          ...match.seed,
+          homeLocationId: match.seed.homeLocationId ?? poi.locationId,
+          homePoiId: this.cleanResidentPoiId(match.seed.homePoiId, poisByLocation) || poi.id,
+        },
+        match.index,
+      );
+    }
+
+    for (const [index, seed] of seeds.entries()) {
+      if (consumed.has(index)) continue;
+      const homeLocation = this.resolveNpcHomeLocation(seed, locations, fallbackLocation);
+      add(
+        {
+          ...seed,
+          homeLocationId: seed.homeLocationId ?? homeLocation?.id,
+          homePoiId:
+            this.cleanResidentPoiId(seed.homePoiId, poisByLocation) ||
+            this.pickFallbackPoiId(homeLocation?.id, poisByLocation, poiCounters),
+        },
+        index,
+      );
+    }
+
+    return result;
+  }
+
+  private takeSeedForPoi(
+    seeds: NpcSeed[],
+    consumed: Set<number>,
+    poi: LocationPoiEntity,
+  ): { seed: NpcSeed; index: number } | null {
+    for (const [index, seed] of seeds.entries()) {
+      if (consumed.has(index)) continue;
+      if (clean(seed.homePoiId) === poi.id) {
+        return { seed, index };
+      }
+    }
+    return null;
+  }
+
+  private takeUnconsumedSeed(
+    seeds: NpcSeed[],
+    consumed: Set<number>,
+    predicate: (seed: NpcSeed) => boolean,
+  ): { seed: NpcSeed; index: number } | null {
+    for (const [index, seed] of seeds.entries()) {
+      if (consumed.has(index)) continue;
+      if (predicate(seed)) return { seed, index };
+    }
+    return null;
+  }
+
+  private resolveNpcHomeLocation(
+    seed: NpcSeed,
+    locations: Map<string, LocationEntity>,
+    fallbackLocation: LocationEntity | undefined,
+  ): LocationEntity | undefined {
+    return (
+      (seed.homeLocationId
+        ? Array.from(locations.values()).find(
+            (location) => location.id === seed.homeLocationId,
+          )
+        : undefined) ??
+      (seed.location_name ? locations.get(normalizeKey(seed.location_name)) : undefined) ??
+      fallbackLocation
+    );
+  }
+
+  private createAnchorNpcSeed(
+    poi: LocationPoiEntity,
+    kind: "social" | "objective",
+  ): NpcSeed {
+    const role = this.anchorRoleForPoi(poi, kind);
+    return {
+      name: `${role.name} de ${poi.name}`,
+      title: role.title,
+      role: role.tag,
+      profile_depth: "core",
+      archetype_slug: role.archetypeSlug,
+      homeLocationId: poi.locationId,
+      homePoiId: poi.id,
+      knowledge_scope: [`poi:${poi.id}`, `location:${poi.locationId}`],
+      reputation_seed: {
+        tags: ["anchor", `poi:${poi.kind}`, role.tag],
+      },
+    };
+  }
+
+  private anchorRoleForPoi(
+    poi: LocationPoiEntity,
+    kind: "social" | "objective",
+  ): { name: string; title: string; tag: string; archetypeSlug?: string } {
+    const text = normalizeKey(
+      `${poi.name} ${poi.type} ${(poi.tags ?? []).join(" ")} ${poi.narrativeRole ?? ""}`,
+    );
+    if (kind === "objective") {
+      return {
+        name: "Guardião",
+        title: "Âncora da fase",
+        tag: "objective-anchor",
+        archetypeSlug: "guard",
+      };
+    }
+    if (text.includes("templo") || text.includes("shrine") || text.includes("sant")) {
+      return {
+        name: "Sacerdote",
+        title: "Sacerdote local",
+        tag: "priest",
+        archetypeSlug: "priest",
+      };
+    }
+    if (text.includes("mercado") || text.includes("market") || text.includes("loja")) {
+      return {
+        name: "Mercador",
+        title: "Mercador local",
+        tag: "merchant",
+        archetypeSlug: "commoner",
+      };
+    }
+    return {
+      name: "Taverneiro",
+      title: "Anfitrião local",
+      tag: "bartender",
+      archetypeSlug: "commoner",
+    };
+  }
+
   private pickFallbackPoiId(
     locationId: string | undefined,
     poisByLocation: Map<string, LocationPoiEntity[]>,
-    fallbackPoiCounters: Map<string, number>,
+    fallbackPoiCounters: Map<string, number> | number,
   ): string | undefined {
     if (!locationId) return undefined;
     const pois = poisByLocation.get(locationId) ?? [];
     if (pois.length === 0) return undefined;
 
-    const assignablePois = pois.filter((poi) => poi.isKnownToParty && !poi.isLocked);
-    const candidates = assignablePois.length > 0 ? assignablePois : pois;
-    const count = fallbackPoiCounters.get(locationId) ?? 0;
-    fallbackPoiCounters.set(locationId, count + 1);
+    const assignablePois = pois.filter(
+      (poi) => poi.isKnownToParty && !poi.isLocked && poi.kind !== "wild",
+    );
+    const candidates = assignablePois.length > 0 ? assignablePois : [];
+    if (candidates.length === 0) return undefined;
+    const count =
+      fallbackPoiCounters instanceof Map
+        ? fallbackPoiCounters.get(locationId) ?? 0
+        : fallbackPoiCounters;
+    if (fallbackPoiCounters instanceof Map) {
+      fallbackPoiCounters.set(locationId, count + 1);
+    }
     return candidates[count % candidates.length]?.id;
+  }
+
+  // Spec 047: deriva o `kind` de um POI a partir do tipo do local. Locais
+  // civilizados (city/district/building/region) hospedam residentes → POIs
+  // acessíveis viram "safe"; locais selvagens/dungeon mantêm "wild" (encontros
+  // aleatórios). POIs secretos/trancados são sempre "wild". Mantém um kind já
+  // significativo (social/objective) se presente.
+  private derivePoiKind(
+    location: LocationEntity,
+    poi: LocationPoiEntity,
+  ): "safe" | "wild" | "objective" | "social" {
+    if (poi.kind && poi.kind !== "wild") return poi.kind;
+    if (poi.isSecret || poi.isLocked || !poi.isKnownToParty) return "wild";
+    const locType = normalizeKey(location.type ?? "");
+    const wildLocation =
+      locType.includes("wild") ||
+      locType.includes("selv") ||
+      locType.includes("dungeon") ||
+      locType.includes("masmorra") ||
+      locType.includes("floresta") ||
+      locType.includes("forest") ||
+      locType.includes("cave") ||
+      locType.includes("caverna") ||
+      locType.includes("ruin") ||
+      locType.includes("ruina");
+    return wildLocation ? "wild" : "safe";
+  }
+
+  // Spec 047: último recurso quando a cadeia normal (seed/explícito/fallback por
+  // kind) não resolve um POI — garante que um residente com home_location sempre
+  // ganhe um home_poi. Prefere POIs acessíveis e não-wild; cai para o default.
+  private pickDefaultResidentPoiId(
+    locationId: string | undefined,
+    poisByLocation: Map<string, LocationPoiEntity[]>,
+  ): string | undefined {
+    if (!locationId) return undefined;
+    const pois = (poisByLocation.get(locationId) ?? [])
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    if (pois.length === 0) return undefined;
+    const accessible = pois.filter((poi) => poi.isKnownToParty && !poi.isLocked);
+    const nonWild = accessible.filter((poi) => poi.kind !== "wild");
+    const pool =
+      nonWild.length > 0 ? nonWild : accessible.length > 0 ? accessible : pois;
+    return (pool.find((poi) => poi.isDefault) ?? pool[0])?.id;
+  }
+
+  private cleanResidentPoiId(
+    poiId: string | null | undefined,
+    poisByLocation: Map<string, LocationPoiEntity[]>,
+  ): string | undefined {
+    const cleaned = clean(poiId);
+    if (!cleaned) return undefined;
+    for (const pois of poisByLocation.values()) {
+      const poi = pois.find((candidate) => candidate.id === cleaned);
+      if (poi?.kind === "wild") return undefined;
+    }
+    return cleaned;
+  }
+
+  private buildRoutineSlots(
+    locationId: string | undefined,
+    homePoiId: string | undefined,
+    poisByLocation: Map<string, LocationPoiEntity[]>,
+  ): NpcRoutineSlots | null {
+    if (!locationId || !homePoiId) return null;
+    const pois = (poisByLocation.get(locationId) ?? [])
+      .filter((poi) => poi.isKnownToParty && !poi.isLocked && poi.kind !== "wild")
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const uniquePoiIds = uniqueStrings([
+      homePoiId,
+      ...pois.map((poi) => poi.id),
+    ]);
+    if (uniquePoiIds.length < 2) return null;
+    return {
+      morning: uniquePoiIds[0],
+      afternoon: uniquePoiIds[1] ?? uniquePoiIds[0],
+      evening: uniquePoiIds[2] ?? uniquePoiIds[0],
+      night: uniquePoiIds[3] ?? uniquePoiIds[0],
+    };
   }
 
   private async persistLoreEntries(

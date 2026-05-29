@@ -15,6 +15,7 @@ import { QuestService } from "src/models/world/services/quest.service";
 import type { CreateQuestDto } from "src/models/world/services/quest.service";
 import { PhaseService } from "src/models/world/services/phase.service";
 import { SessionNpcStateService } from "src/models/world/services/session-npc-state.service";
+import { LocationPoiService } from "src/models/world/services/location-poi.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 const STARTING_LOCATION_TYPE_PRIORITY: Record<string, number> = {
@@ -86,6 +87,7 @@ export class SessionService {
     private readonly questService: QuestService,
     private readonly phaseService: PhaseService,
     private readonly sessionNpcStateService: SessionNpcStateService,
+    private readonly poiService: LocationPoiService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(SessionService.name);
@@ -182,18 +184,46 @@ export class SessionService {
         select: ["npcId"],
       });
       const existingIds = new Set(existing.map((s) => s.npcId));
-      const states = npcs
-        .filter((npc) => !existingIds.has(npc.id))
-        .map((npc) =>
+
+      // Spec 047: quando home_poi_id é null mas home_location_id existe (mundos
+      // gerados antes da atribuição de POI, ou cujo seed só definiu a location),
+      // caímos no POI default da home_location. Sem isso, currentPoiId fica null,
+      // listByPoi nunca encontra o NPC e a cena nasce vazia (figurantes anônimos
+      // com [FALA] inline). Memoiza por location → 1 chamada por location.
+      const defaultPoiByLocation = new Map<string, string | null>();
+      const resolveCurrentPoiId = async (
+        npc: Pick<NpcEntity, "homeLocationId" | "homePoiId">,
+      ): Promise<string | undefined> => {
+        if (npc.homePoiId) return npc.homePoiId;
+        if (!npc.homeLocationId) return undefined;
+        if (!defaultPoiByLocation.has(npc.homeLocationId)) {
+          try {
+            const poi = await this.poiService.ensureDefaultForLocation(
+              campaignId,
+              npc.homeLocationId,
+            );
+            defaultPoiByLocation.set(npc.homeLocationId, poi.id);
+          } catch {
+            defaultPoiByLocation.set(npc.homeLocationId, null);
+          }
+        }
+        return defaultPoiByLocation.get(npc.homeLocationId) ?? undefined;
+      };
+
+      const states: SessionNpcStateEntity[] = [];
+      for (const npc of npcs) {
+        if (existingIds.has(npc.id)) continue;
+        states.push(
           this.npcStateRepo.create({
             gameSessionId: sessionId,
             npcId: npc.id,
             status: "alive",
             disposition: "neutral",
             currentLocationId: npc.homeLocationId,
-            currentPoiId: npc.homePoiId,
+            currentPoiId: await resolveCurrentPoiId(npc),
           }),
         );
+      }
       if (states.length > 0) await this.npcStateRepo.save(states);
     } catch (err) {
       this.logger.warn("session.initialize_canonical_npc_states.failed", {

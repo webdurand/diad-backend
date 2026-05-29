@@ -401,6 +401,13 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Reusar NPC existente em vez de criar duplicado (Princípio bounded world).",
     domain: "npc",
   },
+  [ErrorCode.NPC_ROUTINE_INVALID_SLOT]: {
+    httpStatus: 422,
+    defaultTitle: "Invalid NPC routine slot",
+    defaultHint:
+      "Routine slots aceitos: morning, afternoon, evening, night; o POI alvo deve existir na campanha.",
+    domain: "npc",
+  },
   [ErrorCode.ROLE_HINT_INVALID]: {
     httpStatus: 400,
     defaultTitle: "Invalid role hint",

@@ -734,6 +734,7 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
       expect.any(Function),
       expect.any(Function),
       expect.any(Object),
+      expect.any(Function),
     );
   });
 

@@ -66,6 +66,8 @@ import { StoryArcService } from "./services/story-arc.service";
 import { MissionPullListener } from "./listeners/mission-pull.listener";
 import { MissionPanelCacheListener } from "./listeners/mission-panel-cache.listener";
 import { PhaseGateListener } from "./listeners/phase-gate.listener";
+import { NpcRoutineListener } from "./listeners/npc-routine.listener";
+import { WorldPulseListener } from "./listeners/world-pulse.listener";
 import { NpcRelationshipService } from "./services/npc-relationship.service";
 
 import { AmbianceService } from "./services/ambiance.service";
@@ -81,6 +83,7 @@ import { CompanionTemplatesController } from "./companion-templates.controller";
 import { CompanionTemplateService } from "./services/companion-template.service";
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 import { WorldSeedMaterializationService } from "./services/world-seed-materialization.service";
+import { WorldPulseService } from "./services/world-pulse.service";
 
 @Module({
   imports: [
@@ -161,12 +164,15 @@ import { WorldSeedMaterializationService } from "./services/world-seed-materiali
     NpcWealthService,
     CompanionTemplateService,
     WorldSeedMaterializationService,
+    WorldPulseService,
 
     CampaignIdPipe,
     QuestDefeatListener,
     GainReputationListener,
     QuestRewardListener,
     MissionPullListener,
+    WorldPulseListener,
+    NpcRoutineListener,
     MissionPanelCacheListener,
     PhaseGateListener,
   ],
@@ -192,6 +198,7 @@ import { WorldSeedMaterializationService } from "./services/world-seed-materiali
     NpcWealthService,
     CompanionTemplateService,
     WorldSeedMaterializationService,
+    WorldPulseService,
   ],
 })
 export class WorldModule implements OnModuleInit {
@@ -201,6 +208,8 @@ export class WorldModule implements OnModuleInit {
     private readonly gainReputationListener: GainReputationListener,
     private readonly questRewardListener: QuestRewardListener,
     private readonly missionPullListener: MissionPullListener,
+    private readonly worldPulseListener: WorldPulseListener,
+    private readonly npcRoutineListener: NpcRoutineListener,
     private readonly missionPanelCacheListener: MissionPanelCacheListener,
     private readonly phaseGateListener: PhaseGateListener,
   ) {}
@@ -210,6 +219,8 @@ export class WorldModule implements OnModuleInit {
     this.eventBus.registerListener(this.gainReputationListener);
     this.eventBus.registerListener(this.questRewardListener);
     this.eventBus.registerListener(this.missionPullListener);
+    this.eventBus.registerListener(this.worldPulseListener);
+    this.eventBus.registerListener(this.npcRoutineListener);
     this.eventBus.registerListener(this.missionPanelCacheListener);
     this.eventBus.registerListener(this.phaseGateListener);
   }

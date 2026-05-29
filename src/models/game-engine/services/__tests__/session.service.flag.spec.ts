@@ -22,6 +22,7 @@ function makeService(sessionRepo: Record<string, any>) {
     { create: jest.fn(), revealQuest: jest.fn() } as any,
     { bootstrapStoryFirst: jest.fn() } as any,
     { listByPoi: jest.fn().mockResolvedValue([]) } as any,
+    { ensureDefaultForLocation: jest.fn() } as any,
     makeLogger() as any,
   );
 }

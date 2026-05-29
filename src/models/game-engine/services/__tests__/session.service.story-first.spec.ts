@@ -39,6 +39,7 @@ function makeService(overrides: Record<string, any> = {}): SessionService {
     questService as any,
     phaseService as any,
     sessionNpcStateService as any,
+    { ensureDefaultForLocation: jest.fn() } as any,
     logger as any,
   );
 }

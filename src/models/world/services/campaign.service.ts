@@ -143,7 +143,7 @@ export class CampaignService {
       npcExpansionBudgetUsed: 0,
       contentBudget:
         dto.dmMode !== "human" && (dto.scope ?? "solo") === "solo"
-          ? { maxScenes: 12, maxNpcs: 30, maxLocations: 6 }
+          ? { maxScenes: 12, maxNpcs: 45, maxLocations: 6 }
           : undefined,
     });
 

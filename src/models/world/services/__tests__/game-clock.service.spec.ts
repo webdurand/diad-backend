@@ -79,6 +79,50 @@ describe("GameClockService", () => {
     expect(bus.publish).toHaveBeenCalled();
   });
 
+  it("advanceTime emite period_changed quando cruza fronteira de periodo", async () => {
+    const { repo } = makeRepo({
+      currentInGameDateTime: new Date("2026-04-27T08:00:00.000Z"),
+    });
+    const factory = new EventEnvelopeFactory(undefined);
+    const bus = makeBus();
+    const svc = new GameClockService(repo, bus, factory);
+
+    await svc.advanceTime(CAMPAIGN_ID, {
+      hours: 4,
+      sessionId: "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(bus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventCategory: "WorldEvent",
+        eventType: "period_changed",
+        scope: expect.objectContaining({
+          campaignId: CAMPAIGN_ID,
+          sessionId: "22222222-2222-4222-8222-222222222222",
+        }),
+        payload: expect.objectContaining({
+          previousTimeOfDay: "morning",
+          timeOfDay: "afternoon",
+        }),
+      }),
+    );
+  });
+
+  it("advanceTime nao emite period_changed quando permanece no mesmo periodo", async () => {
+    const { repo } = makeRepo({
+      currentInGameDateTime: new Date("2026-04-27T08:00:00.000Z"),
+    });
+    const factory = new EventEnvelopeFactory(undefined);
+    const bus = makeBus();
+    const svc = new GameClockService(repo, bus, factory);
+
+    await svc.advanceTime(CAMPAIGN_ID, { hours: 1 });
+
+    expect(bus.publish).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "period_changed" }),
+    );
+  });
+
   it("advanceTime avança 24h aumentando daysPassed", async () => {
     const { repo } = makeRepo({
       currentInGameDateTime: new Date("2026-04-27T08:00:00.000Z"),

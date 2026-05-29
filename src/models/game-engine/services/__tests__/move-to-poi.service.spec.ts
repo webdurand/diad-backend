@@ -11,6 +11,7 @@ function makeService(overrides: Record<string, any> = {}): MoveToPoiService {
   return new MoveToPoiService(
     overrides.sessionRepo as any,
     overrides.sceneNpcRepo as any,
+    (overrides.eventRepo ?? { find: jest.fn().mockResolvedValue([]) }) as any,
     overrides.poiService as any,
     overrides.sceneService as any,
     (overrides.eventBus ?? { publish: jest.fn() }) as any,
@@ -31,7 +32,10 @@ function makeService(overrides: Record<string, any> = {}): MoveToPoiService {
       generate: jest.fn().mockReturnValue([]),
     }) as any,
     (overrides.characterSheetService ?? { computeSheet: jest.fn() }) as any,
-    overrides.sessionNpcStateService as any,
+    (overrides.sessionNpcStateService ?? {
+      listByPoi: jest.fn().mockResolvedValue([]),
+      listByLocation: jest.fn().mockResolvedValue([]),
+    }) as any,
   );
 }
 
@@ -181,6 +185,7 @@ describe("MoveToPoiService POI hub envelope", () => {
         listByPoi: jest.fn().mockResolvedValue([
           { npcId: "npc-1", status: "alive" },
         ]),
+        listByLocation: jest.fn().mockResolvedValue([]),
       },
     });
 
@@ -226,6 +231,7 @@ describe("MoveToPoiService POI hub envelope", () => {
         },
         sessionNpcStateService: {
           listByPoi: jest.fn().mockResolvedValue([]),
+          listByLocation: jest.fn().mockResolvedValue([]),
         },
       });
 

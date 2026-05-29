@@ -24,6 +24,7 @@ import {
   QuestEntity,
   QuestObjectiveEntity,
   SessionStoryArcStateEntity,
+  SessionEventEntity,
   UserEntity,
   CharacterEquipmentEntity,
 } from "src/entities";
@@ -186,6 +187,7 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
       QuestEntity,
       QuestObjectiveEntity,
       SessionStoryArcStateEntity,
+      SessionEventEntity,
       UserEntity,
 
       RestSessionEntity,
@@ -207,7 +209,7 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
     ]),
     AuthModule,
     CharactersModule,
-    WorldModule,
+    forwardRef(() => WorldModule),
     SessionModule,
     forwardRef(() => AiProxyModule),
     RealtimeModule,
@@ -387,6 +389,7 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
 
     DiceRollService,
     StartEncounterFromNarrativeService,
+    RandomEncounterMaterializerService,
     DialogueActionGeneratorService,
     OpenModeActionGeneratorService,
   ],

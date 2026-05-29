@@ -109,6 +109,7 @@ describe("movement lock blocking", () => {
     const service = new MoveToPoiService(
       sessionRepo as any,
       {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
       {} as any,
       {} as any,
       {} as any,
@@ -120,7 +121,10 @@ describe("movement lock blocking", () => {
       { generate: jest.fn().mockReturnValue([]) } as any,
       { generate: jest.fn().mockReturnValue([]) } as any,
       { computeSheet: jest.fn() } as any,
-      { listByPoi: jest.fn().mockResolvedValue([]) } as any,
+      {
+        listByPoi: jest.fn().mockResolvedValue([]),
+        listByLocation: jest.fn().mockResolvedValue([]),
+      } as any,
     );
 
     const result = await service.run({
@@ -157,6 +161,7 @@ describe("movement lock blocking", () => {
           },
         ]),
       } as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
       { listKnownByLocation: jest.fn().mockResolvedValue([]) } as any,
       { getActive: jest.fn().mockResolvedValue(currentScene) } as any,
       {} as any,
@@ -168,7 +173,10 @@ describe("movement lock blocking", () => {
       { generate: jest.fn().mockReturnValue([]) } as any,
       { generate: jest.fn().mockReturnValue([]) } as any,
       { computeSheet: jest.fn() } as any,
-      { listByPoi: jest.fn().mockResolvedValue([]) } as any,
+      {
+        listByPoi: jest.fn().mockResolvedValue([]),
+        listByLocation: jest.fn().mockResolvedValue([]),
+      } as any,
     );
 
     const result = await service.listAvailablePois("sess-1");
