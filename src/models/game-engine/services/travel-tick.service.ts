@@ -23,6 +23,14 @@ const LOCATION_VISIT_AUDIENCES: EventAudience[] = [
   "HUD",
 ];
 
+// Spec 053: viagem deixa de ser clicker — cada tick pode rolar um evento.
+// threatLevel 'alto' → overlay de encounter no front; 'baixo' → banner ambient.
+export interface TravelTickEvent {
+  kind: "ambient" | "hostile";
+  threatLevel: "baixo" | "medio" | "alto";
+  descriptor: string;
+}
+
 export type TravelTickResult =
   | { status: "no_travel" }
   | {
@@ -34,6 +42,7 @@ export type TravelTickResult =
       status: "in_transit";
       travelState: SessionTravelState;
       progressPercent: number;
+      travelEvent?: TravelTickEvent | null;
     }
   | {
       status: "ready_to_arrive";
@@ -142,6 +151,8 @@ export class TravelTickService {
       }
     }
 
+    const travelEvent = this.rollTravelEvent(travel);
+
     session.travelState = travel;
     await this.sessionRepo.save(session);
     await this.invalidateActiveSceneCache(sessionId);
@@ -158,6 +169,7 @@ export class TravelTickService {
       "travel.progress": progressPercent,
       "travel.destination_biome": travel.destinationBiome,
       "travel.ready_to_arrive": justReachedDestination,
+      "travel.event": travelEvent?.kind ?? "none",
     });
 
     if (justReachedDestination) {
@@ -172,6 +184,60 @@ export class TravelTickService {
       status: "in_transit",
       travelState: travel,
       progressPercent,
+      travelEvent,
+    };
+  }
+
+  // Spec 053: rolagem de evento por tick. Chance base por bioma + delta de
+  // scout falho (encounterRollDeltaNextTurn, escrito pelo travel-action e
+  // consumido aqui exatamente uma vez). Determinístico via Math.random local
+  // — sem LLM; a prosa do evento é responsabilidade do Narrator no próximo turno.
+  private rollTravelEvent(
+    travel: SessionTravelState & { encounterRollDeltaNextTurn?: number },
+  ): TravelTickEvent | null {
+    const biome = (travel.destinationBiome ?? "road").toLowerCase();
+    const baseChance: Record<string, number> = {
+      road: 2,
+      urban: 1,
+      settlement: 1,
+      city: 1,
+      wilderness: 4,
+      forest: 4,
+      mountain: 5,
+      mountains: 5,
+      desert: 5,
+      swamp: 6,
+      planar: 7,
+      supernatural: 7,
+    };
+    const delta = Math.max(0, travel.encounterRollDeltaNextTurn ?? 0);
+    if (delta > 0) travel.encounterRollDeltaNextTurn = 0;
+    const threshold = (baseChance[biome] ?? 3) + delta * 3;
+    const roll = Math.floor(Math.random() * 20) + 1;
+    if (roll > threshold) return null;
+
+    const hostile = Math.random() < 0.35;
+    const dangerous = (baseChance[biome] ?? 3) >= 5;
+    const descriptorTable: Record<"ambient" | "hostile", string[]> = {
+      ambient: [
+        "Um mercador solitário acena da beira do caminho.",
+        "Rastros recentes cruzam a trilha — grandes demais para serem de cervo.",
+        "Uma fogueira abandonada ainda solta fumaça fina.",
+        "Um viajante encapuzado observa o grupo passar, sem dizer palavra.",
+      ],
+      hostile: [
+        "Vultos se movem em paralelo à trilha, cercando devagar.",
+        "Um assobio curto corta o ar — sinal de emboscada.",
+        "O cheiro de carniça fica forte demais para ser coincidência.",
+      ],
+    };
+    const kind: "ambient" | "hostile" = hostile ? "hostile" : "ambient";
+    const options = descriptorTable[kind];
+    const descriptor = options[Math.floor(Math.random() * options.length)];
+    return {
+      kind,
+      threatLevel: hostile ? (dangerous ? "alto" : "medio") : "baixo",
+      descriptor,
     };
   }
 

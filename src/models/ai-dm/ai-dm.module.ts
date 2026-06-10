@@ -10,6 +10,9 @@ import {
   GameSessionEntity,
   AiUsageLogEntity,
   SessionNpcStateEntity,
+  LocationEntity,
+  LocationConnectionEntity,
+  SceneEntity,
 } from "src/entities";
 import { AuthModule } from "../auth/auth.module";
 import { WorldModule } from "../world/world.module";
@@ -35,6 +38,9 @@ import { AiUsageService } from "./services/ai-usage.service";
       GameSessionEntity,
       AiUsageLogEntity,
       SessionNpcStateEntity,
+  LocationEntity,
+  LocationConnectionEntity,
+  SceneEntity,
     ]),
     AuthModule,
     WorldModule,

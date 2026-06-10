@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -164,6 +165,21 @@ export class AiDmController {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
+  }
+
+  // Spec 053: consumo do payoff — o turno que paga a divida narrativa marca a
+  // decisao como realizada (fim do markPayoffRealized orfao).
+  @Patch("sessions/:sessionId/narrative-decisions/:decisionId/payoff")
+  async markDecisionPayoff(
+    @Param("sessionId") sessionId: string,
+    @Param("decisionId") decisionId: string,
+    @Body() body: { sceneNumber?: number },
+  ) {
+    void sessionId;
+    return this.decisionService.markPayoffRealized(
+      decisionId,
+      Math.max(0, Math.floor(body?.sceneNumber ?? 0)),
+    );
   }
 
   @Get("sessions/:sessionId/narrative-decisions/top")

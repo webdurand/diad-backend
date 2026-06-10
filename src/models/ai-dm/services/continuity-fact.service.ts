@@ -12,6 +12,9 @@ import {
   ContinuityFactType,
 } from "src/entities/continuity-fact.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
+import { LocationEntity } from "src/entities/location.entity";
+import { LocationConnectionEntity } from "src/entities/location-connection.entity";
+import { SceneEntity } from "src/entities/scene.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
 
@@ -78,6 +81,12 @@ export class ContinuityFactService {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     @InjectRepository(SessionNpcStateEntity)
     private readonly npcStateRepo: Repository<SessionNpcStateEntity>,
+    @InjectRepository(LocationEntity)
+    private readonly locationRepo: Repository<LocationEntity>,
+    @InjectRepository(LocationConnectionEntity)
+    private readonly connectionRepo: Repository<LocationConnectionEntity>,
+    @InjectRepository(SceneEntity)
+    private readonly sceneRepo: Repository<SceneEntity>,
     private readonly sceneContextCache: SceneContextCacheService,
   ) {}
 
@@ -202,6 +211,11 @@ export class ContinuityFactService {
     sessionId: string,
     fact: ContinuityFactEntity,
   ): Promise<void> {
+    if (fact.factType === "location_discovered") {
+      await this.materializeDiscoveredLocation(sessionId, fact);
+      return;
+    }
+
     if (fact.factType !== "npc_death" || !fact.entityId) return;
 
     let state = await this.npcStateRepo.findOne({
@@ -218,6 +232,83 @@ export class ContinuityFactService {
     }
     await this.npcStateRepo.save(state);
     this.sceneContextCache.invalidateAll();
+  }
+
+  // Spec 053 (fim dos "dois mundos"): lugar que a prosa descobre vira entidade
+  // clicável. location_discovered com nome não-resolvido e confidence alta
+  // materializa Location stub + conexão a partir da location da cena ativa —
+  // reachable-locations deixa de contradizer o texto.
+  private async materializeDiscoveredLocation(
+    sessionId: string,
+    fact: ContinuityFactEntity,
+  ): Promise<void> {
+    const name = (fact.entityName ?? "").trim();
+    if (fact.entityId || name.length < 3) return;
+    if ((fact.confidence ?? 0) < 0.6) return;
+
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+      select: { id: true, campaignId: true },
+    });
+    if (!session?.campaignId) return;
+
+    const slug = this.slugify(name);
+    const existing = await this.locationRepo
+      .createQueryBuilder("l")
+      .where("l.campaign_id = :campaignId", { campaignId: session.campaignId })
+      .andWhere("(l.slug = :slug OR LOWER(l.name) = LOWER(:name))", {
+        slug,
+        name,
+      })
+      .getOne();
+    if (existing) return;
+
+    const activeScene = await this.sceneRepo.findOne({
+      where: { sessionId, isActive: true },
+      select: ["id", "locationId"],
+    });
+
+    const created = await this.locationRepo.save(
+      this.locationRepo.create({
+        campaignId: session.campaignId,
+        name,
+        slug,
+        type: "wilderness",
+        description: fact.summary?.slice(0, 400) ?? null,
+        tags: ["discovered_in_prose"],
+        properties: {
+          materializedFrom: "continuity_fact",
+          factId: fact.id,
+          sourceSceneId: fact.sceneId ?? null,
+        },
+        sortOrder: 999,
+      } as Partial<LocationEntity>),
+    );
+
+    if (activeScene?.locationId) {
+      await this.connectionRepo.save(
+        this.connectionRepo.create({
+          fromLocationId: activeScene.locationId,
+          toLocationId: created.id,
+          description: `Caminho mencionado em cena: ${name}.`,
+          travelTime: "3",
+          isHidden: false,
+          isLocked: false,
+          requirements: {},
+        } as Partial<LocationConnectionEntity>),
+      );
+    }
+    this.sceneContextCache.invalidateAll();
+  }
+
+  private slugify(value: string): string {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
   }
 
   private scoreFact(
