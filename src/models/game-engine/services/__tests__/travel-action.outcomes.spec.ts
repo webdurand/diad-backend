@@ -46,6 +46,11 @@ function makeService(travel = makeTravel()) {
     characterIds: ["char-1"],
     travelState: travel,
   });
+  const characterStateService = {
+    getRestHealingContext: jest
+      .fn()
+      .mockResolvedValue({ maxHp: 20, conMod: 2 }),
+  };
   const service = new TravelActionService(
     sessionRepo as any,
     stateRepo as any,
@@ -54,6 +59,7 @@ function makeService(travel = makeTravel()) {
     connectionRepo as any,
     contextCache as any,
     dice as any,
+    characterStateService as any,
     eventBus as any,
     envelopeFactory as any,
   );

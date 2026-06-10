@@ -14,6 +14,7 @@ import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factor
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
 import { DiceService } from "./dice.service";
 import {
   parseTravelTimeToMinutes,
@@ -132,6 +133,7 @@ export class TravelActionService {
     private readonly connectionRepo: Repository<LocationConnectionEntity>,
     private readonly contextCache: SceneContextCacheService,
     private readonly dice: DiceService,
+    private readonly characterStateService: CharacterStateService,
     @Optional()
     private readonly eventBus?: EventBusService,
     @Optional()
@@ -290,11 +292,16 @@ export class TravelActionService {
         state.spell_slots_used = {};
         state.feature_uses_used = {};
         state.last_long_rest_at = new Date();
+        // RAW (PHB 2014/2024): long rest restaura todo o HP.
+        const healed = await this.applyRestHealing(state, characterId, "long");
         await this.stateRepo.save(state);
         consequences.push({
           type: "exhaustion",
           value: { from: before, to: state.exhaustion_level, rawTrack: "1-6" },
         });
+        if (healed > 0) {
+          consequences.push({ type: "rest_applied", value: { hpHealed: healed } });
+        }
       }
     } else if (state) {
       const hdSpent = await this.spendShortRestHitDice(
@@ -303,9 +310,14 @@ export class TravelActionService {
         input.hdToSpend ?? {},
       );
       state.last_short_rest_at = new Date();
+      // RAW: cada HD gasto cura roll(dado) + CON mod (mínimo 0 por dado).
+      const healed = await this.applyRestHealing(state, characterId, "short", hdSpent);
       await this.stateRepo.save(state);
       if (Object.keys(hdSpent).length > 0) {
         consequences.push({ type: "hd_consumed", value: hdSpent });
+      }
+      if (healed > 0) {
+        consequences.push({ type: "rest_applied", value: { hpHealed: healed } });
       }
     }
 
@@ -511,6 +523,53 @@ export class TravelActionService {
     const config = session.config as Record<string, unknown>;
     const rawEdition = config.edition ?? config.rulesEdition ?? config.ruleset;
     return String(rawEdition).includes("2014") ? "2014" : "2024";
+  }
+
+  // Spec 049: descanso em viagem cura HP de verdade. short = roll de cada HD
+  // gasto + CON mod (mínimo 0 por dado); long = HP cheio (RAW ambas edições).
+  private async applyRestHealing(
+    state: CharacterStateEntity,
+    characterId: string | null,
+    restType: TravelRestType,
+    hdSpent: Record<string, number> = {},
+  ): Promise<number> {
+    if (!characterId) return 0;
+    const { maxHp, conMod } = await this.characterStateService.getRestHealingContext(
+      characterId,
+    );
+    const before = state.current_hp;
+    if (restType === "long") {
+      state.current_hp = maxHp;
+      if (state.current_hp > 0) {
+        state.death_saves_success = 0;
+        state.death_saves_fail = 0;
+      }
+      return Math.max(0, state.current_hp - before);
+    }
+
+    let healed = 0;
+    for (const [die, count] of Object.entries(hdSpent)) {
+      const sides = Number(die.replace(/^d/i, ""));
+      const rolls = Math.max(0, Math.floor(count));
+      if (!Number.isFinite(sides) || sides <= 0 || rolls <= 0) continue;
+      for (let i = 0; i < rolls; i++) {
+        let roll: number;
+        try {
+          roll = this.dice.rollExpression(`1d${sides}`).total;
+        } catch {
+          roll = Math.ceil(sides / 2);
+        }
+        healed += Math.max(0, roll + conMod);
+      }
+    }
+    if (healed > 0) {
+      state.current_hp = Math.min(maxHp, state.current_hp + healed);
+      if (state.current_hp > 0) {
+        state.death_saves_success = 0;
+        state.death_saves_fail = 0;
+      }
+    }
+    return Math.max(0, state.current_hp - before);
   }
 
   private async spendShortRestHitDice(

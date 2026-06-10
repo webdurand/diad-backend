@@ -296,6 +296,19 @@ export class FateLadderService {
 
 
 
+      // Spec 049: custos mecânicos do preço viram estado real, não só descritor.
+      if (change === "cost_applied=exhaustion_plus_2_perm") {
+        const before = state.exhaustion_level ?? 0;
+        state.exhaustion_level = Math.min(6, before + 2);
+        dirty = true;
+        applied.push({
+          change,
+          applied: true,
+          reason: `exhaustion ${before} -> ${state.exhaustion_level} (track 1-6)`,
+        });
+        continue;
+      }
+
       applied.push({
         change,
         applied: false,

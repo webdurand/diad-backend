@@ -112,9 +112,28 @@ function releaseIdempotency(key: string): void {
   inFlightRequests.delete(key);
 }
 
+// Lock por SESSÃO (spec 049): a idempotência acima só barra o MESMO payload;
+// dois turnos diferentes em paralelo geravam narrações contraditórias e cenas
+// duplicadas. Enquanto um stream narra, qualquer outro turno da sessão é 409.
+// TTL alto é só rede de segurança caso o stream morra sem passar pelo finally.
+const SESSION_TURN_LOCK_TTL_MS = 180_000;
+const sessionTurnLocks = new Map<string, number>();
+
+function tryAcquireSessionTurnLock(sessionId: string): boolean {
+  const now = Date.now();
+  const expiresAt = sessionTurnLocks.get(sessionId);
+  if (expiresAt && expiresAt > now) return false;
+  sessionTurnLocks.set(sessionId, now + SESSION_TURN_LOCK_TTL_MS);
+  return true;
+}
+
+function releaseSessionTurnLock(sessionId: string): void {
+  sessionTurnLocks.delete(sessionId);
+}
 
 export function __resetIdempotencyForTests(): void {
   inFlightRequests.clear();
+  sessionTurnLocks.clear();
 }
 
 @Controller("ai")
@@ -849,6 +868,19 @@ export class AiProxyController {
       res.end();
       return;
     }
+    if (!tryAcquireSessionTurnLock(sessionId)) {
+      releaseIdempotency(idempotencyKey);
+      res.statusCode = 409;
+      res.write(
+        `data: ${JSON.stringify({
+          type: "error",
+          code: ErrorCode.NARRATIVE_TURN_IN_PROGRESS,
+          content: "O Mestre ainda está narrando o turno anterior — aguarde.",
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
 
     try {
       const ctx = await this.resumeService.assemble(sessionId, {
@@ -1157,6 +1189,7 @@ export class AiProxyController {
       res.end();
     } finally {
       releaseIdempotency(idempotencyKey);
+      releaseSessionTurnLock(sessionId);
       const tEnd = performance.now();
       const prePersistMs =
         tAgentsCallStart > 0 ? Math.round(tAgentsCallStart - tStart) : null;
@@ -1221,6 +1254,19 @@ export class AiProxyController {
           code: ErrorCode.IDEMPOTENCY_CACHE_MISS_AFTER_RACE,
           content:
             "A abertura desta sessão já está em processamento — aguarde a primeira resposta.",
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+    if (!tryAcquireSessionTurnLock(sessionId)) {
+      releaseIdempotency(idempotencyKey);
+      res.statusCode = 409;
+      res.write(
+        `data: ${JSON.stringify({
+          type: "error",
+          code: ErrorCode.NARRATIVE_TURN_IN_PROGRESS,
+          content: "O Mestre ainda está narrando — aguarde a cena atual terminar.",
         })}\n\n`,
       );
       res.end();
@@ -1332,6 +1378,7 @@ export class AiProxyController {
       res.end();
     } finally {
       releaseIdempotency(idempotencyKey);
+      releaseSessionTurnLock(sessionId);
       const tEnd = performance.now();
       const firstSseMs =
         tFirstSse > 0 ? Math.round(tFirstSse - tStart) : null;

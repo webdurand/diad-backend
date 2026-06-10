@@ -41,6 +41,11 @@ function makeService() {
   const dice = { roll: jest.fn(() => 10) };
   const eventBus = { publish: jest.fn() };
   const envelopeFactory = { build: jest.fn((input) => input) };
+  const characterStateService = {
+    getRestHealingContext: jest
+      .fn()
+      .mockResolvedValue({ maxHp: 20, conMod: 2 }),
+  };
   const service = new TravelActionService(
     sessionRepo as any,
     stateRepo as any,
@@ -49,6 +54,7 @@ function makeService() {
     connectionRepo as any,
     contextCache as any,
     dice as any,
+    characterStateService as any,
     eventBus as any,
     envelopeFactory as any,
   );

@@ -152,6 +152,24 @@ export class CharacterStateService {
     return next;
   }
 
+  // Contexto mínimo para curas de descanso fora do fluxo updateHp (spec 049:
+  // camp em viagem cura HP de verdade — HD spent = roll + CON mod; long = full).
+  async getRestHealingContext(
+    characterId: string,
+  ): Promise<{ maxHp: number; conMod: number }> {
+    const charAbilities = await this.charAbilityRepo.find({
+      where: { character_id: characterId },
+    });
+    const conAbility = charAbilities.find(
+      (a) => a.ability_score.slug === "con",
+    );
+    const conMod = conAbility
+      ? getAbilityModifier(conAbility.base_score + conAbility.bonus)
+      : 0;
+    const maxHp = await this.computeMaxHp(characterId);
+    return { maxHp, conMod };
+  }
+
   private async computeMaxHp(characterId: string): Promise<number> {
     const charClasses = await this.charClassRepo.find({
       where: { character_id: characterId },

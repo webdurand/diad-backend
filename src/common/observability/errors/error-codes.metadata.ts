@@ -462,6 +462,12 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Pergunte sobre tática, percepção, lembrança do personagem ou regra RAW; não sobre segredos ou números ocultos.",
     domain: "narrative",
   },
+  [ErrorCode.NARRATIVE_TURN_IN_PROGRESS]: {
+    httpStatus: 409,
+    defaultTitle: "Another narrative turn is streaming",
+    defaultHint: "Aguarde a narração atual terminar antes de enviar nova ação.",
+    domain: "narrative",
+  },
   [ErrorCode.BOOKEND_NPC_REFERENCE_VIOLATION]: {
     httpStatus: 422,
     defaultTitle: "Bookend referenced an NPC that is not alive",
