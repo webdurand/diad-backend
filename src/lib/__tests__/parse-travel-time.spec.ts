@@ -12,6 +12,10 @@ describe("parseTravelTimeToMinutes (integer 1-24, hours)", () => {
     ["12", 720],
     ["24", 1440],
     ["  4  ", 240],
+    ["4h", 240],
+    ["4 hours", 240],
+    ["2 horas", 120],
+    ["90 minutes", 90],
   ])("parses %p → %d minutes", (input, expected) => {
     expect(parseTravelTimeToMinutes(input)).toBe(expected);
   });
@@ -23,7 +27,6 @@ describe("parseTravelTimeToMinutes (integer 1-24, hours)", () => {
     ["0", null],
     ["25", null],
     ["abc", null],
-    ["4h", null],
     ["half day", null],
   ])("returns null for invalid %p", (input, expected) => {
     expect(parseTravelTimeToMinutes(input)).toBe(expected);

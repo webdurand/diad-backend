@@ -35,12 +35,23 @@ describe("TravelTickService.tick", () => {
     };
     const locationService = {
       markVisited: jest.fn().mockResolvedValue(undefined),
+      getById: jest.fn().mockResolvedValue({
+        id: "loc-2",
+        name: "Florestas",
+        slug: "florestas",
+      }),
     };
     const gameClockService = {
       advanceTime: jest.fn().mockResolvedValue(undefined),
     };
     const contextCache = {
       invalidate: jest.fn(),
+    };
+    const eventBus = {
+      publish: jest.fn().mockResolvedValue(undefined),
+    };
+    const envelopeFactory = {
+      build: jest.fn((input) => input),
     };
     const service = new TravelTickService(
       sessionRepo as any,
@@ -49,6 +60,8 @@ describe("TravelTickService.tick", () => {
       locationService as any,
       gameClockService as any,
       contextCache as any,
+      eventBus as any,
+      envelopeFactory as any,
       makeLogger() as any,
     );
     return {

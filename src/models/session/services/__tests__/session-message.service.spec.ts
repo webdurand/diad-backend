@@ -179,6 +179,7 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
         saveCalls.push(payload);
         return { id: "msg-uuid", ...payload };
       }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     } as unknown as EntityManager;
 
     const transactionFn = jest.fn(async (cb: (m: EntityManager) => any) => {
@@ -237,6 +238,23 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
 
     expect(result.sequenceNumber).toBe(5);
     expect(ctx.transactionFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("ativa a sessão no primeiro append narrativo ou de ação", async () => {
+    const ctx = buildService({ existingSequence: 0 });
+
+    await ctx.service.append({
+      sessionId: SESSION_ID,
+      userId: USER_ID,
+      kind: "player_action",
+      content: "abro a porta",
+    });
+
+    expect(ctx.txManager.update).toHaveBeenCalledWith(
+      GameSessionEntity,
+      { id: SESSION_ID, status: "lobby" },
+      { status: "active" },
+    );
   });
 
   it("dedup por clientId acontece DENTRO da transação (após lock)", async () => {
@@ -311,6 +329,7 @@ describe("SessionMessageService.append — atomic sequence (spec 027)", () => {
         currentMax = payload.sequenceNumber;
         return { id: `m-${payload.sequenceNumber}`, ...payload };
       }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     } as unknown as EntityManager;
 
     const dataSource = {

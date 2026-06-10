@@ -108,6 +108,7 @@ export class DialogueActionService {
     }
 
     await this.sceneService.addNpcToScene(scene.id, input.npcId, "interlocutor");
+    await this.resetSkillRollCount(scene.id, scene.contextSnapshot);
     const reason =
       input.reason?.trim() || `Conversa com ${sceneNpc.npc.name} em andamento.`;
     const movementLock = await this.movementLockService.setForActiveScene(
@@ -164,6 +165,7 @@ export class DialogueActionService {
     await this.sceneService.update(scene.id, {
       currentInterlocutorNpcId: null,
     });
+    await this.resetSkillRollCount(scene.id, scene.contextSnapshot);
     if (activeLock || scene.currentInterlocutorNpcId) {
       await this.publishDialogueEvent("dialogue_exited", {
         sessionId,
@@ -185,6 +187,25 @@ export class DialogueActionService {
         ? "Você saiu da conversa."
         : "Não havia uma conversa ativa.",
     };
+  }
+
+  private async resetSkillRollCount(
+    sceneId: string,
+    contextSnapshot: Record<string, unknown> | null | undefined,
+  ): Promise<void> {
+    if (
+      typeof contextSnapshot?.dialogueSkillRollCount !== "number" ||
+      contextSnapshot.dialogueSkillRollCount === 0
+    ) {
+      return;
+    }
+    await this.sceneService.update(sceneId, {
+      contextSnapshot: {
+        ...(contextSnapshot ?? {}),
+        dialogueSkillRollCount: 0,
+        dialogueSkillRollLastActionId: null,
+      },
+    });
   }
 
   async registerSkillRoll(

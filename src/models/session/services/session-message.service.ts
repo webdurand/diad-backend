@@ -66,6 +66,14 @@ export class SessionMessageService {
         if (existing) return existing;
       }
 
+      if (dto.kind === "player_action" || dto.kind === "narration") {
+        await manager.update(
+          GameSessionEntity,
+          { id: dto.sessionId, status: "lobby" },
+          { status: "active" },
+        );
+      }
+
       const sequence = await this.computeNextSequence(manager, dto.sessionId);
       const message = manager.create(SessionMessageEntity, {
         sessionId: dto.sessionId,

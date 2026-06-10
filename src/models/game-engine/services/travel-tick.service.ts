@@ -13,6 +13,15 @@ import { SceneContextCacheService } from "src/models/session/services/scene-cont
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
+import { EventAudience } from "src/common/event-bus/event-envelope.types";
+
+const LOCATION_VISIT_AUDIENCES: EventAudience[] = [
+  "Narrator",
+  "Director",
+  "HUD",
+];
 
 export type TravelTickResult =
   | { status: "no_travel" }
@@ -53,6 +62,8 @@ export class TravelTickService {
     private readonly locationService: LocationService,
     private readonly gameClockService: GameClockService,
     private readonly contextCache: SceneContextCacheService,
+    private readonly eventBus: EventBusService,
+    private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(TravelTickService.name);
@@ -193,7 +204,16 @@ export class TravelTickService {
       reason: "travel_arrival",
       skipBudgetIncrement: true,
     });
+    const destination = await this.locationService.getById(toLocationId);
     await this.locationService.markVisited(toLocationId);
+    await this.publishLocationVisited({
+      session,
+      sceneId: newScene.id,
+      fromLocationId,
+      locationId: toLocationId,
+      locationName: toLocationName,
+      locationSlug: destination.slug,
+    });
     await this.invalidateActiveSceneCache(sessionId);
 
     this.logger.info("🚶 travel.arrive", {
@@ -211,5 +231,47 @@ export class TravelTickService {
       toLocationName,
       fromLocationId,
     };
+  }
+
+  private async publishLocationVisited(params: {
+    session: GameSessionEntity;
+    sceneId: string;
+    fromLocationId: string | null;
+    locationId: string;
+    locationName: string;
+    locationSlug?: string | null;
+  }): Promise<void> {
+    if (!params.session.campaignId) return;
+    const envelope = this.envelopeFactory.build({
+      eventCategory: "WorldEvent",
+      eventType: "location_visited",
+      source: {
+        service: "diad-backend",
+        module: "TravelTickService.arrive",
+      },
+      scope: {
+        campaignId: params.session.campaignId,
+        sessionId: params.session.id,
+        sceneId: params.sceneId,
+      },
+      payload: {
+        sessionId: params.session.id,
+        fromLocationId: params.fromLocationId,
+        locationId: params.locationId,
+        locationName: params.locationName,
+        locationSlug: params.locationSlug ?? null,
+      },
+      audiences: LOCATION_VISIT_AUDIENCES,
+      narrativeDescriptor: `Local visitado: ${params.locationName}`,
+    });
+    try {
+      await this.eventBus.publish(envelope);
+    } catch (err) {
+      this.logger.warn("travel.arrive.location_visited_publish_failed", {
+        "session.id": params.session.id,
+        "location.id": params.locationId,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }

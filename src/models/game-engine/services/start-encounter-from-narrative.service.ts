@@ -105,6 +105,7 @@ export class StartEncounterFromNarrativeService {
       input.targetNpcIds ?? [],
       input.targets ?? [],
       input.campaignId ?? null,
+      input.narrativeTrigger ?? null,
     );
 
     let cachedPcSnapshot: {
@@ -118,11 +119,12 @@ export class StartEncounterFromNarrativeService {
 
     if (resolvedIds.length === 0) {
       const sceneCtx = await this.sceneContextService.assembleContext(scene.id);
-      const hostiles = sceneCtx.npcsPresent.filter(
-        (n) => n.disposition === "hostile",
-      );
-      const fallback = hostiles.length > 0 ? hostiles : sceneCtx.npcsPresent;
-      resolvedIds = fallback.map((n) => n.id);
+      // Só hostis declarados entram por inferência. Aliados/neutros presentes
+      // NUNCA são recrutados como inimigos por fallback — sem hostil na cena,
+      // a extração lazy (prosa recente) decide quem é o antagonista real.
+      resolvedIds = sceneCtx.npcsPresent
+        .filter((n) => n.disposition === "hostile")
+        .map((n) => n.id);
       const pc = sceneCtx.playerCharacter;
       if (pc) {
         cachedPcSnapshot = {
@@ -173,7 +175,10 @@ export class StartEncounterFromNarrativeService {
       );
     }
 
-    const npcs = await this.loadAndValidateNpcs(resolvedIds);
+    const npcs = await this.loadAndValidateNpcs(
+      resolvedIds,
+      input.narrativeTrigger ?? null,
+    );
 
 
     let encounter;
@@ -362,6 +367,7 @@ export class StartEncounterFromNarrativeService {
     uuidTargets: string[],
     mixedTargets: string[],
     sessionId: string | null,
+    narrativeTrigger: string | null,
   ): Promise<string[]> {
     const resolved: string[] = [...uuidTargets];
 
@@ -383,7 +389,7 @@ export class StartEncounterFromNarrativeService {
         const stub = await this.npcService.materializeStubFromName(
           sessionId,
           candidate,
-          undefined,
+          narrativeTrigger ?? undefined,
           "hostile",
         );
         resolved.push(stub.id);
@@ -395,7 +401,10 @@ export class StartEncounterFromNarrativeService {
     return resolved;
   }
 
-  private async loadAndValidateNpcs(npcIds: string[]): Promise<NpcEntity[]> {
+  private async loadAndValidateNpcs(
+    npcIds: string[],
+    narrativeTrigger: string | null,
+  ): Promise<NpcEntity[]> {
     const npcs: NpcEntity[] = [];
     for (const npcId of npcIds) {
       const npc = await this.npcRepo.findOne({
@@ -418,7 +427,7 @@ export class StartEncounterFromNarrativeService {
         // (heurística no descritor: nome/título/papel/tags → commoner como base),
         // mesma filosofia do create_npc_from_narrative / _ROLE_DEFAULTS. Assim
         // qualquer NPC vira atacável on-demand, sem depender de backfill.
-        const assigned = await this.ensureNpcCombatStats(npc);
+        const assigned = await this.ensureNpcCombatStats(npc, narrativeTrigger);
         if (!assigned) {
           throw new DomainException(
             ErrorCode.NPC_NOT_HOSTILE_CAPABLE,
@@ -439,11 +448,18 @@ export class StartEncounterFromNarrativeService {
   // a partir de um arquétipo inferido do descritor (cai em "commoner"). Persiste
   // o monsterId para que o NPC fique combatível dali em diante. Retorna false se
   // nem o catálogo de arquétipos/monstros tiver um fallback (config inconsistente).
-  private async ensureNpcCombatStats(npc: NpcEntity): Promise<boolean> {
+  // O narrativeTrigger entra no descritor: "ataco o capanga da cicatriz" carrega
+  // mais sinal de arquétipo que o nome próprio do NPC sozinho.
+  private async ensureNpcCombatStats(
+    npc: NpcEntity,
+    narrativeTrigger: string | null = null,
+  ): Promise<boolean> {
     const descriptor = [
       npc.name,
       npc.title,
       npc.narrativeRole,
+      npc.description,
+      narrativeTrigger,
       ...(npc.tags ?? []),
     ]
       .filter(Boolean)

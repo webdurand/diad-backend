@@ -39,11 +39,31 @@ describe("QuestService story-first events", () => {
     const prereqRepo = {
       find: jest.fn().mockResolvedValue([]),
     };
+    const sceneRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    const sceneNpcRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const eventRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const arcStateRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    const phaseRepo = {
+      count: jest.fn().mockResolvedValue(0),
+    };
     const service = new QuestService(
       questRepo as any,
       objectiveRepo as any,
       prereqRepo as any,
       sessionRepo as any,
+      sceneRepo as any,
+      sceneNpcRepo as any,
+      eventRepo as any,
+      arcStateRepo as any,
+      phaseRepo as any,
       eventBus as any,
       envelopeFactory as any,
     );

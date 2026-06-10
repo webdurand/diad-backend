@@ -116,15 +116,16 @@ export class EventBusService {
         ]);
 
         const sequence = await this.computeNextSequence(manager, sessionId);
+        const summary = envelope.narrativeDescriptor ?? envelope.eventType;
         await manager.save(
           SessionEventEntity,
           manager.create(SessionEventEntity, {
             sessionId,
             sceneId: envelope.scope.sceneId,
             eventType: envelope.eventType,
-            summary: envelope.narrativeDescriptor ?? envelope.eventType,
+            summary,
             details: {},
-            isVisibleToPlayers: true,
+            isVisibleToPlayers: this.isVisibleToPlayers(envelope, summary),
             sequence,
             eventCategory: envelope.eventCategory,
             eventPayload: envelope.payload,
@@ -162,5 +163,22 @@ export class EventBusService {
     const raw = result?.max ?? 0;
     const parsed = typeof raw === "number" ? raw : parseInt(String(raw), 10);
     return (Number.isFinite(parsed) ? parsed : 0) + 1;
+  }
+
+  private isVisibleToPlayers(
+    envelope: EventEnvelope,
+    summary: string,
+  ): boolean {
+    if (envelope.metadata?.visibility === "internal") return false;
+    if (summary.trim().startsWith("_meta")) return false;
+
+    try {
+      const payloadText = JSON.stringify(envelope.payload ?? {});
+      if (payloadText.includes("_meta:")) return false;
+    } catch {
+      return true;
+    }
+
+    return true;
   }
 }

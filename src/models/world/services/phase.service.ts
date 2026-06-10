@@ -1,7 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, In, Repository } from "typeorm";
+import { DataSource, In, IsNull, Repository } from "typeorm";
 import { CampaignEntity } from "src/entities/campaign.entity";
+import { ClockEntity } from "src/entities/clock.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { NpcEntity } from "src/entities/npc.entity";
@@ -42,9 +43,13 @@ export interface GateFacts {
   objectiveStatuses?: Map<string, string>;
   objectiveProgress?: Map<string, number>;
   clockFilledIds?: Set<string>;
+  clockFilledKeys?: Set<string>;
   decisionIds?: Set<string>;
+  decisionKeys?: Set<string>;
   locationVisitedIds?: Set<string>;
+  locationVisitedKeys?: Set<string>;
   combatCompletedIds?: Set<string>;
+  combatCompletedKeys?: Set<string>;
   arcBeatsReached?: Set<string>;
 }
 
@@ -133,7 +138,13 @@ export interface MissionPanelPayload {
     totalConditions: number;
     satisfiedKinds: string[];
   };
-  mainClock: null;
+  mainClock: {
+    id: string;
+    name: string;
+    segments: number;
+    filled: number;
+    type: ClockEntity["type"];
+  } | null;
   pullState: {
     turnsSinceProgress: number;
     threshold: number;
@@ -184,6 +195,8 @@ export class PhaseService {
     private readonly npcRepo: Repository<NpcEntity>,
     @InjectRepository(LocationPoiEntity)
     private readonly poiRepo: Repository<LocationPoiEntity>,
+    @InjectRepository(ClockEntity)
+    private readonly clockRepo: Repository<ClockEntity>,
     private readonly dataSource: DataSource,
     private readonly questService: QuestService,
     private readonly eventBus: EventBusService,
@@ -324,14 +337,19 @@ export class PhaseService {
     });
     if (!quest) throw new NotFoundException("Missão principal não encontrada.");
 
-    const activeObjective = this.selectActiveObjective(quest.objectives ?? []);
-    if (!activeObjective) {
-      throw new NotFoundException("Objetivo ativo da missão principal não encontrado.");
-    }
+    const activeObjective = await this.ensureMissionObjective(
+      sessionId,
+      quest,
+      storyArc,
+      state,
+    );
 
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
     const progress = this.evaluateGate(phase.completionConditions, facts);
     const phaseHistory = await this.loadPhaseHistory(sessionId, storyArc.id);
+    const mainClock = session.campaignId
+      ? await this.loadMainClock(sessionId, session.campaignId)
+      : null;
     const phasesTotal = await this.phaseRepo.count({
       where: { storyArcId: storyArc.id },
     });
@@ -366,7 +384,7 @@ export class PhaseService {
         totalConditions: progress.totalConditions,
         satisfiedKinds: progress.satisfiedKinds,
       },
-      mainClock: null,
+      mainClock,
       pullState: {
         turnsSinceProgress: session.turnsSinceMissionProgress ?? 0,
         threshold: PULL_THRESHOLD,
@@ -455,14 +473,6 @@ export class PhaseService {
         toPhase,
         pending,
         traceId,
-      );
-      throw new DomainException(
-        ErrorCode.PHASE_GATE_PENDING_CONFIRMATION,
-        `Avançar para a fase ${toPhase.name} é irreversível.`,
-        {
-          context: pending as unknown as Record<string, unknown>,
-          hint: "Re-envie POST com body { confirmed: true } para confirmar; ou ignore para continuar na fase atual.",
-        },
       );
     }
 
@@ -654,9 +664,13 @@ export class PhaseService {
           .flatMap((phase) => phase.arcBeats ?? []),
       ),
       clockFilledIds: eventFacts.clockFilledIds,
+      clockFilledKeys: eventFacts.clockFilledKeys,
       decisionIds: eventFacts.decisionIds,
+      decisionKeys: eventFacts.decisionKeys,
       locationVisitedIds: eventFacts.locationVisitedIds,
+      locationVisitedKeys: eventFacts.locationVisitedKeys,
       combatCompletedIds: eventFacts.combatCompletedIds,
+      combatCompletedKeys: eventFacts.combatCompletedKeys,
     };
   }
 
@@ -664,16 +678,24 @@ export class PhaseService {
     Pick<
       GateFacts,
       | "clockFilledIds"
+      | "clockFilledKeys"
       | "decisionIds"
+      | "decisionKeys"
       | "locationVisitedIds"
+      | "locationVisitedKeys"
       | "combatCompletedIds"
+      | "combatCompletedKeys"
     >
   > {
     const facts = {
       clockFilledIds: new Set<string>(),
+      clockFilledKeys: new Set<string>(),
       decisionIds: new Set<string>(),
+      decisionKeys: new Set<string>(),
       locationVisitedIds: new Set<string>(),
+      locationVisitedKeys: new Set<string>(),
       combatCompletedIds: new Set<string>(),
+      combatCompletedKeys: new Set<string>(),
     };
 
     for (const event of events) {
@@ -684,11 +706,23 @@ export class PhaseService {
           payload.id,
           event.aggregateId,
         ]);
+        this.addNormalizedKeys(facts.clockFilledKeys, [
+          payload.clockSlug,
+          payload.clockName,
+          payload.name,
+          event.summary,
+        ]);
       } else if (event.eventType === "narrative_decision_made") {
         this.addFirstString(facts.decisionIds, [
           payload.narrativeDecisionId,
           payload.decisionId,
           event.aggregateId,
+        ]);
+        this.addNormalizedKeys(facts.decisionKeys, [
+          payload.decisionSlug,
+          payload.decisionText,
+          payload.summary,
+          event.summary,
         ]);
       } else if (event.eventType === "location_visited") {
         this.addFirstString(facts.locationVisitedIds, [
@@ -696,11 +730,23 @@ export class PhaseService {
           payload.id,
           event.aggregateId,
         ]);
+        this.addNormalizedKeys(facts.locationVisitedKeys, [
+          payload.locationSlug,
+          payload.locationName,
+          payload.name,
+          event.summary,
+        ]);
       } else if (event.eventType === "encounter_ended") {
         this.addFirstString(facts.combatCompletedIds, [
           payload.encounterId,
           payload.id,
           event.aggregateId,
+        ]);
+        this.addNormalizedKeys(facts.combatCompletedKeys, [
+          payload.encounterSlug,
+          payload.name,
+          payload.encounterName,
+          event.summary,
         ]);
       }
     }
@@ -714,6 +760,35 @@ export class PhaseService {
         typeof candidate === "string" && candidate.length > 0,
     );
     if (value) target.add(value);
+  }
+
+  private addNormalizedKeys(target: Set<string>, values: unknown[]): void {
+    for (const value of values) {
+      const key = this.normalizeFactKey(value);
+      if (key) target.add(key);
+    }
+  }
+
+  private normalizeFactKey(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private hasFact(
+    rawId: string | null,
+    idSet: Set<string> | undefined,
+    keySet: Set<string> | undefined,
+  ): boolean {
+    if (!rawId) return false;
+    if (idSet?.has(rawId)) return true;
+    const key = this.normalizeFactKey(rawId);
+    return Boolean(key && keySet?.has(key));
   }
 
   private async buildPendingPayload(
@@ -802,6 +877,119 @@ export class PhaseService {
       if (objective.isOptional) objective.status = "optional";
     }
     await this.objectiveRepo.save(objectives);
+  }
+
+  private async ensureMissionObjective(
+    sessionId: string,
+    quest: QuestEntity,
+    storyArc: StoryArcEntity,
+    state: SessionStoryArcStateEntity,
+  ): Promise<QuestObjectiveEntity> {
+    const active = this.selectActiveObjective(quest.objectives ?? []);
+    if (active) return active;
+
+    const sorted = (quest.objectives ?? [])
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const incomplete = sorted.find(
+      (objective) =>
+        !objective.isOptional &&
+        objective.status !== "completed" &&
+        objective.status !== "failed",
+    );
+    if (incomplete) {
+      incomplete.status = "active";
+      return this.objectiveRepo.save(incomplete);
+    }
+
+    const phasesTotal = await this.phaseRepo.count({
+      where: { storyArcId: storyArc.id },
+    });
+    if (state.currentPhaseIndex < phasesTotal) {
+      if (quest.status !== "active") {
+        quest.status = "active";
+        await this.questRepo.save(quest);
+      }
+
+      const targetPhaseIndex = state.currentPhaseIndex + 1;
+      const existingTransition = sorted.find((objective) => {
+        const conditions = objective.completionConditions ?? {};
+        return (
+          conditions.kind === "phase_transition" &&
+          Number(conditions.targetPhaseIndex) === targetPhaseIndex &&
+          objective.status !== "completed" &&
+          objective.status !== "failed"
+        );
+      });
+      if (existingTransition) {
+        existingTransition.status = "active";
+        return this.objectiveRepo.save(existingTransition);
+      }
+
+      const nextPhase = await this.phaseRepo.findOne({
+        where: { storyArcId: storyArc.id, index: targetPhaseIndex },
+      });
+      const sortOrder =
+        sorted.length > 0
+          ? Math.max(...sorted.map((objective) => objective.sortOrder ?? 0)) + 1
+          : 0;
+      return this.objectiveRepo.save(
+        this.objectiveRepo.create({
+          questId: quest.id,
+          description: nextPhase
+            ? `Cruzar o limiar para ${nextPhase.name}.`
+            : "Cruzar o próximo limiar da história.",
+          sortOrder,
+          status: "active",
+          isOptional: false,
+          priority: 1000 - 50 - sortOrder,
+          progressCount: 0,
+          completionConditions: {
+            kind: "phase_transition",
+            targetPhaseIndex,
+          },
+        }),
+      );
+    }
+
+    const fallback = sorted
+      .slice()
+      .reverse()
+      .find((objective) => objective.status === "completed");
+    if (fallback) return fallback;
+
+    throw new NotFoundException("Objetivo ativo da missão principal não encontrado.");
+  }
+
+  private async loadMainClock(
+    sessionId: string,
+    campaignId: string,
+  ): Promise<MissionPanelPayload["mainClock"]> {
+    const clocks = await this.clockRepo.find({
+      where: [
+        {
+          gameSessionId: sessionId,
+          visibleToPlayer: true,
+          status: In(["active", "filled"]),
+        },
+        {
+          campaignId,
+          gameSessionId: IsNull(),
+          visibleToPlayer: true,
+          status: In(["active", "filled"]),
+        },
+      ],
+    });
+    const clock =
+      clocks.find((candidate) => candidate.type === "main") ?? clocks[0] ?? null;
+    if (!clock) return null;
+    return {
+      id: clock.id,
+      name: clock.name,
+      segments: clock.segments,
+      filled: clock.filled,
+      type: clock.type,
+    };
   }
 
   private async getOrCreateMainArc(
@@ -971,13 +1159,21 @@ export class PhaseService {
                 facts.objectiveStatuses?.get(id) === "completed"),
           );
         case "clock_filled":
-          return Boolean(id && facts.clockFilledIds?.has(id));
+          return this.hasFact(id, facts.clockFilledIds, facts.clockFilledKeys);
         case "decision_made":
-          return Boolean(id && facts.decisionIds?.has(id));
+          return this.hasFact(id, facts.decisionIds, facts.decisionKeys);
         case "location_visited":
-          return Boolean(id && facts.locationVisitedIds?.has(id));
+          return this.hasFact(
+            id,
+            facts.locationVisitedIds,
+            facts.locationVisitedKeys,
+          );
         case "combat_encounter_completed":
-          return Boolean(id && facts.combatCompletedIds?.has(id));
+          return this.hasFact(
+            id,
+            facts.combatCompletedIds,
+            facts.combatCompletedKeys,
+          );
         case "arc_beat_reached":
           return Boolean(id && facts.arcBeatsReached?.has(id));
         default:

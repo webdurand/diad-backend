@@ -760,7 +760,7 @@ export class EncounterService {
 
     const hasPc = participants.some((p) => p.type === "pc" && !p.isDefeated);
     const hasEnemy = participants.some(
-      (p) => p.type === "monster" && !p.isDefeated,
+      (p) => this.isHostileDefeatable(p) && !p.isDefeated,
     );
     if (!hasPc || !hasEnemy) {
       throw new Error(
@@ -880,7 +880,9 @@ export class EncounterService {
     const encounter = await this.getById(encounterId);
     const participants = encounter.participants ?? [];
 
-    const monsters = participants.filter((p) => p.type === "monster");
+    const monsters = participants.filter(
+      (p) => this.isHostileDefeatable(p) && Boolean(p.monster),
+    );
     const pcs = participants.filter((p) => p.type === "pc" && !p.isDefeated);
 
     let totalXp = 0;
@@ -923,7 +925,7 @@ export class EncounterService {
   ): Promise<EncounterDifficulty> {
     const encounter = await this.getById(encounterId);
     const monsters = (encounter.participants ?? []).filter(
-      (p) => p.type === "monster" && p.monster,
+      (p) => this.isHostileDefeatable(p) && Boolean(p.monster),
     );
 
     let totalXp = 0;
@@ -1618,6 +1620,14 @@ export class EncounterService {
       .replace(/\s+/g, " ");
   }
 
+  private isHostileDefeatable(participant: EncounterParticipantEntity): boolean {
+    return (
+      participant.faction === "enemy" &&
+      participant.controlledBy === "ai" &&
+      participant.type !== "pc"
+    );
+  }
+
 
   private async buildEncounterOutcomeSummary(
     encounter: EncounterEntity,
@@ -1662,8 +1672,7 @@ export class EncounterService {
     const defeatedNpcs = participants
       .filter(
         (p) =>
-          p.faction === "enemy" &&
-          (p.type === "monster" || p.type === "npc") &&
+          this.isHostileDefeatable(p) &&
           (p.isDefeated || (p.currentHp ?? 0) <= 0),
       )
       .map((p) => ({
@@ -1755,7 +1764,8 @@ export class EncounterService {
       const remaining = allParticipants
         .filter(
           (p) =>
-            p.faction === "enemy" && !(p.isDefeated || (p.currentHp ?? 0) <= 0),
+            this.isHostileDefeatable(p) &&
+            !(p.isDefeated || (p.currentHp ?? 0) <= 0),
         )
         .map((p) => p.displayName)
         .slice(0, 3)

@@ -822,7 +822,7 @@ export class GameEngineController {
 
       const totalXp = (encounter.participants ?? [])
         .filter(
-          (p) => p.type === "monster" && p.faction === "enemy" && p.monster,
+          (p) => this.isHostileDefeatable(p) && Boolean(p.monster),
         )
         .reduce((sum, p) => sum + (p.monster?.xp ?? 0), 0);
 
@@ -892,7 +892,7 @@ export class GameEngineController {
     const encounter = await this.encounterService.getById(encounterId);
 
     const monsterParticipants = (encounter.participants ?? []).filter(
-      (p) => p.type === "monster" && p.faction === "enemy" && p.monster,
+      (p) => this.isHostileDefeatable(p) && Boolean(p.monster),
     );
 
     const monsters = monsterParticipants.map((p) => {
@@ -973,6 +973,14 @@ export class GameEngineController {
       talkDownDc,
       talkDownSkill: "persuasion",
     };
+  }
+
+  private isHostileDefeatable(participant: EncounterParticipantEntity): boolean {
+    return (
+      participant.faction === "enemy" &&
+      participant.controlledBy === "ai" &&
+      participant.type !== "pc"
+    );
   }
 
 

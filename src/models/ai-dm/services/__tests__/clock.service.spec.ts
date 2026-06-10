@@ -207,6 +207,11 @@ describe("ClockService", () => {
       "clock_progressed",
       "clock_filled",
     ]);
+    const filledEnvelope = eventBus.publish.mock.calls[1][0];
+    expect(filledEnvelope.payload.narrativeSeed).toBe("A patrulha chega.");
+    expect(filledEnvelope.payload.clock.onFullAction?.narrativeSeed).toBe(
+      "A patrulha chega.",
+    );
   });
 
   it("não reemite clock_filled quando já estava cheio", async () => {

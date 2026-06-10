@@ -458,8 +458,15 @@ export class TravelActionService {
     return (
       items.find((item) => {
         if (item.quantity <= 0) return false;
-        const haystack = `${item.equipment?.slug ?? ""} ${item.equipment?.name ?? ""}`.toLowerCase();
-        return haystack.includes("ration");
+        const haystack = `${item.equipment?.slug ?? ""} ${item.equipment?.name ?? ""}`
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+        return (
+          haystack.includes("ration") ||
+          haystack.includes("racao") ||
+          haystack.includes("racoes")
+        );
       }) ?? null
     );
   }

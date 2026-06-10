@@ -35,6 +35,7 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "world_pulse_random_encounter_triggered",
     "location_revealed",
     "location_visited",
+    "travel_started",
     "lighting_changed",
     "terrain_modified",
     "audience_map_changed",

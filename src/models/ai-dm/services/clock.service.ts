@@ -339,6 +339,8 @@ export class ClockService {
           isFull,
           triggered,
           status: clock.status,
+          onFullAction: clock.onFullAction ?? null,
+          narrativeSeed: clock.onFullAction?.narrativeSeed ?? null,
           clock: {
             id: clock.id,
             name: clock.name,
@@ -347,6 +349,7 @@ export class ClockService {
             segments: clock.segments,
             status: clock.status,
             visibleToPlayer: clock.visibleToPlayer,
+            onFullAction: clock.onFullAction ?? null,
           },
         },
         narrativeDescriptor:

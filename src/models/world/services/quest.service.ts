@@ -5,9 +5,16 @@ import { QuestEntity } from "src/entities/quest.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 import { QuestPrerequisiteEntity } from "src/entities/quest-prerequisite.entity";
 import { GameSessionEntity } from "src/entities/game-session.entity";
+import { SceneEntity } from "src/entities/scene.entity";
+import { SceneNpcEntity } from "src/entities/scene-npc.entity";
+import { SessionEventEntity } from "src/entities/session-event.entity";
+import { PhaseEntity } from "src/entities/phase.entity";
+import { SessionStoryArcStateEntity } from "src/entities/session-story-arc-state.entity";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { EventAudience } from "src/common/event-bus/event-envelope.types";
+import { DomainException } from "src/common/observability/errors/diad-exception";
+import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import { randomBytes } from "crypto";
 
 const MISSION_AUDIENCES: EventAudience[] = [
@@ -95,6 +102,16 @@ export class QuestService {
     private readonly prereqRepo: Repository<QuestPrerequisiteEntity>,
     @InjectRepository(GameSessionEntity)
     private readonly sessionRepo: Repository<GameSessionEntity>,
+    @InjectRepository(SceneEntity)
+    private readonly sceneRepo: Repository<SceneEntity>,
+    @InjectRepository(SceneNpcEntity)
+    private readonly sceneNpcRepo: Repository<SceneNpcEntity>,
+    @InjectRepository(SessionEventEntity)
+    private readonly eventRepo: Repository<SessionEventEntity>,
+    @InjectRepository(SessionStoryArcStateEntity)
+    private readonly arcStateRepo: Repository<SessionStoryArcStateEntity>,
+    @InjectRepository(PhaseEntity)
+    private readonly phaseRepo: Repository<PhaseEntity>,
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
   ) {}
@@ -329,6 +346,14 @@ export class QuestService {
     }
     if (evidence) target.advanceEvidence = evidence;
     if (evidence) target.lastNarrativeDescriptor = evidence.slice(0, 240);
+
+    await this.assertObjectiveAdvanceIsCongruent(
+      gameSessionId,
+      target,
+      newStatus,
+      evidence,
+    );
+
     await this.objectiveRepo.save(target);
 
     if (newStatus === "completed") {
@@ -352,7 +377,14 @@ export class QuestService {
     let questAutoCompleted = false;
     let questAutoFailed = false;
 
-    if (allRequiredCompleted && quest.status === "active") {
+    const deferMainQuestCompletion =
+      quest.isMainQuest && (await this.hasRemainingStoryPhases(gameSessionId));
+
+    if (
+      allRequiredCompleted &&
+      quest.status === "active" &&
+      !deferMainQuestCompletion
+    ) {
       quest.status = "completed";
       await this.questRepo.save(quest);
       await this.cascadeUnlock(quest);
@@ -431,6 +463,271 @@ export class QuestService {
     }
 
     return { objective: target, questAutoCompleted, questAutoFailed };
+  }
+
+  private async assertObjectiveAdvanceIsCongruent(
+    gameSessionId: string,
+    objective: QuestObjectiveEntity,
+    newStatus: "completed" | "failed",
+    evidence: string | null,
+  ): Promise<void> {
+    if (newStatus !== "completed") return;
+    const conditions = objective.completionConditions ?? {};
+    const kind = typeof conditions.kind === "string" ? conditions.kind : null;
+    if (!kind) return;
+
+    let accepted = false;
+    switch (kind) {
+      case "travel_to":
+        accepted = await this.matchesCurrentOrVisitedLocation(
+          gameSessionId,
+          conditions,
+        );
+        break;
+      case "visit_poi":
+      case "investigate_poi":
+        accepted = await this.matchesCurrentPoi(gameSessionId, conditions);
+        break;
+      case "talk_to_npc":
+        accepted = await this.matchesCurrentNpc(gameSessionId, conditions);
+        break;
+      case "defeat_monster":
+      case "defeat_villain":
+        accepted =
+          this.isTrustedDefeatEvidence(evidence) ||
+          (await this.hasRecentEncounterResolution(gameSessionId, conditions));
+        break;
+      case "gain_reputation":
+        accepted =
+          this.isTrustedReputationEvidence(evidence) ||
+          (await this.hasRecentReputationEvent(gameSessionId, conditions));
+        break;
+      case "phase_transition":
+        accepted = false;
+        break;
+      default:
+        accepted = true;
+        break;
+    }
+
+    if (accepted) return;
+
+    throw new DomainException(
+      ErrorCode.VALIDATION_INVALID_PAYLOAD,
+      `Objetivo '${kind}' não confirmado pelo estado determinístico da sessão.`,
+      {
+        context: {
+          gameSessionId,
+          objectiveId: objective.id,
+          objectiveKind: kind,
+          targetName: conditions.targetName ?? null,
+          targetLocationId: conditions.targetLocationId ?? null,
+          targetNpcId: conditions.targetNpcId ?? null,
+        },
+        hint: "Aguarde um evento real de cena, visita, combate ou reputação antes de completar esse objetivo.",
+      },
+    );
+  }
+
+  private async matchesCurrentOrVisitedLocation(
+    gameSessionId: string,
+    conditions: Record<string, any>,
+  ): Promise<boolean> {
+    const currentScene = await this.sceneRepo.findOne({
+      where: { sessionId: gameSessionId, isActive: true },
+      relations: ["location"],
+      order: { sceneNumber: "DESC" },
+    });
+    if (
+      this.locationMatches(conditions, {
+        id: currentScene?.locationId,
+        name: currentScene?.location?.name,
+        slug: currentScene?.location?.slug,
+      })
+    ) {
+      return true;
+    }
+
+    const events = await this.eventRepo.find({
+      where: { sessionId: gameSessionId, eventType: "location_visited" },
+      order: { createdAt: "DESC" },
+      take: 50,
+    });
+    return events.some((event) => {
+      const payload = event.eventPayload ?? {};
+      return this.locationMatches(conditions, {
+        id: payload.locationId as string | undefined,
+        name:
+          (payload.locationName as string | undefined) ??
+          (payload.name as string | undefined),
+        slug: payload.locationSlug as string | undefined,
+      });
+    });
+  }
+
+  private async matchesCurrentPoi(
+    gameSessionId: string,
+    conditions: Record<string, any>,
+  ): Promise<boolean> {
+    const currentScene = await this.sceneRepo.findOne({
+      where: { sessionId: gameSessionId, isActive: true },
+      relations: ["poi"],
+      order: { sceneNumber: "DESC" },
+    });
+    if (!currentScene) return false;
+    return this.targetMatches(conditions, {
+      id: currentScene.poiId,
+      name: currentScene.poi?.name,
+      slug: currentScene.poi?.slug,
+    });
+  }
+
+  private async matchesCurrentNpc(
+    gameSessionId: string,
+    conditions: Record<string, any>,
+  ): Promise<boolean> {
+    const currentScene = await this.sceneRepo.findOne({
+      where: { sessionId: gameSessionId, isActive: true },
+      relations: ["currentInterlocutorNpc"],
+      order: { sceneNumber: "DESC" },
+    });
+    if (!currentScene) return false;
+    if (
+      this.targetMatches(conditions, {
+        id: currentScene.currentInterlocutorNpcId,
+        name: currentScene.currentInterlocutorNpc?.name,
+        slug: currentScene.currentInterlocutorNpc?.slug,
+      })
+    ) {
+      return true;
+    }
+
+    const sceneNpcs = await this.sceneNpcRepo.find({
+      where: { sceneId: currentScene.id },
+      relations: ["npc"],
+    });
+    return sceneNpcs.some((entry) =>
+      this.targetMatches(conditions, {
+        id: entry.npcId,
+        name: entry.npc?.name,
+        slug: entry.npc?.slug,
+      }),
+    );
+  }
+
+  private async hasRecentEncounterResolution(
+    gameSessionId: string,
+    conditions: Record<string, any>,
+  ): Promise<boolean> {
+    const events = await this.eventRepo.find({
+      where: { sessionId: gameSessionId, eventType: "encounter_ended" },
+      order: { createdAt: "DESC" },
+      take: 20,
+    });
+    const target = this.normalizeKey(conditions.targetName);
+    return events.some((event) => {
+      const payload = event.eventPayload ?? {};
+      if (
+        typeof conditions.targetNpcId === "string" &&
+        Array.isArray(payload.defeatedNpcIds) &&
+        payload.defeatedNpcIds.includes(conditions.targetNpcId)
+      ) {
+        return true;
+      }
+      if (!target) return true;
+      return [
+        payload.encounterName,
+        payload.name,
+        payload.defeatedName,
+        payload.defeatedNpcName,
+        event.summary,
+      ].some((value) => this.normalizeKey(value) === target);
+    });
+  }
+
+  private async hasRecentReputationEvent(
+    gameSessionId: string,
+    conditions: Record<string, any>,
+  ): Promise<boolean> {
+    const events = await this.eventRepo.find({
+      where: { sessionId: gameSessionId, eventType: "reputation_shift" },
+      order: { createdAt: "DESC" },
+      take: 20,
+    });
+    const target = this.normalizeKey(conditions.targetName);
+    const required = Math.max(1, Number(conditions.amount ?? 1) || 1);
+    return events.some((event) => {
+      const payload = event.eventPayload ?? {};
+      const faction = this.normalizeKey(payload.factionName);
+      const value = Number(payload.newValue);
+      return Boolean(
+        target &&
+          faction === target &&
+          Number.isFinite(value) &&
+          value >= required,
+      );
+    });
+  }
+
+  private locationMatches(
+    conditions: Record<string, any>,
+    candidate: { id?: string | null; name?: string | null; slug?: string | null },
+  ): boolean {
+    if (
+      typeof conditions.targetLocationId === "string" &&
+      candidate.id === conditions.targetLocationId
+    ) {
+      return true;
+    }
+    return this.targetMatches(conditions, candidate);
+  }
+
+  private targetMatches(
+    conditions: Record<string, any>,
+    candidate: { id?: string | null; name?: string | null; slug?: string | null },
+  ): boolean {
+    const targetId =
+      (conditions.targetNpcId as string | undefined) ??
+      (conditions.targetPoiId as string | undefined) ??
+      (conditions.targetLocationId as string | undefined);
+    if (targetId && candidate.id === targetId) return true;
+
+    const target = this.normalizeKey(conditions.targetName);
+    if (!target) return false;
+    return [candidate.name, candidate.slug, candidate.id].some(
+      (value) => this.normalizeKey(value) === target,
+    );
+  }
+
+  private normalizeKey(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private isTrustedDefeatEvidence(evidence: string | null): boolean {
+    return /^Player derrotou .+/i.test(evidence ?? "");
+  }
+
+  private isTrustedReputationEvidence(evidence: string | null): boolean {
+    return /^Reputação com .+ alcançou /i.test(evidence ?? "");
+  }
+
+  private async hasRemainingStoryPhases(gameSessionId: string): Promise<boolean> {
+    const state = await this.arcStateRepo.findOne({
+      where: { gameSessionId },
+      order: { updatedAt: "DESC" },
+    });
+    if (!state?.storyArcId) return false;
+    const total = await this.phaseRepo.count({
+      where: { storyArcId: state.storyArcId },
+    });
+    return state.currentPhaseIndex < total;
   }
 
   async getById(questId: string): Promise<QuestEntity> {

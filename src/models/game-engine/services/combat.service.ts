@@ -626,23 +626,15 @@ export class CombatService {
       let resisted = false;
       let immune = false;
       let vulnerable = false;
-      const dtLower = actionBlock.damage.type.toLowerCase();
-      if (target.type === "monster" && target.monster) {
-        const m: any = target.monster;
-        const imms = (m.damage_immunities ?? []) as string[];
-        const ress = (m.damage_resistances ?? []) as string[];
-        const vuls = (m.damage_vulnerabilities ?? []) as string[];
-        if (imms.some((i) => i.toLowerCase().includes(dtLower))) {
-          immune = true;
-          finalDamage = 0;
-        } else if (ress.some((r) => r.toLowerCase().includes(dtLower))) {
-          resisted = true;
-          finalDamage = Math.floor(finalDamage / 2);
-        } else if (vuls.some((v) => v.toLowerCase().includes(dtLower))) {
-          vulnerable = true;
-          finalDamage = finalDamage * 2;
-        }
-      }
+      const adjustedDamage = this.resolveDamageAdjustments(
+        target,
+        totalDamage,
+        actionBlock.damage.type,
+      );
+      finalDamage = adjustedDamage.finalDamage;
+      resisted = adjustedDamage.resisted;
+      immune = adjustedDamage.immune;
+      vulnerable = adjustedDamage.vulnerable;
 
 
       let targetHpAfter: number | undefined;
@@ -2694,29 +2686,15 @@ export class CombatService {
       let immune = false;
       let vulnerable = false;
       let finalDamage = totalDamage;
-
-      if (target.type === "monster" && target.monster) {
-        const immunities =
-          (target.monster.damage_immunities as unknown as string[]) ?? [];
-        const resistances =
-          (target.monster.damage_resistances as unknown as string[]) ?? [];
-        const vulnerabilities =
-          (target.monster.damage_vulnerabilities as unknown as string[]) ?? [];
-
-        const dtLower = damageType.toLowerCase();
-        if (immunities.some((i) => i.toLowerCase().includes(dtLower))) {
-          immune = true;
-          finalDamage = 0;
-        } else if (resistances.some((r) => r.toLowerCase().includes(dtLower))) {
-          resisted = true;
-          finalDamage = Math.floor(totalDamage / 2);
-        } else if (
-          vulnerabilities.some((v) => v.toLowerCase().includes(dtLower))
-        ) {
-          vulnerable = true;
-          finalDamage = totalDamage * 2;
-        }
-      }
+      const adjustedDamage = this.resolveDamageAdjustments(
+        target,
+        totalDamage,
+        damageType,
+      );
+      finalDamage = adjustedDamage.finalDamage;
+      resisted = adjustedDamage.resisted;
+      immune = adjustedDamage.immune;
+      vulnerable = adjustedDamage.vulnerable;
 
       damageRollResult = {
         rolls: [dmgResult],
@@ -3367,13 +3345,19 @@ export class CombatService {
     let dyingState: "none" | "dying" | "stable" | "dead" | undefined;
     let instantDeath = false;
     const events: GameEventData[] = [];
+    const adjustedDamage = this.resolveDamageAdjustments(
+      target,
+      dto.amount,
+      dto.damageType,
+    );
+    const finalDamage = adjustedDamage.finalDamage;
 
     if (target.type === "pc" && target.characterId) {
       const wasDying = target.dyingState === "dying";
 
 
 
-      if (wasDying) {
+      if (wasDying && finalDamage > 0) {
         const failuresDelta = dto.fromCriticalHit ? 2 : 1;
         const ds = await this.stateService.updateDeathSaves(
           dto.ownerUserId,
@@ -3409,6 +3393,10 @@ export class CombatService {
           });
         }
         await this.participantRepo.save(target);
+      } else if (wasDying) {
+        hpAfter = 0;
+        dyingState = "dying";
+        defeated = false;
       } else {
 
 
@@ -3420,7 +3408,7 @@ export class CombatService {
         if (target.transformationState) {
           const formRes = await this.transformation.applyDamageToForm(
             target.id,
-            dto.amount,
+            finalDamage,
           );
           formAbsorbed = formRes.absorbedByForm;
           formReverted = formRes.reverted;
@@ -3447,7 +3435,7 @@ export class CombatService {
         if (!target.transformationState || formReverted) {
 
 
-          const effectiveDamage = formReverted ? 0 : dto.amount;
+          const effectiveDamage = formReverted ? 0 : finalDamage;
           const result = await this.stateService.updateHp(
             dto.ownerUserId,
             target.characterId,
@@ -3478,7 +3466,7 @@ export class CombatService {
           events.push({
             event_type: "instant_death",
             target_participant_id: target.id,
-            data: { damage: dto.amount, dyingState: "dead" },
+            data: { damage: finalDamage, dyingState: "dead" },
           });
           await this.participantRepo.save(target);
         } else if (isDown) {
@@ -3498,7 +3486,7 @@ export class CombatService {
         }
       }
     } else {
-      const result = this.applyDamageToMonster(target, dto.amount);
+      const result = this.applyDamageToMonster(target, finalDamage);
       hpAfter = result.hpAfter;
       defeated = result.defeated;
       await this.participantRepo.save(target);
@@ -3510,6 +3498,10 @@ export class CombatService {
       data: {
         damage: dto.amount,
         type: dto.damageType,
+        finalDamage,
+        resisted: adjustedDamage.resisted,
+        immune: adjustedDamage.immune,
+        vulnerable: adjustedDamage.vulnerable,
         hpAfter,
         defeated,
         dyingState,
@@ -3519,8 +3511,8 @@ export class CombatService {
 
 
 
-    if (target.isConcentrating && dto.amount > 0 && !defeated) {
-      const dc = Math.max(10, Math.floor(dto.amount / 2));
+    if (target.isConcentrating && finalDamage > 0 && !defeated) {
+      const dc = Math.max(10, Math.floor(finalDamage / 2));
 
       let conMod = 0;
       if (target.type === "pc" && target.characterId) {
@@ -3818,6 +3810,100 @@ export class CombatService {
   }
 
 
+
+  private resolveDamageAdjustments(
+    target: EncounterParticipantEntity,
+    amount: number,
+    damageType?: string | null,
+  ): {
+    finalDamage: number;
+    resisted: boolean;
+    immune: boolean;
+    vulnerable: boolean;
+  } {
+    const typeKey = this.normalizeDamageType(damageType);
+    let immune = false;
+    let resisted = false;
+    let vulnerable = false;
+
+    if (typeKey) {
+      const monster = target.monster;
+      const immunities = this.extractDamageList(monster?.damage_immunities);
+      const resistances = this.extractDamageList(monster?.damage_resistances);
+      const vulnerabilities = this.extractDamageList(
+        monster?.damage_vulnerabilities,
+      );
+
+      immune = immunities.some((entry) => this.damageTypeMatches(entry, typeKey));
+      resisted = resistances.some((entry) =>
+        this.damageTypeMatches(entry, typeKey),
+      );
+      vulnerable = vulnerabilities.some((entry) =>
+        this.damageTypeMatches(entry, typeKey),
+      );
+
+      if (!immune && this.hasEffectResistance(target, typeKey)) {
+        resisted = true;
+      }
+    }
+
+    if (immune) {
+      return { finalDamage: 0, resisted: false, immune: true, vulnerable: false };
+    }
+    if (resisted) {
+      return {
+        finalDamage: Math.floor(amount / 2),
+        resisted: true,
+        immune: false,
+        vulnerable: false,
+      };
+    }
+    if (vulnerable) {
+      return {
+        finalDamage: amount * 2,
+        resisted: false,
+        immune: false,
+        vulnerable: true,
+      };
+    }
+    return { finalDamage: amount, resisted: false, immune: false, vulnerable: false };
+  }
+
+  private hasEffectResistance(
+    target: EncounterParticipantEntity,
+    typeKey: string,
+  ): boolean {
+    return (target.effectInstances ?? []).some((effect) => {
+      if (effect.kind !== "damage_resistance") return false;
+      const damageTypes = Array.isArray(effect.payload?.damageTypes)
+        ? effect.payload.damageTypes
+        : [];
+      if (damageTypes.length === 0) return true;
+      return damageTypes.some((entry) => this.damageTypeMatches(entry, typeKey));
+    });
+  }
+
+  private extractDamageList(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string");
+    }
+    if (typeof value === "string") return [value];
+    return [];
+  }
+
+  private normalizeDamageType(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private damageTypeMatches(entry: string, typeKey: string): boolean {
+    return this.normalizeDamageType(entry)?.includes(typeKey) ?? false;
+  }
 
   private applyDamageToMonster(
     participant: EncounterParticipantEntity,
