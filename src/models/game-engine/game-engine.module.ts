@@ -148,6 +148,7 @@ import { LocationEntity } from "src/entities/location.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
+import { NpcStoryHookEntity } from "src/entities/npc-story-hook.entity";
 import { MetaQueryAuditEntity } from "src/entities/meta-query-audit.entity";
 import { ScenePoiObservationEntity } from "src/entities/scene-poi-observation.entity";
 import { MoveToLocationService } from "./services/move-to-location.service";
@@ -204,6 +205,7 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
       LocationPoiEntity,
       LocationConnectionEntity,
       SessionNpcStateEntity,
+      NpcStoryHookEntity,
       MetaQueryAuditEntity,
       ScenePoiObservationEntity,
     ]),

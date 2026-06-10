@@ -125,6 +125,7 @@ export interface MissionPanelPayload {
     sortOrder: number;
     progressCount: number;
     lastNarrativeDescriptor: string | null;
+    completionConditions: Record<string, unknown>;
   };
   currentPhase: PhaseDto;
   phaseProgress: {
@@ -138,6 +139,13 @@ export interface MissionPanelPayload {
     threshold: number;
     pullActive: boolean;
     pullScore: number | null;
+  };
+  pacing: {
+    phaseIndex: number;
+    phasesTotal: number;
+    objectivesCompleted: number;
+    objectivesTotal: number;
+    turnsSinceProgress: number;
   };
   phaseHistory: Array<{
     index: number;
@@ -324,6 +332,15 @@ export class PhaseService {
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
     const progress = this.evaluateGate(phase.completionConditions, facts);
     const phaseHistory = await this.loadPhaseHistory(sessionId, storyArc.id);
+    const phasesTotal = await this.phaseRepo.count({
+      where: { storyArcId: storyArc.id },
+    });
+    const requiredObjectives = (quest.objectives ?? []).filter(
+      (objective) => !objective.isOptional,
+    );
+    const objectivesCompleted = requiredObjectives.filter(
+      (objective) => objective.status === "completed",
+    ).length;
 
     const payload: MissionPanelPayload = {
       quest: {
@@ -341,6 +358,7 @@ export class PhaseService {
         sortOrder: activeObjective.sortOrder ?? 0,
         progressCount: activeObjective.progressCount ?? 0,
         lastNarrativeDescriptor: activeObjective.lastNarrativeDescriptor ?? null,
+        completionConditions: activeObjective.completionConditions ?? {},
       },
       currentPhase: this.toPhaseDto(phase),
       phaseProgress: {
@@ -354,6 +372,13 @@ export class PhaseService {
         threshold: PULL_THRESHOLD,
         pullActive: (session.turnsSinceMissionProgress ?? 0) >= PULL_THRESHOLD,
         pullScore: session.pullScore ?? null,
+      },
+      pacing: {
+        phaseIndex: phase.index,
+        phasesTotal,
+        objectivesCompleted,
+        objectivesTotal: requiredObjectives.length,
+        turnsSinceProgress: session.turnsSinceMissionProgress ?? 0,
       },
       phaseHistory,
     };

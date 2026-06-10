@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { SceneNpcEntity } from "src/entities/scene-npc.entity";
 import { SessionEventEntity } from "src/entities/session-event.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
+import { NpcStoryHookEntity } from "src/entities/npc-story-hook.entity";
+import { QuestEntity } from "src/entities/quest.entity";
 import { LocationPoiService } from "src/models/world/services/location-poi.service";
 import { SceneService } from "src/models/session/services/scene.service";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
@@ -77,6 +79,16 @@ export type MoveToPoiResult =
       message: string;
     };
 
+export interface ObjectiveLink {
+  kind: string;
+}
+
+export interface NpcStoryHookProjection {
+  title: string;
+  hookType: string;
+  visibility: "objective" | "known" | "rumor";
+}
+
 export interface AvailablePoi {
   id: string;
   name: string;
@@ -88,6 +100,9 @@ export interface AvailablePoi {
   isDefault: boolean;
   isLocked: boolean;
   phaseIndex: number | null;
+  objectiveLink: ObjectiveLink | null;
+  lockReason: string | null;
+  unlockHint: string | null;
 }
 
 export interface AvailablePoisEnvelope {
@@ -107,9 +122,11 @@ export interface AvailablePoisEnvelope {
     title?: string | null;
     presenceRole: string;
     dialogueWeight: DialogueWeight;
-    disposition: "unknown";
+    disposition: "friendly" | "neutral" | "hostile" | "indifferent" | "unknown";
     tags: string[];
     knowledgeScope: string[];
+    storyHook: NpcStoryHookProjection | null;
+    objectiveLink: ObjectiveLink | null;
   }>;
   pendingBarks: Array<{
     npcId: string;
@@ -135,6 +152,10 @@ export class MoveToPoiService {
     private readonly sceneNpcRepo: Repository<SceneNpcEntity>,
     @InjectRepository(SessionEventEntity)
     private readonly eventRepo: Repository<SessionEventEntity>,
+    @InjectRepository(NpcStoryHookEntity)
+    private readonly storyHookRepo: Repository<NpcStoryHookEntity>,
+    @InjectRepository(QuestEntity)
+    private readonly questRepo: Repository<QuestEntity>,
     private readonly poiService: LocationPoiService,
     private readonly sceneService: SceneService,
     private readonly eventBus: EventBusService,
@@ -344,7 +365,7 @@ export class MoveToPoiService {
     const sceneMode = deriveSceneMode(session, currentScene);
     const bimodalLoopEnabled = session?.config?.bimodalLoopEnabled === true;
     const hubPoiEnabled = session?.config?.hubPoiEnabled === true;
-    const npcsPresent = sceneNpcs
+    const npcsBase = sceneNpcs
       .filter((sceneNpc) => sceneNpc.npc)
       .map((sceneNpc) => ({
         id: sceneNpc.npcId,
@@ -352,10 +373,45 @@ export class MoveToPoiService {
         title: sceneNpc.npc.title ?? null,
         presenceRole: sceneNpc.presenceRole,
         dialogueWeight: getDialogueWeight(sceneNpc.npc),
-        disposition: "unknown" as const,
         tags: sceneNpc.npc.tags ?? [],
         knowledgeScope: sceneNpc.npc.knowledgeScope ?? [],
       }));
+    const npcIds = npcsBase.map((npc) => npc.id);
+    const [npcStates, hooks, objectiveCond] = await Promise.all([
+      this.sessionNpcStateService.listBySession(sessionId),
+      npcIds.length
+        ? this.storyHookRepo.find({
+            where: { npcId: In(npcIds) },
+            order: { priority: "DESC", createdAt: "ASC" },
+          })
+        : Promise.resolve([] as NpcStoryHookEntity[]),
+      this.getActiveObjectiveConditions(sessionId),
+    ]);
+    const dispositionByNpc = new Map(
+      npcStates.map((state) => [state.npcId, state.disposition]),
+    );
+    const hooksByNpc = new Map<string, NpcStoryHookEntity[]>();
+    for (const hook of hooks) {
+      const list = hooksByNpc.get(hook.npcId) ?? [];
+      list.push(hook);
+      hooksByNpc.set(hook.npcId, list);
+    }
+    const npcsPresent = npcsBase.map((npc) => {
+      const objectiveLink = this.matchesNpcObjective(
+        npc.id,
+        npc.name,
+        objectiveCond,
+      );
+      return {
+        ...npc,
+        disposition: dispositionByNpc.get(npc.id) ?? ("unknown" as const),
+        objectiveLink,
+        storyHook: this.selectHookForNpc(
+          hooksByNpc.get(npc.id) ?? [],
+          objectiveLink !== null,
+        ),
+      };
+    });
     const characterSkills = await this.loadProficientSkillSlugs(session, userId);
     const characterKnownFacts = this.extractKnownFacts(sceneNpcs);
     const [pendingBarks, nearbyKnownNpcs] = await Promise.all([
@@ -399,7 +455,10 @@ export class MoveToPoiService {
         characterSkills,
         characterKnownFacts,
       }),
-      pois: pois.map((poi) => this.toAvailablePoi(poi)),
+      pois: pois.map((poi) => ({
+        ...this.toAvailablePoi(poi),
+        objectiveLink: this.matchesPoiObjective(poi.name, objectiveCond),
+      })),
     };
   }
 
@@ -429,7 +488,24 @@ export class MoveToPoiService {
         },
       ];
     }
-    return [];
+    return this.buildHookBark(npcsPresent);
+  }
+
+  private buildHookBark(
+    npcsPresent: AvailablePoisEnvelope["npcsPresent"],
+  ): AvailablePoisEnvelope["pendingBarks"] {
+    const objectiveNpc = npcsPresent.find(
+      (npc) => npc.objectiveLink && npc.storyHook,
+    );
+    const knownNpc = npcsPresent.find(
+      (npc) => npc.storyHook?.visibility === "known",
+    );
+    const chosen = objectiveNpc ?? knownNpc;
+    if (!chosen?.storyHook) return [];
+    const text = chosen.objectiveLink
+      ? `${chosen.name} parece ter relação com o que você procura: ${chosen.storyHook.title}.`
+      : `Dizem que ${chosen.name} sabe de algo: ${chosen.storyHook.title}.`;
+    return [{ npcId: chosen.id, text, source: "hook" }];
   }
 
   private buildWitnessBark(event: SessionEventEntity): string {
@@ -621,6 +697,117 @@ export class MoveToPoiService {
       isDefault: poi.isDefault,
       isLocked: poi.isLocked,
       phaseIndex: poi.phaseIndex ?? null,
+      objectiveLink: null,
+      lockReason: poi.isLocked ? this.describePoiLock(poi) : null,
+      unlockHint: poi.isLocked ? this.describePoiUnlock(poi) : null,
     };
+  }
+
+  private describePoiLock(poi: LocationPoiEntity): string {
+    if (poi.phaseIndex != null) {
+      return "Trancado — a história ainda não chegou aqui.";
+    }
+    return "Trancado por enquanto — algo precisa abrir caminho.";
+  }
+
+  private describePoiUnlock(poi: LocationPoiEntity): string | null {
+    if (poi.phaseIndex != null) {
+      return `Abre na Fase ${poi.phaseIndex}.`;
+    }
+    return null;
+  }
+
+  private async getActiveObjectiveConditions(
+    sessionId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const quests = await this.questRepo.find({
+      where: { gameSessionId: sessionId, status: "active" },
+      relations: ["objectives"],
+    });
+    let best: { priority: number; sortOrder: number; conditions: Record<string, unknown> } | null =
+      null;
+    for (const quest of quests) {
+      for (const objective of quest.objectives ?? []) {
+        if (objective.status !== "active") continue;
+        const priority = objective.priority ?? 0;
+        const sortOrder = objective.sortOrder ?? 0;
+        if (
+          !best ||
+          priority > best.priority ||
+          (priority === best.priority && sortOrder < best.sortOrder)
+        ) {
+          best = {
+            priority,
+            sortOrder,
+            conditions: objective.completionConditions ?? {},
+          };
+        }
+      }
+    }
+    return best?.conditions ?? null;
+  }
+
+  private matchesNpcObjective(
+    npcId: string,
+    npcName: string,
+    cond: Record<string, unknown> | null,
+  ): ObjectiveLink | null {
+    if (!cond) return null;
+    const kind = typeof cond.kind === "string" ? cond.kind : "unknown";
+    if (typeof cond.targetNpcId === "string" && cond.targetNpcId === npcId) {
+      return { kind };
+    }
+    if (typeof cond.targetName === "string") {
+      const target = this.normalize(cond.targetName);
+      if (target.length >= 4 && target === this.normalize(npcName)) {
+        return { kind };
+      }
+    }
+    return null;
+  }
+
+  private matchesPoiObjective(
+    poiName: string,
+    cond: Record<string, unknown> | null,
+  ): ObjectiveLink | null {
+    if (!cond) return null;
+    const kind = typeof cond.kind === "string" ? cond.kind : "unknown";
+    if (typeof cond.targetName === "string") {
+      const target = this.normalize(cond.targetName);
+      if (target.length >= 4 && target === this.normalize(poiName)) {
+        return { kind };
+      }
+    }
+    return null;
+  }
+
+  private selectHookForNpc(
+    hooks: NpcStoryHookEntity[],
+    isObjectiveTarget: boolean,
+  ): NpcStoryHookProjection | null {
+    const titled = hooks.filter((hook) => hook.title && hook.title.trim());
+    if (titled.length === 0) return null;
+    if (isObjectiveTarget) {
+      const top = titled[0];
+      return {
+        title: top.title!,
+        hookType: top.hookType,
+        visibility: "objective",
+      };
+    }
+    const known = titled.find((hook) => hook.isKnownToParty);
+    if (known) {
+      return { title: known.title!, hookType: known.hookType, visibility: "known" };
+    }
+    const rumor = titled[0];
+    return { title: rumor.title!, hookType: rumor.hookType, visibility: "rumor" };
+  }
+
+  private normalize(value: string | null | undefined): string {
+    return (value ?? "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .trim()
+      .toLowerCase();
   }
 }

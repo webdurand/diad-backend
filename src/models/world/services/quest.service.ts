@@ -35,7 +35,14 @@ export interface CreateQuestDto {
     description: string;
     pathGroup?: string;
     isOptional?: boolean;
-    kind?: "talk_to_npc" | "travel_to" | "defeat_monster" | "gain_reputation";
+    kind?:
+      | "talk_to_npc"
+      | "travel_to"
+      | "visit_poi"
+      | "investigate_poi"
+      | "defeat_monster"
+      | "defeat_villain"
+      | "gain_reputation";
     targetName?: string;
     targetNpcId?: string;
     targetLocationId?: string;

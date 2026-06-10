@@ -51,6 +51,7 @@ describe("movement lock blocking", () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
       movementLockService as any,
       makeLogger() as any,
     );
@@ -74,6 +75,7 @@ describe("movement lock blocking", () => {
     const movementLockService = makeMovementLockService();
     const service = new MoveToLocationService(
       sessionRepo as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -110,6 +112,8 @@ describe("movement lock blocking", () => {
       sessionRepo as any,
       {} as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
       {} as any,
       {} as any,
       {} as any,
@@ -124,6 +128,7 @@ describe("movement lock blocking", () => {
       {
         listByPoi: jest.fn().mockResolvedValue([]),
         listByLocation: jest.fn().mockResolvedValue([]),
+        listBySession: jest.fn().mockResolvedValue([]),
       } as any,
     );
 
@@ -162,6 +167,8 @@ describe("movement lock blocking", () => {
         ]),
       } as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
       { listKnownByLocation: jest.fn().mockResolvedValue([]) } as any,
       { getActive: jest.fn().mockResolvedValue(currentScene) } as any,
       {} as any,
@@ -176,6 +183,7 @@ describe("movement lock blocking", () => {
       {
         listByPoi: jest.fn().mockResolvedValue([]),
         listByLocation: jest.fn().mockResolvedValue([]),
+        listBySession: jest.fn().mockResolvedValue([]),
       } as any,
     );
 

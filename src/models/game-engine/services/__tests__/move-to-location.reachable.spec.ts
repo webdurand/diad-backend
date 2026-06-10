@@ -11,6 +11,7 @@ function makeService(overrides: Record<string, any> = {}): MoveToLocationService
   return new MoveToLocationService(
     overrides.sessionRepo as any,
     overrides.connectionRepo as any,
+    (overrides.questRepo ?? { find: jest.fn().mockResolvedValue([]) }) as any,
     (overrides.arcStateRepo ?? { findOne: jest.fn().mockResolvedValue({ currentPhaseIndex: 1 }) }) as any,
     (overrides.locationService ?? {}) as any,
     overrides.sceneService as any,

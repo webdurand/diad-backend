@@ -7,6 +7,7 @@ export interface OpenModeNpcInput {
   presenceRole?: string | null;
   dialogueWeight?: string | null;
   title?: string | null;
+  objectiveLink?: { kind: string } | null;
 }
 
 export interface OpenModeInteractableInput {
@@ -36,6 +37,14 @@ export class OpenModeActionGeneratorService {
         label: `Falar com ${npc.name}`,
         payload: { npcId: npc.id },
       });
+      if (this.isDefeatTarget(npc.objectiveLink)) {
+        this.pushOnce(actions, seen, {
+          actionId: `confront_npc_${npc.id}`,
+          type: "confront_npc",
+          label: `Enfrentar ${npc.name}`,
+          payload: { npcId: npc.id },
+        });
+      }
     }
 
     for (const interactable of input.interactables ?? []) {
@@ -61,6 +70,15 @@ export class OpenModeActionGeneratorService {
     }
 
     return actions;
+  }
+
+  private isDefeatTarget(
+    objectiveLink: { kind: string } | null | undefined,
+  ): boolean {
+    return (
+      objectiveLink?.kind === "defeat_villain" ||
+      objectiveLink?.kind === "defeat_monster"
+    );
   }
 
   private bestSceneSkill(skills: string[]): "investigation" | "perception" | null {

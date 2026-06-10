@@ -6,6 +6,7 @@ import { EncounterParticipantEntity } from "src/entities/encounter-participant.e
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { QuestEntity } from "src/entities/quest.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
+import { NpcEntity } from "src/entities/npc.entity";
 import { DiadLogger } from "../../observability/logger/diad-logger.service";
 import { EventListener } from "../event-bus.types";
 import { EventCategory, EventEnvelope } from "../event-envelope.types";
@@ -29,6 +30,8 @@ export class QuestDefeatListener implements EventListener {
     private readonly questRepo: Repository<QuestEntity>,
     @InjectRepository(QuestObjectiveEntity)
     private readonly objectiveRepo: Repository<QuestObjectiveEntity>,
+    @InjectRepository(NpcEntity)
+    private readonly npcRepo: Repository<NpcEntity>,
     private readonly questService: QuestService,
     private readonly logger: DiadLogger,
   ) {
@@ -48,7 +51,7 @@ export class QuestDefeatListener implements EventListener {
 
     const participant = await this.partRepo.findOne({
       where: { id: participantId },
-      select: ["id", "type", "displayName", "encounterId"],
+      select: ["id", "type", "displayName", "encounterId", "monsterId"],
     });
     if (!participant || participant.type === "pc") {
       await this.markProcessed(envelope.eventId);
@@ -61,8 +64,9 @@ export class QuestDefeatListener implements EventListener {
       return;
     }
 
+    const participantMonsterId = participant.monsterId ?? null;
     const targetSlug = slugifyFuzzy(participant.displayName);
-    if (!targetSlug) {
+    if (!targetSlug && !participantMonsterId) {
       await this.markProcessed(envelope.eventId);
       return;
     }
@@ -85,8 +89,16 @@ export class QuestDefeatListener implements EventListener {
         unknown
       >;
       if (cond.kind !== matchKind) continue;
-      const objTargetSlug = slugifyFuzzy(cond.targetName as string | undefined);
-      if (!objTargetSlug || objTargetSlug !== targetSlug) continue;
+      const condNpcId =
+        typeof cond.targetNpcId === "string" ? cond.targetNpcId : null;
+      const idMatch =
+        condNpcId != null &&
+        participantMonsterId != null &&
+        (await this.targetNpcMonsterId(condNpcId)) === participantMonsterId;
+      if (!idMatch) {
+        const objTargetSlug = slugifyFuzzy(cond.targetName as string | undefined);
+        if (!objTargetSlug || objTargetSlug !== targetSlug) continue;
+      }
 
       const requiredAmount =
         matchKind === "defeat_villain"
@@ -141,6 +153,20 @@ export class QuestDefeatListener implements EventListener {
       select: ["id", "sessionId"],
     });
     return encounter?.sessionId ?? null;
+  }
+
+  /**
+   * NPCs that fight are linked to their statblock via `monsterId`, which is
+   * copied onto the encounter participant. Participants carry no npc id, so the
+   * stable id-based match for a `defeat_villain` objective goes through the
+   * target NPC's monster statblock; the name slug stays as fallback.
+   */
+  private async targetNpcMonsterId(npcId: string): Promise<string | null> {
+    const npc = await this.npcRepo.findOne({
+      where: { id: npcId },
+      select: ["id", "monsterId"],
+    });
+    return npc?.monsterId ?? null;
   }
 
   private async alreadyProcessed(eventId: string): Promise<boolean> {

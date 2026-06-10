@@ -7,6 +7,7 @@ import {
 } from "src/entities/game-session.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
 import { LocationEntity } from "src/entities/location.entity";
+import { QuestEntity } from "src/entities/quest.entity";
 import { SessionStoryArcStateEntity } from "src/entities/session-story-arc-state.entity";
 import { LocationService } from "src/models/world/services/location.service";
 import { SceneService } from "src/models/session/services/scene.service";
@@ -77,6 +78,8 @@ export interface ReachableLocation {
   knownDangers: string[];
   isLocked: boolean;
   lockReason?: string;
+  unlockHint?: string;
+  objectiveLink: { kind: string } | null;
   riskLevel: ReachableLocationRiskLevel;
 }
 
@@ -171,6 +174,8 @@ export class MoveToLocationService {
     private readonly sessionRepo: Repository<GameSessionEntity>,
     @InjectRepository(LocationConnectionEntity)
     private readonly connectionRepo: Repository<LocationConnectionEntity>,
+    @InjectRepository(QuestEntity)
+    private readonly questRepo: Repository<QuestEntity>,
     @InjectRepository(SessionStoryArcStateEntity)
     private readonly arcStateRepo: Repository<SessionStoryArcStateEntity>,
     private readonly locationService: LocationService,
@@ -371,11 +376,73 @@ export class MoveToLocationService {
       );
     }
 
-    const travels = await this.listAvailableTravels(sessionId);
+    const [travels, objectiveCond] = await Promise.all([
+      this.listAvailableTravels(sessionId),
+      this.getActiveObjectiveConditions(sessionId),
+    ]);
     return {
       currentLocationId: scene.locationId,
-      locations: travels.map((travel) => this.toReachableLocation(travel)),
+      locations: travels.map((travel) =>
+        this.toReachableLocation(travel, objectiveCond),
+      ),
     };
+  }
+
+  private async getActiveObjectiveConditions(
+    sessionId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const quests = await this.questRepo.find({
+      where: { gameSessionId: sessionId, status: "active" },
+      relations: ["objectives"],
+    });
+    let best: {
+      priority: number;
+      sortOrder: number;
+      conditions: Record<string, unknown>;
+    } | null = null;
+    for (const quest of quests) {
+      for (const objective of quest.objectives ?? []) {
+        if (objective.status !== "active") continue;
+        const priority = objective.priority ?? 0;
+        const sortOrder = objective.sortOrder ?? 0;
+        if (
+          !best ||
+          priority > best.priority ||
+          (priority === best.priority && sortOrder < best.sortOrder)
+        ) {
+          best = {
+            priority,
+            sortOrder,
+            conditions: objective.completionConditions ?? {},
+          };
+        }
+      }
+    }
+    return best?.conditions ?? null;
+  }
+
+  private matchesLocationObjective(
+    travel: AvailableTravel,
+    cond: Record<string, unknown> | null,
+  ): { kind: string } | null {
+    if (!cond) return null;
+    const kind = typeof cond.kind === "string" ? cond.kind : "unknown";
+    if (
+      typeof cond.targetLocationId === "string" &&
+      cond.targetLocationId === travel.toLocationId
+    ) {
+      return { kind };
+    }
+    if (typeof cond.targetName === "string") {
+      const target = normalizeLocationText(cond.targetName);
+      if (
+        target.length >= 4 &&
+        target === normalizeLocationText(travel.toLocationName)
+      ) {
+        return { kind };
+      }
+    }
+    return null;
   }
 
   async resolveTravel(
@@ -705,7 +772,10 @@ export class MoveToLocationService {
     });
   }
 
-  private toReachableLocation(travel: AvailableTravel): ReachableLocation {
+  private toReachableLocation(
+    travel: AvailableTravel,
+    objectiveCond: Record<string, unknown> | null = null,
+  ): ReachableLocation {
     const travelHours = this.parseTravelHours(travel.travelTime);
     const knownDangers = this.extractKnownDangers(travel.description);
     return {
@@ -719,6 +789,11 @@ export class MoveToLocationService {
       lockReason: travel.isLocked
         ? this.describeTravelLock(travel)
         : undefined,
+      unlockHint:
+        travel.isLocked && travel.unlockedAtPhase != null
+          ? `Abre na Fase ${travel.unlockedAtPhase}.`
+          : undefined,
+      objectiveLink: this.matchesLocationObjective(travel, objectiveCond),
       riskLevel: this.deriveReachableRiskLevel({
         isLocked: travel.isLocked,
         biome: travel.toLocationType,

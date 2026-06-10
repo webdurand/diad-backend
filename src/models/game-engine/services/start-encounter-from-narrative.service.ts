@@ -13,6 +13,7 @@ import { EncounterService } from "./encounter.service";
 import { CombatService } from "./combat.service";
 import { DiceService } from "./dice.service";
 import { NpcService } from "src/models/world/services/npc.service";
+import { pickArchetypeFromDescriptor } from "src/models/world/services/archetype-picker";
 import { SceneContextService } from "src/models/session/services/scene-context.service";
 import { SceneService } from "src/models/session/services/scene.service";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
@@ -412,18 +413,68 @@ export class StartEncounterFromNarrativeService {
         );
       }
       if (!npc.monsterId) {
-        throw new DomainException(
-          ErrorCode.NPC_NOT_HOSTILE_CAPABLE,
-          `NPC '${npc.name}' não tem stats (monsterId ausente).`,
-          {
-            context: { npcId, name: npc.name },
-            hint: "Use create_npc_from_narrative para aplicar default por role_hint.",
-          },
-        );
+        // Spec 047: NPCs sem ficha de combate (monsterId nulo) não podem entrar
+        // em combate. Em vez de erro duro, atribui stats default por arquétipo
+        // (heurística no descritor: nome/título/papel/tags → commoner como base),
+        // mesma filosofia do create_npc_from_narrative / _ROLE_DEFAULTS. Assim
+        // qualquer NPC vira atacável on-demand, sem depender de backfill.
+        const assigned = await this.ensureNpcCombatStats(npc);
+        if (!assigned) {
+          throw new DomainException(
+            ErrorCode.NPC_NOT_HOSTILE_CAPABLE,
+            `NPC '${npc.name}' não tem stats e nenhum arquétipo default pôde ser resolvido.`,
+            {
+              context: { npcId, name: npc.name },
+              hint: "Garanta que os archetype templates (ex.: 'commoner') existam em npc_archetype_templates.",
+            },
+          );
+        }
       }
       npcs.push(npc);
     }
     return npcs;
+  }
+
+  // Spec 047: resolve uma ficha de combate default para um NPC sem monsterId,
+  // a partir de um arquétipo inferido do descritor (cai em "commoner"). Persiste
+  // o monsterId para que o NPC fique combatível dali em diante. Retorna false se
+  // nem o catálogo de arquétipos/monstros tiver um fallback (config inconsistente).
+  private async ensureNpcCombatStats(npc: NpcEntity): Promise<boolean> {
+    const descriptor = [
+      npc.name,
+      npc.title,
+      npc.narrativeRole,
+      ...(npc.tags ?? []),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const archetypeSlug = pickArchetypeFromDescriptor(descriptor);
+
+    let monsterId: string | undefined;
+    for (const slug of [archetypeSlug, "commoner"]) {
+      try {
+        monsterId = (await this.npcService.resolveArchetype(slug)).monsterId;
+      } catch {
+        // arquétipo desconhecido — tenta o próximo candidato
+      }
+      if (monsterId) break;
+    }
+    if (!monsterId) {
+      const fallback = await this.monsterRepo.findOne({
+        where: { slug: "commoner" },
+      });
+      monsterId = fallback?.id;
+    }
+    if (!monsterId) return false;
+
+    const monster = await this.monsterRepo.findOne({ where: { id: monsterId } });
+    npc.monsterId = monsterId;
+    if (monster) npc.monster = monster;
+    await this.npcRepo.save(npc);
+    this.logger.log(
+      `npc.combat_stats.auto_assigned npc=${npc.id} name="${npc.name}" archetype=${archetypeSlug} monster=${monsterId}`,
+    );
+    return true;
   }
 
   private async materializeNpcParticipants(

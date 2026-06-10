@@ -80,6 +80,7 @@ function makeNpcRepo(npcs: Record<string, Partial<NpcEntity> | null>) {
       if (!npc) return null;
       return npc as NpcEntity;
     }),
+    save: jest.fn(async (npc: any) => npc),
   } as unknown as Repository<NpcEntity>;
 }
 
@@ -173,7 +174,10 @@ function makeEventBus(): EventBusService {
   } as unknown as EventBusService;
 }
 
-function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
+function build(
+  over: RepoOverrides = {},
+  opts: { withPc?: boolean; resolveArchetype?: any } = {},
+) {
   savedParticipants = [];
   const sceneRepo = makeSceneRepo(
     over.scene === undefined
@@ -228,6 +232,9 @@ function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
   const npcSvc = {
     materializeStubFromName: jest.fn(),
     findByNameInCampaign: jest.fn(),
+    resolveArchetype:
+      opts.resolveArchetype ??
+      jest.fn().mockResolvedValue({ monsterId: MONSTER_ID }),
   } as unknown as import("src/models/world/services/npc.service").NpcService;
 
 
@@ -271,7 +278,17 @@ function build(over: RepoOverrides = {}, opts: { withPc?: boolean } = {}) {
     new EventEnvelopeFactory(undefined),
     aiProxy,
   );
-  return { svc, encounterSvc, combatSvc, bus, partRepo, aiProxy, messageRepo };
+  return {
+    svc,
+    encounterSvc,
+    combatSvc,
+    bus,
+    partRepo,
+    aiProxy,
+    messageRepo,
+    npcRepo,
+    npcSvc,
+  };
 }
 
 describe("StartEncounterFromNarrativeService — Spec 020", () => {
@@ -318,16 +335,48 @@ describe("StartEncounterFromNarrativeService — Spec 020", () => {
     ).rejects.toMatchObject({ code: ErrorCode.SCENE_NOT_FOUND });
   });
 
-  it("NPC sem monsterId → NPC_NOT_HOSTILE_CAPABLE com name no context", async () => {
-    const { svc } = build({
+  it("NPC sem monsterId → auto-atribui stats default por arquétipo e inicia combate", async () => {
+    const { svc, npcRepo, npcSvc } = build({
       npcs: {
         [NPC_ID_NO_MONSTER]: {
           id: NPC_ID_NO_MONSTER,
           name: "Velho Tom",
+          title: "taverneiro",
+          tags: [],
           monsterId: undefined,
         },
       },
     });
+    const result = await svc.run({
+      sessionId: SESSION_ID,
+      sceneId: SCENE_ID,
+      targetNpcIds: [NPC_ID_NO_MONSTER],
+      ownerUserId: OWNER_USER_ID,
+    });
+    // Combate começa (não lança mais NPC_NOT_HOSTILE_CAPABLE)
+    expect(result.encounterId).toBe(ENCOUNTER_ID);
+    // Resolveu um arquétipo (cai em commoner) e persistiu o monsterId no NPC
+    expect((npcSvc as any).resolveArchetype).toHaveBeenCalled();
+    const savedNpc = (npcRepo.save as jest.Mock).mock.calls[0][0];
+    expect(savedNpc.id).toBe(NPC_ID_NO_MONSTER);
+    expect(savedNpc.monsterId).toBe(MONSTER_ID);
+  });
+
+  it("NPC sem monsterId e sem fallback de monster → NPC_NOT_HOSTILE_CAPABLE", async () => {
+    const { svc } = build(
+      {
+        npcs: {
+          [NPC_ID_NO_MONSTER]: {
+            id: NPC_ID_NO_MONSTER,
+            name: "Velho Tom",
+            tags: [],
+            monsterId: undefined,
+          },
+        },
+        monster: null,
+      },
+      { resolveArchetype: jest.fn().mockRejectedValue(new Error("sem archetype")) },
+    );
     await expect(
       svc.run({
         sessionId: SESSION_ID,

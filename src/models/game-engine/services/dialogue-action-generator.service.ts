@@ -3,6 +3,7 @@ import type { DialogueWeight } from "src/shared/dialogue-weight";
 
 export type DialogueActionType =
   | "talk_npc"
+  | "confront_npc"
   | "examine_interactable"
   | "investigate_scene"
   | "skill"
