@@ -35,8 +35,16 @@ export class SessionStoryArcStateEntity {
   @JoinColumn({ name: "story_arc_id" })
   storyArc: StoryArcEntity;
 
+  // "completed"/"failed" são estados terminais da campanha (spec 052) — a
+  // coluna é varchar, então não há migration; o union documenta o ciclo todo.
   @Column({ name: "current_phase", type: "varchar", default: "hook" })
-  currentPhase: "hook" | "development" | "climax" | "resolution";
+  currentPhase:
+    | "hook"
+    | "development"
+    | "climax"
+    | "resolution"
+    | "completed"
+    | "failed";
 
   @Column({ name: "current_phase_index", type: "smallint", default: 1 })
   currentPhaseIndex: number;

@@ -92,6 +92,9 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "chronicle_tier_changed",
     "downtime_executed",
     "nl_trigger_evaluated",
+    "story_completed",
+    "story_failed",
+    "ending_imminent",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",

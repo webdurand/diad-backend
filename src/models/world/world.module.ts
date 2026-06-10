@@ -72,6 +72,7 @@ import { MissionPullListener } from "./listeners/mission-pull.listener";
 import { MissionPanelCacheListener } from "./listeners/mission-panel-cache.listener";
 import { PhaseGateListener } from "./listeners/phase-gate.listener";
 import { NpcRoutineListener } from "./listeners/npc-routine.listener";
+import { StoryFinaleListener } from "./listeners/story-finale.listener";
 import { WorldPulseListener } from "./listeners/world-pulse.listener";
 import { NpcRelationshipService } from "./services/npc-relationship.service";
 
@@ -210,6 +211,7 @@ import { EvaluateNaturalLanguageTriggerListener } from "../narrative-memory/list
     MissionPullListener,
     WorldPulseListener,
     NpcRoutineListener,
+    StoryFinaleListener,
     MissionPanelCacheListener,
     PhaseGateListener,
     CommitClosingSeedListener,
@@ -263,6 +265,7 @@ export class WorldModule implements OnModuleInit {
     private readonly missionPullListener: MissionPullListener,
     private readonly worldPulseListener: WorldPulseListener,
     private readonly npcRoutineListener: NpcRoutineListener,
+    private readonly storyFinaleListener: StoryFinaleListener,
     private readonly missionPanelCacheListener: MissionPanelCacheListener,
     private readonly phaseGateListener: PhaseGateListener,
     private readonly commitClosingSeedListener: CommitClosingSeedListener,
@@ -281,6 +284,7 @@ export class WorldModule implements OnModuleInit {
     this.eventBus.registerListener(this.missionPullListener);
     this.eventBus.registerListener(this.worldPulseListener);
     this.eventBus.registerListener(this.npcRoutineListener);
+    this.eventBus.registerListener(this.storyFinaleListener);
     this.eventBus.registerListener(this.missionPanelCacheListener);
     this.eventBus.registerListener(this.phaseGateListener);
     this.eventBus.registerListener(this.commitClosingSeedListener);

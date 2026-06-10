@@ -66,6 +66,46 @@ export class SceneService {
     this.logger.setContext(SceneService.name);
   }
 
+  private isSceneBudgetExceeded(err: unknown): boolean {
+    const response = (err as { getResponse?: () => unknown })?.getResponse?.();
+    const body = (typeof response === "object" ? response : null) as {
+      code?: string;
+      kind?: string;
+    } | null;
+    return body?.code === "BUDGET_EXCEEDED" && body?.kind === "scenes";
+  }
+
+  private async publishEndingImminent(
+    sessionId: string,
+    campaignId: string,
+    scenesUsed: number,
+    maxScenes: number,
+    urgent: boolean,
+  ): Promise<void> {
+    try {
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "ending_imminent",
+        source: {
+          service: "diad-backend",
+          module: "SceneService.create",
+        },
+        scope: { campaignId, sessionId },
+        payload: { sessionId, scenesUsed, maxScenes, urgent },
+        audiences: ["Narrator", "Director", "HUD"],
+        narrativeDescriptor: urgent
+          ? "O orçamento de cenas estourou: feche a história JÁ nesta cena."
+          : "Última cena disponível se aproxima: comece a fechar a história.",
+      });
+      await this.eventBus.publish(envelope);
+    } catch (err) {
+      this.logger.warn("scene.ending_imminent_publish_failed", {
+        "session.id": sessionId,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   async create(sessionId: string, dto: CreateSceneDto): Promise<SceneEntity> {
     const previousActive = await this.sceneRepo.findOne({
       where: { sessionId, isActive: true },
@@ -83,8 +123,37 @@ export class SceneService {
     let arcBeat: ArcBeat | undefined;
     if (campaign) {
       if (!dto.skipBudgetIncrement) {
-        await this.campaignService.incrementCount(campaign.id, "scenes");
-        arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber);
+        // Spec 052: o teto de cenas não pode matar a história com um 409 no
+        // meio da narração. Penúltima cena emite ending_imminent (o Director
+        // acelera o fechamento); estourar o teto vira cena de graça + sinal
+        // urgente, nunca erro na cara do jogador.
+        try {
+          const counts = await this.campaignService.incrementCount(
+            campaign.id,
+            "scenes",
+          );
+          const scenesUsed = counts?.scenes ?? 0;
+          const maxScenes = campaign.contentBudget?.maxScenes ?? 0;
+          if (maxScenes > 0 && scenesUsed > 0 && maxScenes - scenesUsed <= 1) {
+            await this.publishEndingImminent(
+              sessionId,
+              campaign.id,
+              scenesUsed,
+              maxScenes,
+              false,
+            );
+          }
+          arcBeat = await this.computeAndAdvanceArcBeat(campaign.id, nextNumber);
+        } catch (err) {
+          if (!this.isSceneBudgetExceeded(err)) throw err;
+          await this.publishEndingImminent(
+            sessionId,
+            campaign.id,
+            campaign.currentCounts?.scenes ?? 0,
+            campaign.contentBudget?.maxScenes ?? 0,
+            true,
+          );
+        }
       }
     }
 

@@ -493,7 +493,10 @@ export class PhaseService {
       }),
     ]);
     if (!fromPhase) throw new NotFoundException("Fase atual não encontrada.");
-    if (!toPhase) return this.getMainQuest(sessionId);
+    if (!toPhase) {
+      await this.maybeCompleteStory(sessionId, traceId);
+      return this.getMainQuest(sessionId);
+    }
 
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
     const evaluation = this.evaluateGate(toPhase.unlockConditions, facts);
@@ -562,7 +565,12 @@ export class PhaseService {
       }),
     ]);
     if (!fromPhase) throw new NotFoundException("Fase atual não encontrada.");
-    if (!toPhase) return null;
+    if (!toPhase) {
+      // Spec 052: sem próxima fase = estamos no clímax. Condições satisfeitas
+      // encerram a campanha em vez de cair no vazio.
+      await this.maybeCompleteStory(sessionId, traceId);
+      return null;
+    }
 
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
     const evaluation = this.evaluateGate(toPhase.unlockConditions, facts);
@@ -581,6 +589,61 @@ export class PhaseService {
       traceId,
     );
     return pending;
+  }
+
+  // Spec 052: "fase 4 virtual" — última fase com completionConditions
+  // satisfeitas encerra a campanha deterministicamente: arco completed,
+  // sessão completed/endedAt, story_completed publicado (o StoryFinaleListener
+  // semeia a cerimônia de desfecho via clock de consequência do executor 049).
+  async maybeCompleteStory(sessionId: string, traceId?: string): Promise<boolean> {
+    const { session, storyArc, state } = await this.loadMainArcState(sessionId);
+    if (state.currentPhase === "completed" || state.currentPhase === "failed") {
+      return false;
+    }
+    const phasesTotal = await this.phaseRepo.count({
+      where: { storyArcId: storyArc.id },
+    });
+    if (phasesTotal === 0 || state.currentPhaseIndex < phasesTotal) return false;
+    const lastPhase = await this.phaseRepo.findOne({
+      where: { storyArcId: storyArc.id, index: state.currentPhaseIndex },
+    });
+    if (!lastPhase) return false;
+    const facts = await this.collectFacts(sessionId, storyArc.id, state);
+    const evaluation = this.evaluateGate(lastPhase.completionConditions, facts);
+    if (evaluation.status !== "pending") return false;
+
+    state.currentPhase = "completed";
+    await this.stateRepo.save(state);
+    session.status = "completed";
+    session.endedAt = new Date();
+    await this.sessionRepo.save(session);
+    this.invalidateMainQuestCache(sessionId);
+
+    const envelope = this.envelopeFactory.build({
+      eventCategory: "NarrativeEvent",
+      eventType: "story_completed",
+      source: {
+        service: "diad-backend",
+        module: "PhaseService.maybeCompleteStory",
+        traceId,
+      },
+      scope: {
+        campaignId: session.campaignId ?? storyArc.campaignId,
+        sessionId,
+      },
+      payload: {
+        sessionId,
+        storyArcId: storyArc.id,
+        finalPhaseIndex: lastPhase.index,
+        finalPhaseName: lastPhase.name,
+        satisfiedKinds: evaluation.satisfiedKinds,
+        xpTriggerState: normalizeXpTriggerState(state.xpTriggerState),
+      },
+      audiences: STORY_AUDIENCES,
+      narrativeDescriptor: `A questão dramática se fecha: ${storyArc.name ?? "a campanha"} chega ao desfecho.`,
+    });
+    await this.eventBus.publish(envelope);
+    return true;
   }
 
   private async commitAdvance(
