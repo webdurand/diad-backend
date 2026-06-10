@@ -67,11 +67,57 @@ export interface WorldCompletionAdditions {
   quests?: QuestSeed[];
 }
 
+export type NpcSeedDisposition =
+  | "friendly"
+  | "neutral"
+  | "hostile"
+  | "indifferent";
+
+const NPC_SEED_DISPOSITIONS: readonly NpcSeedDisposition[] = [
+  "friendly",
+  "neutral",
+  "hostile",
+  "indifferent",
+];
+
+const NPC_DISPOSITION_TAG_PREFIX = "disposition:";
+
+/**
+ * NPCs canônicos não têm coluna própria de disposition (ela vive no estado
+ * por sessão). O seed declara a disposition inicial e nós a codificamos como
+ * tag `disposition:<valor>`; SessionService.initializeCanonicalNpcStates a
+ * decodifica ao criar o SessionNpcState (default continua "neutral").
+ */
+export function extractNpcDispositionFromTags(
+  tags: string[] | null | undefined,
+): NpcSeedDisposition | undefined {
+  for (const tag of tags ?? []) {
+    if (typeof tag !== "string") continue;
+    const normalized = tag.trim().toLowerCase();
+    if (!normalized.startsWith(NPC_DISPOSITION_TAG_PREFIX)) continue;
+    const value = normalized.slice(NPC_DISPOSITION_TAG_PREFIX.length);
+    if ((NPC_SEED_DISPOSITIONS as readonly string[]).includes(value)) {
+      return value as NpcSeedDisposition;
+    }
+  }
+  return undefined;
+}
+
+function normalizeNpcSeedDisposition(
+  value: unknown,
+): NpcSeedDisposition | undefined {
+  const normalized = clean(value).toLowerCase();
+  return (NPC_SEED_DISPOSITIONS as readonly string[]).includes(normalized)
+    ? (normalized as NpcSeedDisposition)
+    : undefined;
+}
+
 interface NpcSeed {
   name?: string | null;
   title?: string;
   race?: string;
   role?: string;
+  disposition?: NpcSeedDisposition | string;
   profile_depth?: "core" | "supporting" | "expanded";
   archetype_slug?: string;
   faction_slug?: string | null;
@@ -749,8 +795,12 @@ export class WorldSeedMaterializationService {
         monsterId = template?.monsterId;
       }
 
+      const dispositionSeed = normalizeNpcSeedDisposition(seed.disposition);
       const tags = uniqueStrings([
         ...(seed.role ? [seed.role] : []),
+        ...(dispositionSeed
+          ? [`${NPC_DISPOSITION_TAG_PREFIX}${dispositionSeed}`]
+          : []),
         ...asArray(seed.reputation_seed?.tags),
       ]);
 

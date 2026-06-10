@@ -7,8 +7,11 @@ import {
   CharacterEntity,
   CharacterStateEntity,
   CampaignEntity,
+  GameSessionEntity,
 } from "src/entities";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { EventBusService } from "src/common/event-bus/event-bus.service";
+import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factory";
 import { GameResult, failure, success } from "../interfaces/result.type";
 import {
   buildPayPriceOutcome,
@@ -61,6 +64,10 @@ export class FateLadderService {
     private readonly campaignRepo: Repository<CampaignEntity>,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
+    @InjectRepository(GameSessionEntity)
+    private readonly sessionRepo: Repository<GameSessionEntity>,
+    private readonly eventBus: EventBusService,
+    private readonly envelopeFactory: EventEnvelopeFactory,
   ) {}
 
 
@@ -218,6 +225,7 @@ export class FateLadderService {
   async applyResolution(
     characterId: string,
     stateChanges: string[],
+    options?: { sessionId?: string | null },
   ): Promise<{
     appliedChanges: Array<{
       change: string;
@@ -324,15 +332,17 @@ export class FateLadderService {
 
 
     let dyingState: string | null = null;
+    let encounterSessionId: string | null = null;
     try {
       const activeParticipant = await this.participantRepo
         .createQueryBuilder("p")
-        .innerJoin("p.encounter", "e")
+        .innerJoinAndSelect("p.encounter", "e")
         .where("p.character_id = :cid", { cid: characterId })
         .andWhere("e.status = :st", { st: "active" })
         .orderBy("p.id", "DESC")
         .getOne();
       if (activeParticipant) {
+        encounterSessionId = activeParticipant.encounter?.sessionId ?? null;
         if (state.conditions?.includes("dead")) {
           activeParticipant.dyingState = "dead";
         } else if (state.conditions?.includes("unconscious")) {
@@ -349,6 +359,16 @@ export class FateLadderService {
       );
     }
 
+    // Spec 052: a opção A (aceitar a morte) fecha a campanha em derrota — a
+    // morte permanente do herói falha a main quest. O StoryFinaleListener
+    // consome quest_failed(isMainQuest) e cuida da cerimônia de derrota.
+    if (stateChanges.includes("pc_status=dead_permanent")) {
+      await this.publishHeroFallen(
+        characterId,
+        options?.sessionId ?? encounterSessionId,
+      );
+    }
+
     return {
       appliedChanges: applied,
       pcFinalState: {
@@ -358,5 +378,56 @@ export class FateLadderService {
         dyingState,
       },
     };
+  }
+
+  private async publishHeroFallen(
+    characterId: string,
+    sessionId: string | null | undefined,
+  ): Promise<void> {
+    try {
+      if (!sessionId) {
+        this.logger.warn(
+          `morte permanente de ${characterId} sem sessionId — quest_failed não publicado (campanha não fechará em derrota).`,
+        );
+        return;
+      }
+      const session = await this.sessionRepo.findOne({
+        where: { id: sessionId },
+        select: ["id", "campaignId"],
+      });
+      if (!session?.campaignId) {
+        this.logger.warn(
+          `morte permanente de ${characterId}: sessão ${sessionId} sem campaignId — quest_failed não publicado.`,
+        );
+        return;
+      }
+      const envelope = this.envelopeFactory.build({
+        eventCategory: "NarrativeEvent",
+        eventType: "quest_failed",
+        source: {
+          service: "diad-backend",
+          module: "FateLadderService.applyResolution",
+        },
+        scope: {
+          campaignId: session.campaignId,
+          sessionId,
+        },
+        payload: {
+          sessionId,
+          characterId,
+          isMainQuest: true,
+          questName: "Queda do herói",
+          evidence: "Morte permanente do personagem.",
+        },
+        audiences: ["Narrator", "Director", "HUD"],
+        narrativeDescriptor:
+          "O herói tomba em definitivo — a missão principal falha e a campanha termina em derrota.",
+      });
+      await this.eventBus.publish(envelope);
+    } catch (err) {
+      this.logger.warn(
+        `falha ao publicar quest_failed (morte permanente) para ${characterId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }

@@ -117,6 +117,20 @@ export class CharacterStateService {
     return getCharacterState(this.stateRepo, characterId);
   }
 
+  // A ficha (character_state) é o que o front recarrega após o turno — é ela
+  // que decide abrir a Fate Ladder (currentHp<=0 && failures>=3). Os caminhos
+  // de morte precisam manter conditions/'dying'/'dead' coerentes na ficha.
+  private syncConditions(
+    state: CharacterStateEntity,
+    add: string[],
+    remove: string[],
+  ): void {
+    const next = new Set(state.conditions ?? []);
+    for (const c of remove) next.delete(c);
+    for (const c of add) next.add(c);
+    state.conditions = Array.from(next);
+  }
+
 
   async getFeatureUsesUsed(
     characterId: string,
@@ -266,6 +280,19 @@ export class CharacterStateService {
             instantDeath = true;
           }
         }
+
+        // Morte em limbo (avaliação 2026-06): a ficha precisa refletir o
+        // estado do encounter. Instant death persiste 3 falhas + 'dead'
+        // (o front só abre a Fate Ladder com hp<=0 && failures>=3);
+        // cair a 0 HP marca 'dying' na ficha, não só no participant.
+        if (state.current_hp === 0) {
+          if (instantDeath) {
+            state.death_saves_fail = 3;
+            this.syncConditions(state, ["dead"], ["dying"]);
+          } else if (!(state.conditions ?? []).includes("dead")) {
+            this.syncConditions(state, ["dying"], []);
+          }
+        }
       }
     }
 
@@ -276,6 +303,8 @@ export class CharacterStateService {
       if (state.current_hp > 0) {
         state.death_saves_success = 0;
         state.death_saves_fail = 0;
+        // HP > 0 ⇒ não está mais morrendo ('dead' só sai via revive explícito).
+        this.syncConditions(state, [], ["dying"]);
       }
     }
 
@@ -364,6 +393,28 @@ export class CharacterStateService {
         (dto.rollValue !== undefined && dto.rollValue < 10 && dto.rollValue > 1)
       ) {
         state.death_saves_fail = Math.min(3, state.death_saves_fail + 1);
+      }
+    }
+
+    // Morte em limbo (avaliação 2026-06): death saves só existem a 0 HP, mas
+    // o PC pode ter entrado em 'dying' por caminho que não passou pela ficha
+    // (ex.: PATCH dying-state narrativo só escreve participant.dyingState).
+    // Sincroniza aqui — current_hp=0 enquanto morre, e condição 'dying'/'dead'
+    // conforme o caso — para a ficha recarregada disparar a Fate Ladder.
+    if (!dto.reset) {
+      if (revivedHp !== undefined) {
+        this.syncConditions(state, [], ["dying", "unconscious"]);
+      } else {
+        if (state.current_hp > 0) {
+          state.current_hp = 0;
+        }
+        if (state.death_saves_fail >= 3) {
+          this.syncConditions(state, ["dead"], ["dying"]);
+        } else if (state.death_saves_success >= 3) {
+          this.syncConditions(state, ["unconscious"], ["dying"]);
+        } else {
+          this.syncConditions(state, ["dying"], []);
+        }
       }
     }
 

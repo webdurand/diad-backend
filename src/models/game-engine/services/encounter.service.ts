@@ -234,10 +234,18 @@ export class EncounterService {
     return fallbackUserId;
   }
 
-  async getById(encounterId: string): Promise<EncounterEntity> {
+  async getById(
+    encounterId: string,
+    options?: { withMonsters?: boolean },
+  ): Promise<EncounterEntity> {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
-      relations: ["participants"],
+
+      // participants.monster só é carregada sob demanda (fluxos de XP /
+      // dificuldade / briefing) para não inflar todas as leituras de encounter.
+      relations: options?.withMonsters
+        ? ["participants", "participants.monster"]
+        : ["participants"],
     });
     if (!encounter) throw new NotFoundException("Encontro nao encontrado.");
     await this.enrichPcParticipants(encounter);
@@ -877,7 +885,9 @@ export class EncounterService {
   async endEncounter(
     encounterId: string,
   ): Promise<{ totalXp: number; xpPerCharacter: number }> {
-    const encounter = await this.getById(encounterId);
+    // withMonsters: o XP vem de participants.monster — sem a relation,
+    // todo caminho de soma via getById retornava 0.
+    const encounter = await this.getById(encounterId, { withMonsters: true });
     const participants = encounter.participants ?? [];
 
     const monsters = participants.filter(
@@ -895,6 +905,14 @@ export class EncounterService {
     const xpPerCharacter =
       pcs.length > 0 ? Math.floor(totalXp / pcs.length) : 0;
 
+    const defeatedHostiles = participants.filter(
+      (p) =>
+        this.isHostileDefeatable(p) &&
+        (p.isDefeated || (p.currentHp ?? 0) <= 0),
+    );
+    const defeatedNpcIds = defeatedHostiles.map((p) => p.id);
+    const defeatedNpcNames = defeatedHostiles.map((p) => p.displayName);
+
     encounter.status = "completed";
     await this.encounterRepo.save(encounter);
     await this.sessionService.setActiveEncounter(encounter.sessionId, null);
@@ -906,15 +924,27 @@ export class EncounterService {
           name: encounter.name,
           totalXp,
           xpPerCharacter,
-          monstersDefeated: monsters.filter((m) => m.isDefeated).length,
+          monstersDefeated: defeatedHostiles.length,
+          defeatedNpcIds,
+          defeatedNpcNames,
         },
       },
     ]);
     await this.publishEncounterEnded(
       encounter,
       "victory",
-      { totalXp, xpPerCharacter },
+      { totalXp, xpPerCharacter, defeatedNpcIds, defeatedNpcNames },
     );
+
+    await this.appendCombatDigestMessage(encounter, {
+      outcome: "victory",
+      totalXp,
+      xpPerCharacter,
+      defeated: defeatedHostiles.map((p) => ({
+        id: p.id,
+        name: p.displayName,
+      })),
+    });
 
     return { totalXp, xpPerCharacter };
   }
@@ -923,7 +953,7 @@ export class EncounterService {
     encounterId: string,
     partyLevels: number[],
   ): Promise<EncounterDifficulty> {
-    const encounter = await this.getById(encounterId);
+    const encounter = await this.getById(encounterId, { withMonsters: true });
     const monsters = (encounter.participants ?? []).filter(
       (p) => this.isHostileDefeatable(p) && Boolean(p.monster),
     );
@@ -1385,6 +1415,11 @@ export class EncounterService {
     }
 
 
+    const defeatedNpcIds = outcomeSummary.defeatedNpcs.map(
+      (d) => d.participantId,
+    );
+    const defeatedNpcNames = outcomeSummary.defeatedNpcs.map((d) => d.name);
+
     const events = [
       {
         event_type: "encounter_resolved",
@@ -1394,6 +1429,8 @@ export class EncounterService {
           xpApplied,
           goldApplied,
           itemsApplied,
+          defeatedNpcIds,
+          defeatedNpcNames,
         },
       },
       {
@@ -1406,6 +1443,8 @@ export class EncounterService {
       xpApplied,
       goldApplied,
       itemsApplied,
+      defeatedNpcIds,
+      defeatedNpcNames,
     });
 
 
@@ -1465,6 +1504,20 @@ export class EncounterService {
       );
     }
 
+    await this.appendCombatDigestMessage(
+      encounter,
+      {
+        outcome: dto.outcome,
+        totalXp: outcomeSummary.xpAwarded,
+        xpPerCharacter: xpApplied.length > 0 ? (xpApplied[0]?.xp ?? 0) : 0,
+        defeated: outcomeSummary.defeatedNpcs.map((d) => ({
+          id: d.participantId,
+          name: d.name,
+        })),
+      },
+      session?.ownerId ?? null,
+    );
+
     if (campaignId) {
       const rounds = Math.max(1, encounter.currentRound ?? 1);
       const hours = Math.max(0.1, (rounds * 6) / 3600);
@@ -1523,6 +1576,39 @@ export class EncounterService {
       .getById(encounter.sessionId)
       .catch(() => null);
     if (!session?.campaignId) return;
+
+    // TPK (avaliação 2026-06): o payload precisa dizer se TODOS os PCs caíram
+    // — o QuestDefeatListener transforma isso em party_defeated para a
+    // narrativa. "Derrotado" = morto, morrendo ou estável-inconsciente.
+    let pcsDefeated: Array<{
+      participantId: string;
+      characterId: string | null;
+      displayName: string;
+      dyingState: string;
+    }> = [];
+    let allPcsDown = false;
+    try {
+      const pcs = await this.participantRepo.find({
+        where: { encounterId: encounter.id, type: "pc" },
+      });
+      const down = pcs.filter(
+        (p) =>
+          p.isDefeated ||
+          p.dyingState === "dead" ||
+          p.dyingState === "dying" ||
+          p.dyingState === "stable",
+      );
+      pcsDefeated = down.map((p) => ({
+        participantId: p.id,
+        characterId: p.characterId ?? null,
+        displayName: p.displayName,
+        dyingState: p.dyingState,
+      }));
+      allPcsDown = pcs.length > 0 && down.length === pcs.length;
+    } catch {
+      // enriquecimento best-effort; o evento sai mesmo sem o snapshot de PCs
+    }
+
     try {
       const envelope = this.envelopeFactory.build({
         eventCategory: "EncounterEvent",
@@ -1542,6 +1628,8 @@ export class EncounterService {
           encounterId: encounter.id,
           encounterName: encounter.name,
           outcome,
+          pcsDefeated,
+          allPcsDown,
           ...payload,
         },
         audiences: ["CombatAgent", "Narrator", "Director", "HUD", "CompanionAI"],
@@ -1648,6 +1736,7 @@ export class EncounterService {
   ): Promise<{
     outcome: string;
     defeatedNpcs: Array<{
+      participantId: string;
       name: string;
       type: "monster" | "npc";
       monsterSlug?: string;
@@ -1676,6 +1765,7 @@ export class EncounterService {
           (p.isDefeated || (p.currentHp ?? 0) <= 0),
       )
       .map((p) => ({
+        participantId: p.id,
         name: p.displayName,
         type: p.type as "monster" | "npc",
         monsterSlug: p.monster?.slug,
@@ -1776,6 +1866,153 @@ export class EncounterService {
       return "PC retirou-se. Combate inconcluso.";
     }
     return `Encontro encerrado: ${outcome}.`;
+  }
+
+
+  // Digest narrativo do combate: UMA mensagem 'system' no transcript da
+  // sessão, montada a partir dos game_events já registrados do encounter
+  // (rounds, golpe final, quem caiu, XP). Melhor-esforço: nunca derruba o
+  // encerramento.
+  private async appendCombatDigestMessage(
+    encounter: EncounterEntity,
+    opts: {
+      outcome: string;
+      totalXp: number;
+      xpPerCharacter: number;
+      defeated: Array<{ id: string; name: string }>;
+    },
+    ownerUserId?: string | null,
+  ): Promise<void> {
+    try {
+      let ownerId = ownerUserId ?? null;
+      if (!ownerId) {
+        const session = await this.sessionService
+          .getById(encounter.sessionId)
+          .catch(() => null);
+        ownerId = session?.ownerId ?? null;
+      }
+      if (!ownerId) return;
+
+      const digest = await this.buildCombatDigestText(encounter, opts);
+      if (!digest) return;
+
+      await this.sessionMessageService.append({
+        sessionId: encounter.sessionId,
+        userId: ownerId,
+        kind: "system",
+        content: digest,
+        clientId: `srv-combat-digest-${encounter.id}`,
+      });
+    } catch (err: unknown) {
+      this.logger.warn(
+        `combat digest persist failed (encounter=${encounter.id}): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  private async buildCombatDigestText(
+    encounter: EncounterEntity,
+    opts: {
+      outcome: string;
+      totalXp: number;
+      xpPerCharacter: number;
+      defeated: Array<{ id: string; name: string }>;
+    },
+  ): Promise<string> {
+    const rounds = Math.max(1, encounter.currentRound ?? 1);
+    const nameById = new Map(
+      (encounter.participants ?? []).map((p) => [p.id, p.displayName]),
+    );
+
+    // Golpe final: último evento de dano cujo alvo terminou derrotado.
+    let finalBlow: {
+      attacker?: string;
+      target?: string;
+      damage?: number;
+    } | null = null;
+    try {
+      const timeline = await this.eventService.getEncounterTimeline(
+        encounter.id,
+      );
+      const defeatedIds = new Set(opts.defeated.map((d) => d.id));
+      const damageEventTypes = new Set([
+        "damage_applied",
+        "aoe_target_hit",
+        "hp_change",
+      ]);
+      for (let i = timeline.length - 1; i >= 0; i--) {
+        const ev = timeline[i];
+        if (!damageEventTypes.has(ev.eventType)) continue;
+        if (
+          !ev.targetParticipantId ||
+          !defeatedIds.has(ev.targetParticipantId)
+        ) {
+          continue;
+        }
+        const data = (ev.data ?? {}) as Record<string, unknown>;
+        const nested = data.damage as Record<string, unknown> | undefined;
+        const damage =
+          typeof data.finalDamage === "number"
+            ? data.finalDamage
+            : typeof nested?.finalDamage === "number"
+              ? (nested.finalDamage as number)
+              : undefined;
+        finalBlow = {
+          attacker: ev.actorParticipantId
+            ? nameById.get(ev.actorParticipantId)
+            : undefined,
+          target: nameById.get(ev.targetParticipantId),
+          damage,
+        };
+        break;
+      }
+    } catch {
+      // sem timeline, o digest sai sem a frase do golpe final
+    }
+
+    const outcomeLabels: Record<string, string> = {
+      victory: "vitória",
+      defeat: "derrota",
+      retreat: "retirada",
+      negotiation: "negociação",
+    };
+    const outcomeLabel = outcomeLabels[opts.outcome] ?? opts.outcome;
+
+    const sentences: string[] = [
+      `O combate "${encounter.name}" terminou em ${outcomeLabel} após ${rounds} ${
+        rounds === 1 ? "round" : "rounds"
+      }.`,
+    ];
+    if (finalBlow?.attacker && finalBlow?.target) {
+      const dmgFragment =
+        typeof finalBlow.damage === "number" && finalBlow.damage > 0
+          ? ` (${finalBlow.damage} de dano)`
+          : "";
+      sentences.push(
+        `${finalBlow.attacker} desferiu o golpe final em ${finalBlow.target}${dmgFragment}.`,
+      );
+    }
+    if (opts.defeated.length > 0) {
+      const shown = opts.defeated
+        .slice(0, 4)
+        .map((d) => d.name)
+        .join(", ");
+      const extra =
+        opts.defeated.length > 4
+          ? ` e mais ${opts.defeated.length - 4}`
+          : "";
+      sentences.push(`Caíram em combate: ${shown}${extra}.`);
+    }
+    if (opts.totalXp > 0) {
+      sentences.push(
+        opts.xpPerCharacter > 0 && opts.xpPerCharacter !== opts.totalXp
+          ? `O grupo recebeu ${opts.totalXp} XP (${opts.xpPerCharacter} para cada).`
+          : `O grupo recebeu ${opts.totalXp} XP.`,
+      );
+    }
+    return sentences.slice(0, 5).join(" ");
   }
 
   async updateMapData(

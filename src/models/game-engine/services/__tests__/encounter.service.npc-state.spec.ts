@@ -10,11 +10,21 @@ describe("EncounterService — NPC state sync", () => {
       encounterId: ENCOUNTER_ID,
       type: "npc",
       faction: "enemy",
+      controlledBy: "ai",
       displayName: "Vitorino",
       currentHp: 0,
       maxHp: 5,
       isDefeated: true,
-      monster: { slug: "commoner" },
+      monster: { slug: "commoner", xp: 10 },
+    };
+    const pcParticipant = {
+      id: "part-aric",
+      encounterId: ENCOUNTER_ID,
+      type: "pc",
+      faction: "ally",
+      controlledBy: "pc",
+      displayName: "Aric",
+      isDefeated: false,
     };
     const encounter = {
       id: ENCOUNTER_ID,
@@ -22,7 +32,7 @@ describe("EncounterService — NPC state sync", () => {
       name: "Emboscada na taberna",
       status: "active",
       currentRound: 1,
-      participants: [defeatedNpc],
+      participants: [defeatedNpc, pcParticipant],
     };
     const npcState = {
       id: "state-vitorino",
@@ -38,13 +48,23 @@ describe("EncounterService — NPC state sync", () => {
       save: jest.fn(async (value) => value),
     };
     const participantRepo = {
-      find: jest.fn().mockResolvedValue([defeatedNpc]),
+      find: jest.fn().mockResolvedValue([defeatedNpc, pcParticipant]),
     };
     const npcStateRepo = {
       find: jest.fn().mockResolvedValue([npcState]),
       save: jest.fn(async (value) => value),
     };
-    const eventService = { emit: jest.fn() };
+    const eventService = {
+      emit: jest.fn(),
+      getEncounterTimeline: jest.fn().mockResolvedValue([
+        {
+          eventType: "damage_applied",
+          actorParticipantId: "part-aric",
+          targetParticipantId: "part-vitorino",
+          data: { finalDamage: 7 },
+        },
+      ]),
+    };
     const sessionService = {
       getById: jest.fn().mockResolvedValue({
         id: SESSION_ID,
@@ -78,7 +98,15 @@ describe("EncounterService — NPC state sync", () => {
       sceneContextCache as any,
     );
 
-    return { service, npcState, npcStateRepo, sceneContextCache };
+    return {
+      service,
+      npcState,
+      npcStateRepo,
+      sceneContextCache,
+      encounterRepo,
+      eventService,
+      sessionMessageService,
+    };
   }
 
   it("marca NPC derrotado como dead no estado da sessão ao resolver encounter", async () => {
@@ -93,6 +121,87 @@ describe("EncounterService — NPC state sync", () => {
     expect(npcState.status).toBe("dead");
     expect(npcStateRepo.save).toHaveBeenCalledWith([npcState]);
     expect(sceneContextCache.invalidateAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("inclui defeatedNpcIds/nomes no encounter_resolved e gera digest 'system' no transcript", async () => {
+    const { service, eventService, sessionMessageService } = setup();
+
+    await service.resolveEncounter(
+      ENCOUNTER_ID,
+      { outcome: "victory" },
+      "system",
+    );
+
+    expect(eventService.emit).toHaveBeenCalledWith(
+      SESSION_ID,
+      ENCOUNTER_ID,
+      expect.arrayContaining([
+        expect.objectContaining({
+          event_type: "encounter_resolved",
+          data: expect.objectContaining({
+            defeatedNpcIds: ["part-vitorino"],
+            defeatedNpcNames: ["Vitorino"],
+          }),
+        }),
+      ]),
+    );
+
+    expect(sessionMessageService.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: SESSION_ID,
+        userId: "user-1",
+        kind: "system",
+        clientId: `srv-combat-digest-${ENCOUNTER_ID}`,
+        content: expect.stringContaining("Vitorino"),
+      }),
+    );
+    const digestCall = sessionMessageService.append.mock.calls.find(
+      ([dto]: any[]) => dto.kind === "system",
+    );
+    expect(digestCall[0].content).toContain("vitória");
+    expect(digestCall[0].content).toContain(
+      "Aric desferiu o golpe final em Vitorino (7 de dano)",
+    );
+  });
+
+  it("endEncounter carrega participants.monster e soma XP do monstro (regressão XP=0)", async () => {
+    const { service, encounterRepo, eventService, sessionMessageService } =
+      setup();
+
+    const result = await service.endEncounter(ENCOUNTER_ID);
+
+    expect(encounterRepo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relations: ["participants", "participants.monster"],
+      }),
+    );
+    expect(result.totalXp).toBe(10);
+    expect(result.xpPerCharacter).toBe(10);
+
+    expect(eventService.emit).toHaveBeenCalledWith(
+      SESSION_ID,
+      ENCOUNTER_ID,
+      expect.arrayContaining([
+        expect.objectContaining({
+          event_type: "encounter_end",
+          data: expect.objectContaining({
+            totalXp: 10,
+            xpPerCharacter: 10,
+            monstersDefeated: 1,
+            defeatedNpcIds: ["part-vitorino"],
+            defeatedNpcNames: ["Vitorino"],
+          }),
+        }),
+      ]),
+    );
+
+    expect(sessionMessageService.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "system",
+        clientId: `srv-combat-digest-${ENCOUNTER_ID}`,
+        content: expect.stringContaining("10 XP"),
+      }),
+    );
   });
 
   it("auto-inclui companions ativos como participantes pc aliados", async () => {

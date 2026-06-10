@@ -11,6 +11,7 @@ import {
   AiUsageLogEntity,
   SessionNpcStateEntity,
   LocationEntity,
+  LocationPoiEntity,
   LocationConnectionEntity,
   SceneEntity,
 } from "src/entities";
@@ -39,6 +40,7 @@ import { AiUsageService } from "./services/ai-usage.service";
       AiUsageLogEntity,
       SessionNpcStateEntity,
   LocationEntity,
+  LocationPoiEntity,
   LocationConnectionEntity,
   SceneEntity,
     ]),

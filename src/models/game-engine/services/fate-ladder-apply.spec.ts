@@ -9,7 +9,10 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
         max_hp_bonus: number;
         conditions: string[];
       };
-      activeParticipant: { id: string; dyingState: string } | null;
+      activeParticipant:
+        | { id: string; dyingState: string; encounter?: { sessionId: string } }
+        | null;
+      session: { id: string; campaignId: string | null } | null;
     }> = {},
   ) {
     const initial = overrides.initialState ?? {
@@ -34,6 +37,7 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
 
     const qb = {
       innerJoin: jest.fn().mockReturnThis(),
+      innerJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
@@ -44,13 +48,42 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
       save: jest.fn().mockImplementation(async (p: any) => p),
     };
 
+    const session =
+      overrides.session !== undefined
+        ? overrides.session
+        : { id: "sess-1", campaignId: "camp-1" };
+    const sessionRepo: any = {
+      findOne: jest.fn().mockResolvedValue(session),
+    };
+    const eventBus: any = {
+      publish: jest.fn().mockImplementation(async (e: any) => e),
+    };
+    const envelopeFactory: any = {
+      build: jest.fn().mockImplementation((input: any) => ({
+        eventId: "evt-1",
+        ...input,
+      })),
+    };
+
     const svc = new FateLadderService(
       characterRepo,
       stateRepo,
       campaignRepo,
       participantRepo,
+      sessionRepo,
+      eventBus,
+      envelopeFactory,
     );
-    return { svc, stateRepo, stateRow, participantRepo, activeParticipant };
+    return {
+      svc,
+      stateRepo,
+      stateRow,
+      participantRepo,
+      activeParticipant,
+      sessionRepo,
+      eventBus,
+      envelopeFactory,
+    };
   }
 
   it("opção C (Pay Price): hp=1 + stable_unconscious + dyingState=stable", async () => {
@@ -113,6 +146,65 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
     expect(activeParticipant!.dyingState).toBe("dead");
   });
 
+  it("opção A (spec 052): dead_permanent publica quest_failed(isMainQuest) com sessionId", async () => {
+    const { svc, eventBus, envelopeFactory } = setup();
+
+    await svc.applyResolution(
+      "char-1",
+      ["arc_beat=CHANGE_forced", "trigger_epilogue_modal", "pc_status=dead_permanent"],
+      { sessionId: "sess-1" },
+    );
+
+    expect(eventBus.publish).toHaveBeenCalledTimes(1);
+    const input = envelopeFactory.build.mock.calls[0][0];
+    expect(input.eventCategory).toBe("NarrativeEvent");
+    expect(input.eventType).toBe("quest_failed");
+    expect(input.scope).toEqual({ campaignId: "camp-1", sessionId: "sess-1" });
+    expect(input.payload).toMatchObject({
+      sessionId: "sess-1",
+      isMainQuest: true,
+      questName: "Queda do herói",
+      evidence: "Morte permanente do personagem.",
+    });
+  });
+
+  it("opção A sem sessionId (nem encounter ativo): não publica quest_failed", async () => {
+    const { svc, eventBus } = setup({ activeParticipant: null });
+
+    await svc.applyResolution("char-1", ["pc_status=dead_permanent"]);
+
+    expect(eventBus.publish).not.toHaveBeenCalled();
+  });
+
+  it("opção A usa sessionId do encounter ativo quando o caller não informa", async () => {
+    const { svc, eventBus, envelopeFactory } = setup({
+      activeParticipant: {
+        id: "p-1",
+        dyingState: "dying",
+        encounter: { sessionId: "sess-enc" },
+      },
+    });
+
+    await svc.applyResolution("char-1", ["pc_status=dead_permanent"]);
+
+    expect(eventBus.publish).toHaveBeenCalledTimes(1);
+    const input = envelopeFactory.build.mock.calls[0][0];
+    expect(input.scope.sessionId).toBe("sess-enc");
+    expect(input.payload.sessionId).toBe("sess-enc");
+  });
+
+  it("opção C não publica quest_failed", async () => {
+    const { svc, eventBus } = setup();
+
+    await svc.applyResolution(
+      "char-1",
+      ["pc_hp=1", "pc_status=stable_unconscious"],
+      { sessionId: "sess-1" },
+    );
+
+    expect(eventBus.publish).not.toHaveBeenCalled();
+  });
+
   it("opção D (Resurrection): hp=1 + alive limpa unconscious + dyingState=none", async () => {
     const { svc, stateRow, activeParticipant } = setup({
       initialState: {
@@ -171,6 +263,9 @@ describe("FateLadderService.applyResolution (spec 027)", () => {
       stateRepo,
       {} as any,
       participantRepo,
+      {} as any,
+      { publish: jest.fn() } as any,
+      { build: jest.fn() } as any,
     );
 
     await expect(svc.applyResolution("char-1", ["pc_hp=1"])).rejects.toThrow(

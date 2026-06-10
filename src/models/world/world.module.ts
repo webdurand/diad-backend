@@ -89,6 +89,7 @@ import { CompanionTemplatesController } from "./companion-templates.controller";
 import { CompanionTemplateService } from "./services/companion-template.service";
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 import { WorldSeedMaterializationService } from "./services/world-seed-materialization.service";
+import { MinimalWorldSeedService } from "./services/minimal-world-seed.service";
 import { WorldPulseService } from "./services/world-pulse.service";
 import { BookendDecisionService } from "../bookends/services/bookend-decision.service";
 import { NpcStateSnapshotService } from "../bookends/services/npc-state-snapshot.service";
@@ -191,6 +192,7 @@ import { EvaluateNaturalLanguageTriggerListener } from "../narrative-memory/list
     NpcWealthService,
     CompanionTemplateService,
     WorldSeedMaterializationService,
+    MinimalWorldSeedService,
     WorldPulseService,
     BookendDecisionService,
     NpcStateSnapshotService,
@@ -243,6 +245,7 @@ import { EvaluateNaturalLanguageTriggerListener } from "../narrative-memory/list
     NpcWealthService,
     CompanionTemplateService,
     WorldSeedMaterializationService,
+    MinimalWorldSeedService,
     WorldPulseService,
     BookendDecisionService,
     NpcStateSnapshotService,

@@ -95,6 +95,13 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "story_completed",
     "story_failed",
     "ending_imminent",
+    // Morte permanente (Fate Ladder opção A) falha a main quest como evento
+    // narrativo — o StoryFinaleListener (categoria NarrativeEvent) consome
+    // quest_failed(isMainQuest) e fecha a campanha em derrota.
+    "quest_failed",
+    // TPK: encounter terminou com todos os PCs derrotados. Sinal para a
+    // narrativa (Narrator/Director/HUD) — não fecha a campanha sozinho.
+    "party_defeated",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",

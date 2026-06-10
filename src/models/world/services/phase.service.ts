@@ -810,6 +810,10 @@ export class PhaseService {
       }),
     ]);
     const eventFacts = this.collectEventFacts(events);
+    // Fatos satisfeitos são monotônicos: a janela móvel de 200 eventos fazia
+    // condições já cumpridas "evaporarem" (gate preso após 15+ turnos). Funde
+    // com o memo persistido em phaseNotes e regrava se cresceu.
+    await this.mergeAndPersistGateFacts(state, eventFacts);
 
     return {
       questStatuses: new Map(quests.map((quest) => [quest.id, quest.status])),
@@ -825,9 +829,12 @@ export class PhaseService {
           objective.progressCount ?? 0,
         ]),
       ),
+      // Só fases CONCLUÍDAS contam beat como alcançado — incluir a fase
+      // corrente deixava o unlock arc_beat_reached auto-satisfeito (gate
+      // espúrio: dava pra pular fase com 1 clique).
       arcBeatsReached: new Set(
         phases
-          .filter((phase) => phase.index <= state.currentPhaseIndex)
+          .filter((phase) => phase.index < state.currentPhaseIndex)
           .flatMap((phase) => phase.arcBeats ?? []),
       ),
       clockFilledIds: eventFacts.clockFilledIds,
@@ -840,6 +847,51 @@ export class PhaseService {
       combatCompletedKeys: eventFacts.combatCompletedKeys,
       nlTriggerSatisfiedKeys: eventFacts.nlTriggerSatisfiedKeys,
     };
+  }
+
+  private static readonly GATE_FACTS_MEMO_KEY = "__gateFactsMemo";
+  private static readonly GATE_FACTS_MEMO_CAP = 300;
+
+  private async mergeAndPersistGateFacts(
+    state: SessionStoryArcStateEntity,
+    eventFacts: Record<string, Set<string>>,
+  ): Promise<void> {
+    const raw = state.phaseNotes?.[PhaseService.GATE_FACTS_MEMO_KEY];
+    let memo: Record<string, string[]> = {};
+    if (typeof raw === "string" && raw) {
+      try {
+        memo = JSON.parse(raw) as Record<string, string[]>;
+      } catch {
+        memo = {};
+      }
+    }
+
+    let grew = false;
+    for (const [key, set] of Object.entries(eventFacts)) {
+      const persisted = Array.isArray(memo[key]) ? memo[key] : [];
+      const before = set.size;
+      for (const value of persisted) set.add(value);
+      if (set.size > before || set.size > persisted.length) {
+        memo[key] = Array.from(set).slice(
+          0,
+          PhaseService.GATE_FACTS_MEMO_CAP,
+        );
+        if (set.size > persisted.length) grew = true;
+      }
+    }
+
+    if (grew) {
+      state.phaseNotes = {
+        ...(state.phaseNotes ?? {}),
+        [PhaseService.GATE_FACTS_MEMO_KEY]: JSON.stringify(memo),
+      };
+      try {
+        await this.stateRepo.save(state);
+      } catch {
+        // memo é otimização de durabilidade; falha de save não pode
+        // derrubar a avaliação do gate deste turno.
+      }
+    }
   }
 
   private collectEventFacts(

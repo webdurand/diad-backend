@@ -7,7 +7,18 @@ import { EventListener } from "src/common/event-bus/event-bus.types";
 import { EventCategory, EventEnvelope } from "src/common/event-bus/event-envelope.types";
 import { PhaseService } from "../services/phase.service";
 
-const HANDLED_EVENTS = new Set(["encounter_ended", "narrative_decision_made"]);
+// Qualquer evento que possa satisfazer condição de gate reavalia o gate —
+// com só encounter_ended/decision o gate ficava preso mesmo após a condição
+// real (quest, clock, visita, progresso de missão) ter acontecido.
+const HANDLED_EVENTS = new Set([
+  "encounter_ended",
+  "narrative_decision_made",
+  "quest_completed",
+  "objective_completed",
+  "clock_filled",
+  "location_visited",
+  "mission_progress_advanced",
+]);
 
 @Injectable()
 export class PhaseGateListener implements EventListener {
@@ -15,6 +26,7 @@ export class PhaseGateListener implements EventListener {
   readonly categories: readonly EventCategory[] = [
     "EncounterEvent",
     "NarrativeEvent",
+    "WorldEvent",
   ];
 
   constructor(

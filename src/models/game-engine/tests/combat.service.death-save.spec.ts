@@ -211,6 +211,11 @@ function createHarness() {
     resolveByName: jest.fn(() => null),
   };
 
+  const encounterEndDetector: any = {
+    tryAutoEnd: jest.fn(async () => null),
+    detectOutcome: jest.fn(async () => null),
+  };
+
   const combat = new CombatService(
     encounterRepo,
     participantRepo,
@@ -317,7 +322,7 @@ function createHarness() {
     } as any,
     { shouldOfferShield: async () => null } as any,
 
-    { tryAutoEnd: async () => null, detectOutcome: async () => null } as any,
+    encounterEndDetector,
     { processRoundStart: async () => [] } as any,
     { processAfterPcTurn: async () => [] } as any,
     { tryParryAfterAttackRoll: async () => null } as any,
@@ -332,6 +337,7 @@ function createHarness() {
     stateService,
     eventService,
     diceService,
+    encounterEndDetector,
   };
 }
 
@@ -718,6 +724,62 @@ describe("CombatService — US1 death-save flow", () => {
 
       expect(res.ok).toBe(true);
       expect(h.encounter.turnOrder).toEqual([monster.id, alive.id]);
+    });
+  });
+
+  describe("auto-end após ação de dano", () => {
+    it("dispara tryAutoEnd quando applyDamage derrota o monstro", async () => {
+      const h = createHarness();
+      const goblin = makeParticipant({
+        id: "m-auto-1",
+        type: "monster",
+        characterId: undefined,
+        faction: "enemy",
+        currentHp: 5,
+        maxHp: 5,
+        displayName: "Goblin",
+      });
+      h.participants.set(goblin.id, goblin);
+
+      const res = await h.combat.applyDamage(h.encounter.id, {
+        targetParticipantId: goblin.id,
+        amount: 5,
+        damageType: "slashing",
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value.defeated).toBe(true);
+      expect(h.encounterEndDetector.tryAutoEnd).toHaveBeenCalledWith(
+        h.encounter.id,
+      );
+    });
+
+    it("não dispara tryAutoEnd quando o dano não derrota ninguém", async () => {
+      const h = createHarness();
+      const goblin = makeParticipant({
+        id: "m-auto-2",
+        type: "monster",
+        characterId: undefined,
+        faction: "enemy",
+        currentHp: 10,
+        maxHp: 10,
+        displayName: "Goblin",
+      });
+      h.participants.set(goblin.id, goblin);
+
+      const res = await h.combat.applyDamage(h.encounter.id, {
+        targetParticipantId: goblin.id,
+        amount: 3,
+        damageType: "slashing",
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value.defeated).toBe(false);
+      expect(h.encounterEndDetector.tryAutoEnd).not.toHaveBeenCalled();
     });
   });
 });

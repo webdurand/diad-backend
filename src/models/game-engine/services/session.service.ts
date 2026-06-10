@@ -16,6 +16,8 @@ import type { CreateQuestDto } from "src/models/world/services/quest.service";
 import { PhaseService } from "src/models/world/services/phase.service";
 import { SessionNpcStateService } from "src/models/world/services/session-npc-state.service";
 import { LocationPoiService } from "src/models/world/services/location-poi.service";
+import { MinimalWorldSeedService } from "src/models/world/services/minimal-world-seed.service";
+import { extractNpcDispositionFromTags } from "src/models/world/services/world-seed-materialization.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
 
 const STARTING_LOCATION_TYPE_PRIORITY: Record<string, number> = {
@@ -88,6 +90,7 @@ export class SessionService {
     private readonly phaseService: PhaseService,
     private readonly sessionNpcStateService: SessionNpcStateService,
     private readonly poiService: LocationPoiService,
+    private readonly minimalWorldSeedService: MinimalWorldSeedService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(SessionService.name);
@@ -129,6 +132,12 @@ export class SessionService {
     const saved = await this.sessionRepo.save(session);
 
     if (campaign) {
+      // Avaliação 2026-06-10 P0 #3: o fluxo /ai/solo/create cria a campanha
+      // vazia (0 NPCs, 0 conexões, 1 POI nulo). Antes de qualquer bootstrap,
+      // garantimos o mundo mínimo jogável (seed determinístico materializado
+      // pelo MESMO pipeline do fluxo "preparar") — assim os passos abaixo já
+      // encontram NPCs com homePoiId, POIs nomeados e conexões.
+      campaign = await this.ensureMinimalWorld(campaign);
       await this.initializeCanonicalNpcStates(saved.id, campaign.id);
       await this.bootstrapInitialScene(saved.id, campaign);
       await this.materializeQuestsFromTemplate(saved.id, campaign);
@@ -138,6 +147,27 @@ export class SessionService {
     }
 
     return saved;
+  }
+
+  /**
+   * Nunca bloqueia a criação da sessão: falha vira warn e seguimos com a
+   * campanha original. Quando o seed materializa, usamos a entidade
+   * atualizada (startingLocationId resolvido) para os bootstraps seguintes.
+   */
+  private async ensureMinimalWorld(
+    campaign: CampaignEntity,
+  ): Promise<CampaignEntity> {
+    try {
+      const refreshed =
+        await this.minimalWorldSeedService.ensureMinimalPlayableWorld(campaign);
+      return refreshed ?? campaign;
+    } catch (err) {
+      this.logger.warn("session.ensure_minimal_world.failed", {
+        "campaign.id": campaign.id,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
+      return campaign;
+    }
   }
 
   private isStoryFirstCampaign(campaign: CampaignEntity): boolean {
@@ -175,7 +205,7 @@ export class SessionService {
     try {
       const npcs = await this.npcRepo.find({
         where: { campaignId, gameSessionId: IsNull() },
-        select: ["id", "homeLocationId", "homePoiId"],
+        select: ["id", "homeLocationId", "homePoiId", "tags"],
       });
       if (npcs.length === 0) return;
 
@@ -218,7 +248,9 @@ export class SessionService {
             gameSessionId: sessionId,
             npcId: npc.id,
             status: "alive",
-            disposition: "neutral",
+            // Seeds canônicos podem declarar a disposition inicial via tag
+            // `disposition:<valor>` (ver world-seed-materialization).
+            disposition: extractNpcDispositionFromTags(npc.tags) ?? "neutral",
             currentLocationId: npc.homeLocationId,
             currentPoiId: await resolveCurrentPoiId(npc),
           }),

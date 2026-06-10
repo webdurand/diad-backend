@@ -19,6 +19,9 @@ function makeService(overrides: Record<string, any> = {}): SessionService {
   const sessionNpcStateService = overrides.sessionNpcStateService ?? {
     listByPoi: jest.fn().mockResolvedValue([]),
   };
+  const minimalWorldSeedService = overrides.minimalWorldSeedService ?? {
+    ensureMinimalPlayableWorld: jest.fn().mockResolvedValue(null),
+  };
   const logger = overrides.logger ?? {
     setContext: jest.fn(),
     info: jest.fn(),
@@ -40,6 +43,7 @@ function makeService(overrides: Record<string, any> = {}): SessionService {
     phaseService as any,
     sessionNpcStateService as any,
     { ensureDefaultForLocation: jest.fn() } as any,
+    minimalWorldSeedService as any,
     logger as any,
   );
 }

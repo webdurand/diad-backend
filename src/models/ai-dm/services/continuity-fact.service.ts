@@ -14,6 +14,7 @@ import {
 import { GameSessionEntity } from "src/entities/game-session.entity";
 import { LocationEntity } from "src/entities/location.entity";
 import { LocationConnectionEntity } from "src/entities/location-connection.entity";
+import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { SceneEntity } from "src/entities/scene.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
@@ -87,6 +88,8 @@ export class ContinuityFactService {
     private readonly connectionRepo: Repository<LocationConnectionEntity>,
     @InjectRepository(SceneEntity)
     private readonly sceneRepo: Repository<SceneEntity>,
+    @InjectRepository(LocationPoiEntity)
+    private readonly poiRepo: Repository<LocationPoiEntity>,
     private readonly sceneContextCache: SceneContextCacheService,
   ) {}
 
@@ -266,7 +269,42 @@ export class ContinuityFactService {
     const activeScene = await this.sceneRepo.findOne({
       where: { sessionId, isActive: true },
       select: ["id", "locationId"],
+      relations: ["location"],
     });
+
+    // Não clonar o lugar onde o jogador já está (a prosa re-descreve a
+    // própria praça com outro epíteto e isso virava "destino de viagem").
+    const currentLocationName = activeScene?.location?.name ?? "";
+    if (
+      currentLocationName &&
+      this.slugify(currentLocationName) === slug
+    ) {
+      return;
+    }
+
+    // "A viela a vinte passos" é POI do lugar atual, não location a 3h de
+    // viagem: menções de escala-interior viram POI; só o resto vira location.
+    if (activeScene?.locationId && this.looksLikeNearbySpot(name, fact.summary)) {
+      const poiExists = await this.poiRepo.findOne({
+        where: { locationId: activeScene.locationId, slug },
+      });
+      if (!poiExists) {
+        await this.poiRepo.save(
+          this.poiRepo.create({
+            locationId: activeScene.locationId,
+            name,
+            slug,
+            type: "landmark",
+            description: fact.summary?.slice(0, 400) ?? null,
+            tags: ["discovered_in_prose"],
+            isDefault: false,
+            sortOrder: 99,
+          } as Partial<LocationPoiEntity>),
+        );
+        this.sceneContextCache.invalidateAll();
+      }
+      return;
+    }
 
     const created = await this.locationRepo.save(
       this.locationRepo.create({
@@ -299,6 +337,40 @@ export class ContinuityFactService {
       );
     }
     this.sceneContextCache.invalidateAll();
+  }
+
+  private static readonly NEARBY_SPOT_HINTS = [
+    "viela",
+    "beco",
+    "rua",
+    "praca",
+    "porao",
+    "sotao",
+    "sala",
+    "salao",
+    "quarto",
+    "cripta",
+    "celeiro",
+    "estabulo",
+    "poco",
+    "ponte",
+    "cais",
+    "doca",
+    "mercado",
+    "taverna",
+    "estalagem",
+    "templo",
+    "capela",
+    "torre",
+    "portao",
+    "muralha",
+  ];
+
+  private looksLikeNearbySpot(name: string, summary?: string | null): boolean {
+    const haystack = this.slugify(`${name} ${summary ?? ""}`).replace(/-/g, " ");
+    return ContinuityFactService.NEARBY_SPOT_HINTS.some((hint) =>
+      haystack.includes(hint),
+    );
   }
 
   private slugify(value: string): string {

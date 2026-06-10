@@ -230,6 +230,24 @@ export class CombatService {
   }
 
 
+  // Auto-end no fluxo solo: o tryAutoEnd antes só rodava em endTurn, então o
+  // golpe que derrubava o último hostil deixava o encounter `active` para
+  // sempre (sem DM humano para encerrar). Agora toda ação de dano/ataque que
+  // derrota alguém reavalia o fim do combate. Melhor-esforço: nunca derruba a
+  // ação que o disparou (tryAutoEnd também já engole erros internamente).
+  private async maybeAutoEndAfterDefeat(
+    encounterId: string,
+    somebodyDefeated: boolean,
+  ): Promise<void> {
+    if (!somebodyDefeated) return;
+    try {
+      await this.encounterEndDetector.tryAutoEnd(encounterId);
+    } catch {
+      // best-effort
+    }
+  }
+
+
   async translateSlugToActionName(
     encounterId: string,
     attackerParticipantId: string,
@@ -727,6 +745,11 @@ export class CombatService {
     await this.participantRepo.save(caster);
 
     await this.eventService.emit(encounter.sessionId, encounterId, events);
+
+    await this.maybeAutoEndAfterDefeat(
+      encounterId,
+      results.some((r) => r.targetDefeated),
+    );
 
     return success(
       {
@@ -2446,6 +2469,8 @@ export class CombatService {
     let damageRollResult;
     let targetHpAfter: number | undefined;
     let targetDefeated = false;
+
+    let collateralDefeated = false;
     let concentrationBroken: boolean | undefined;
 
     if (hit) {
@@ -2890,6 +2915,7 @@ export class CombatService {
               if (hpRes.instantDeath) {
                 secondTarget.dyingState = "dead";
                 secondTarget.isDefeated = true;
+                collateralDefeated = true;
                 await this.participantRepo.save(secondTarget);
               } else if (hpRes.isDown) {
                 secondTarget.dyingState = "dying";
@@ -2902,6 +2928,7 @@ export class CombatService {
               );
               await this.participantRepo.save(secondTarget);
               if (cleaveResult.defeated) {
+                collateralDefeated = true;
                 await this.removeDefeatedSummon(
                   encounter,
                   secondTarget,
@@ -3172,6 +3199,14 @@ export class CombatService {
       }
     }
 
+    // Sub-attacks (multiattack) deixam a checagem para o fim da sequência.
+    if (!dto._isSubAttack) {
+      await this.maybeAutoEndAfterDefeat(
+        encounterId,
+        targetDefeated || collateralDefeated,
+      );
+    }
+
     return success(
       {
         attackRoll: attackRollResult,
@@ -3310,6 +3345,11 @@ export class CombatService {
     });
 
     await this.eventService.emit(encounter.sessionId, encounterId, allEvents);
+
+    await this.maybeAutoEndAfterDefeat(
+      encounterId,
+      subAttacks.some((s) => s.targetDefeated),
+    );
 
     return success(
       { kind: "multiattack", actionConsumed: true, subAttacks, interruptedAt },
@@ -3562,6 +3602,8 @@ export class CombatService {
     }
 
     await this.eventService.emit(encounter.sessionId, encounterId, events);
+
+    await this.maybeAutoEndAfterDefeat(encounterId, defeated);
 
     return success({ hpAfter, defeated, dyingState, instantDeath }, events);
   }

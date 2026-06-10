@@ -818,7 +818,9 @@ export class GameEngineController {
     }> = [];
 
     if (succeeded) {
-      const encounter = await this.encounterService.getById(id);
+      const encounter = await this.encounterService.getById(id, {
+        withMonsters: true,
+      });
 
       const totalXp = (encounter.participants ?? [])
         .filter(
@@ -889,7 +891,9 @@ export class GameEngineController {
 
   @Get("encounters/:id/pre-combat-briefing")
   async preCombatBriefing(@Param("id") encounterId: string) {
-    const encounter = await this.encounterService.getById(encounterId);
+    const encounter = await this.encounterService.getById(encounterId, {
+      withMonsters: true,
+    });
 
     const monsterParticipants = (encounter.participants ?? []).filter(
       (p) => this.isHostileDefeatable(p) && Boolean(p.monster),
@@ -2879,6 +2883,7 @@ export class GameEngineController {
       applied = await this.fateLadderService.applyResolution(
         characterId,
         result.value.stateChanges,
+        { sessionId: body.sessionId ?? null },
       );
     } catch (err: unknown) {
 

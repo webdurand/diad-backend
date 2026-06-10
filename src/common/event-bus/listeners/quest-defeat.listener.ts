@@ -8,6 +8,8 @@ import { QuestEntity } from "src/entities/quest.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 import { NpcEntity } from "src/entities/npc.entity";
 import { DiadLogger } from "../../observability/logger/diad-logger.service";
+import { EventBusService } from "../event-bus.service";
+import { EventEnvelopeFactory } from "../event-envelope.factory";
 import { EventListener } from "../event-bus.types";
 import { EventCategory, EventEnvelope } from "../event-envelope.types";
 import { QuestService } from "src/models/world/services/quest.service";
@@ -33,12 +35,21 @@ export class QuestDefeatListener implements EventListener {
     @InjectRepository(NpcEntity)
     private readonly npcRepo: Repository<NpcEntity>,
     private readonly questService: QuestService,
+    private readonly eventBus: EventBusService,
+    private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(QuestDefeatListener.name);
   }
 
   async handle(envelope: EventEnvelope): Promise<void> {
+    // TPK (avaliação 2026-06): encounter terminou com todos os PCs caídos →
+    // party_defeated. A Fate Ladder individual cobre o destino do herói solo;
+    // este evento é o sinal narrativo da derrota do grupo (não fecha campanha).
+    if (envelope.eventType === "encounter_ended") {
+      await this.handlePartyDefeat(envelope);
+      return;
+    }
     if (envelope.eventType !== "dying_state_changed") return;
     if (envelope.payload?.next !== "dead") return;
     if (await this.alreadyProcessed(envelope.eventId)) return;
@@ -141,6 +152,70 @@ export class QuestDefeatListener implements EventListener {
           "error.message": err instanceof Error ? err.message : String(err),
         });
       }
+    }
+
+    await this.markProcessed(envelope.eventId);
+  }
+
+  private async handlePartyDefeat(envelope: EventEnvelope): Promise<void> {
+    if (envelope.payload?.allPcsDown !== true) return;
+    if (await this.alreadyProcessed(envelope.eventId)) return;
+
+    const payloadSessionId = envelope.payload?.sessionId;
+    const sessionId =
+      envelope.scope.sessionId ??
+      (typeof payloadSessionId === "string" ? payloadSessionId : undefined);
+    const campaignId = envelope.scope.campaignId;
+    if (!sessionId || !campaignId) {
+      await this.markProcessed(envelope.eventId);
+      return;
+    }
+
+    const rawPcsDefeated = envelope.payload?.pcsDefeated;
+    const pcsDefeated: unknown[] = Array.isArray(rawPcsDefeated)
+      ? rawPcsDefeated
+      : [];
+
+    const partyDefeated = this.envelopeFactory.build({
+      eventCategory: "NarrativeEvent",
+      eventType: "party_defeated",
+      source: {
+        service: "diad-backend",
+        module: "QuestDefeatListener",
+        traceId: envelope.source.traceId,
+      },
+      scope: {
+        campaignId,
+        sessionId,
+        ...(envelope.scope.encounterId
+          ? { encounterId: envelope.scope.encounterId }
+          : {}),
+      },
+      payload: {
+        sessionId,
+        encounterId: envelope.scope.encounterId ?? null,
+        encounterName: envelope.payload?.encounterName ?? null,
+        outcome: envelope.payload?.outcome ?? null,
+        pcsDefeated,
+      },
+      audiences: ["Narrator", "Director", "HUD"],
+      narrativeDescriptor:
+        "Todos os heróis caíram. O campo ficou em silêncio — a derrota tem um preço que o mundo ainda vai cobrar.",
+    });
+
+    try {
+      await this.eventBus.publish(partyDefeated);
+      this.logger.info("quest_defeat.party_defeated", {
+        "session.id": sessionId,
+        "encounter.id": envelope.scope.encounterId ?? null,
+        "pcs.defeated": pcsDefeated.length,
+        "event.id": envelope.eventId,
+      });
+    } catch (err) {
+      this.logger.warn("quest_defeat.party_defeated_publish_failed", {
+        "event.id": envelope.eventId,
+        "error.message": err instanceof Error ? err.message : String(err),
+      });
     }
 
     await this.markProcessed(envelope.eventId);
