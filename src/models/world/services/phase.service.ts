@@ -540,6 +540,10 @@ export class PhaseService {
       fromPhase,
       normalizeXpTriggerState(state.xpTriggerState),
     );
+    // Objetivos phase_transition são completados AQUI, deterministicamente:
+    // o guard de congruência da quest os rejeita de propósito (LLM nunca pode
+    // fechá-los) — sem este passo a main quest fica eternamente incompletável.
+    await this.completeTransitionObjectives(sessionId, toPhase.index);
     this.invalidateMainQuestCache(sessionId);
     await this.publishPhaseChanged(
       session,
@@ -589,6 +593,36 @@ export class PhaseService {
       traceId,
     );
     return pending;
+  }
+
+  // Cruza o limiar: todo objetivo phase_transition com alvo <= fase alcançada
+  // completa agora. Caminho 100% determinístico (não passa pelo guard de
+  // congruência, que existe pra barrar o LLM — não o motor).
+  private async completeTransitionObjectives(
+    sessionId: string,
+    reachedPhaseIndex: number,
+  ): Promise<void> {
+    const quest = await this.questRepo.findOne({
+      where: { gameSessionId: sessionId, isMainQuest: true },
+      relations: ["objectives"],
+    });
+    if (!quest) return;
+    for (const objective of quest.objectives ?? []) {
+      const conditions = (objective.completionConditions ?? {}) as {
+        kind?: string;
+        targetPhaseIndex?: number;
+      };
+      if (
+        conditions.kind === "phase_transition" &&
+        Number(conditions.targetPhaseIndex) <= reachedPhaseIndex &&
+        objective.status !== "completed" &&
+        objective.status !== "failed"
+      ) {
+        objective.status = "completed";
+        objective.lastNarrativeDescriptor = `Limiar cruzado: fase ${reachedPhaseIndex}.`;
+        await this.objectiveRepo.save(objective);
+      }
+    }
   }
 
   // Spec 052: "fase 4 virtual" — última fase com completionConditions
