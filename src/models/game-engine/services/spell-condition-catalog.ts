@@ -80,6 +80,13 @@ const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
     requiresConcentration: true,
     repeatSaveTiming: "end_of_turn",
   },
+  polymorph: {
+    conditionSlug: "incapacitated",
+    saveAbility: "wis",
+    durationRounds: 10,
+    requiresConcentration: true,
+    repeatSaveTiming: "never",
+  },
   banishment: {
     conditionSlug: "incapacitated",
     saveAbility: "cha",

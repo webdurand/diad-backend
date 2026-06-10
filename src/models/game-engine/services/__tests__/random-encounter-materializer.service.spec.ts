@@ -158,6 +158,44 @@ describe("RandomEncounterMaterializerService", () => {
     expect(envelope.payload.encounterId).toBe("encounter-123");
   });
 
+  it("adiciona unidade extra quando partyContext indica party grande", async () => {
+    const npcService = makeNpcService();
+    const bus = makeBus();
+    const svc = new RandomEncounterMaterializerService(
+      makeMonsterRepo([GOBLIN]),
+      npcService,
+      makeStartEncounter(),
+      bus,
+      new EventEnvelopeFactory(undefined),
+    );
+
+    const result = await svc.materialize({
+      campaignId: CAMPAIGN,
+      sessionId: SESSION,
+      sceneId: SCENE,
+      monsterSlugs: ["goblin"],
+      ownerUserId: OWNER,
+      partyAvgLevel: 3,
+      partySize: 4,
+      difficulty: "moderate",
+      partyContext: {
+        partySize: 4,
+        allyPcIds: ["pc-1", "pc-2", "pc-3", "pc-4"],
+      },
+      reasonChain: ["baseline=moderate"],
+    });
+
+    expect(npcService.create).toHaveBeenCalledTimes(2);
+    expect(result.monsterSlugs).toEqual(["goblin", "goblin"]);
+    expect(result.reasonChain).toContain(
+      "party_context_scaling:+1_unit_for_party_size_4",
+    );
+    const envelope = (bus.publish as jest.Mock).mock.calls[0][0];
+    expect(envelope.payload.reasonChain).toContain(
+      "party_context_scaling:+1_unit_for_party_size_4",
+    );
+  });
+
   it("levanta erro se algum slug não existe no catálogo", async () => {
     const svc = new RandomEncounterMaterializerService(
       makeMonsterRepo([GOBLIN]),

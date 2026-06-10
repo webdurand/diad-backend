@@ -1,12 +1,10 @@
 import type { EventCategory, EventEnvelope } from "./event-envelope.types";
 
-
 export interface EventListener {
   readonly name: string;
   readonly categories: readonly EventCategory[];
   handle(envelope: EventEnvelope): Promise<void>;
 }
-
 
 const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
   EncounterEvent: new Set([
@@ -47,6 +45,7 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "main_quest_assigned",
     "phase_gate_pending",
     "phase_changed",
+    "chaos_factor_evolved",
   ]),
   NarrativeEvent: new Set([
     "dialog_chosen",
@@ -63,6 +62,14 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "session_resumed",
     "scene_changed",
     "cold_open_generated",
+    "phase_opened",
+    "phase_completed",
+    "xp_trigger_marked",
+    "phase_outcome_derived",
+    "bookend_ready",
+    "bookend_failed",
+    "previously_on_shown",
+    "bookend_skipped",
     "movement_lock_changed",
     "dialogue_started",
     "dialogue_exited",
@@ -78,6 +85,13 @@ const EVENT_TYPE_CATALOG: Record<EventCategory, ReadonlySet<string>> = {
     "director_pull_injected",
     "travel_action_applied",
     "dialogue_reveal",
+    "compass_signal_emitted",
+    "combat_intent_signal_emitted",
+    "npc_posture_changed",
+    "identity_tags_changed",
+    "chronicle_tier_changed",
+    "downtime_executed",
+    "nl_trigger_evaluated",
   ]),
   SocialEvent: new Set([
     "companion_approval_changed",

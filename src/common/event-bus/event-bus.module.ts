@@ -19,6 +19,7 @@ import { ReputationListener } from "./listeners/reputation.listener";
 import { GuardDispatchListener } from "./listeners/guard-dispatch.listener";
 import { GuardArrivalListener } from "./listeners/guard-arrival.listener";
 import { AdminMetricsListener } from "./listeners/admin-metrics.listener";
+import { SignalTelemetryListener } from "./listeners/signal-telemetry.listener";
 
 
 @Global()
@@ -45,6 +46,7 @@ import { AdminMetricsListener } from "./listeners/admin-metrics.listener";
     GuardDispatchListener,
     GuardArrivalListener,
     AdminMetricsListener,
+    SignalTelemetryListener,
   ],
   exports: [
     EventBusService,
@@ -62,6 +64,7 @@ export class EventBusModule implements OnModuleInit {
     private readonly guardDispatchListener: GuardDispatchListener,
     private readonly guardArrivalListener: GuardArrivalListener,
     private readonly adminMetricsListener: AdminMetricsListener,
+    private readonly signalTelemetryListener: SignalTelemetryListener,
   ) {}
 
   onModuleInit(): void {
@@ -71,5 +74,6 @@ export class EventBusModule implements OnModuleInit {
     this.eventBus.registerListener(this.guardDispatchListener);
     this.eventBus.registerListener(this.guardArrivalListener);
     this.eventBus.registerListener(this.adminMetricsListener);
+    this.eventBus.registerListener(this.signalTelemetryListener);
   }
 }

@@ -81,8 +81,6 @@ export class GameSessionEntity {
     poiObservationStaleGraceTurns?: number;
   };
 
-
-
   @Column({ name: "summary_text", type: "text", nullable: true })
   summaryText?: string;
 
@@ -91,7 +89,6 @@ export class GameSessionEntity {
 
   @Column({ name: "previous_session_id", type: "uuid", nullable: true })
   previousSessionId?: string;
-
 
   @Column({ name: "chaos_factor", type: "smallint", default: 5 })
   chaosFactor: number;
@@ -104,6 +101,12 @@ export class GameSessionEntity {
 
   @Column({ name: "pull_score", type: "float", nullable: true })
   pullScore?: number | null;
+
+  @Column({ name: "last_scene_location_id", type: "uuid", nullable: true })
+  lastSceneLocationId?: string | null;
+
+  @Column({ name: "scenes_at_current_location", type: "int", default: 0 })
+  scenesAtCurrentLocation: number;
 
   @Column({ name: "ended_at", type: "timestamptz", nullable: true })
   endedAt?: Date;

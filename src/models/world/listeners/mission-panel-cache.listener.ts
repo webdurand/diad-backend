@@ -10,12 +10,16 @@ const INVALIDATING_EVENTS = new Set([
   "main_quest_assigned",
   "phase_gate_pending",
   "phase_changed",
+  "identity_tags_changed",
 ]);
 
 @Injectable()
 export class MissionPanelCacheListener implements EventListener {
   readonly name = "MissionPanelCacheListener";
-  readonly categories: readonly EventCategory[] = ["WorldEvent"];
+  readonly categories: readonly EventCategory[] = [
+    "WorldEvent",
+    "NarrativeEvent",
+  ];
 
   constructor(private readonly phaseService: PhaseService) {}
 

@@ -24,6 +24,7 @@ import { CharacterFeatureEntity } from "./character-feature.entity";
 import { CharacterOriginEntity } from "./character-origin.entity";
 import { CompSourceEntity } from "./comp-source.entity";
 import { CompanionTemplateEntity } from "./companion-template.entity";
+import type { IdentityTagDelta } from "src/models/narrative-memory/domain/narrative-memory.types";
 
 export type CharacterOwnerType = "pc" | "companion";
 
@@ -34,7 +35,6 @@ export class CharacterEntity {
 
   @Column({ type: "varchar" })
   name: string;
-
 
   @Column({ type: "jsonb", nullable: true })
   data?: Record<string, unknown>;
@@ -63,6 +63,12 @@ export class CharacterEntity {
   @Index()
   @Column({ name: "companion_template_id", type: "uuid", nullable: true })
   companionTemplateId?: string | null;
+
+  @Column({ name: "current_identity_tags", type: "jsonb", default: [] })
+  currentIdentityTags: string[];
+
+  @Column({ name: "identity_tags_history", type: "jsonb", default: [] })
+  identityTagsHistory: IdentityTagDelta[];
 
   @ManyToOne(() => CompSourceEntity, { nullable: true, eager: true })
   @JoinColumn({ name: "source_id" })

@@ -23,8 +23,6 @@ import {
 
 const PERSONA_FIELDS = ["trait", "ideal", "bond", "flaw", "backstory"] as const;
 
-
-
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -40,7 +38,6 @@ const VALID_ALIGNMENTS = new Set<PCPersonaAlignment>([
   "chaotic-evil",
   "unaligned",
 ]);
-
 
 @Injectable()
 export class PcPersonaService {
@@ -63,16 +60,10 @@ export class PcPersonaService {
     private readonly charOriginRepo: Repository<CharacterOriginEntity>,
   ) {}
 
-
   async assemblePersona(
     characterIdOrName: string,
     userId: string | null,
   ): Promise<PCPersona> {
-
-
-
-
-
     const isUuid = UUID_RE.test(characterIdOrName);
     const where = userId
       ? isUuid
@@ -85,7 +76,6 @@ export class PcPersonaService {
     if (!character) {
       throw new NotFoundException("Personagem nao encontrado.");
     }
-
 
     const characterId = character.id;
 
@@ -163,6 +153,12 @@ export class PcPersonaService {
         ? [...charState.conditions]
         : [],
       keyEquipmentSummary: pickKeyEquipment(charEquip, charMagicItems),
+      currentIdentityTags: Array.isArray(character.currentIdentityTags)
+        ? character.currentIdentityTags
+        : [],
+      identityTagsHistory: Array.isArray(character.identityTagsHistory)
+        ? character.identityTagsHistory.slice(-5)
+        : [],
     };
   }
 }

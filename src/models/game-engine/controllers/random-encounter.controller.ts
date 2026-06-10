@@ -62,6 +62,15 @@ interface MaterializeBody {
   monsterSlugs: string[];
   partyAvgLevel: number;
   partySize?: number;
+  partyContext?: {
+    partySize: number;
+    allyPcIds?: string[];
+    allyNpcIds?: string[];
+    npcWitnessIds?: string[];
+    distanceM?: number;
+    encircled?: boolean;
+    surpriseState?: string;
+  };
   difficulty: Difficulty;
   biome?: string;
   reasonChain?: string[];
@@ -226,7 +235,8 @@ export class RandomEncounterController {
       monsterSlugs: body.monsterSlugs,
       ownerUserId,
       partyAvgLevel: body.partyAvgLevel,
-      partySize: body.partySize,
+      partySize: body.partyContext?.partySize ?? body.partySize,
+      partyContext: body.partyContext,
       difficulty: body.difficulty,
       biome: body.biome,
       reasonChain: body.reasonChain,

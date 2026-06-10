@@ -11,6 +11,7 @@ import {
 } from "typeorm";
 import { GameSessionEntity } from "./game-session.entity";
 import { StoryArcEntity } from "./story-arc.entity";
+import type { XpTriggerState } from "src/models/story-hidden-layer/domain/hidden-layer.types";
 
 @Entity("session_story_arc_state")
 @Unique(["gameSessionId", "storyArcId"])
@@ -42,6 +43,14 @@ export class SessionStoryArcStateEntity {
 
   @Column({ name: "phase_notes", type: "jsonb", default: {} })
   phaseNotes: Record<string, string>;
+
+  @Column({
+    name: "xp_trigger_state",
+    type: "jsonb",
+    default: () =>
+      `'{ "objective_met": false, "belief_expressed": false, "flaw_struggled": false, "bond_progressed": false, "secret_revealed": false }'::jsonb`,
+  })
+  xpTriggerState: XpTriggerState;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt: Date;

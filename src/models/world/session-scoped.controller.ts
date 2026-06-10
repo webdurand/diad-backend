@@ -44,6 +44,7 @@ import {
   ChaosFactorService,
   type ChaosSource,
 } from "./services/chaos-factor.service";
+import { BookendArtifactService } from "../bookends/services/bookend-artifact.service";
 import { isDmOmniscient } from "./services/npc-projection";
 import type { CreateQuestDto, UpdateQuestDto } from "./services/quest.service";
 
@@ -71,6 +72,7 @@ export class SessionScopedWorldController {
     private readonly factionStateService: SessionFactionStateService,
     private readonly arcStateService: SessionStoryArcStateService,
     private readonly chaosFactorService: ChaosFactorService,
+    private readonly bookendArtifactService: BookendArtifactService,
   ) {}
 
   private async ensureDm(
@@ -94,6 +96,51 @@ export class SessionScopedWorldController {
     return this.phaseService.getMainQuest(sessionId);
   }
 
+  @Get(":sessionId/state-snapshot")
+  async getStateSnapshot(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+  ) {
+    const session = await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    const npcStates = session.lastSceneLocationId
+      ? await this.npcStateService.listByLocation(
+          sessionId,
+          session.lastSceneLocationId,
+        )
+      : await this.npcStateService.listBySession(sessionId);
+    const pcParticipants = (session.characterIds ?? []).map((id) => ({
+      id,
+      role: "pc" as const,
+      disposition: "friendly",
+      posture: "peaceful",
+    }));
+    const npcParticipants = npcStates.map((state) => ({
+      id: state.npcId,
+      role: this.resolveParticipantRole(state.disposition),
+      disposition: state.disposition,
+      posture: state.posture ?? "peaceful",
+      ...(state.npc?.name ? { name: state.npc.name } : {}),
+    }));
+    const npcPostureSnapshot = Object.fromEntries(
+      npcStates.map((state) => [state.npcId, state.posture ?? "peaceful"]),
+    );
+    return {
+      lastSceneLocationId: session.lastSceneLocationId ?? null,
+      scenesAtCurrentLocation: session.scenesAtCurrentLocation ?? 0,
+      participants: [...pcParticipants, ...npcParticipants],
+      partySize: Math.max(1, pcParticipants.length),
+      npcPostureSnapshot,
+    };
+  }
+
+  private resolveParticipantRole(
+    disposition: string,
+  ): "ally_npc" | "enemy" | "witness" {
+    if (disposition === "friendly") return "ally_npc";
+    if (disposition === "hostile") return "enemy";
+    return "witness";
+  }
+
   @Post(":sessionId/phase/advance")
   async advancePhase(
     @Req() req: AuthRequest,
@@ -109,6 +156,45 @@ export class SessionScopedWorldController {
       body.confirmed === true,
       extractTraceId(traceparent),
     );
+  }
+
+  @Get(":sessionId/bookends")
+  async listBookends(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return {
+      sessionId,
+      bookends: await this.bookendArtifactService.listBySession(sessionId),
+    };
+  }
+
+  @Get(":sessionId/bookends/:bookendId")
+  async getBookend(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Param("bookendId") bookendId: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.bookendArtifactService.getById(sessionId, bookendId);
+  }
+
+  @Post(":sessionId/bookends/:bookendId/mark-skipped")
+  async markBookendSkipped(
+    @Req() req: AuthRequest,
+    @Param("sessionId") sessionId: string,
+    @Param("bookendId") bookendId: string,
+    @Body() body: { elapsedMs?: number },
+    @Headers("traceparent") traceparent?: string,
+  ) {
+    await this.sessionService.ensureAccess(sessionId, getUserId(req));
+    return this.bookendArtifactService.markSkipped({
+      sessionId,
+      id: bookendId,
+      elapsedMs: Math.max(0, body.elapsedMs ?? 0),
+      traceId: extractTraceId(traceparent),
+    });
   }
 
 
@@ -151,8 +237,18 @@ export class SessionScopedWorldController {
     @Param("sessionId") sessionId: string,
     @Param("npcId") npcId: string,
     @Body() dto: UpsertNpcStateDto,
+    @Headers("traceparent") traceparent?: string,
   ) {
-    await this.ensureDm(sessionId, getUserId(req));
+    const { campaignId } = await this.ensureDm(sessionId, getUserId(req));
+    if (dto.posture !== undefined && campaignId) {
+      return this.npcStateService.updatePosture({
+        gameSessionId: sessionId,
+        campaignId,
+        npcId,
+        posture: dto.posture,
+        traceId: extractTraceId(traceparent),
+      });
+    }
     return this.npcStateService.upsert(sessionId, npcId, dto);
   }
 

@@ -1,5 +1,3 @@
-
-
 import { ErrorCode } from "./error-codes.catalog";
 
 export interface ErrorCodeMetadata {
@@ -10,7 +8,6 @@ export interface ErrorCodeMetadata {
 }
 
 export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
-
   [ErrorCode.AUTH_TOKEN_MISSING]: {
     httpStatus: 401,
     defaultTitle: "Authentication token missing",
@@ -35,7 +32,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Você não tem permissão para esta ação.",
     domain: "auth",
   },
-
 
   [ErrorCode.AGENT_UPSTREAM_ERROR]: {
     httpStatus: 502,
@@ -68,7 +64,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "agent",
   },
 
-
   [ErrorCode.CAMPAIGN_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Campaign not found",
@@ -87,7 +82,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Você não tem acesso a esta campanha.",
     domain: "campaign",
   },
-
 
   [ErrorCode.SESSION_NOT_FOUND]: {
     httpStatus: 404,
@@ -150,7 +144,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "narrative",
   },
 
-
   [ErrorCode.COMBAT_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Combat not found",
@@ -170,7 +163,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "combat",
   },
 
-
   [ErrorCode.CHARACTER_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Character not found",
@@ -183,7 +175,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Você não tem acesso a este personagem.",
     domain: "character",
   },
-
 
   [ErrorCode.SPELL_SLOT_UNAVAILABLE]: {
     httpStatus: 409,
@@ -198,7 +189,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "spell",
   },
 
-
   [ErrorCode.VALIDATION_INVALID_PAYLOAD]: {
     httpStatus: 400,
     defaultTitle: "Validation failed",
@@ -211,7 +201,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     defaultHint: "Preencha todos os campos obrigatórios.",
     domain: "validation",
   },
-
 
   [ErrorCode.SYSTEM_INTERNAL_ERROR]: {
     httpStatus: 500,
@@ -238,7 +227,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "system",
   },
 
-
   [ErrorCode.EVENT_TYPE_NOT_REGISTERED]: {
     httpStatus: 422,
     defaultTitle: "Event type not registered",
@@ -253,7 +241,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "O header traceparent precisa seguir o formato W3C 00-{32hex}-{16hex}-{2hex}.",
     domain: "event-bus",
   },
-
 
   [ErrorCode.WEATHER_INVALID_BIOME]: {
     httpStatus: 422,
@@ -280,7 +267,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Dead magic zone bloqueia spells de nível 1+; cantrips exigem ability check DC 11.",
     domain: "spell",
   },
-
 
   [ErrorCode.ENCOUNTER_CREATE_FAILED]: {
     httpStatus: 422,
@@ -476,6 +462,106 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Pergunte sobre tática, percepção, lembrança do personagem ou regra RAW; não sobre segredos ou números ocultos.",
     domain: "narrative",
   },
+  [ErrorCode.BOOKEND_NPC_REFERENCE_VIOLATION]: {
+    httpStatus: 422,
+    defaultTitle: "Bookend referenced an NPC that is not alive",
+    defaultHint:
+      "O writer será retentado uma vez sem referenciar NPCs mortos; depois cai em fallback mínimo.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_PLANNER_TIMEOUT]: {
+    httpStatus: 504,
+    defaultTitle: "Bookend planner timed out",
+    defaultHint: "A sessão continua com fallback curto de capítulo.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_WRITER_TIMEOUT]: {
+    httpStatus: 504,
+    defaultTitle: "Bookend writer timed out",
+    defaultHint: "A sessão continua com fallback curto de capítulo.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_ARTIFACT_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Bookend artifact not found",
+    defaultHint:
+      "O bookend solicitado não existe mais ou não pertence à sessão.",
+    domain: "narrative",
+  },
+  [ErrorCode.BOOKEND_DECISION_INCONSISTENT]: {
+    httpStatus: 409,
+    defaultTitle: "Bookend decision inconsistent",
+    defaultHint:
+      "Outro dispatcher processou a mesma transição; reidrate o estado.",
+    domain: "narrative",
+  },
+  [ErrorCode.CLOSING_SEED_COMMIT_FAILED]: {
+    httpStatus: 502,
+    defaultTitle: "Haiku planner failed to generate closingSeed",
+    defaultHint:
+      "Phase.closingSeed fica null; bookend roda em modo degradado até retry manual.",
+    domain: "narrative",
+  },
+  [ErrorCode.CLOSING_SEED_LEAKAGE_DETECTED]: {
+    httpStatus: 500,
+    defaultTitle: "Player payload contains hidden closing seed fields",
+    defaultHint:
+      "DTO whitelist falhou. Investigue imediatamente para não revelar mistério da fase.",
+    domain: "narrative",
+  },
+  [ErrorCode.OUTCOME_TIER_DERIVATION_INVALID]: {
+    httpStatus: 422,
+    defaultTitle: "Malformed xpTriggerState",
+    defaultHint:
+      "Campos booleanos ausentes ou inválidos; fallback seguro é FAILURE.",
+    domain: "narrative",
+  },
+  [ErrorCode.DIEGETIC_RITUAL_NOT_FOUND]: {
+    httpStatus: 404,
+    defaultTitle: "Diegetic ritual key not found",
+    defaultHint:
+      "Validador de paridade Python/TS deve acusar catálogo quebrado; fallback neutro é oath.",
+    domain: "narrative",
+  },
+  [ErrorCode.TWO_BEAT_STRUCTURE_VIOLATION]: {
+    httpStatus: 422,
+    defaultTitle: "Bookend output missing required two-beat headers",
+    defaultHint:
+      "Retente uma vez com hint estruturado; segunda falha usa fallback single-beat.",
+    domain: "narrative",
+  },
+  [ErrorCode.IDENTITY_TAGS_LIMIT_EXCEEDED]: {
+    httpStatus: 422,
+    defaultTitle: "Identity tags limit exceeded",
+    defaultHint: "Remova uma identity tag antiga antes de adicionar outra.",
+    domain: "narrative",
+  },
+  [ErrorCode.CHRONICLE_TIER_INVALID_TRANSITION]: {
+    httpStatus: 422,
+    defaultTitle: "Invalid chronicle tier transition",
+    defaultHint: "Transições válidas: active→diary→forgotten.",
+    domain: "narrative",
+  },
+  [ErrorCode.DOWNTIME_TURNS_OUT_OF_RANGE]: {
+    httpStatus: 422,
+    defaultTitle: "Downtime turns out of range",
+    defaultHint: "Downtime mini-phase aceita 1 a 3 turnos.",
+    domain: "narrative",
+  },
+  [ErrorCode.NL_TRIGGER_AUDITOR_INCONCLUSIVE]: {
+    httpStatus: 502,
+    defaultTitle: "Natural language trigger auditor inconclusive",
+    defaultHint:
+      "Auditor retornou evidence inválida; o trigger é tratado como não satisfeito.",
+    domain: "narrative",
+  },
+  [ErrorCode.CHAOS_FACTOR_CLAMP_VIOLATION]: {
+    httpStatus: 500,
+    defaultTitle: "Chaos factor clamp violation",
+    defaultHint:
+      "O clamp 1..9 deveria impedir este estado. Investigue o use case.",
+    domain: "narrative",
+  },
   [ErrorCode.SCENE_NOT_FOUND]: {
     httpStatus: 404,
     defaultTitle: "Scene not found",
@@ -562,7 +648,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
     domain: "encounter",
   },
 
-
   [ErrorCode.SUMMARIZE_LLM_TIMEOUT]: {
     httpStatus: 504,
     defaultTitle: "Hot-recap LLM call timed out",
@@ -598,7 +683,6 @@ export const ERROR_CODE_METADATA: Record<ErrorCode, ErrorCodeMetadata> = {
       "Re-hidrate o histórico — algum turno foi processado fora desta aba.",
     domain: "session-recap",
   },
-
 
   [ErrorCode.IDEMPOTENCY_CACHE_MISS_AFTER_RACE]: {
     httpStatus: 409,

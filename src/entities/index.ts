@@ -84,6 +84,9 @@ import { EncounterTemplateEntity } from "./encounter-template.entity";
 import { EncounterJoinRequestEntity } from "./encounter-join-request.entity";
 import { SceneEntity } from "./scene.entity";
 import { OpeningArchetypeEntity } from "./opening-archetype.entity";
+import { BookendArtifactEntity } from "./bookend-artifact.entity";
+import { DiegeticRitualEntity } from "./diegetic-ritual.entity";
+import { DowntimeTurnEntity } from "./downtime-turn.entity";
 import { SceneNpcEntity } from "./scene-npc.entity";
 import { ScenePoiObservationEntity } from "./scene-poi-observation.entity";
 import { SessionEventEntity } from "./session-event.entity";
@@ -205,6 +208,9 @@ export {
   EncounterJoinRequestEntity,
   SceneEntity,
   OpeningArchetypeEntity,
+  BookendArtifactEntity,
+  DiegeticRitualEntity,
+  DowntimeTurnEntity,
   SceneNpcEntity,
   ScenePoiObservationEntity,
   SessionEventEntity,
@@ -322,6 +328,9 @@ export const ENTITIES = [
   EncounterJoinRequestEntity,
   SceneEntity,
   OpeningArchetypeEntity,
+  BookendArtifactEntity,
+  DiegeticRitualEntity,
+  DowntimeTurnEntity,
   SceneNpcEntity,
   ScenePoiObservationEntity,
   SessionEventEntity,

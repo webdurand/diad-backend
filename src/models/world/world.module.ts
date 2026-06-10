@@ -15,6 +15,10 @@ import {
   StoryArcEntity,
   PhaseEntity,
   PhaseTransitionEntity,
+  BookendArtifactEntity,
+  DiegeticRitualEntity,
+  DowntimeTurnEntity,
+  CampaignChronicleEntity,
   QuestEntity,
   QuestObjectiveEntity,
   QuestPrerequisiteEntity,
@@ -37,8 +41,8 @@ import {
   ClockEntity,
   SceneEntity,
   SceneNpcEntity,
+  SessionMessageEntity,
   SessionEventEntity,
-
   GameSessionEntity,
   SessionNpcStateEntity,
   SessionFactionStateEntity,
@@ -63,6 +67,7 @@ import { FactionService } from "./services/faction.service";
 import { QuestService } from "./services/quest.service";
 import { PhaseService } from "./services/phase.service";
 import { StoryArcService } from "./services/story-arc.service";
+import { CompassScenesListener } from "./listeners/compass-scenes.listener";
 import { MissionPullListener } from "./listeners/mission-pull.listener";
 import { MissionPanelCacheListener } from "./listeners/mission-panel-cache.listener";
 import { PhaseGateListener } from "./listeners/phase-gate.listener";
@@ -84,6 +89,22 @@ import { CompanionTemplateService } from "./services/companion-template.service"
 import { CampaignIdPipe } from "./pipes/campaign-id.pipe";
 import { WorldSeedMaterializationService } from "./services/world-seed-materialization.service";
 import { WorldPulseService } from "./services/world-pulse.service";
+import { BookendDecisionService } from "../bookends/services/bookend-decision.service";
+import { NpcStateSnapshotService } from "../bookends/services/npc-state-snapshot.service";
+import { AgentBookendGenerationService } from "../bookends/services/agent-bookend-generation.service";
+import { BookendEventPublisherService } from "../bookends/services/bookend-event-publisher.service";
+import { BookendRendererService } from "../bookends/services/bookend-renderer.service";
+import { BookendArtifactService } from "../bookends/services/bookend-artifact.service";
+import { AgentClosingSeedPlannerService } from "../story-hidden-layer/services/agent-closing-seed-planner.service";
+import { StoryHiddenLayerEventPublisherService } from "../story-hidden-layer/services/story-hidden-layer-event-publisher.service";
+import { StoryHiddenLayerService } from "../story-hidden-layer/services/story-hidden-layer.service";
+import { CommitClosingSeedListener } from "../story-hidden-layer/listeners/commit-closing-seed.listener";
+import { DerivePhaseOutcomeListener } from "../story-hidden-layer/listeners/derive-phase-outcome.listener";
+import { NarrativeMemoryService } from "../narrative-memory/services/narrative-memory.service";
+import { RollChaosFactorListener } from "../narrative-memory/listeners/roll-chaos-factor.listener";
+import { TierChronicleEntriesListener } from "../narrative-memory/listeners/tier-chronicle-entries.listener";
+import { EvolveDowntimeListener } from "../narrative-memory/listeners/evolve-downtime.listener";
+import { EvaluateNaturalLanguageTriggerListener } from "../narrative-memory/listeners/evaluate-natural-language-trigger.listener";
 
 @Module({
   imports: [
@@ -102,6 +123,10 @@ import { WorldPulseService } from "./services/world-pulse.service";
       StoryArcEntity,
       PhaseEntity,
       PhaseTransitionEntity,
+      BookendArtifactEntity,
+      DiegeticRitualEntity,
+      DowntimeTurnEntity,
+      CampaignChronicleEntity,
       QuestEntity,
       QuestObjectiveEntity,
       QuestPrerequisiteEntity,
@@ -121,6 +146,7 @@ import { WorldPulseService } from "./services/world-pulse.service";
       ClockEntity,
       SceneEntity,
       SceneNpcEntity,
+      SessionMessageEntity,
       SessionEventEntity,
       GameSessionEntity,
       SessionNpcStateEntity,
@@ -165,16 +191,33 @@ import { WorldPulseService } from "./services/world-pulse.service";
     CompanionTemplateService,
     WorldSeedMaterializationService,
     WorldPulseService,
+    BookendDecisionService,
+    NpcStateSnapshotService,
+    AgentBookendGenerationService,
+    BookendEventPublisherService,
+    BookendRendererService,
+    BookendArtifactService,
+    AgentClosingSeedPlannerService,
+    StoryHiddenLayerEventPublisherService,
+    StoryHiddenLayerService,
+    NarrativeMemoryService,
 
     CampaignIdPipe,
     QuestDefeatListener,
     GainReputationListener,
     QuestRewardListener,
+    CompassScenesListener,
     MissionPullListener,
     WorldPulseListener,
     NpcRoutineListener,
     MissionPanelCacheListener,
     PhaseGateListener,
+    CommitClosingSeedListener,
+    DerivePhaseOutcomeListener,
+    RollChaosFactorListener,
+    TierChronicleEntriesListener,
+    EvolveDowntimeListener,
+    EvaluateNaturalLanguageTriggerListener,
   ],
   exports: [
     CampaignService,
@@ -199,6 +242,15 @@ import { WorldPulseService } from "./services/world-pulse.service";
     CompanionTemplateService,
     WorldSeedMaterializationService,
     WorldPulseService,
+    BookendDecisionService,
+    NpcStateSnapshotService,
+    BookendEventPublisherService,
+    BookendRendererService,
+    BookendArtifactService,
+    AgentClosingSeedPlannerService,
+    StoryHiddenLayerEventPublisherService,
+    StoryHiddenLayerService,
+    NarrativeMemoryService,
   ],
 })
 export class WorldModule implements OnModuleInit {
@@ -207,21 +259,35 @@ export class WorldModule implements OnModuleInit {
     private readonly questDefeatListener: QuestDefeatListener,
     private readonly gainReputationListener: GainReputationListener,
     private readonly questRewardListener: QuestRewardListener,
+    private readonly compassScenesListener: CompassScenesListener,
     private readonly missionPullListener: MissionPullListener,
     private readonly worldPulseListener: WorldPulseListener,
     private readonly npcRoutineListener: NpcRoutineListener,
     private readonly missionPanelCacheListener: MissionPanelCacheListener,
     private readonly phaseGateListener: PhaseGateListener,
+    private readonly commitClosingSeedListener: CommitClosingSeedListener,
+    private readonly derivePhaseOutcomeListener: DerivePhaseOutcomeListener,
+    private readonly rollChaosFactorListener: RollChaosFactorListener,
+    private readonly tierChronicleEntriesListener: TierChronicleEntriesListener,
+    private readonly evolveDowntimeListener: EvolveDowntimeListener,
+    private readonly evaluateNaturalLanguageTriggerListener: EvaluateNaturalLanguageTriggerListener,
   ) {}
 
   onModuleInit(): void {
     this.eventBus.registerListener(this.questDefeatListener);
     this.eventBus.registerListener(this.gainReputationListener);
     this.eventBus.registerListener(this.questRewardListener);
+    this.eventBus.registerListener(this.compassScenesListener);
     this.eventBus.registerListener(this.missionPullListener);
     this.eventBus.registerListener(this.worldPulseListener);
     this.eventBus.registerListener(this.npcRoutineListener);
     this.eventBus.registerListener(this.missionPanelCacheListener);
     this.eventBus.registerListener(this.phaseGateListener);
+    this.eventBus.registerListener(this.commitClosingSeedListener);
+    this.eventBus.registerListener(this.derivePhaseOutcomeListener);
+    this.eventBus.registerListener(this.rollChaosFactorListener);
+    this.eventBus.registerListener(this.tierChronicleEntriesListener);
+    this.eventBus.registerListener(this.evolveDowntimeListener);
+    this.eventBus.registerListener(this.evaluateNaturalLanguageTriggerListener);
   }
 }
