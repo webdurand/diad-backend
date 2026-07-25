@@ -46,9 +46,11 @@ describe("EncounterService — NPC state sync", () => {
     const encounterRepo = {
       findOne: jest.fn().mockResolvedValue(encounter),
       save: jest.fn(async (value) => value),
+      update: jest.fn(),
     };
     const participantRepo = {
       find: jest.fn().mockResolvedValue([defeatedNpc, pcParticipant]),
+      save: jest.fn(async (value) => value),
     };
     const npcStateRepo = {
       find: jest.fn().mockResolvedValue([npcState]),
@@ -76,6 +78,16 @@ describe("EncounterService — NPC state sync", () => {
     const gameClockService = { advanceTime: jest.fn() };
     const sessionMessageService = { append: jest.fn() };
     const sceneContextCache = { invalidateAll: jest.fn() };
+    const diceService = {
+      rollInitiative: jest.fn().mockReturnValue({
+        roll: 10,
+        modifier: 0,
+        total: 10,
+      }),
+    };
+    const stateService = {
+      restoreQuickPlaySnapshot: jest.fn().mockResolvedValue(undefined),
+    };
 
     const service = new EncounterService(
       encounterRepo as any,
@@ -84,11 +96,11 @@ describe("EncounterService — NPC state sync", () => {
       {} as any,
       {} as any,
       npcStateRepo as any,
-      {} as any,
+      diceService as any,
       eventService as any,
       sessionService as any,
       {} as any,
-      {} as any,
+      stateService as any,
       {} as any,
       {} as any,
       {} as any,
@@ -104,10 +116,36 @@ describe("EncounterService — NPC state sync", () => {
       npcStateRepo,
       sceneContextCache,
       encounterRepo,
+      participantRepo,
+      defeatedNpc,
       eventService,
       sessionMessageService,
+      stateService,
+      encounter,
     };
   }
+
+  it("aceita inimigo controlado pelo mestre ao rolar iniciativa", async () => {
+    const {
+      service,
+      participantRepo,
+      defeatedNpc,
+      encounterRepo,
+    } = setup();
+    defeatedNpc.controlledBy = "dm";
+    defeatedNpc.currentHp = 5;
+    defeatedNpc.isDefeated = false;
+
+    const result = await service.rollAllInitiative(ENCOUNTER_ID);
+
+    expect(result).toHaveLength(2);
+    expect(participantRepo.save).toHaveBeenCalled();
+    expect(encounterRepo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relations: ["participants"],
+      }),
+    );
+  });
 
   it("marca NPC derrotado como dead no estado da sessão ao resolver encounter", async () => {
     const { service, npcState, npcStateRepo, sceneContextCache } = setup();
@@ -200,6 +238,135 @@ describe("EncounterService — NPC state sync", () => {
         kind: "system",
         clientId: `srv-combat-digest-${ENCOUNTER_ID}`,
         content: expect.stringContaining("10 XP"),
+      }),
+    );
+  });
+
+  it("resume o PV atual da ficha e lista todos os inimigos sem truncamento silencioso", async () => {
+    const pcParticipant = {
+      id: "part-aric",
+      encounterId: ENCOUNTER_ID,
+      type: "pc",
+      faction: "ally",
+      controlledBy: "pc",
+      characterId: "char-aric",
+      displayName: "Aric",
+      currentHp: 129,
+      maxHp: 129,
+      isDefeated: false,
+    };
+    const defeatedNpcs = ["Goblin", "Troll 1", "Troll 3", "Troll 2"].map(
+      (displayName, index) => ({
+        id: `part-enemy-${index}`,
+        encounterId: ENCOUNTER_ID,
+        type: "monster",
+        faction: "enemy",
+        controlledBy: "ai",
+        displayName,
+        currentHp: 0,
+        maxHp: 5,
+        isDefeated: true,
+        monster: { slug: displayName.toLowerCase().replaceAll(" ", "-") },
+      }),
+    );
+    const participantRepo = {
+      find: jest.fn().mockResolvedValue([...defeatedNpcs, pcParticipant]),
+    };
+    const characterRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: "char-aric",
+        userId: "user-1",
+      }),
+    };
+    const sheetService = {
+      computeSheet: jest.fn().mockResolvedValue({
+        currentHp: 3,
+        maxHp: 129,
+      }),
+    };
+    const service = new EncounterService(
+      {} as any,
+      participantRepo as any,
+      {} as any,
+      characterRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      sheetService as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const outcome = await (service as any).buildEncounterOutcomeSummary(
+      { id: ENCOUNTER_ID },
+      "victory",
+      [],
+      [],
+      [],
+    );
+
+    expect(sheetService.computeSheet).toHaveBeenCalledWith(
+      "user-1",
+      "char-aric",
+    );
+    expect(outcome.pcFinalHp).toEqual(
+      expect.objectContaining({
+        current: 3,
+        max: 129,
+        percent: 2,
+      }),
+    );
+    expect(outcome.summary).toContain(
+      "Goblin, Troll 1, Troll 3 e Troll 2",
+    );
+    expect(outcome.summary).toContain("PC 2%HP");
+  });
+
+  it("restaura o snapshot de Quick Play uma única vez", async () => {
+    const { service, encounter, stateService, encounterRepo } = setup();
+    const snapshot = {
+      current_hp: 3,
+      temp_hp: 7,
+      death_saves_success: 1,
+      death_saves_fail: 2,
+      conditions: ["poisoned"],
+      spell_slots_used: { "5": 3 },
+      hit_dice_used: { d8: 4 },
+      ki_points_used: 2,
+      feature_uses_used: { "wild-shape": 1 },
+      exhaustion_level: 1,
+      inspiration: true,
+    };
+    encounter.mapData = {
+      quickPlay: {
+        characterId: "char-aric",
+        characterStateSnapshot: snapshot,
+        restored: false,
+      },
+    };
+
+    await (service as any).restoreQuickPlayCharacterState(encounter);
+    await (service as any).restoreQuickPlayCharacterState(encounter);
+
+    expect(stateService.restoreQuickPlaySnapshot).toHaveBeenCalledTimes(1);
+    expect(stateService.restoreQuickPlaySnapshot).toHaveBeenCalledWith(
+      "char-aric",
+      snapshot,
+    );
+    expect(encounterRepo.update).toHaveBeenCalledWith(
+      ENCOUNTER_ID,
+      expect.objectContaining({
+        mapData: expect.objectContaining({
+          quickPlay: expect.objectContaining({ restored: true }),
+        }),
       }),
     );
   });

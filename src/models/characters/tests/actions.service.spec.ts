@@ -33,6 +33,7 @@ describe("ActionsService", () => {
       charState: createMockRepository(),
       equipCatItem: createMockRepository(),
       classProf: createMockRepository(),
+      spell: createMockRepository(),
     };
 
     service = new ActionsService(
@@ -47,7 +48,9 @@ describe("ActionsService", () => {
       repos.charState as any,
       repos.equipCatItem as any,
       repos.classProf as any,
+      repos.spell as any,
     );
+    repos.spell.find!.mockResolvedValue([]);
   });
 
   const setupActions = (
@@ -56,6 +59,7 @@ describe("ActionsService", () => {
       level?: number;
       str?: number;
       dex?: number;
+      con?: number;
       wis?: number;
       cha?: number;
       int?: number;
@@ -63,6 +67,10 @@ describe("ActionsService", () => {
       spells?: any[];
       features?: any[];
       proficiencies?: any[];
+      equipmentCategorySlugs?: Record<string, string>;
+      raceSlug?: string;
+      raceTraitChoices?: string[];
+      featureUsesUsed?: Record<string, number>;
     } = {},
   ) => {
     const classSlug = opts.classSlug ?? "fighter";
@@ -71,12 +79,16 @@ describe("ActionsService", () => {
     const abilities = makeCharacterAbilityScores({
       str: opts.str ?? 16,
       dex: opts.dex ?? 14,
+      con: opts.con ?? 12,
       wis: opts.wis ?? 10,
       cha: opts.cha ?? 10,
       int: opts.int ?? 10,
     });
     const state = makeCharacterState();
     const origin = makeCharacterOrigin();
+    if (opts.raceSlug) origin.race.slug = opts.raceSlug;
+    origin.race_trait_choices = opts.raceTraitChoices ?? [];
+    state.feature_uses_used = opts.featureUsesUsed ?? {};
     const character = makeCharacter({ character_origin: origin });
 
     repos.character.findOne!.mockResolvedValue(character);
@@ -95,13 +107,15 @@ describe("ActionsService", () => {
         equipment_id: ce.equipment_id,
         category_id: "cat-1",
         category: {
-          slug: ce.equipment?.properties?.some(
-            (p: any) => p === "finesse" || p?.slug === "finesse",
-          )
-            ? "martial-melee-weapons"
-            : ce.equipment?.range?.normal
-              ? "simple-ranged-weapons"
-              : "martial-melee-weapons",
+          slug:
+            opts.equipmentCategorySlugs?.[ce.equipment?.slug] ??
+            (ce.equipment?.properties?.some(
+              (p: any) => p === "finesse" || p?.slug === "finesse",
+            )
+              ? "martial-melee-weapons"
+              : ce.equipment?.range?.normal
+                ? "simple-ranged-weapons"
+                : "martial-melee-weapons"),
         },
       }));
     repos.equipCatItem.find!.mockResolvedValue(catItems);
@@ -196,6 +210,82 @@ describe("ActionsService", () => {
       expect(weapon).toBeDefined();
       expect(weapon!.attackBonus).toBe(4 + 2);
       expect(weapon!.damage?.bonus).toBe(4);
+    });
+
+    it("keeps a thrown melee weapon at 5 ft and exposes a separate throw action", async () => {
+      setupActions({
+        str: 12,
+        dex: 18,
+        equipmentCategorySlugs: {
+          dagger: "simple-melee-weapons",
+          javelin: "simple-melee-weapons",
+        },
+        equip: [
+          makeCharacterEquipment("dagger", {
+            equipped: true,
+            equipmentOverrides: {
+              damage: { damage_dice: "1d4", damage_type: { name: "Piercing" } },
+              properties: [
+                { index: "finesse", name: "Finesse" },
+                { index: "thrown", name: "Thrown" },
+              ],
+              range: { normal: 20, long: 60 },
+              weight: "1",
+            },
+          }),
+          makeCharacterEquipment("javelin", {
+            equipped: true,
+            equipmentOverrides: {
+              damage: { damage_dice: "1d6", damage_type: { name: "Piercing" } },
+              properties: [{ index: "thrown", name: "Thrown" }],
+              range: { normal: 30, long: 120 },
+              weight: "2",
+            },
+          }),
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const dagger = result.actions.find((action) => action.name === "Dagger");
+      const daggerThrown = result.actions.find(
+        (action) => action.name === "Dagger (Arremesso)",
+      );
+      const javelin = result.actions.find((action) => action.name === "Javelin");
+      const javelinThrown = result.actions.find(
+        (action) => action.name === "Javelin (Arremesso)",
+      );
+
+      expect(dagger?.range).toBe("5 ft");
+      expect(daggerThrown?.range).toBe("20/60 ft");
+      expect(javelin?.range).toBe("5 ft");
+      expect(javelinThrown?.range).toBe("30/120 ft");
+    });
+
+    it("keeps a thrown ranged weapon as one DEX-based ranged action", async () => {
+      setupActions({
+        str: 12,
+        dex: 18,
+        equipmentCategorySlugs: { dart: "simple-ranged-weapons" },
+        equip: [
+          makeCharacterEquipment("dart", {
+            equipped: true,
+            equipmentOverrides: {
+              damage: { damage_dice: "1d4", damage_type: { name: "Piercing" } },
+              properties: [{ index: "thrown", name: "Thrown" }],
+              range: { normal: 20, long: 60 },
+              weight: "0.25",
+            },
+          }),
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const dart = result.actions.find((action) => action.name === "Dart");
+
+      expect(dart?.range).toBe("20/60 ft");
+      expect(dart?.attackBonus).toBe(4);
+      expect(result.actions.some((action) => action.name === "Dart (Arremesso)"))
+        .toBe(false);
     });
 
     it("should not include unequipped weapons", async () => {
@@ -362,6 +452,218 @@ describe("ActionsService", () => {
       const hidden = result.actions.find((a) => a.name === "Unmodeled Spell");
 
       expect(hidden).toBeUndefined();
+    });
+
+    it("should expose Acid Splash 2024 as a 5ft point-origin sphere", async () => {
+      const spell = {
+        id: "spell-acid-splash",
+        slug: "acid-splash",
+        name: "Acid Splash",
+        level: 0,
+        description: ["An acid bubble bursts at a point within range."],
+        casting_time: "1 action",
+        range: "60 feet",
+        concentration: false,
+        ritual: false,
+        attack_type: null,
+        area_of_effect: null,
+        damage: {
+          damage_type: { name: "Acid" },
+          damage_at_character_level: {
+            "1": "1d6",
+            "5": "2d6",
+            "11": "3d6",
+            "17": "4d6",
+          },
+        },
+        dc: {
+          dc_type: { index: "dex", name: "DEX" },
+          dc_success: "none",
+        },
+      };
+
+      setupActions({
+        classSlug: "wizard",
+        level: 5,
+        int: 16,
+        spells: [
+          {
+            id: "cs-acid-splash",
+            character_id: "char-1",
+            spell_id: spell.id,
+            source: "class",
+            status: SpellStatusEnum.Known,
+            always_prepared: true,
+            spell,
+          },
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const action = result.actions.find((candidate) => candidate.id === "spell-acid-splash");
+      expect(action?.aoe).toEqual({
+        originType: "point",
+        shape: "sphere",
+        sizeFt: 5,
+        rangeFt: 60,
+      });
+    });
+
+    it("should override stale Thunderwave metadata with its canonical self-origin cube", async () => {
+      const spell = {
+        id: "spell-thunderwave",
+        slug: "thunderwave",
+        name: "Thunderwave",
+        level: 1,
+        description: ["A wave of thunderous force sweeps out from you."],
+        casting_time: "1 action",
+        range: "Self",
+        concentration: false,
+        ritual: false,
+        attack_type: null,
+        // Reproduces the stale shape found by the Chrome audit.
+        area_of_effect: { type: "sphere", size: 15 },
+        damage: {
+          damage_type: { name: "Thunder" },
+          damage_at_slot_level: { "1": "2d8" },
+        },
+        dc: {
+          dc_type: { index: "con", name: "CON" },
+          dc_success: "half",
+        },
+      };
+
+      setupActions({
+        classSlug: "wizard",
+        level: 5,
+        int: 16,
+        spells: [
+          {
+            id: "cs-thunderwave",
+            character_id: "char-1",
+            spell_id: spell.id,
+            source: "class",
+            status: SpellStatusEnum.Known,
+            always_prepared: true,
+            spell,
+          },
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const action = result.actions.find(
+        (candidate) => candidate.id === "spell-thunderwave",
+      );
+      expect(action?.aoe).toEqual({
+        originType: "self",
+        shape: "cube",
+        sizeFt: 15,
+        rangeFt: 0,
+      });
+    });
+  });
+
+  describe("2024 limited-use features", () => {
+    it("describes the level-1 Lay on Hands poison removal", async () => {
+      setupActions({
+        classSlug: "paladin",
+        level: 1,
+        features: [
+          makeCharacterFeature("lay-on-hands-paladin-1", "paladin", {
+            featureOverrides: {
+              slug: "lay-on-hands-paladin-1",
+              name: "Lay on Hands",
+              level: 1,
+            },
+          }),
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const layOnHands = result.bonusActions.find(
+        (action) => action.featureSlug === "lay-on-hands",
+      );
+
+      expect(layOnHands?.description).toContain(
+        "remover Envenenado",
+      );
+      expect(layOnHands?.description).not.toContain("Paralisado");
+    });
+
+    it("describes every Restoring Touch condition at level 14", async () => {
+      setupActions({
+        classSlug: "paladin",
+        level: 14,
+        features: [
+          makeCharacterFeature("lay-on-hands-paladin-1", "paladin", {
+            featureOverrides: {
+              slug: "lay-on-hands-paladin-1",
+              name: "Lay on Hands",
+              level: 1,
+            },
+          }),
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const layOnHands = result.bonusActions.find(
+        (action) => action.featureSlug === "lay-on-hands",
+      );
+
+      expect(layOnHands?.description).toContain(
+        "Cego, Enfeitiçado, Surdo, Amedrontado, Paralisado, Envenenado ou Atordoado",
+      );
+    });
+
+    it("exposes the two level-1 Second Wind uses and their remaining count", async () => {
+      setupActions({
+        classSlug: "fighter",
+        level: 1,
+        featureUsesUsed: { "second-wind": 1 },
+        features: [
+          makeCharacterFeature("second-wind-fighter-1", "fighter", {
+            featureOverrides: {
+              slug: "second-wind-fighter-1",
+              name: "Second Wind",
+              level: 1,
+            },
+          }),
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const secondWind = result.bonusActions.find(
+        (action) => action.featureSlug === "second-wind",
+      );
+
+      expect(secondWind).toMatchObject({ uses: 1, usesMax: 2 });
+    });
+
+    it("exposes Dragonborn cone and line with one shared Breath Weapon pool", async () => {
+      setupActions({
+        classSlug: "fighter",
+        level: 1,
+        con: 14,
+        raceSlug: "dragonborn",
+        raceTraitChoices: ["red"],
+        featureUsesUsed: { "breath-weapon": 1 },
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const breaths = result.actions.filter(
+        (action) => action.featureSlug === "breath-weapon",
+      );
+
+      expect(breaths).toHaveLength(2);
+      expect(breaths.map((action) => action.aoe?.shape).sort()).toEqual([
+        "cone",
+        "line",
+      ]);
+      expect(breaths.every((action) => action.uses === 1)).toBe(true);
+      expect(breaths.every((action) => action.usesMax === 2)).toBe(true);
+      expect(breaths.every((action) => action.saveSuccess === "half")).toBe(
+        true,
+      );
     });
   });
 

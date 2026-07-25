@@ -3,6 +3,7 @@ import {
   isMultiTargetNonAoeSpell,
   maxTargetsFor,
   MULTI_TARGET_NON_AOE_SPELLS,
+  repeatsFirstTargetToMaximum,
 } from "../services/spell-targeting";
 
 
@@ -11,6 +12,10 @@ type MiniSpell = { slug: string; area_of_effect: unknown };
 
 
 const acidSplash: MiniSpell = { slug: "acid-splash", area_of_effect: null };
+const legacyAcidSplash: MiniSpell = {
+  slug: "acid-splash-phb",
+  area_of_effect: null,
+};
 const burningHands: MiniSpell = {
   slug: "burning-hands",
   area_of_effect: { type: "cone", size: 15 },
@@ -34,11 +39,14 @@ describe("spell-targeting — US14 (Spec 005)", () => {
       expect(isAoeSpell(burningHands as any)).toBe(true);
       expect(isAoeSpell(fireball as any)).toBe(true);
     });
-    it("rejeita spells sem area_of_effect", () => {
+    it("rejeita spells sem area_of_effect ou forma canônica", () => {
       expect(isAoeSpell(fireBolt as any)).toBe(false);
       expect(isAoeSpell(magicMissile as any)).toBe(false);
       expect(isAoeSpell(cureWounds as any)).toBe(false);
-      expect(isAoeSpell(acidSplash as any)).toBe(false);
+      expect(isAoeSpell(legacyAcidSplash as any)).toBe(false);
+    });
+    it("reconhece Acid Splash XPHB como esfera de 5 pés", () => {
+      expect(isAoeSpell(acidSplash as any)).toBe(true);
     });
     it("rejeita area_of_effect XPHB que só tem tags (sem shape real)", () => {
 
@@ -57,11 +65,12 @@ describe("spell-targeting — US14 (Spec 005)", () => {
   });
 
   describe("isMultiTargetNonAoeSpell", () => {
-    it("reconhece Magic Missile, Eldritch Blast, Scorching Ray e Acid Splash", () => {
+    it("reconhece Magic Missile, Eldritch Blast, Scorching Ray e Acid Splash PHB", () => {
       expect(isMultiTargetNonAoeSpell(magicMissile as any)).toBe(true);
       expect(isMultiTargetNonAoeSpell(eldritchBlast as any)).toBe(true);
       expect(isMultiTargetNonAoeSpell(scorchingRay as any)).toBe(true);
-      expect(isMultiTargetNonAoeSpell(acidSplash as any)).toBe(true);
+      expect(isMultiTargetNonAoeSpell(legacyAcidSplash as any)).toBe(true);
+      expect(isMultiTargetNonAoeSpell(acidSplash as any)).toBe(false);
     });
     it("rejeita spells single-target e AoE", () => {
       expect(isMultiTargetNonAoeSpell(fireBolt as any)).toBe(false);
@@ -76,6 +85,9 @@ describe("spell-targeting — US14 (Spec 005)", () => {
         Number.POSITIVE_INFINITY,
       );
       expect(maxTargetsFor(fireball as any, 3, 5)).toBe(
+        Number.POSITIVE_INFINITY,
+      );
+      expect(maxTargetsFor(acidSplash as any, 0, 5)).toBe(
         Number.POSITIVE_INFINITY,
       );
     });
@@ -111,7 +123,7 @@ describe("spell-targeting — US14 (Spec 005)", () => {
       expect("magic-missile" in MULTI_TARGET_NON_AOE_SPELLS).toBe(true);
       expect("eldritch-blast" in MULTI_TARGET_NON_AOE_SPELLS).toBe(true);
       expect("scorching-ray" in MULTI_TARGET_NON_AOE_SPELLS).toBe(true);
-      expect("acid-splash" in MULTI_TARGET_NON_AOE_SPELLS).toBe(true);
+      expect("acid-splash" in MULTI_TARGET_NON_AOE_SPELLS).toBe(false);
     });
 
     it("tolera sufixos de fonte (-phb, -xphb, etc.)", () => {
@@ -125,10 +137,24 @@ describe("spell-targeting — US14 (Spec 005)", () => {
       expect(maxTargetsFor(splashVariant as any, 0, 3)).toBe(2);
     });
 
-    it("Acid Splash: até 2 alvos (cantrip multi-target RAW)", () => {
-      const splash: MiniSpell = { slug: "acid-splash", area_of_effect: null };
-      expect(maxTargetsFor(splash as any, 0, 3)).toBe(2);
-      expect(maxTargetsFor(splash as any, 0, 17)).toBe(2);
+    it("Acid Splash PHB: até 2 alvos; XPHB usa a área do grid", () => {
+      expect(maxTargetsFor(legacyAcidSplash as any, 0, 3)).toBe(2);
+      expect(maxTargetsFor(legacyAcidSplash as any, 0, 17)).toBe(2);
+      expect(maxTargetsFor(acidSplash as any, 0, 17)).toBe(
+        Number.POSITIVE_INFINITY,
+      );
+    });
+  });
+
+  describe("repetição automática no mesmo alvo", () => {
+    it("é exclusiva de magias com múltiplos projéteis", () => {
+      expect(repeatsFirstTargetToMaximum(magicMissile as any)).toBe(true);
+      expect(repeatsFirstTargetToMaximum(eldritchBlast as any)).toBe(true);
+      expect(repeatsFirstTargetToMaximum(scorchingRay as any)).toBe(true);
+      expect(repeatsFirstTargetToMaximum(legacyAcidSplash as any)).toBe(false);
+      expect(
+        repeatsFirstTargetToMaximum({ slug: "bless" } as any),
+      ).toBe(false);
     });
   });
 });

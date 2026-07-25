@@ -38,7 +38,11 @@ export class UnarmedStrikeResolver implements ActionResolver {
       if (!economy.isOnTurn) {
         available = false;
         disabledReason = "NOT_YOUR_TURN";
-      } else if (economy.attacksUsedThisTurn >= economy.attacksMaxThisTurn) {
+      } else if (
+        economy.bonusUnarmedAttacksRemainingThisTurn <= 0 &&
+        (economy.attacksUsedThisTurn >= economy.attacksMaxThisTurn ||
+          (economy.actionUsed && economy.attacksUsedThisTurn === 0))
+      ) {
         available = false;
         disabledReason = "ACTION_ALREADY_USED";
       }

@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  ValidateNested,
   Max,
   MaxLength,
   Min,
@@ -30,7 +31,7 @@ const SUPPORTED_CLASS_SLUGS = [
 
 export type SupportedClassSlug = (typeof SUPPORTED_CLASS_SLUGS)[number];
 
-const SUPPORTED_LEVELS = [1, 3, 9, 10, 11, 13, 15, 20] as const;
+const SUPPORTED_LEVELS = [1, 3, 5, 9, 10, 11, 13, 15, 20] as const;
 export type SupportedLevel = (typeof SUPPORTED_LEVELS)[number];
 
 const SUPPORTED_SEED_MODES = ["spell-lab"] as const;
@@ -42,6 +43,15 @@ const SUPPORTED_SPELL_LOADOUTS = [
 ] as const;
 export type SupportedSpellLoadout = (typeof SUPPORTED_SPELL_LOADOUTS)[number];
 
+export class SeedAbilityBonusDto {
+  @IsString()
+  abilityScoreSlug!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(2)
+  bonus!: number;
+}
 
 export class SeedCharacterDto {
   @IsIn(SUPPORTED_CLASS_SLUGS as unknown as string[])
@@ -54,9 +64,32 @@ export class SeedCharacterDto {
   @IsIn(SUPPORTED_LEVELS as unknown as number[])
   level!: SupportedLevel;
 
-  @IsIn(["XPHB"])
-  edition!: "XPHB";
+  @IsIn(["PHB", "XPHB"])
+  edition!: "PHB" | "XPHB";
 
+  @IsOptional()
+  @IsString()
+  raceSlug?: string;
+
+  @IsOptional()
+  @IsString()
+  subraceSlug?: string;
+
+  @IsOptional()
+  @IsString()
+  backgroundSlug?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SeedAbilityBonusDto)
+  backgroundAbilityBonuses?: SeedAbilityBonusDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SeedAbilityBonusDto)
+  raceAbilityBonuses?: SeedAbilityBonusDto[];
 
   @IsOptional()
   @IsArray()
@@ -88,6 +121,11 @@ export class SeedCharacterDto {
   @IsArray()
   @IsString({ each: true })
   weaponMasteryChoices?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  raceTraitChoices?: string[];
 
 
   @IsOptional()

@@ -46,7 +46,10 @@ import type {
   ConditionDto,
 } from "./services/combat.service";
 import { EventService } from "./services/event.service";
-import { MovementService } from "./services/movement.service";
+import {
+  MovementService,
+  reconcileRemainingMovement,
+} from "./services/movement.service";
 import { PersistentAreaService } from "./services/persistent-area.service";
 import { SpellCastingService } from "./services/spell-casting.service";
 import { DiceService } from "./services/dice.service";
@@ -72,6 +75,8 @@ import { TransformationService } from "./services/transformation.service";
 import { SummoningService } from "./services/summoning.service";
 import { MarkTransferService } from "./services/mark-transfer.service";
 import { OpportunityAttackService } from "./services/opportunity-attack.service";
+import { ReadyActionService } from "./services/ready-action.service";
+import { AarakocraRitualService } from "./services/aarakocra-ritual.service";
 import { CapstonesService } from "./services/capstones.service";
 import { AiTurnService } from "./services/ai-turn.service";
 import { EncounterSnapshotService } from "./services/encounter-snapshot.service";
@@ -84,6 +89,7 @@ import { LegendaryActionService } from "./services/legendary-action.service";
 import { GrappleEscapeService } from "./services/grapple-escape.service";
 import { LairActionService } from "./services/lair-action.service";
 import { ConditionLifecycleService } from "./services/condition-lifecycle.service";
+import { ConcentrationService } from "./services/concentration.service";
 
 import { JoinRequestService } from "./services/join-request.service";
 
@@ -179,6 +185,8 @@ export class GameEngineController {
     private readonly summoningService: SummoningService,
     private readonly markTransferService: MarkTransferService,
     private readonly opportunityAttackService: OpportunityAttackService,
+    private readonly readyActionService: ReadyActionService,
+    private readonly aarakocraRitualService: AarakocraRitualService,
     private readonly capstonesService: CapstonesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
@@ -189,6 +197,7 @@ export class GameEngineController {
     private readonly grappleEscapeService: GrappleEscapeService,
     private readonly lairActionService: LairActionService,
     private readonly conditionLifecycle: ConditionLifecycleService,
+    private readonly concentrationService: ConcentrationService,
 
     private readonly joinRequestService: JoinRequestService,
     @InjectRepository(EncounterEntity)
@@ -604,7 +613,9 @@ export class GameEngineController {
   @Get("encounters/:id")
   @Header("Cache-Control", "no-store, no-cache, must-revalidate")
   async getEncounter(@Param("id") id: string) {
-    const encounter = await this.encounterService.getById(id);
+    const encounter = await this.encounterService.getById(id, {
+      withMonsters: true,
+    });
     const areas = await this.persistentArea.listByEncounter(id);
     return {
       ok: true as const,
@@ -618,12 +629,15 @@ export class GameEngineController {
           shapeKind: area.shapeKind,
           originCell: area.originCell,
           radiusCells: area.radiusCells,
+          damageDice: area.damageDice,
+          damageType: area.damageType,
           durationRoundsRemaining: area.durationRoundsRemaining,
           saveDc: area.saveDc,
           saveAbility: area.saveAbility,
           isDifficultTerrain: area.isDifficultTerrain,
           speedMultiplier: area.speedMultiplier,
           sourceConcentration: area.sourceConcentration,
+          auraFollowsCaster: area.auraFollowsCaster ?? false,
           narrativeDescriptor: area.narrativeDescriptor,
         })),
       }),
@@ -1171,7 +1185,13 @@ export class GameEngineController {
   async applyCondition(
     @Req() req: AuthRequest,
     @Param("id") id: string,
-    @Body() body: { participantId: string; condition: string; apply: boolean },
+    @Body()
+    body: {
+      participantId: string;
+      condition: string;
+      apply: boolean;
+      durationRoundsRemaining?: number;
+    },
   ) {
     const ownerUserId = await this.permissionResolver.resolveMutationOwner(
       body.participantId,
@@ -1315,7 +1335,82 @@ export class GameEngineController {
       authUserId,
       id,
     );
-    return this.genericActionsService.execute(id, { ...dto, ownerUserId });
+    const result = await this.genericActionsService.execute(id, {
+      ...dto,
+      ownerUserId,
+    });
+    if (result.ok && result.events?.length) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+      this.emitEncounterInvalidate(id, `generic-action:${dto.kind}`);
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/participants/:participantId/concentration/drop")
+  async dropConcentration(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Param("participantId") participantId: string,
+  ) {
+    const participant =
+      await this.encounterService.getParticipant(participantId);
+    if (participant.encounterId !== id) {
+      return failure("Participante não pertence ao encontro.", "INVALID_TARGET");
+    }
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      participantId,
+      getUserId(req),
+      id,
+    );
+    if (!participant.isConcentrating) {
+      return failure(
+        "O participante não está mantendo concentração.",
+        "INVALID_ACTION",
+      );
+    }
+
+    const encounter = await this.encounterService.getById(id);
+    const previousSpeed = await this.movementService.getBaseSpeed(
+      participant,
+      ownerUserId,
+    );
+    const result = await this.concentrationService.break(participant, "manual");
+    const newSpeed = await this.movementService.getBaseSpeed(
+      participant,
+      ownerUserId,
+    );
+    if (newSpeed !== previousSpeed) {
+      participant.movementRemaining = reconcileRemainingMovement(
+        participant.movementRemaining,
+        previousSpeed,
+        newSpeed,
+      );
+      await this.participantRepo.save(participant);
+      result.events.push({
+        event_type: "movement_speed_changed",
+        actor_participant_id: participant.id,
+        target_participant_id: participant.id,
+        data: {
+          sourceSpell: participant.concentratingOn ?? "concentração",
+          previousSpeed,
+          newSpeed,
+          movementRemaining: participant.movementRemaining,
+        },
+      });
+    }
+    await this.eventService.emit(encounter.sessionId, id, result.events);
+    this.emitEncounterInvalidate(id, "concentration-drop");
+    return {
+      ok: true as const,
+      value: {
+        participantId,
+        spellName: participant.concentratingOn,
+        events: result.events,
+      },
+    };
   }
 
 
@@ -1373,6 +1468,14 @@ export class GameEngineController {
       spellSlug: string;
       slotLevel: number;
       targetParticipantIds?: string[];
+      damageType?:
+        | "acid"
+        | "cold"
+        | "fire"
+        | "lightning"
+        | "poison"
+        | "thunder";
+      conditionChoice?: "blinded" | "deafened";
 
       asReaction?: boolean;
 
@@ -1383,7 +1486,9 @@ export class GameEngineController {
         y: number;
         direction?: "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
         end?: { x: number; y: number } | null;
+        hotSide?: "left" | "right" | null;
       };
+      aoeOriginCells?: Array<{ x: number; y: number }>;
 
       metamagic?: {
         type:
@@ -1404,6 +1509,31 @@ export class GameEngineController {
       summonPosition?: { x: number; y: number };
 
       summonControlMode?: "shared-turn" | "own-initiative" | "ai-controlled";
+
+      summonBeastForm?: "air" | "land" | "water";
+
+      summonElementalForm?: "air" | "earth" | "fire" | "water";
+
+      summonFamiliarForm?:
+        | "bat"
+        | "cat"
+        | "crab"
+        | "frog"
+        | "hawk"
+        | "lizard"
+        | "octopus"
+        | "owl"
+        | "poisonous-snake"
+        | "quipper"
+        | "rat"
+        | "raven"
+        | "sea-horse"
+        | "spider"
+        | "weasel";
+
+      summonFamiliarCreatureType?: "celestial" | "fey" | "fiend";
+
+      deliverThroughFamiliar?: boolean;
     },
   ) {
     const result = await this.spellCastingService.castSpellInCombat({
@@ -1415,14 +1545,22 @@ export class GameEngineController {
         ? body.targetParticipantIds
         : [],
       ownerUserId: getUserId(req),
+      damageType: body.damageType,
+      conditionChoice: body.conditionChoice,
       asReaction: body.asReaction,
       triggerEventId: body.triggerEventId,
       aoeOriginCell: body.aoeOriginCell,
+      aoeOriginCells: body.aoeOriginCells,
       metamagic: body.metamagic,
       polymorphBeastSlug: body.polymorphBeastSlug,
       summonMonsterSlug: body.summonMonsterSlug,
       summonPosition: body.summonPosition,
       summonControlMode: body.summonControlMode,
+      summonBeastForm: body.summonBeastForm,
+      summonElementalForm: body.summonElementalForm,
+      summonFamiliarForm: body.summonFamiliarForm,
+      summonFamiliarCreatureType: body.summonFamiliarCreatureType,
+      deliverThroughFamiliar: body.deliverThroughFamiliar,
     });
 
 
@@ -1439,6 +1577,168 @@ export class GameEngineController {
     }
     if (result.ok) {
       this.emitEncounterInvalidate(id, "cast-spell");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/spells/witch-bolt/sustain")
+  async sustainWitchBolt(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body() body: { participantId: string },
+  ) {
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    const result = await this.spellCastingService.sustainWitchBolt(
+      id,
+      body.participantId,
+      ownerUserId,
+    );
+    if (result.ok && result.events?.length) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+    }
+    if (result.ok) {
+      this.emitEncounterInvalidate(id, "witch-bolt-sustain");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/spells/call-lightning/sustain")
+  async sustainCallLightning(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body()
+    body: {
+      participantId: string;
+      originCell: { x: number; y: number };
+    },
+  ) {
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    const result = await this.spellCastingService.sustainCallLightning(
+      id,
+      body.participantId,
+      ownerUserId,
+      body.originCell,
+    );
+    if (result.ok && result.events?.length) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+    }
+    if (result.ok) {
+      this.emitEncounterInvalidate(id, "call-lightning-sustain");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/spells/cloud-of-daggers/relocate")
+  async relocateCloudOfDaggers(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body()
+    body: {
+      participantId: string;
+      originCell: { x: number; y: number };
+    },
+  ) {
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    const result = await this.spellCastingService.relocateCloudOfDaggers(
+      id,
+      body.participantId,
+      ownerUserId,
+      body.originCell,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+    }
+    if (result.ok) {
+      this.emitEncounterInvalidate(id, "cloud-of-daggers-relocate");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/spells/conjure-animals/relocate")
+  async relocateConjureAnimals(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body()
+    body: {
+      participantId: string;
+      originCell: { x: number; y: number };
+    },
+  ) {
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    const result = await this.spellCastingService.relocateConjureAnimals(
+      id,
+      body.participantId,
+      ownerUserId,
+      body.originCell,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+    }
+    if (result.ok) {
+      this.emitEncounterInvalidate(id, "conjure-animals-relocate");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/spells/spiritual-weapon/relocate")
+  async relocateSpiritualWeapon(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body()
+    body: {
+      participantId: string;
+      originCell: { x: number; y: number };
+      targetParticipantId?: string;
+    },
+  ) {
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    const result = await this.spellCastingService.relocateSpiritualWeapon(
+      id,
+      body.participantId,
+      ownerUserId,
+      body.originCell,
+      body.targetParticipantId,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+    }
+    if (result.ok) {
+      this.emitEncounterInvalidate(id, "spiritual-weapon-relocate");
     }
     return result;
   }
@@ -1660,6 +1960,13 @@ export class GameEngineController {
 
     if (result.ok && result.events && result.events.length > 0) {
       try {
+        result.events.push(
+          ...(await this.combatService.applyPersistentAreaDamageEvents(
+            id,
+            result.events,
+            getUserId(req),
+          )),
+        );
         const enc = await this.encounterRepo.findOne({ where: { id } });
         if (enc?.sessionId) {
           await this.eventService.emit(enc.sessionId, id, result.events);
@@ -1690,6 +1997,72 @@ export class GameEngineController {
     @Body() body: { participantId: string },
   ) {
     return this.movementService.disengageAction(id, body.participantId);
+  }
+
+  @Post("encounters/:id/ready-action")
+  async readyAction(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body()
+    body: {
+      reactorParticipantId: string;
+      targetParticipantId: string;
+    },
+  ) {
+    const result = await this.readyActionService.resolve({
+      encounterId: id,
+      reactorParticipantId: body.reactorParticipantId,
+      targetParticipantId: body.targetParticipantId,
+      ownerUserId: getUserId(req),
+    });
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+      this.emitEncounterInvalidate(id, "ready-action");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/aarakocra-air-elemental-ritual")
+  async aarakocraAirElementalRitual(
+    @Param("id") id: string,
+    @Body() body: { participantId: string },
+  ) {
+    const result = await this.aarakocraRitualService.perform(
+      id,
+      body.participantId,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+      this.emitEncounterInvalidate(id, "aarakocra-air-elemental-ritual");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/stand-up")
+  async standUp(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body() body: { participantId: string },
+  ) {
+    const result = await this.movementService.standUp(
+      id,
+      body.participantId,
+      getUserId(req),
+    );
+    if (result.ok && result.events && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+      this.emitEncounterInvalidate(id, "stand-up");
+    }
+    return result;
   }
 
 
@@ -1814,13 +2187,18 @@ export class GameEngineController {
     const events: import("./interfaces/result.type").GameEventData[] = [];
     if (traversed.length > 0) {
       try {
+        let previousCell = { x: fromX, y: fromY };
         for (const cell of traversed) {
           const r = await this.persistentArea.resolveEntry(
             updated,
             cell,
             updated.encounterId,
+            undefined,
+            undefined,
+            previousCell,
           );
           events.push(...r.events);
+          previousCell = cell;
         }
         const through = await this.persistentArea.resolveMoveThrough(
           updated,
@@ -2002,9 +2380,8 @@ export class GameEngineController {
     body: {
       targetParticipantId: string;
       slotLevel: number;
-      hitWasCritical: boolean;
-      targetType: "fiend" | "undead" | null;
       freeCast: boolean;
+      decline?: boolean;
     },
   ) {
     const userId = getUserId(req);
@@ -2014,9 +2391,8 @@ export class GameEngineController {
       participantId,
       body.targetParticipantId,
       body.slotLevel,
-      body.hitWasCritical,
-      body.targetType,
       body.freeCast,
+      body.decline === true,
     );
     if (!result.ok)
       return { ok: false, error: result.error, code: result.code };
@@ -2438,6 +2814,7 @@ export class GameEngineController {
         eventTypes,
         limit: query.limit ?? 50,
         offset: query.offset ?? 0,
+        latest: query.latest ?? false,
       });
 
 
@@ -2754,6 +3131,137 @@ export class GameEngineController {
 
 
 
+
+  @Post("encounters/:id/familiar/share-senses")
+  async shareFamiliarSenses(
+    @Req() req: AuthRequest,
+    @Param("id") encounterId: string,
+    @Body() body: { participantId: string },
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      encounterId,
+    );
+    const result = await this.summoningService.shareFamiliarSenses(
+      encounterId,
+      body.participantId,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({
+        where: { id: encounterId },
+      });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(
+          encounter.sessionId,
+          encounterId,
+          result.events,
+        );
+      }
+      this.emitEncounterInvalidate(encounterId, "familiar-share-senses");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/steed/gift")
+  async useOtherworldlySteedGift(
+    @Req() req: AuthRequest,
+    @Param("id") encounterId: string,
+    @Body()
+    body: {
+      participantId: string;
+      targetParticipantId?: string;
+      destinationX?: number;
+      destinationY?: number;
+    },
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      encounterId,
+    );
+    const result = await this.combatService.resolveOtherworldlySteedGift(
+      encounterId,
+      {
+        steedParticipantId: body.participantId,
+        targetParticipantId: body.targetParticipantId,
+        destinationX: body.destinationX,
+        destinationY: body.destinationY,
+        ownerUserId: getUserId(req),
+      },
+    );
+    if (result.ok) {
+      this.emitEncounterInvalidate(encounterId, "otherworldly-steed-gift");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/familiar/pocket")
+  async pocketFindFamiliar(
+    @Req() req: AuthRequest,
+    @Param("id") encounterId: string,
+    @Body() body: { participantId: string },
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      encounterId,
+    );
+    const result = await this.summoningService.pocketFindFamiliar(
+      encounterId,
+      body.participantId,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({
+        where: { id: encounterId },
+      });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(
+          encounter.sessionId,
+          encounterId,
+          result.events,
+        );
+      }
+      this.emitEncounterInvalidate(encounterId, "familiar-pocket");
+    }
+    return result;
+  }
+
+  @Post("encounters/:id/familiar/reappear")
+  async reappearFindFamiliar(
+    @Req() req: AuthRequest,
+    @Param("id") encounterId: string,
+    @Body()
+    body: {
+      participantId: string;
+      position: { x: number; y: number };
+    },
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      encounterId,
+    );
+    const result = await this.summoningService.reappearFindFamiliar(
+      encounterId,
+      body.participantId,
+      body.position,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({
+        where: { id: encounterId },
+      });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(
+          encounter.sessionId,
+          encounterId,
+          result.events,
+        );
+      }
+      this.emitEncounterInvalidate(encounterId, "familiar-reappear");
+    }
+    return result;
+  }
 
   @Post("encounters/:id/participants/:participantId/summon/spawn")
   async summonSpawn(

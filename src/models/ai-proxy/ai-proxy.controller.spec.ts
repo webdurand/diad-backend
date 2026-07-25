@@ -295,6 +295,37 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     expect(pipeStream).toHaveBeenCalledTimes(2);
   });
 
+  it("narrativeTurn: bloqueia novas ações depois do fim da história", async () => {
+    const pipeStream = makePipeStream();
+    const controller = makeController({
+      pipeStream,
+      session: {
+        id: SESSION_ID,
+        status: "completed",
+        characterIds: ["char-1"],
+        activeEncounterId: null,
+        travelState: null,
+        config: { bimodalLoopEnabled: false },
+      },
+    });
+    const response = makeRes();
+
+    await controller.narrativeTurn(
+      SESSION_ID,
+      {
+        playerInput: "continuar explorando",
+        lastMessageId: 5,
+        clientId: "entry-after-ending",
+      },
+      { user: { id: USER_ID } } as any,
+      response.res,
+    );
+
+    expect(response.getStatusCode()).toBe(409);
+    expect(response.writes.join("")).toContain(ErrorCode.SESSION_NOT_JOINABLE);
+    expect(pipeStream).not.toHaveBeenCalled();
+  });
+
   describe("bimodal state", () => {
     it("usa deriveSceneMode canônico e preserva modo combat", async () => {
       const controller = makeController({
@@ -671,8 +702,13 @@ describe("AiProxyController — idempotency guard (spec 027)", () => {
     const r2 = makeRes();
 
     const first = controller.narrativeStart(SESSION_ID, {}, req, r1.res);
-    await Promise.resolve();
-    await Promise.resolve();
+    for (
+      let attempt = 0;
+      attempt < 10 && pipeStream.mock.calls.length === 0;
+      attempt += 1
+    ) {
+      await Promise.resolve();
+    }
 
     await controller.narrativeStart(SESSION_ID, {}, req, r2.res);
 

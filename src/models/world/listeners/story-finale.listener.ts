@@ -13,6 +13,7 @@ import {
   EventEnvelope,
 } from "src/common/event-bus/event-envelope.types";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
+import { PhaseService } from "../services/phase.service";
 
 const FINALE_CLOCK_NAME = "O Desfecho";
 const DEFEAT_CLOCK_NAME = "A Queda";
@@ -48,6 +49,7 @@ export class StoryFinaleListener implements EventListener {
     private readonly eventBus: EventBusService,
     private readonly envelopeFactory: EventEnvelopeFactory,
     private readonly logger: DiadLogger,
+    private readonly phaseService: PhaseService,
   ) {
     this.logger.setContext(StoryFinaleListener.name);
   }
@@ -62,6 +64,31 @@ export class StoryFinaleListener implements EventListener {
         name: FINALE_CLOCK_NAME,
         seed: FINALE_SEED,
         trigger: "climax_phase",
+      });
+      await this.markProcessed(envelope.eventId);
+      return;
+    }
+
+    if (envelope.eventType === "story_failed") {
+      if (await this.alreadyProcessed(envelope.eventId)) return;
+      await this.seedConsequenceClock(envelope, sessionId, {
+        name: DEFEAT_CLOCK_NAME,
+        seed: DEFEAT_SEED,
+        trigger: "climax_phase",
+      });
+      await this.markProcessed(envelope.eventId);
+      return;
+    }
+
+    if (
+      envelope.eventType === "ending_imminent" &&
+      envelope.payload?.urgent === true
+    ) {
+      if (await this.alreadyProcessed(envelope.eventId)) return;
+      await this.phaseService.failStoryAtDeadline(sessionId, {
+        scenesUsed: Number(envelope.payload?.scenesUsed ?? 0),
+        maxScenes: Number(envelope.payload?.maxScenes ?? 0),
+        traceId: envelope.source.traceId,
       });
       await this.markProcessed(envelope.eventId);
       return;

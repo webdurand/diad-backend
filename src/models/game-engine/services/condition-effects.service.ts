@@ -1,17 +1,84 @@
 import { Injectable } from "@nestjs/common";
 import {
   AttackModifiers,
+  ConditionInstance,
   DefenseModifiers,
   SaveModifiers,
   ConditionTurnEffect,
   HelpingState,
 } from "../interfaces/combat.interfaces";
 
+export const INCAPACITATED_CONDITIONS = [
+  "incapacitated",
+  "stunned",
+  "paralyzed",
+  "petrified",
+  "unconscious",
+  "haste_lethargy",
+  "hypnotized",
+  "banished",
+] as const;
+
+export function canTakeReactionFromConditions(
+  conditions: readonly string[] | null | undefined,
+): boolean {
+  return !(conditions ?? []).some((condition) =>
+    INCAPACITATED_CONDITIONS.includes(
+      condition.toLowerCase() as (typeof INCAPACITATED_CONDITIONS)[number],
+    ),
+  );
+}
+
+export const NO_MOVE_CONDITIONS = [
+  "grappled",
+  "restrained",
+  "stunned",
+  "paralyzed",
+  "petrified",
+  "unconscious",
+  "haste_lethargy",
+  "hypnotized",
+  "banished",
+] as const;
+
+export function canMoveFromConditions(
+  conditions: readonly string[] | null | undefined,
+): boolean {
+  return !(conditions ?? []).some((condition) =>
+    NO_MOVE_CONDITIONS.includes(
+      condition.toLowerCase() as (typeof NO_MOVE_CONDITIONS)[number],
+    ),
+  );
+}
+
+export function isTargetingCharmer(
+  conditionInstances: readonly ConditionInstance[] | null | undefined,
+  targetParticipantId: string,
+): boolean {
+  return (conditionInstances ?? []).some(
+    (condition) =>
+      (condition.slug === "charmed" || condition.slug === "hypnotized") &&
+      condition.appliedBy === targetParticipantId,
+  );
+}
 
 export interface ReactiveParticipant {
   id: string;
   conditions: string[];
   dodgingUntilTurnOfParticipantId: string | null;
+}
+
+export function hasDodgeDexSaveAdvantage(
+  participant:
+    | Pick<ReactiveParticipant, "id" | "dodgingUntilTurnOfParticipantId">
+    | null
+    | undefined,
+  ability: string,
+): boolean {
+  return (
+    ability.toLowerCase().slice(0, 3) === "dex" &&
+    participant?.dodgingUntilTurnOfParticipantId === participant?.id
+  );
 }
 
 export interface ReactiveAttackModifiers {
@@ -26,24 +93,6 @@ export interface ReactiveAttackModifiers {
 
 @Injectable()
 export class ConditionEffectsService {
-  private static readonly INCAPACITATED_CONDITIONS = [
-    "incapacitated",
-    "stunned",
-    "paralyzed",
-    "petrified",
-    "unconscious",
-  ];
-
-  private static readonly NO_MOVE_CONDITIONS = [
-    "grappled",
-    "restrained",
-    "stunned",
-    "paralyzed",
-    "petrified",
-    "unconscious",
-  ];
-
-
   getAttackModifiers(conditions: string[]): AttackModifiers {
     const set = new Set(conditions);
     return {
@@ -59,7 +108,8 @@ export class ConditionEffectsService {
         set.has("stunned") ||
         set.has("paralyzed") ||
         set.has("petrified") ||
-        set.has("unconscious"),
+        set.has("unconscious") ||
+        set.has("banished"),
       autoCrit: false,
     };
   }
@@ -90,7 +140,7 @@ export class ConditionEffectsService {
     const isStrOrDex = ability === "str" || ability === "dex";
     return {
       hasAdvantage: false,
-      hasDisadvantage: false,
+      hasDisadvantage: ability === "dex" && set.has("restrained"),
       autoFail:
         isStrOrDex &&
         (set.has("paralyzed") ||
@@ -102,9 +152,7 @@ export class ConditionEffectsService {
 
 
   canTakeAction(conditions: string[]): boolean {
-    return !conditions.some((c) =>
-      ConditionEffectsService.INCAPACITATED_CONDITIONS.includes(c),
-    );
+    return canTakeReactionFromConditions(conditions);
   }
 
 
@@ -114,17 +162,13 @@ export class ConditionEffectsService {
 
 
   canMove(conditions: string[]): boolean {
-    return !conditions.some((c) =>
-      ConditionEffectsService.NO_MOVE_CONDITIONS.includes(c),
-    );
+    return canMoveFromConditions(conditions);
   }
 
 
   getSpeedMultiplier(conditions: string[]): number {
     if (
-      conditions.some((c) =>
-        ConditionEffectsService.NO_MOVE_CONDITIONS.includes(c),
-      )
+      !canMoveFromConditions(conditions)
     ) {
       return 0;
     }

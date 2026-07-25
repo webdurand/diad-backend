@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import type { GameEventData } from "../interfaces/result.type";
+import { canTakeReactionFromConditions } from "./condition-effects.service";
 
 
 @Injectable()
@@ -30,6 +31,7 @@ export class MonsterReactionService {
     if (target.type !== "monster") return null;
     if (target.isDefeated || target.dyingState === "dead") return null;
     if ((target.reactionsUsed ?? 0) > 0) return null;
+    if (!canTakeReactionFromConditions(target.conditions)) return null;
     if (!target.monster) return null;
 
     const reactions = target.monster.reactions;

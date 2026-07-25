@@ -84,6 +84,21 @@ export interface DeathSaveResult {
   revivedHp?: number;
 }
 
+export interface QuickPlayCharacterStateSnapshot {
+  current_hp: number;
+  temp_hp: number;
+  max_hp_bonus?: number;
+  death_saves_success: number;
+  death_saves_fail: number;
+  conditions: string[];
+  spell_slots_used: Record<string, number>;
+  hit_dice_used: Record<string, number>;
+  ki_points_used: number;
+  feature_uses_used: Record<string, number>;
+  exhaustion_level: number;
+  inspiration: boolean;
+}
+
 @Injectable()
 export class CharacterStateService {
   constructor(
@@ -117,6 +132,28 @@ export class CharacterStateService {
     return getCharacterState(this.stateRepo, characterId);
   }
 
+  async restoreQuickPlaySnapshot(
+    characterId: string,
+    snapshot: QuickPlayCharacterStateSnapshot,
+  ): Promise<void> {
+    const state = await this.getState(characterId);
+    state.current_hp = snapshot.current_hp;
+    state.temp_hp = snapshot.temp_hp;
+    if (snapshot.max_hp_bonus != null) {
+      state.max_hp_bonus = snapshot.max_hp_bonus;
+    }
+    state.death_saves_success = snapshot.death_saves_success;
+    state.death_saves_fail = snapshot.death_saves_fail;
+    state.conditions = [...snapshot.conditions];
+    state.spell_slots_used = { ...snapshot.spell_slots_used };
+    state.hit_dice_used = { ...snapshot.hit_dice_used };
+    state.ki_points_used = snapshot.ki_points_used;
+    state.feature_uses_used = { ...snapshot.feature_uses_used };
+    state.exhaustion_level = snapshot.exhaustion_level;
+    state.inspiration = snapshot.inspiration;
+    await this.stateRepo.save(state);
+  }
+
   // A ficha (character_state) é o que o front recarrega após o turno — é ela
   // que decide abrir a Fate Ladder (currentHp<=0 && failures>=3). Os caminhos
   // de morte precisam manter conditions/'dying'/'dead' coerentes na ficha.
@@ -147,6 +184,52 @@ export class CharacterStateService {
       where: { character_id: characterId },
     });
     return state?.current_hp ?? null;
+  }
+
+  async adjustTemporaryHitPointMaximum(
+    characterId: string,
+    delta: number,
+  ): Promise<{
+    currentHpBefore: number;
+    currentHpAfter: number;
+    maxHpBefore: number;
+    maxHpAfter: number;
+  }> {
+    const state = await this.getState(characterId);
+    const maxHpBefore = await this.computeMaxHp(characterId);
+    const currentHpBefore = state.current_hp;
+    const maxHpAfter = Math.max(1, maxHpBefore + delta);
+
+    state.max_hp_bonus = (state.max_hp_bonus ?? 0) + delta;
+    state.current_hp = Math.max(
+      0,
+      Math.min(maxHpAfter, currentHpBefore + delta),
+    );
+    await this.stateRepo.save(state);
+
+    return {
+      currentHpBefore,
+      currentHpAfter: state.current_hp,
+      maxHpBefore,
+      maxHpAfter,
+    };
+  }
+
+  async stabilizeAtZero(characterId: string): Promise<void> {
+    const state = await this.getState(characterId);
+    if (state.current_hp !== 0) {
+      throw new BadRequestException(
+        "Somente um personagem com 0 HP pode ser estabilizado.",
+      );
+    }
+    state.death_saves_success = 0;
+    state.death_saves_fail = 0;
+    this.syncConditions(
+      state,
+      ["unconscious"],
+      ["dying", "dead"],
+    );
+    await this.stateRepo.save(state);
   }
 
 
@@ -453,6 +536,19 @@ export class CharacterStateService {
     await this.stateRepo.save(state);
 
     return { total, used };
+  }
+
+  async spendKiPoints(
+    characterId: string,
+    total: number,
+    amount: number = 1,
+  ): Promise<boolean> {
+    const state = await this.getState(characterId);
+    const used = Math.max(0, state.ki_points_used ?? 0);
+    if (used + amount > total) return false;
+    state.ki_points_used = used + amount;
+    await this.stateRepo.save(state);
+    return true;
   }
 
 

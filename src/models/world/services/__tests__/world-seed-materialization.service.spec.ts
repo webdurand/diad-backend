@@ -20,6 +20,13 @@ describe("WorldSeedMaterializationService", () => {
         poisByLocation: Map<string, LocationPoiEntity[]>,
         maxNpcs?: number,
       ) => any[];
+      extractContent: (body: any) => {
+        npcs: any[];
+        locations: any[];
+        factions: any[];
+        connections: any[];
+        quests: any[];
+      };
     };
 
   const createNpcRepo = () => {
@@ -331,5 +338,70 @@ describe("WorldSeedMaterializationService", () => {
     );
 
     expect(saved[0].homePoiId).toBe("poi-safe");
+  });
+
+  it("promove referências obrigatórias da quest a conteúdo canônico", () => {
+    const service = createService();
+
+    const content = service.extractContent({
+      startingLocationName: "Vila Inicial",
+      context: {
+        locations: [{ name: "Vila Inicial", type: "town" }],
+        npcs: [{ name: "Ferreiro", location_name: "Vila Inicial" }],
+        factions: [],
+      },
+      additions: {
+        quests: [
+          {
+            name: "Os Sinos",
+            objectives: [
+              {
+                kind: "talk_to_npc",
+                targetName: "Dra. Elara Vindel",
+                description: "Ouvir a advertência de Elara.",
+              },
+              {
+                kind: "travel_to",
+                targetName: "Estrada Soterrada",
+                description: "Encontrar a estrada.",
+              },
+              {
+                kind: "gain_reputation",
+                targetName: "Vigília do Sino",
+                description: "Conquistar a confiança da Vigília.",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(content.npcs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Dra. Elara Vindel",
+          profile_depth: "core",
+          role: "objective-anchor",
+        }),
+      ]),
+    );
+    expect(content.locations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Estrada Soterrada" }),
+      ]),
+    );
+    expect(content.factions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Vigília do Sino" }),
+      ]),
+    );
+    expect(content.connections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from_name: "Vila Inicial",
+          to_name: "Estrada Soterrada",
+        }),
+      ]),
+    );
   });
 });

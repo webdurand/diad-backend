@@ -14,6 +14,9 @@ export interface CampaignContentBudget {
   maxScenes: number;
   maxNpcs: number;
   maxLocations: number;
+  storyLength?: "short" | "standard" | "epic";
+  targetScenes?: number;
+  minScenes?: number;
 }
 
 export interface CampaignContentCounts {

@@ -17,7 +17,9 @@ export interface AreaEffect {
   shape: AoEShape;
   sizeFt: number;
   rangeFt: number;
+  maxPlacements?: number;
   fixedOrigin?: GridCell | null;
+  placementOrigin?: GridCell | null;
 }
 
 export interface AoeConfirmation {

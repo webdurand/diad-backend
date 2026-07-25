@@ -14,6 +14,12 @@ import {
 } from "./tile-effect-catalog";
 import type { GameEventData } from "../interfaces/result.type";
 import type { SaveAbility } from "../interfaces/combat.interfaces";
+import { ConditionLifecycleService } from "./condition-lifecycle.service";
+import {
+  isCellWithinWallHotZone,
+  pathCrossesWall,
+} from "./wall-of-fire-geometry";
+import { getStormOfVengeancePhase } from "./storm-of-vengeance";
 
 export interface CreatePersistentAreaInput {
   encounterId: string;
@@ -39,6 +45,10 @@ export interface CreateFromCatalogInput {
   slotLevel: number;
   originCell: TileEffectOriginCell;
   saveDc: number;
+  casterFaction?: "ally" | "enemy" | "neutral";
+  damageDiceOverride?: string;
+  damageTypeOverride?: "cold" | "fire" | "lightning" | "thunder" | "force";
+  currentRound?: number;
 }
 
 export interface ResolveResult {
@@ -48,7 +58,24 @@ export interface ResolveResult {
   stopMovement: boolean;
 }
 
-type SaveModifierFn = (ability: SaveAbility) => Promise<{ modifier: number }>;
+type SaveModifierFn = (
+  ability: SaveAbility,
+  target?: EncounterParticipantEntity,
+) => Promise<{
+  modifier: number;
+  advantage?: boolean;
+  disadvantage?: boolean;
+  autoFail?: boolean;
+}>;
+
+interface RelocateAuraContext {
+  participants: EncounterParticipantEntity[];
+  getSaveModifier?: SaveModifierFn;
+  turnKey?: string;
+  persistParticipant?: (
+    participant: EncounterParticipantEntity,
+  ) => Promise<unknown>;
+}
 
 const LINE_DIRECTIONS: Record<TileEffectDirection, { dx: number; dy: number }> =
   {
@@ -91,6 +118,12 @@ function cellsOnLine(
   return cells;
 }
 
+function cubeOffsetRange(sizeCells: number): { start: number; end: number } {
+  const size = Math.max(1, Math.floor(sizeCells));
+  const start = -Math.floor((size - 1) / 2);
+  return { start, end: start + size - 1 };
+}
+
 
 @Injectable()
 export class PersistentAreaService {
@@ -98,7 +131,47 @@ export class PersistentAreaService {
     @InjectRepository(PersistentAreaEffectEntity)
     private readonly areas: Repository<PersistentAreaEffectEntity>,
     private readonly dice: DiceService,
+    private readonly conditionLifecycle: ConditionLifecycleService,
   ) {}
+
+  private alreadyTriggeredThisTurn(
+    area: PersistentAreaEffectEntity,
+    participant: EncounterParticipantEntity,
+    turnKey?: string,
+  ): boolean {
+    if (!turnKey) return false;
+    return (participant.effectInstances ?? []).some(
+      (effect) =>
+        (effect.kind === "tile_effect_turn_trigger_marker" ||
+          effect.kind === "tile_effect_entry_marker") &&
+        effect.payload.areaId === area.id &&
+        effect.payload.turnKey === turnKey,
+    );
+  }
+
+  private markTriggeredThisTurn(
+    area: PersistentAreaEffectEntity,
+    participant: EncounterParticipantEntity,
+    turnKey?: string,
+  ): void {
+    if (!turnKey || this.alreadyTriggeredThisTurn(area, participant, turnKey)) {
+      return;
+    }
+    participant.effectInstances = [
+      ...(participant.effectInstances ?? []),
+      {
+        id: `tile-trigger:${area.id}:${turnKey}`,
+        sourceSpellSlug: area.sourceSpell,
+        sourceCasterParticipantId:
+          area.casterParticipantId ?? participant.id,
+        kind: "tile_effect_turn_trigger_marker",
+        payload: { areaId: area.id, turnKey },
+        expiresAt: { kind: "until_target_turn", value: 1 },
+        requiresConcentration: false,
+        appliedAt: new Date().toISOString(),
+      },
+    ];
+  }
 
 
 
@@ -145,19 +218,26 @@ export class PersistentAreaService {
     const dmgTrigger =
       def.triggers.find((t) => t.kind === "on-start-turn-in" && t.damage) ??
       def.triggers.find((t) => t.kind === "on-cast" && t.damage) ??
-      def.triggers.find((t) => t.kind === "on-move-through");
+      def.triggers.find((t) => t.kind === "on-move-through") ??
+      def.triggers.find(
+        (t) =>
+          ("damage" in t && Boolean(t.damage)) ||
+          (t.kind === "on-move-through" && Boolean(t.damagePerCell)),
+      );
     const damageDice =
-      dmgTrigger && "damage" in dmgTrigger && dmgTrigger.damage
+      input.damageDiceOverride ??
+      (dmgTrigger && "damage" in dmgTrigger && dmgTrigger.damage
         ? dmgTrigger.damage.expressionPerSlot(input.slotLevel)
         : dmgTrigger?.kind === "on-move-through"
           ? dmgTrigger.damagePerCell.expressionPerSlot(input.slotLevel)
-          : "";
-    const damageType =
+          : "");
+    const catalogDamageType =
       dmgTrigger && "damage" in dmgTrigger && dmgTrigger.damage
         ? dmgTrigger.damage.type
         : dmgTrigger?.kind === "on-move-through"
           ? dmgTrigger.damagePerCell.type
           : "";
+    const damageType = input.damageTypeOverride ?? catalogDamageType;
 
 
     const saveTrigger = def.triggers.find((t) => "save" in t && t.save) as
@@ -185,7 +265,18 @@ export class PersistentAreaService {
       triggers: def.triggers,
       isDifficultTerrain: def.isDifficultTerrain,
       speedMultiplier: def.speedMultiplier ?? null,
-      tacticalMetadata: def.tactical,
+      tacticalMetadata: {
+        ...def.tactical,
+        ...(input.casterFaction
+          ? { casterFaction: input.casterFaction }
+          : {}),
+        ...(input.damageTypeOverride && input.damageTypeOverride !== "force"
+          ? { elementalDamageType: input.damageTypeOverride }
+          : {}),
+        ...(input.currentRound != null
+          ? { createdRound: input.currentRound }
+          : {}),
+      },
       narrativeDescriptor: def.narrativeDescriptor,
       slotLevel: input.slotLevel,
       auraFollowsCaster: def.auraFollowsCaster ?? false,
@@ -199,10 +290,10 @@ export class PersistentAreaService {
     return this.areas.find({ where: { encounterId } });
   }
 
-
-  async resolveOnCast(
-    area: PersistentAreaEffectEntity,
-    participantsInArea: EncounterParticipantEntity[],
+  async resolveStormOfVengeanceTurn(
+    caster: EncounterParticipantEntity,
+    currentRound: number,
+    participants: EncounterParticipantEntity[],
     getSaveModifier?: SaveModifierFn,
   ): Promise<ResolveResult> {
     const result: ResolveResult = {
@@ -211,17 +302,139 @@ export class PersistentAreaService {
       conditionsApplied: [],
       stopMovement: false,
     };
-    if (!area.effectKind || !area.triggers) return result;
+    const areas = await this.areas.find({
+      where: { encounterId: caster.encounterId },
+    });
+    const area = areas.find(
+      (candidate) =>
+        candidate.effectKind === "storm-of-vengeance" &&
+        candidate.casterParticipantId === caster.id,
+    );
+    if (!area) return result;
+
+    const metadata = area.tacticalMetadata ?? {
+      tags: [],
+      tacticalValue: 10,
+      beneficiaryFaction: "caster" as const,
+    };
+    const createdRound = Number(metadata.createdRound ?? currentRound);
+    if (metadata.lastResolvedRound === currentRound) return result;
+
+    const phase = getStormOfVengeancePhase(createdRound, currentRound);
+    if (!phase) return result;
+
+    let eligible = participants.filter(
+      (target) =>
+        !target.isDefeated &&
+        target.positionX != null &&
+        target.positionY != null &&
+        this.cellInArea(target.positionX, target.positionY, area),
+    );
+    if (phase.maxTargets != null) {
+      eligible = eligible
+        .filter((target) => target.faction !== caster.faction)
+        .slice(0, phase.maxTargets);
+    }
+
+    const trigger: Extract<TileEffectTrigger, { kind: "on-start-turn-in" }> = {
+      kind: "on-start-turn-in",
+      damage: {
+        expressionPerSlot: () => phase.damageExpression,
+        type: phase.damageType,
+      },
+      ...(phase.saveAbility
+        ? {
+            save: {
+              ability: phase.saveAbility,
+              halfOnSave: phase.halfOnSave,
+            },
+          }
+        : {}),
+    };
+    const sharedDamageRoll = this.rollExpression(phase.damageExpression);
+
+    for (const target of eligible) {
+      const partial = await this.dispatchTrigger(
+        area,
+        trigger,
+        target,
+        area.slotLevel ?? 9,
+        getSaveModifier,
+        sharedDamageRoll,
+      );
+      result.events.push(
+        ...partial.events.map((event) => ({
+          ...event,
+          data: {
+            ...(event.data ?? {}),
+            stormRound: phase.round,
+          },
+        })),
+      );
+      result.totalDamage += partial.damage;
+    }
+
+    area.tacticalMetadata = {
+      ...metadata,
+      lastResolvedRound: currentRound,
+    };
+    await this.areas.save(area);
+    result.events.unshift({
+      event_type: "storm_of_vengeance_phase",
+      actor_participant_id: caster.id,
+      data: {
+        areaId: area.id,
+        stormRound: phase.round,
+        damageExpression: phase.damageExpression,
+        damageRoll: sharedDamageRoll,
+        damageType: phase.damageType,
+        targets: eligible.map((target) => target.id),
+      },
+    });
+    return result;
+  }
+
+  async relocate(
+    area: PersistentAreaEffectEntity,
+    originCell: TileEffectOriginCell,
+  ): Promise<PersistentAreaEffectEntity> {
+    area.originCell = originCell;
+    return this.areas.save(area);
+  }
+
+
+  async resolveOnCast(
+    area: PersistentAreaEffectEntity,
+    participantsInArea: EncounterParticipantEntity[],
+    getSaveModifier?: SaveModifierFn,
+    turnKey?: string,
+  ): Promise<ResolveResult> {
+    const result: ResolveResult = {
+      events: [],
+      totalDamage: 0,
+      conditionsApplied: [],
+      stopMovement: false,
+    };
+    if (!area.effectKind) return result;
 
     const def = getTileEffectDefinition(area.effectKind);
     if (!def) return result;
     const slot = area.slotLevel ?? 1;
 
-    const onCast = area.triggers.find((t) => t.kind === "on-cast");
+    const onCast = this.runtimeTriggers(area).find(
+      (t) => t.kind === "on-cast",
+    );
     if (!onCast) return result;
 
     for (const target of participantsInArea) {
-      if (target.isDefeated) continue;
+      if (target.isDefeated || !this.canAffectTarget(area, target)) continue;
+      if (
+        onCast.kind === "on-cast" &&
+        onCast.oncePerTurn &&
+        this.alreadyTriggeredThisTurn(area, target, turnKey)
+      ) {
+        continue;
+      }
       const partial = await this.dispatchTrigger(
         area,
         onCast,
@@ -229,6 +442,9 @@ export class PersistentAreaService {
         slot,
         getSaveModifier,
       );
+      if (onCast.oncePerTurn) {
+        this.markTriggeredThisTurn(area, target, turnKey);
+      }
       result.events.push(...partial.events);
       result.totalDamage += partial.damage;
       if (partial.conditionApplied) {
@@ -247,6 +463,8 @@ export class PersistentAreaService {
     toCell: { x: number; y: number },
     encounterId: string,
     getSaveModifier?: SaveModifierFn,
+    turnKey?: string,
+    fromCell?: { x: number; y: number },
   ): Promise<ResolveResult> {
     const result: ResolveResult = {
       events: [],
@@ -257,12 +475,34 @@ export class PersistentAreaService {
     if (participant.isDefeated) return result;
 
     const areas = await this.areas.find({ where: { encounterId } });
-    const affecting = areas.filter(
-      (a) => a.effectKind && this.cellInArea(toCell.x, toCell.y, a),
-    );
+    const affecting = areas.filter((a) => {
+      if (!a.effectKind) return false;
+      if (a.effectKind === "conjure-elemental") {
+        return (
+          this.cellInLargeCore(toCell.x, toCell.y, a) &&
+          (!fromCell ||
+            !this.cellInLargeCore(fromCell.x, fromCell.y, a))
+        );
+      }
+      return (
+        this.cellInArea(toCell.x, toCell.y, a) &&
+        (!fromCell || !this.cellInArea(fromCell.x, fromCell.y, a))
+      );
+    });
     for (const area of affecting) {
-      const onEnter = area.triggers?.find((t) => t.kind === "on-enter");
+      if (!this.canAffectTarget(area, participant)) continue;
+      const onEnter = this.runtimeTriggers(area).find(
+        (t) => t.kind === "on-enter",
+      );
       if (!onEnter) continue;
+      if (
+        onEnter.kind === "on-enter" &&
+        onEnter.oncePerTurn &&
+        turnKey &&
+        this.alreadyTriggeredThisTurn(area, participant, turnKey)
+      ) {
+        continue;
+      }
       const slot = area.slotLevel ?? 1;
       const partial = await this.dispatchTrigger(
         area,
@@ -271,6 +511,9 @@ export class PersistentAreaService {
         slot,
         getSaveModifier,
       );
+      if (onEnter.oncePerTurn && turnKey) {
+        this.markTriggeredThisTurn(area, participant, turnKey);
+      }
       result.events.push(...partial.events);
       result.totalDamage += partial.damage;
       if (partial.conditionApplied) {
@@ -279,7 +522,11 @@ export class PersistentAreaService {
           slug: partial.conditionApplied,
         });
 
-        if (area.speedMultiplier === 0 && !partial.savePassed) {
+        if (
+          (area.speedMultiplier === 0 ||
+            area.effectKind === "conjure-elemental") &&
+          !partial.savePassed
+        ) {
           result.stopMovement = true;
           result.events.push({
             event_type: "tile_effect_movement_stopped",
@@ -299,11 +546,49 @@ export class PersistentAreaService {
     return result;
   }
 
+  async removeLocationBoundConditionsOutsideAreas(
+    participant: EncounterParticipantEntity,
+    cell: { x: number; y: number },
+  ): Promise<GameEventData[]> {
+    const truthBindings = (participant.conditionInstances ?? []).filter(
+      (instance) =>
+        instance.slug === "truth_bound" &&
+        instance.sourceSpell
+          ?.toLowerCase()
+          .replace(/-(phb|xphb|srd52)$/, "") === "zone-of-truth",
+    );
+    if (truthBindings.length === 0) return [];
+
+    const zones = await this.areas.find({
+      where: {
+        encounterId: participant.encounterId,
+        effectKind: "zone-of-truth",
+      },
+    });
+    const events: GameEventData[] = [];
+    for (const binding of truthBindings) {
+      const stillBound = zones.some(
+        (zone) =>
+          zone.casterParticipantId === binding.appliedBy &&
+          this.cellInArea(cell.x, cell.y, zone),
+      );
+      if (stillBound) continue;
+      const removed = await this.conditionLifecycle.removeConditionInstance(
+        participant,
+        binding.id,
+        "left_area",
+      );
+      events.push(...removed.events);
+    }
+    return events;
+  }
+
 
   async resolveMoveThrough(
     participant: EncounterParticipantEntity,
     cellsTraversed: Array<{ x: number; y: number }>,
     encounterId: string,
+    turnKey?: string,
   ): Promise<ResolveResult> {
     const result: ResolveResult = {
       events: [],
@@ -315,14 +600,21 @@ export class PersistentAreaService {
 
     const areas = await this.areas.find({ where: { encounterId } });
     const moveThruAreas = areas.filter((a) =>
-      a.triggers?.some((t) => t.kind === "on-move-through"),
+      this.runtimeTriggers(a).some((t) => t.kind === "on-move-through"),
     );
-    if (moveThruAreas.length === 0) return result;
+    const wallAreas = areas.filter((area) =>
+      this.runtimeTriggers(area).some(
+        (trigger) => trigger.kind === "on-pass-through-wall",
+      ),
+    );
+    if (moveThruAreas.length === 0 && wallAreas.length === 0) return result;
 
     for (const cell of cellsTraversed) {
       for (const area of moveThruAreas) {
         if (!this.cellInArea(cell.x, cell.y, area)) continue;
-        const trig = area.triggers!.find((t) => t.kind === "on-move-through");
+        const trig = this.runtimeTriggers(area).find(
+          (t) => t.kind === "on-move-through",
+        );
         if (!trig || trig.kind !== "on-move-through") continue;
         const slot = area.slotLevel ?? 1;
         const expr = trig.damagePerCell.expressionPerSlot(slot);
@@ -350,6 +642,35 @@ export class PersistentAreaService {
         });
       }
     }
+
+    for (const area of wallAreas) {
+      const trigger = this.runtimeTriggers(area).find(
+        (candidate) => candidate.kind === "on-pass-through-wall",
+      );
+      if (!trigger || trigger.kind !== "on-pass-through-wall") continue;
+      if (
+        !pathCrossesWall(cellsTraversed, area.originCell, area.radiusCells)
+      ) {
+        continue;
+      }
+      if (
+        trigger.oncePerTurn &&
+        this.alreadyTriggeredThisTurn(area, participant, turnKey)
+      ) {
+        continue;
+      }
+      const partial = await this.dispatchTrigger(
+        area,
+        trigger,
+        participant,
+        area.slotLevel ?? 1,
+      );
+      if (trigger.oncePerTurn) {
+        this.markTriggeredThisTurn(area, participant, turnKey);
+      }
+      result.events.push(...partial.events);
+      result.totalDamage += partial.damage;
+    }
     return result;
   }
 
@@ -374,13 +695,66 @@ export class PersistentAreaService {
     const areas = await this.areas.find({
       where: { encounterId: participant.encounterId },
     });
-    const affecting = areas.filter((a) =>
-      this.cellInArea(participant.positionX!, participant.positionY!, a),
-    );
-    for (const area of affecting) {
+    for (const area of areas) {
+      const restrainedByThisElemental =
+        area.effectKind === "conjure-elemental" &&
+        this.isRestrainedByArea(area, participant);
+      if (restrainedByThisElemental) {
+        const repeat = this.runtimeTriggers(area).find(
+          (trigger) => trigger.kind === "on-restrained-start-turn",
+        );
+        if (repeat && repeat.kind === "on-restrained-start-turn") {
+          const partial = await this.dispatchTrigger(
+            area,
+            repeat,
+            participant,
+            area.slotLevel ?? 1,
+            getSaveModifier,
+          );
+          result.events.push(...partial.events);
+          result.totalDamage += partial.damage;
+        }
+        continue;
+      }
+      if (
+        !this.cellInArea(
+          participant.positionX,
+          participant.positionY,
+          area,
+        )
+      ) {
+        continue;
+      }
+      if (!this.canAffectTarget(area, participant)) continue;
 
-      if (area.effectKind && area.triggers) {
-        const trig = area.triggers.find((t) => t.kind === "on-start-turn-in");
+      if (area.effectKind) {
+        const alreadyTruthBoundByThisZone =
+          area.effectKind === "zone-of-truth" &&
+          (participant.conditionInstances ?? []).some(
+            (instance) =>
+              instance.slug === "truth_bound" &&
+              instance.appliedBy === area.casterParticipantId &&
+              instance.sourceSpell
+                ?.toLowerCase()
+                .replace(/-(phb|xphb|srd52)$/, "") === "zone-of-truth",
+          );
+        if (alreadyTruthBoundByThisZone) continue;
+
+        const alreadyRestrainedByThisWeb =
+          area.effectKind === "web" &&
+          (participant.conditionInstances ?? []).some(
+            (instance) =>
+              instance.slug === "restrained" &&
+              instance.appliedBy === area.casterParticipantId &&
+              instance.sourceSpell
+                ?.toLowerCase()
+                .replace(/-(phb|xphb|srd52)$/, "") === "web",
+          );
+        if (alreadyRestrainedByThisWeb) continue;
+
+        const trig = this.runtimeTriggers(area).find(
+          (t) => t.kind === "on-start-turn-in",
+        );
         if (trig) {
           const slot = area.slotLevel ?? 1;
           const partial = await this.dispatchTrigger(
@@ -515,14 +889,22 @@ export class PersistentAreaService {
       where: { encounterId: participant.encounterId },
     });
     for (const area of areas) {
-      if (!area.effectKind || !area.triggers) continue;
-      const trig = area.triggers.find((t) => t.kind === "on-end-turn-adjacent");
+      if (!area.effectKind) continue;
+      const trig = this.runtimeTriggers(area).find(
+        (t) => t.kind === "on-end-turn-adjacent",
+      );
       if (!trig || trig.kind !== "on-end-turn-adjacent") continue;
 
-      const dx = participant.positionX - area.originCell.x;
-      const dy = participant.positionY - area.originCell.y;
-      const chebyshev = Math.max(Math.abs(dx), Math.abs(dy));
-      if (chebyshev > area.radiusCells + trig.range) continue;
+      if (
+        !isCellWithinWallHotZone(
+          { x: participant.positionX, y: participant.positionY },
+          area.originCell,
+          area.radiusCells,
+          trig.range,
+        )
+      ) {
+        continue;
+      }
       const slot = area.slotLevel ?? 1;
       const partial = await this.dispatchTrigger(
         area,
@@ -537,6 +919,136 @@ export class PersistentAreaService {
     return result;
   }
 
+  async resolveAreaMovedInto(
+    area: PersistentAreaEffectEntity,
+    participants: EncounterParticipantEntity[],
+    previousOrigin: TileEffectOriginCell,
+    getSaveModifier?: SaveModifierFn,
+    turnKey?: string,
+  ): Promise<ResolveResult> {
+    const result: ResolveResult = {
+      events: [],
+      totalDamage: 0,
+      conditionsApplied: [],
+      stopMovement: false,
+    };
+    if (!area.effectKind) return result;
+
+    const trigger = this.runtimeTriggers(area).find(
+      (candidate) => candidate.kind === "on-area-moved-into",
+    );
+    if (!trigger || trigger.kind !== "on-area-moved-into") return result;
+
+    for (const target of participants) {
+      if (
+        target.isDefeated ||
+        !this.canAffectTarget(area, target) ||
+        target.positionX == null ||
+        target.positionY == null ||
+        !this.cellInArea(target.positionX, target.positionY, area) ||
+        this.cellInAreaForOrigin(
+          target.positionX,
+          target.positionY,
+          area,
+          previousOrigin,
+        )
+      ) {
+        continue;
+      }
+      if (
+        trigger.oncePerTurn &&
+        this.alreadyTriggeredThisTurn(area, target, turnKey)
+      ) {
+        continue;
+      }
+      const partial = await this.dispatchTrigger(
+        area,
+        trigger,
+        target,
+        area.slotLevel ?? 1,
+        getSaveModifier,
+      );
+      if (trigger.oncePerTurn) {
+        this.markTriggeredThisTurn(area, target, turnKey);
+      }
+      result.events.push(...partial.events);
+      result.totalDamage += partial.damage;
+      if (partial.conditionApplied) {
+        result.conditionsApplied.push({
+          targetId: target.id,
+          slug: partial.conditionApplied,
+        });
+      }
+    }
+    return result;
+  }
+
+  async resolveEndTurnIn(
+    participant: EncounterParticipantEntity,
+    getSaveModifier?: SaveModifierFn,
+    turnKey?: string,
+  ): Promise<ResolveResult> {
+    const result: ResolveResult = {
+      events: [],
+      totalDamage: 0,
+      conditionsApplied: [],
+      stopMovement: false,
+    };
+    if (
+      participant.positionX == null ||
+      participant.positionY == null ||
+      participant.isDefeated
+    ) {
+      return result;
+    }
+    const areas = await this.areas.find({
+      where: { encounterId: participant.encounterId },
+    });
+    for (const area of areas) {
+      if (
+        !area.effectKind ||
+        !this.canAffectTarget(area, participant) ||
+        !this.cellInArea(
+          participant.positionX,
+          participant.positionY,
+          area,
+        )
+      ) {
+        continue;
+      }
+      const trigger = this.runtimeTriggers(area).find(
+        (candidate) => candidate.kind === "on-end-turn-in",
+      );
+      if (!trigger || trigger.kind !== "on-end-turn-in") continue;
+      if (
+        trigger.oncePerTurn &&
+        this.alreadyTriggeredThisTurn(area, participant, turnKey)
+      ) {
+        continue;
+      }
+      const partial = await this.dispatchTrigger(
+        area,
+        trigger,
+        participant,
+        area.slotLevel ?? 1,
+        getSaveModifier,
+      );
+      if (trigger.oncePerTurn) {
+        this.markTriggeredThisTurn(area, participant, turnKey);
+      }
+      result.events.push(...partial.events);
+      result.totalDamage += partial.damage;
+      if (partial.conditionApplied) {
+        result.conditionsApplied.push({
+          targetId: participant.id,
+          slug: partial.conditionApplied,
+        });
+      }
+    }
+
+    return result;
+  }
+
 
 
 
@@ -546,6 +1058,7 @@ export class PersistentAreaService {
     target: EncounterParticipantEntity,
     slot: number,
     getSaveModifier?: SaveModifierFn,
+    damageRollOverride?: number,
   ): Promise<{
     events: GameEventData[];
     damage: number;
@@ -557,6 +1070,9 @@ export class PersistentAreaService {
     let conditionApplied: ConditionSlug | null = null;
     let savePassed = true;
 
+    if (area.auraFollowsCaster && target.id === area.casterParticipantId) {
+      return { events, damage, conditionApplied, savePassed };
+    }
 
 
 
@@ -571,11 +1087,18 @@ export class PersistentAreaService {
     const save = "save" in trigger ? trigger.save : undefined;
     if (save && area.saveDc != null) {
       const m = getSaveModifier
-        ? await getSaveModifier(save.ability)
+        ? await getSaveModifier(save.ability, target)
         : { modifier: 0 };
-      const r = this.dice.roll(20);
+      const firstRoll = this.dice.roll(20);
+      const secondRoll =
+        m.advantage || m.disadvantage ? this.dice.roll(20) : firstRoll;
+      const r = m.advantage
+        ? Math.max(firstRoll, secondRoll)
+        : m.disadvantage
+          ? Math.min(firstRoll, secondRoll)
+          : firstRoll;
       const total = r + m.modifier;
-      const passed = total >= area.saveDc;
+      const passed = !m.autoFail && total >= area.saveDc;
       saveData = { rolled: r, modifier: m.modifier, total, passed };
       savePassed = passed;
       events.push({
@@ -591,6 +1114,9 @@ export class PersistentAreaService {
           modifier: m.modifier,
           total,
           passed,
+          advantage: m.advantage ?? false,
+          disadvantage: m.disadvantage ?? false,
+          autoFail: m.autoFail ?? false,
           narrativeDescriptor: area.narrativeDescriptor,
         },
       });
@@ -620,7 +1146,10 @@ export class PersistentAreaService {
     } else if (
       trigger.kind === "on-cast" ||
       trigger.kind === "on-enter" ||
+      trigger.kind === "on-area-moved-into" ||
+      trigger.kind === "on-restrained-start-turn" ||
       trigger.kind === "on-start-turn-in" ||
+      trigger.kind === "on-end-turn-in" ||
       trigger.kind === "on-end-turn-adjacent" ||
       trigger.kind === "on-pass-through-wall"
     ) {
@@ -628,7 +1157,11 @@ export class PersistentAreaService {
     }
     if (damageSpec) {
       const expr = damageSpec.expressionPerSlot(slot);
-      let amount = this.rollExpression(expr);
+      const resolvedDamageType =
+        area.effectKind === "conjure-elemental" && area.damageType
+          ? area.damageType
+          : damageSpec.type;
+      let amount = damageRollOverride ?? this.rollExpression(expr);
       if (saveData && saveData.passed) {
         amount = save?.halfOnSave ? Math.floor(amount / 2) : 0;
       }
@@ -641,14 +1174,14 @@ export class PersistentAreaService {
           effectKind: area.effectKind,
           triggerKind: trigger.kind,
           expression: expr,
-          type: damageSpec.type,
+          type: resolvedDamageType,
           amount,
           saveResult: saveData,
           narrativeDescriptor: this.buildDamageNarrative(
             area,
             target,
             amount,
-            damageSpec.type,
+            resolvedDamageType,
             trigger.kind,
           ),
           tactical: area.tacticalMetadata,
@@ -656,7 +1189,210 @@ export class PersistentAreaService {
       });
     }
 
+    const normalizedAreaSpell = area.sourceSpell
+      .toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "");
+    if (
+      conditionApplied &&
+      !(target.conditionInstances ?? []).some(
+        (instance) =>
+          instance.slug === conditionApplied &&
+          instance.appliedBy === area.casterParticipantId &&
+          instance.sourceSpell
+            ?.toLowerCase()
+            .replace(/-(phb|xphb|srd52)$/, "") === normalizedAreaSpell,
+      )
+    ) {
+      const applied = await this.conditionLifecycle.applyCondition(target, {
+        slug: conditionApplied,
+        appliedBy: area.casterParticipantId,
+        sourceSpell: area.sourceSpell,
+        // Falling prone is an instantaneous result of the failed save. It
+        // remains until the creature stands even if the originating area ends.
+        sourceConcentration:
+          area.sourceConcentration && conditionApplied !== "prone",
+        saveAbility: save?.ability ?? null,
+        saveDc: area.saveDc,
+        repeatSaveTiming: "never",
+        durationRoundsRemaining:
+          conditionApplied === "prone"
+            ? null
+            : area.durationRoundsRemaining,
+      });
+      events.push(...applied.events);
+      if (area.effectKind === "conjure-elemental") {
+        area.tacticalMetadata = {
+          ...(area.tacticalMetadata ?? {
+            tags: ["damage", "control", "restrained"],
+            tacticalValue: 9,
+            beneficiaryFaction: "caster",
+          }),
+          restrainedTargetId: target.id,
+        };
+        await this.areas.save(area);
+      }
+    }
+
+    if (
+      area.effectKind === "conjure-elemental" &&
+      trigger.kind === "on-restrained-start-turn" &&
+      saveData?.passed
+    ) {
+      const restrained = (target.conditionInstances ?? []).find(
+        (instance) =>
+          instance.slug === "restrained" &&
+          instance.appliedBy === area.casterParticipantId &&
+          instance.sourceSpell
+            ?.toLowerCase()
+            .replace(/-(phb|xphb|srd52)$/, "") === "conjure-elemental",
+      );
+      if (restrained) {
+        const removed = await this.conditionLifecycle.removeConditionInstance(
+          target,
+          restrained.id,
+          "target_saved",
+        );
+        events.push(...removed.events);
+      }
+      area.tacticalMetadata = {
+        ...(area.tacticalMetadata ?? {
+          tags: ["damage", "control", "restrained"],
+          tacticalValue: 9,
+          beneficiaryFaction: "caster",
+        }),
+        restrainedTargetId: null,
+      };
+      await this.areas.save(area);
+    }
+
+    if (
+      !savePassed &&
+      save?.affectsConcentration &&
+      target.isConcentrating
+    ) {
+      events.push(
+        ...(await this.conditionLifecycle.breakConcentration(
+          target,
+          "sleet_storm_failed_save",
+        )),
+      );
+    }
+
     return { events, damage, conditionApplied, savePassed };
+  }
+
+  /**
+   * JSONB cannot preserve the executable damage calculators from the catalog.
+   * Rehydrate catalog-backed triggers whenever a persisted area is resolved.
+   */
+  private runtimeTriggers(
+    area: PersistentAreaEffectEntity,
+  ): TileEffectTrigger[] {
+    if (area.effectKind) {
+      const definition = getTileEffectDefinition(area.effectKind);
+      if (definition) return definition.triggers;
+    }
+    return area.triggers ?? [];
+  }
+
+  private canAffectTarget(
+    area: PersistentAreaEffectEntity,
+    target: EncounterParticipantEntity,
+  ): boolean {
+    const tactical = area.tacticalMetadata;
+    if (
+      area.effectKind === "conjure-elemental" &&
+      tactical?.restrainedTargetId &&
+      tactical.restrainedTargetId !== target.id
+    ) {
+      return false;
+    }
+    if (tactical?.targeting !== "hostile_only") return true;
+    if (!tactical.casterFaction) return true;
+    return target.faction !== tactical.casterFaction;
+  }
+
+  private cellInLargeCore(
+    x: number,
+    y: number,
+    area: PersistentAreaEffectEntity,
+  ): boolean {
+    return (
+      x >= area.originCell.x &&
+      x <= area.originCell.x + 1 &&
+      y >= area.originCell.y &&
+      y <= area.originCell.y + 1
+    );
+  }
+
+  private isRestrainedByArea(
+    area: PersistentAreaEffectEntity,
+    target: EncounterParticipantEntity,
+  ): boolean {
+    return (target.conditionInstances ?? []).some(
+      (instance) =>
+        instance.slug === "restrained" &&
+        instance.appliedBy === area.casterParticipantId &&
+        instance.sourceSpell
+          ?.toLowerCase()
+          .replace(/-(phb|xphb|srd52)$/, "") === "conjure-elemental",
+    );
+  }
+
+  async releaseConjureElementalTarget(
+    target: EncounterParticipantEntity,
+    reason: "target_defeated" | "target_removed" = "target_defeated",
+  ): Promise<{ events: GameEventData[] }> {
+    const events: GameEventData[] = [];
+    const areas = await this.areas.find({
+      where: {
+        encounterId: target.encounterId,
+        effectKind: "conjure-elemental",
+      },
+    });
+
+    for (const area of areas) {
+      if (area.tacticalMetadata?.restrainedTargetId !== target.id) continue;
+
+      const restrainedInstances = (target.conditionInstances ?? []).filter(
+        (instance) =>
+          instance.slug === "restrained" &&
+          instance.appliedBy === area.casterParticipantId &&
+          instance.sourceSpell
+            ?.toLowerCase()
+            .replace(/-(phb|xphb|srd52)$/, "") === "conjure-elemental",
+      );
+      for (const instance of restrainedInstances) {
+        const removed =
+          await this.conditionLifecycle.removeConditionInstance(
+            target,
+            instance.id,
+            reason,
+          );
+        events.push(...removed.events);
+      }
+
+      area.tacticalMetadata = {
+        ...(area.tacticalMetadata ?? {
+          tags: ["damage", "control", "restrained"],
+          tacticalValue: 9,
+          beneficiaryFaction: "caster",
+        }),
+        restrainedTargetId: null,
+      };
+      await this.areas.save(area);
+      events.push({
+        event_type: "tile_effect_target_released",
+        target_participant_id: target.id,
+        data: {
+          areaId: area.id,
+          effectKind: area.effectKind,
+          reason,
+        },
+      });
+    }
+
+    return { events };
   }
 
 
@@ -726,18 +1462,124 @@ export class PersistentAreaService {
     return { events };
   }
 
+  async removeByCasterAndSpell(
+    casterParticipantId: string,
+    sourceSpell: string,
+    reason: "recast" | "expired" = "recast",
+  ): Promise<{ events: GameEventData[] }> {
+    const normalizedSource = sourceSpell
+      .trim()
+      .toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "");
+    const areas = (await this.areas.find({ where: { casterParticipantId } }))
+      .filter(
+        (area) =>
+          area.sourceSpell
+            .trim()
+            .toLowerCase()
+            .replace(/-(phb|xphb|srd52)$/, "") === normalizedSource,
+      );
+    if (areas.length > 0) {
+      await this.areas.delete(areas.map((area) => area.id));
+    }
+    return {
+      events: areas.map((area) => ({
+        event_type: "tile_effect_removed",
+        actor_participant_id: casterParticipantId,
+        data: {
+          areaId: area.id,
+          sourceSpell: area.sourceSpell,
+          effectKind: area.effectKind,
+          reason,
+          narrativeDescriptor: area.narrativeDescriptor,
+        },
+      })),
+    };
+  }
+
 
   async relocateAurasByCaster(
     casterParticipantId: string,
     newCell: { x: number; y: number },
-  ): Promise<void> {
+    context?: RelocateAuraContext,
+  ): Promise<ResolveResult> {
+    const result: ResolveResult = {
+      events: [],
+      totalDamage: 0,
+      conditionsApplied: [],
+      stopMovement: false,
+    };
     const areas = await this.areas.find({ where: { casterParticipantId } });
     for (const a of areas) {
-
-
       if (!a.auraFollowsCaster) continue;
+      const previousOrigin = { ...a.originCell };
       a.originCell = newCell;
       await this.areas.save(a);
+
+      if (!context) continue;
+      const onEnter = this.runtimeTriggers(a).find(
+        (trigger) => trigger.kind === "on-enter",
+      );
+      if (!onEnter || onEnter.kind !== "on-enter") continue;
+
+      const newlyEnveloped = context.participants.filter(
+        (participant) =>
+          participant.id !== casterParticipantId &&
+          !participant.isDefeated &&
+          participant.positionX != null &&
+          participant.positionY != null &&
+          this.cellInArea(participant.positionX, participant.positionY, a) &&
+          !this.cellInAreaForOrigin(
+            participant.positionX,
+            participant.positionY,
+            a,
+            previousOrigin,
+          ),
+      );
+      for (const participant of newlyEnveloped) {
+        if (
+          onEnter.oncePerTurn &&
+          context.turnKey &&
+          this.alreadyTriggeredThisTurn(a, participant, context.turnKey)
+        ) {
+          continue;
+        }
+        const partial = await this.dispatchTrigger(
+          a,
+          onEnter,
+          participant,
+          a.slotLevel ?? 1,
+          context.getSaveModifier,
+        );
+        if (onEnter.oncePerTurn) {
+          this.markTriggeredThisTurn(a, participant, context.turnKey);
+          await context.persistParticipant?.(participant);
+        }
+        result.events.push(...partial.events);
+        result.totalDamage += partial.damage;
+        if (partial.conditionApplied) {
+          result.conditionsApplied.push({
+            targetId: participant.id,
+            slug: partial.conditionApplied,
+          });
+        }
+      }
+    }
+    return result;
+  }
+
+  private cellInAreaForOrigin(
+    x: number,
+    y: number,
+    area: PersistentAreaEffectEntity,
+    originCell: TileEffectOriginCell,
+  ): boolean {
+    const currentOrigin = area.originCell;
+    area.originCell = originCell;
+    try {
+      return this.cellInArea(x, y, area);
+    } finally {
+      area.originCell = currentOrigin;
     }
   }
 
@@ -767,14 +1609,13 @@ export class PersistentAreaService {
     const dx = x - area.originCell.x;
     const dy = y - area.originCell.y;
     if (area.shapeKind === "sphere" || area.shapeKind === "cylinder") {
-
-
-      return Math.sqrt(dx * dx + dy * dy) <= area.radiusCells;
+      return area.auraFollowsCaster
+        ? Math.max(Math.abs(dx), Math.abs(dy)) <= area.radiusCells
+        : Math.sqrt(dx * dx + dy * dy) <= area.radiusCells;
     }
     if (area.shapeKind === "cube") {
-      return (
-        Math.abs(dx) <= area.radiusCells && Math.abs(dy) <= area.radiusCells
-      );
+      const { start, end } = cubeOffsetRange(area.radiusCells);
+      return dx >= start && dx <= end && dy >= start && dy <= end;
     }
     if (area.shapeKind === "line") {
       if (area.originCell.end) {
@@ -810,8 +1651,12 @@ export class PersistentAreaService {
     const r = area.radiusCells;
     const ox = area.originCell.x;
     const oy = area.originCell.y;
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
+    const range =
+      area.shapeKind === "cube"
+        ? cubeOffsetRange(r)
+        : { start: -r, end: r };
+    for (let dx = range.start; dx <= range.end; dx++) {
+      for (let dy = range.start; dy <= range.end; dy++) {
         const x = ox + dx;
         const y = oy + dy;
         if (this.cellInArea(x, y, area)) cells.push({ x, y });

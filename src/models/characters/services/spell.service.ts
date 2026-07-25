@@ -30,6 +30,7 @@ import {
   getCasterClassType,
   getSpellcastingAbility,
   getCasterSlotType,
+  getStandardCasterLevelContribution,
   normalizeClassSlug,
 } from "src/shared/srd-constants";
 import { getAbilityModifier } from "src/shared/srd-utils";
@@ -45,6 +46,10 @@ import {
 } from "src/shared/edition-rules";
 import { CLASS_FEATURE_CATALOG } from "src/models/game-engine/services/action-resolvers/class-feature-catalog";
 import { ReputationDecayService } from "src/models/world/services/reputation-decay.service";
+import {
+  getAlwaysPreparedPaladinSpells,
+  normalizePreparedSpellSlug,
+} from "src/shared/paladin-spell-rules";
 
 type CasterType = CasterClassType;
 
@@ -177,6 +182,47 @@ export class SpellService {
     private readonly gameClockService: GameClockService,
   ) {}
 
+  private async appendVirtualAlwaysPreparedSpells(
+    character: CharacterEntity,
+    characterClasses: CharacterClassEntity[],
+    characterSpells: CharacterSpellEntity[],
+  ): Promise<void> {
+    const specs = getAlwaysPreparedPaladinSpells(
+      characterClasses,
+      character.source?.code !== "PHB",
+    );
+    const existing = new Set(
+      characterSpells.map((characterSpell) =>
+        normalizePreparedSpellSlug(characterSpell.spell.slug),
+      ),
+    );
+    const missing = specs.filter((spell) => !existing.has(spell.slug));
+    if (missing.length === 0) return;
+
+    const spellEntities = await this.spellRepo.find({
+      where: { slug: In(missing.map((spell) => spell.slug)) },
+    });
+    const spellsBySlug = new Map(
+      spellEntities.map((spell) => [
+        normalizePreparedSpellSlug(spell.slug),
+        spell,
+      ]),
+    );
+    for (const spec of missing) {
+      const spell = spellsBySlug.get(spec.slug);
+      if (!spell) continue;
+      characterSpells.push({
+        id: `virtual:${character.id}:${spell.id}`,
+        character_id: character.id,
+        spell_id: spell.id,
+        spell,
+        source: SpellSourceEnum.Class,
+        status: SpellStatusEnum.Prepared,
+        always_prepared: true,
+      } as CharacterSpellEntity);
+    }
+  }
+
   private async findActiveCampaignsForCharacter(
     characterId: string,
   ): Promise<string[]> {
@@ -270,20 +316,25 @@ export class SpellService {
   }
 
   private getMaxSpellLevel(charClasses: CharacterClassEntity[]): number {
-    let fullCasterLevels = 0;
-    let halfCasterLevels = 0;
+    let standardCasterLevel = 0;
     let warlockLevel = 0;
+    const isMulticlass = charClasses.length > 1;
 
     for (const cc of charClasses) {
       const slotType = getCasterSlotType(cc.class.slug);
       if (!slotType) continue;
-      if (slotType === "full") fullCasterLevels += cc.class_level;
-      else if (slotType === "half") halfCasterLevels += cc.class_level;
-      else if (slotType === "pact") warlockLevel = cc.class_level;
+      if (slotType === "full" || slotType === "half") {
+        standardCasterLevel += getStandardCasterLevelContribution(
+          cc.class.slug,
+          cc.class_level,
+          isMulticlass,
+        );
+      } else if (slotType === "pact") {
+        warlockLevel = cc.class_level;
+      }
     }
 
-    const effectiveCasterLevel =
-      fullCasterLevels + Math.floor(halfCasterLevels / 2);
+    const effectiveCasterLevel = standardCasterLevel;
     let maxLevel = 0;
 
     if (effectiveCasterLevel > 0) {
@@ -304,22 +355,27 @@ export class SpellService {
   private getSpellSlotTotals(
     charClasses: CharacterClassEntity[],
   ): Record<string, number> {
-    let fullCasterLevels = 0;
-    let halfCasterLevels = 0;
+    let standardCasterLevel = 0;
     let warlockLevel = 0;
+    const isMulticlass = charClasses.length > 1;
 
     for (const cc of charClasses) {
       const slotType = getCasterSlotType(cc.class.slug);
       if (!slotType) continue;
-      if (slotType === "full") fullCasterLevels += cc.class_level;
-      else if (slotType === "half") halfCasterLevels += cc.class_level;
-      else if (slotType === "pact") warlockLevel = cc.class_level;
+      if (slotType === "full" || slotType === "half") {
+        standardCasterLevel += getStandardCasterLevelContribution(
+          cc.class.slug,
+          cc.class_level,
+          isMulticlass,
+        );
+      } else if (slotType === "pact") {
+        warlockLevel = cc.class_level;
+      }
     }
 
     const result: Record<string, number> = {};
 
-    const effectiveCasterLevel =
-      fullCasterLevels + Math.floor(halfCasterLevels / 2);
+    const effectiveCasterLevel = standardCasterLevel;
     if (effectiveCasterLevel > 0) {
       const slots = FULL_CASTER_SLOTS[Math.min(effectiveCasterLevel, 20)];
       if (slots) {
@@ -399,6 +455,11 @@ export class SpellService {
       this.charAbilityRepo.find({ where: { character_id: characterId } }),
       this.charSpellRepo.find({ where: { character_id: characterId } }),
     ]);
+    await this.appendVirtualAlwaysPreparedSpells(
+      character,
+      charClasses,
+      charSpells,
+    );
 
 
     const casterClass = charClasses.find((cc) =>
@@ -530,23 +591,32 @@ export class SpellService {
 
 
     if (casterType === "total_access") {
-
-      const toRemove = charSpells.filter(
+      const keptSpellIds = new Set<string>();
+      const mutableClassSpells = charSpells.filter(
         (cs) =>
           cs.source === SpellSourceEnum.Class &&
-          cs.status === SpellStatusEnum.Prepared &&
           !cs.always_prepared &&
           cs.spell.level > 0,
       );
-      if (toRemove.length > 0) {
-        await this.charSpellRepo.remove(toRemove);
+
+      for (const cs of mutableClassSpells) {
+        if (
+          requestedSpellIds.has(cs.spell_id) &&
+          !keptSpellIds.has(cs.spell_id)
+        ) {
+          keptSpellIds.add(cs.spell_id);
+          if (cs.status !== SpellStatusEnum.Prepared) {
+            cs.status = SpellStatusEnum.Prepared;
+            await this.charSpellRepo.save(cs);
+          }
+          continue;
+        }
+
+        await this.charSpellRepo.remove(cs);
       }
 
-
       for (const spell of requestedSpells) {
-
-        const existing = charSpells.find((cs) => cs.spell_id === spell.id);
-        if (existing) continue;
+        if (keptSpellIds.has(spell.id)) continue;
 
         await this.charSpellRepo.save({
           character_id: characterId,
@@ -618,6 +688,11 @@ export class SpellService {
       this.charAbilityRepo.find({ where: { character_id: characterId } }),
       this.charSpellRepo.find({ where: { character_id: characterId } }),
     ]);
+    await this.appendVirtualAlwaysPreparedSpells(
+      character,
+      charClasses,
+      charSpells,
+    );
 
     const maxSpellLevel = this.getMaxSpellLevel(charClasses);
     const results: AvailableSpellsResult[] = [];
@@ -775,6 +850,11 @@ export class SpellService {
         relations: ["spell", "spell.school"],
       }),
     ]);
+    await this.appendVirtualAlwaysPreparedSpells(
+      character,
+      charClasses,
+      charSpells,
+    );
 
     const maxSpellLevel = this.getMaxSpellLevel(charClasses);
     const results: ManageableSpellsResult[] = [];
@@ -809,7 +889,7 @@ export class SpellService {
           level: cs.spell.level,
           status: cs.status,
           alwaysPrepared: cs.always_prepared,
-          canRemove: !cs.always_prepared || cs.spell.level > 0,
+          canRemove: !cs.always_prepared,
         }))
         .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
@@ -1024,6 +1104,7 @@ export class SpellService {
   private resetFeatureUses(
     state: CharacterStateEntity,
     restType: "short" | "long",
+    is2024Fighter = false,
   ): string[] {
     const used: Record<string, number> = { ...(state.feature_uses_used ?? {}) };
     const reset: string[] = [];
@@ -1037,6 +1118,15 @@ export class SpellService {
       }
       const spec = CLASS_FEATURE_CATALOG.find((s) => s.slug === slug);
 
+      if (
+        slug === "second-wind" &&
+        is2024Fighter &&
+        spec?.rechargeOn === "short"
+      ) {
+        used[slug] = Math.max(0, used[slug] - 1);
+        reset.push(slug);
+        continue;
+      }
 
       if (spec?.rechargeOn === "short") {
         used[slug] = 0;
@@ -1136,7 +1226,11 @@ export class SpellService {
       }
 
 
-      const resetShort = this.resetFeatureUses(state, "short");
+      const resetShort = this.resetFeatureUses(
+        state,
+        "short",
+        charClasses.some((cc) => cc.class.slug === "fighter"),
+      );
       if (resetShort.length > 0) {
         summary.push(`Features recuperadas: ${resetShort.join(", ")}.`);
       }

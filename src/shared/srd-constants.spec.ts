@@ -6,6 +6,7 @@ import {
   SPELLCASTING_ABILITY,
   CASTER_SLOT_TYPE,
   CASTER_CLASS_TYPE,
+  getStandardCasterLevelContribution,
 } from "src/shared/srd-constants";
 import {
   SRD_PROFICIENCY_BONUS,
@@ -157,6 +158,20 @@ describe("SRD Constants", () => {
       ["warlock", "pact"],
     ])("%s should be %s caster", (classSlug, type) => {
       expect(CASTER_SLOT_TYPE[classSlug]).toBe(type);
+    });
+
+    it("uses the correct 2014 and 2024 half-caster progression", () => {
+      expect(getStandardCasterLevelContribution("paladin", 1, false)).toBe(1);
+      expect(getStandardCasterLevelContribution("paladin", 5, false)).toBe(3);
+      expect(getStandardCasterLevelContribution("paladin-phb", 1, false)).toBe(
+        0,
+      );
+      expect(getStandardCasterLevelContribution("paladin-phb", 5, false)).toBe(
+        3,
+      );
+      expect(getStandardCasterLevelContribution("paladin-phb", 5, true)).toBe(
+        2,
+      );
     });
   });
 

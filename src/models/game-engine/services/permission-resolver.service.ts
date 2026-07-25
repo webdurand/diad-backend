@@ -99,24 +99,7 @@ export class PermissionResolver {
     if (!campaignId) return false;
     try {
       const campaign = await this.campaignService.getById(campaignId);
-      if (campaign.dmUserId !== userId) return false;
-
-
-      const otherPlayers = await this.campaignPlayerRepo.count({
-        where: { campaignId, isActive: true },
-      });
-
-      if (otherPlayers <= 1) return false;
-
-      const distinctUsers = await this.campaignPlayerRepo
-        .createQueryBuilder("cp")
-        .select("COUNT(DISTINCT cp.user_id)", "n")
-        .where("cp.campaign_id = :cid", { cid: campaignId })
-        .andWhere("cp.is_active = true")
-        .getRawOne<{ n: string }>();
-      const n = Number(distinctUsers?.n ?? 0);
-
-      return n >= 2;
+      return campaign.dmUserId === userId;
     } catch {
       return false;
     }

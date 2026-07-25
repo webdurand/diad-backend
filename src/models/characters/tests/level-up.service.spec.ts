@@ -46,6 +46,7 @@ describe("LevelUpService", () => {
       charProf: createMockRepository(),
       class: createMockRepository(),
       level: createMockRepository(),
+      feature: createMockRepository(),
       subclass: createMockRepository(),
       spell: createMockRepository(),
       proficiency: createMockRepository(),
@@ -79,6 +80,7 @@ describe("LevelUpService", () => {
       repos.charProf as any,
       repos.class as any,
       repos.level as any,
+      repos.feature as any,
       repos.subclass as any,
       repos.spell as any,
       repos.proficiency as any,
@@ -115,6 +117,103 @@ describe("LevelUpService", () => {
   };
 
   describe("getOptions", () => {
+    it("selects only the level row matching the class source", async () => {
+      const cls = {
+        ...makeClass("fighter"),
+        source_id: "source-xphb",
+      };
+      repos.level.find!.mockResolvedValue([
+        {
+          id: "level-srd",
+          source_id: "source-srd",
+          level_features: [
+            { feature: { id: "feature-srd", slug: "action-surge" } },
+          ],
+        },
+        {
+          id: "level-xphb",
+          source_id: "source-xphb",
+          level_features: [
+            {
+              feature: {
+                id: "feature-xphb",
+                slug: "action-surge-fighter-2",
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = await (service as any).resolveLevelData(
+        cls,
+        2,
+        {},
+        null,
+      );
+
+      expect(result.levelData.id).toBe("level-xphb");
+      expect(
+        result.levelData.level_features.map(
+          (item: { feature: { slug: string } }) => item.feature.slug,
+        ),
+      ).toEqual(["action-surge-fighter-2"]);
+    });
+
+    it("filters direct features by the selected source", async () => {
+      repos.feature.find!.mockResolvedValue([]);
+
+      await (service as any).findDirectFeatures(
+        "fighter-class",
+        2,
+        null,
+        "source-xphb",
+      );
+
+      expect(repos.feature.find).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          class_id: "fighter-class",
+          level: 2,
+          source_id: "source-xphb",
+        }),
+      });
+    });
+
+    it("keeps native and SRD linked features but excludes optional-book replacements", () => {
+      const cls = {
+        ...makeClass("ranger-phb"),
+        source_id: "source-phb",
+      };
+      const result = (service as any).filterCompatibleLinkedFeatures(
+        [
+          {
+            id: "feature-phb",
+            slug: "favored-enemy-ranger-1-phb",
+            source_id: "source-phb",
+            source: { code: "PHB" },
+          },
+          {
+            id: "feature-srd",
+            slug: "spellcasting-ranger",
+            source_id: "source-srd",
+            source: { code: "SRD" },
+          },
+          {
+            id: "feature-tce",
+            slug: "favored-foe-ranger-1-tce",
+            source_id: "source-tce",
+            source: { code: "TCE" },
+          },
+        ],
+        cls,
+        { featureFallbackSource: "SRD" },
+      );
+
+      expect(result.map((feature: { slug: string }) => feature.slug)).toEqual([
+        "favored-enemy-ranger-1-phb",
+        "spellcasting-ranger",
+      ]);
+    });
+
     it("should show canLevelUp=true when XP meets threshold", async () => {
       const cc = makeCharacterClass("fighter", 1);
       const state = makeCharacterState({ xp: 300 });
@@ -372,6 +471,58 @@ describe("LevelUpService", () => {
       );
       expect(spellSaves).toHaveLength(1);
       expect(spellSaves[0][1].status).toBe(SpellStatusEnum.Known);
+    });
+
+    it("materializes direct subclass features when level rows are absent", async () => {
+      const { cc, classEntity } = setupForExecute({
+        classSlug: "barbarian",
+        totalLevel: 2,
+        xp: 900,
+      });
+      const subclass = {
+        id: "subclass-berserker",
+        slug: "barbarian-berserker",
+        class_id: classEntity.id,
+      };
+      const frenzy = {
+        id: "feature-frenzy",
+        slug: "frenzy-barbarian-berserker-3",
+        name: "Frenzy",
+        level: 3,
+        class_id: classEntity.id,
+        subclass_id: subclass.id,
+      };
+
+      repos.charClass.find!.mockResolvedValue([cc]);
+      repos.subclass.findOneBy!.mockResolvedValue(subclass);
+      repos.level.find!.mockResolvedValue([]);
+      mockManager.find.mockImplementation(
+        async (entity: { name?: string }, options: any) => {
+          if (
+            entity?.name === "FeatureEntity" &&
+            options?.where?.subclass_id === subclass.id &&
+            options?.where?.level === 3
+          ) {
+            return [frenzy];
+          }
+          return [];
+        },
+      );
+
+      const result = await service.execute("user-1", "char-1", {
+        classSlug: "barbarian",
+        hpMethod: "fixed",
+        subclassSlug: subclass.slug,
+      });
+
+      expect(result.newFeatures).toContain("Frenzy");
+      expect(mockManager.save).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          character_id: "char-1",
+          feature_id: frenzy.id,
+        }),
+      );
     });
 
     it("should throw NotFoundException for missing character", async () => {

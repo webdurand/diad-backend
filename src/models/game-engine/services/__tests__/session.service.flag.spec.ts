@@ -23,6 +23,7 @@ function makeService(sessionRepo: Record<string, any>) {
     { bootstrapStoryFirst: jest.fn() } as any,
     { listByPoi: jest.fn().mockResolvedValue([]) } as any,
     { ensureDefaultForLocation: jest.fn() } as any,
+    {} as any,
     makeLogger() as any,
   );
 }

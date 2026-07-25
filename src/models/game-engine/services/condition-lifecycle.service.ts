@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { randomUUID } from "crypto";
@@ -13,11 +13,20 @@ import type {
 } from "../interfaces/combat.interfaces";
 import type { GameEventData } from "../interfaces/result.type";
 import { ConcentrationService } from "./concentration.service";
+import type { ConcentrationBreakReason } from "./concentration.service";
 import { DiceService } from "./dice.service";
 import {
   narrativeForConditionRemoval,
   type RemovalReason,
 } from "./narrative-condition-removal";
+import { canSeeFearSource } from "./fear-compulsion";
+import { getSummonStatBlock } from "./summon-stat-block";
+import { PaladinAuraService } from "./paladin-aura.service";
+import {
+  hasProtectionFromEvilGood,
+  participantCreatureType,
+  protectionBlocksCondition,
+} from "./protection-from-evil-good";
 
 export interface ApplyConditionInput {
   slug: ConditionSlug;
@@ -30,6 +39,7 @@ export interface ApplyConditionInput {
   saveDc?: number | null;
   repeatSaveTiming?: RepeatSaveTiming;
   durationRoundsRemaining?: number | null;
+  expiresAtTurnEndParticipantId?: string | null;
   level?: number;
 }
 
@@ -52,7 +62,45 @@ export class ConditionLifecycleService {
     private readonly characterClasses: Repository<CharacterClassEntity>,
     private readonly concentration: ConcentrationService,
     private readonly dice: DiceService,
+    @Optional()
+    private readonly paladinAuras?: PaladinAuraService,
   ) {}
+
+  private async getConditionImmunitySource(
+    target: EncounterParticipantEntity,
+    slug: ConditionSlug,
+  ): Promise<string | null> {
+    const immunitySlug = slug === "hypnotized" ? "charmed" : slug;
+    const summonStatBlock = getSummonStatBlock(target);
+    if (
+      summonStatBlock?.conditionImmunities.some(
+        (condition) => condition.toLowerCase() === immunitySlug,
+      )
+    ) {
+      return summonStatBlock.kind;
+    }
+
+    const resolvedTarget =
+      target.monsterId && !target.monster
+        ? ((await this.participants.findOne({
+            where: { id: target.id },
+            relations: ["monster"],
+          })) ?? target)
+        : target;
+    const rawImmunities = resolvedTarget.monster?.condition_immunities;
+    const entries = Array.isArray(rawImmunities)
+      ? rawImmunities
+      : rawImmunities && typeof rawImmunities === "object"
+        ? Object.values(rawImmunities)
+        : [];
+    const isImmune = entries.some((entry) =>
+      String(entry)
+        .toLowerCase()
+        .split(/[,\s()]+/)
+        .includes(immunitySlug),
+    );
+    return isImmune ? "monster-stat-block" : null;
+  }
 
 
   private async isBlockedByNaturesWard(
@@ -60,7 +108,10 @@ export class ConditionLifecycleService {
     slug: string,
   ): Promise<boolean> {
     if (target.type !== "pc" || !target.characterId) return false;
-    if (!["charmed", "frightened", "poisoned"].includes(slug)) return false;
+    const immunitySlug = slug === "hypnotized" ? "charmed" : slug;
+    if (!["charmed", "frightened", "poisoned"].includes(immunitySlug)) {
+      return false;
+    }
     const classes = await this.characterClasses.find({
       where: { character_id: target.characterId },
       relations: ["class", "subclass"],
@@ -75,6 +126,28 @@ export class ConditionLifecycleService {
     return sub === "land";
   }
 
+  private async isBlockedByProtectionFromEvilGood(
+    target: EncounterParticipantEntity,
+    input: ApplyConditionInput,
+  ): Promise<boolean> {
+    if (
+      !input.appliedBy ||
+      !hasProtectionFromEvilGood(target.effectInstances) ||
+      !["charmed", "frightened", "hypnotized"].includes(input.slug)
+    ) {
+      return false;
+    }
+    const source = await this.participants.findOne({
+      where: { id: input.appliedBy },
+      relations: ["monster"],
+    });
+    return protectionBlocksCondition(
+      target.effectInstances,
+      input.slug,
+      participantCreatureType(source),
+    );
+  }
+
 
   async applyCondition(
     target: EncounterParticipantEntity,
@@ -85,8 +158,27 @@ export class ConditionLifecycleService {
     concentrationBroken: boolean;
   }> {
 
-    const blockedByWard = await this.isBlockedByNaturesWard(target, input.slug);
-    if (blockedByWard) {
+    const immunitySource = await this.getConditionImmunitySource(
+      target,
+      input.slug,
+    );
+    const blockedByWard =
+      !immunitySource &&
+      (await this.isBlockedByNaturesWard(target, input.slug));
+    const blockedByProtection =
+      !immunitySource &&
+      !blockedByWard &&
+      (await this.isBlockedByProtectionFromEvilGood(target, input));
+    const auraImmunity =
+      !immunitySource && !blockedByWard && !blockedByProtection
+        ? await this.paladinAuras?.getConditionImmunity(target, input.slug)
+        : null;
+    if (
+      immunitySource ||
+      blockedByWard ||
+      auraImmunity ||
+      blockedByProtection
+    ) {
       const stubInstance: ConditionInstance = {
         id: randomUUID(),
         slug: input.slug,
@@ -98,6 +190,8 @@ export class ConditionLifecycleService {
         saveDc: null,
         repeatSaveTiming: "never",
         durationRoundsRemaining: 0,
+        expiresAtTurnEndParticipantId:
+          input.expiresAtTurnEndParticipantId ?? null,
         level: input.level,
         appliedAt: new Date().toISOString(),
       };
@@ -108,8 +202,24 @@ export class ConditionLifecycleService {
             target_participant_id: target.id,
             data: {
               slug: input.slug,
-              source: "natures-ward",
-              feature: "Land Druid L10",
+              source:
+                immunitySource ??
+                (blockedByWard
+                  ? "natures-ward"
+                  : auraImmunity?.featureSlug ??
+                    "protection-from-evil-and-good"),
+              feature: immunitySource
+                ? target.displayName
+                : blockedByWard
+                  ? "Land Druid L10"
+                  : blockedByProtection
+                    ? "Protection from Evil and Good"
+                    : auraImmunity?.featureSlug === "aura-of-courage"
+                      ? "Aura da Coragem"
+                      : "Aura de Devoção",
+              sourceParticipantId: auraImmunity?.sourceParticipantId,
+              sourceParticipantName: auraImmunity?.sourceName,
+              radiusFeet: auraImmunity?.radiusFeet,
             },
           },
         ],
@@ -129,6 +239,8 @@ export class ConditionLifecycleService {
       saveDc: input.saveDc ?? null,
       repeatSaveTiming: input.repeatSaveTiming ?? "never",
       durationRoundsRemaining: input.durationRoundsRemaining ?? null,
+      expiresAtTurnEndParticipantId:
+        input.expiresAtTurnEndParticipantId ?? null,
       level: input.level,
       appliedAt: new Date().toISOString(),
     };
@@ -159,11 +271,29 @@ export class ConditionLifecycleService {
           saveAbility: instance.saveAbility,
           saveDc: instance.saveDc,
           durationRoundsRemaining: instance.durationRoundsRemaining,
+          expiresAtTurnEndParticipantId:
+            instance.expiresAtTurnEndParticipantId,
           level: instance.level,
         },
       },
     ];
 
+    if (instance.sourceConcentration && instance.appliedBy) {
+      const caster =
+        target.id === instance.appliedBy
+          ? target
+          : await this.participants.findOne({
+              where: { id: instance.appliedBy },
+            });
+      if (caster) {
+        await this.concentration.trackAppliedEffect(caster, {
+          kind: "condition",
+          refId: instance.id,
+          targetParticipantId: target.id,
+          description: `${instance.sourceSpell ?? "concentration"}: ${instance.slug}`,
+        });
+      }
+    }
 
     const conc = await this.concentration.checkBreakOnCondition(
       target,
@@ -219,6 +349,46 @@ export class ConditionLifecycleService {
       ],
       removed: true,
     };
+  }
+
+  async removeConditionsEndedByDamage(
+    target: EncounterParticipantEntity,
+  ): Promise<GameEventData[]> {
+    const endedByDamage = (target.conditionInstances ?? []).filter(
+      (condition) =>
+        condition.slug === "hypnotized" ||
+        (condition.slug === "frightened" &&
+          condition.source === "feature:abjure-foes"),
+    );
+    const events: GameEventData[] = [];
+    for (const condition of endedByDamage) {
+      const removed = await this.removeConditionInstance(
+        target,
+        condition.id,
+        "damage_received",
+      );
+      events.push(...removed.events);
+    }
+    if (
+      endedByDamage.some(
+        (condition) => condition.source === "feature:abjure-foes",
+      )
+    ) {
+      target.effectInstances = (target.effectInstances ?? []).filter(
+        (effect) => effect.kind !== "abjure_foes_turn_choice",
+      );
+      await this.participants.save(target);
+    }
+    return events;
+  }
+
+  async breakConcentration(
+    target: EncounterParticipantEntity,
+    reason: ConcentrationBreakReason,
+  ): Promise<GameEventData[]> {
+    if (!target.isConcentrating) return [];
+    const result = await this.concentration.break(target, reason);
+    return result.events;
   }
 
 
@@ -308,12 +478,57 @@ export class ConditionLifecycleService {
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
     const remaining: ConditionInstance[] = [];
+    let changed = false;
     for (const ci of target.conditionInstances ?? []) {
+      if (ci.slug === "haste_lethargy") {
+        ci.durationRoundsRemaining =
+          (ci.durationRoundsRemaining ?? 1) - 1;
+        changed = true;
+        if (ci.durationRoundsRemaining <= 0) {
+          events.push({
+            event_type: "condition_removed",
+            target_participant_id: target.id,
+            data: {
+              instanceId: ci.id,
+              slug: ci.slug,
+              source: ci.source,
+              removalReason: "haste_next_turn_ended",
+              reason: "haste_next_turn_ended",
+            },
+          });
+          continue;
+        }
+        remaining.push(ci);
+        continue;
+      }
       if (
         ci.repeatSaveTiming === "end_of_turn" &&
         ci.saveAbility &&
         ci.saveDc != null
       ) {
+        const normalizedSourceSpell = ci.sourceSpell?.replace(
+          /-(phb|xphb|srd52)$/,
+          "",
+        );
+        if (normalizedSourceSpell === "fear" && ci.appliedBy) {
+          const source = await this.participants.findOne({
+            where: { id: ci.appliedBy },
+          });
+          if (canSeeFearSource(source)) {
+            events.push({
+              event_type: "fear_save_not_available",
+              target_participant_id: target.id,
+              actor_participant_id: ci.appliedBy,
+              data: {
+                instanceId: ci.id,
+                slug: ci.slug,
+                reason: "source_still_visible",
+              },
+            });
+            remaining.push(ci);
+            continue;
+          }
+        }
         const mod = await getSaveModifier(ci.saveAbility);
         let rolled: number;
         if (mod.advantage && !mod.disadvantage) {
@@ -340,12 +555,28 @@ export class ConditionLifecycleService {
           },
         });
         if (passed) {
-
+          changed = true;
+          events.push({
+            event_type: "condition_removed",
+            target_participant_id: target.id,
+            data: {
+              instanceId: ci.id,
+              slug: ci.slug,
+              source: ci.source,
+              removalReason: "target_saved",
+              narrativeDescriptor: narrativeForConditionRemoval(
+                ci.slug,
+                "target_saved",
+              ),
+              reason: "target_saved",
+            },
+          });
           continue;
         }
 
         if (ci.durationRoundsRemaining != null) {
           ci.durationRoundsRemaining -= 1;
+          changed = true;
           if (ci.durationRoundsRemaining <= 0) {
             events.push({
               event_type: "condition_expired",
@@ -355,10 +586,52 @@ export class ConditionLifecycleService {
             continue;
           }
         }
+
+        const normalizedSourceSpellAfterSave = ci.sourceSpell?.replace(
+          /-(phb|xphb|srd52)$/,
+          "",
+        );
+        if (
+          normalizedSourceSpellAfterSave === "sleep" &&
+          ci.slug === "incapacitated"
+        ) {
+          const previousSlug = ci.slug;
+          ci.slug = "unconscious";
+          ci.repeatSaveTiming = "never";
+          changed = true;
+          events.push(
+            {
+              event_type: "condition_removed",
+              target_participant_id: target.id,
+              data: {
+                instanceId: ci.id,
+                slug: previousSlug,
+                source: ci.source,
+                removalReason: "sleep_second_save_failed",
+              },
+            },
+            {
+              event_type: "condition_applied",
+              target_participant_id: target.id,
+              actor_participant_id: ci.appliedBy ?? undefined,
+              data: {
+                instanceId: ci.id,
+                slug: ci.slug,
+                sourceSpell: ci.sourceSpell,
+                sourceConcentration: ci.sourceConcentration,
+                durationRoundsRemaining: ci.durationRoundsRemaining,
+                stage: "sleep_second_save_failed",
+              },
+            },
+          );
+        }
       }
       remaining.push(ci);
     }
-    if (remaining.length !== (target.conditionInstances ?? []).length) {
+    if (
+      changed ||
+      remaining.length !== (target.conditionInstances ?? []).length
+    ) {
       target.conditionInstances = remaining;
       target.conditions = this.deriveSlugs(remaining);
       if (!remaining.some((ci) => ci.slug === "grappled")) {
@@ -405,6 +678,54 @@ export class ConditionLifecycleService {
         await this.participants.save(p);
       }
     }
+    return { events };
+  }
+
+  async expireAtParticipantTurnEnd(
+    encounterId: string,
+    participantId: string,
+  ): Promise<{ events: GameEventData[] }> {
+    const events: GameEventData[] = [];
+    const participants = await this.participants.find({
+      where: { encounterId },
+    });
+
+    for (const target of participants) {
+      const expiring = (target.conditionInstances ?? []).filter(
+        (instance) =>
+          instance.expiresAtTurnEndParticipantId === participantId,
+      );
+      if (expiring.length === 0) continue;
+
+      const expiringIds = new Set(expiring.map((instance) => instance.id));
+      target.conditionInstances = (target.conditionInstances ?? []).filter(
+        (instance) => !expiringIds.has(instance.id),
+      );
+      target.conditions = this.deriveSlugs(target.conditionInstances);
+      if (
+        !target.conditionInstances.some(
+          (instance) => instance.slug === "grappled",
+        )
+      ) {
+        target.grappledByParticipantId = null;
+      }
+      await this.participants.save(target);
+
+      for (const instance of expiring) {
+        events.push({
+          event_type: "condition_expired",
+          actor_participant_id: participantId,
+          target_participant_id: target.id,
+          data: {
+            instanceId: instance.id,
+            slug: instance.slug,
+            source: instance.source,
+            removalReason: "source_turn_ended",
+          },
+        });
+      }
+    }
+
     return { events };
   }
 

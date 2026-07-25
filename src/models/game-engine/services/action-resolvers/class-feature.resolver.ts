@@ -41,7 +41,14 @@ export class ClassFeatureActionResolver implements ActionResolver {
     spec: FeatureSpec,
     ctx: ParticipantContext,
   ): ActionDescriptor | null {
-    const { matches, classLevel } = matchesClass(spec, ctx.sheet!.classes);
+    if (spec.trigger && spec.trigger !== "action-bar") return null;
+    const { matches, classLevel } = matchesClass(
+      spec,
+      ctx.sheet!.classes,
+      undefined,
+      ctx.sheet!.raceSlug,
+      ctx.sheet!.totalLevel,
+    );
     if (!matches) return null;
     if (classLevel < spec.requiredLevel) return null;
 

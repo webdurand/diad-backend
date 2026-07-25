@@ -76,6 +76,11 @@ const HIDE_PATTERNS: readonly RegExp[] = [
   /^pact-magic-[a-z-]+-\d+$/,
 
   /^primal-order-[a-z-]+-\d+$/,
+  /^elemental-fury-druid-\d+$/,
+  /^primal-strike-druid-\d+$/,
+  /^potent-spellcasting-druid-\d+$/,
+  /^improved-elemental-fury-druid-\d+$/,
+  /^lunar-form-druid-moon-\d+$/,
 ];
 
 
@@ -89,6 +94,18 @@ const ALIAS_PATTERNS: Array<{ regex: RegExp; canonicalSlug: string }> = [
 
 
   { regex: /^wild-shape-druid-\d+$/, canonicalSlug: "wild-shape" },
+  {
+    regex: /^wild-companion-druid-\d+$/,
+    canonicalSlug: "wild-companion",
+  },
+  {
+    regex: /^wild-resurgence-druid-\d+$/,
+    canonicalSlug: "wild-resurgence",
+  },
+  {
+    regex: /^moonlight-step-druid(?:-moon)?-\d+$/,
+    canonicalSlug: "moonlight-step",
+  },
   { regex: /^rage-barbarian-\d+$/, canonicalSlug: "rage" },
   {
     regex: /^reckless-attack-barbarian-\d+$/,
@@ -98,16 +115,25 @@ const ALIAS_PATTERNS: Array<{ regex: RegExp; canonicalSlug: string }> = [
   { regex: /^second-wind-fighter-\d+$/, canonicalSlug: "second-wind" },
   { regex: /^sneak-attack-rogue-\d+$/, canonicalSlug: "sneak-attack" },
   { regex: /^cunning-action-rogue-\d+$/, canonicalSlug: "cunning-action" },
+  { regex: /^steady-aim-rogue-\d+$/, canonicalSlug: "steady-aim" },
   { regex: /^martial-arts-monk-\d+$/, canonicalSlug: "martial-arts" },
   { regex: /^flurry-of-blows-monk-\d+$/, canonicalSlug: "flurry-of-blows" },
   { regex: /^patient-defense-monk-\d+$/, canonicalSlug: "patient-defense" },
   { regex: /^step-of-the-wind-monk-\d+$/, canonicalSlug: "step-of-the-wind" },
+  { regex: /^stunning-strike-monk-\d+$/, canonicalSlug: "stunning-strike" },
   {
     regex: /^channel-divinity-(cleric|paladin)-\d+$/,
     canonicalSlug: "channel-divinity",
   },
   { regex: /^divine-smite-paladin-\d+$/, canonicalSlug: "divine-smite" },
+  { regex: /^divine-sense-paladin-\d+$/, canonicalSlug: "divine-sense" },
   { regex: /^lay-on-hands-paladin-\d+$/, canonicalSlug: "lay-on-hands" },
+  { regex: /^faithful-steed-paladin-\d+$/, canonicalSlug: "faithful-steed" },
+  { regex: /^abjure-foes-paladin-\d+$/, canonicalSlug: "abjure-foes" },
+  {
+    regex: /^(?:channel-divinity-)?sacred-weapon(?:-paladin)?(?:-devotion)?-\d+$/,
+    canonicalSlug: "sacred-weapon",
+  },
   { regex: /^font-of-magic-sorcerer-\d+$/, canonicalSlug: "font-of-magic" },
   { regex: /^arcane-recovery-wizard-\d+$/, canonicalSlug: "arcane-recovery" },
   {

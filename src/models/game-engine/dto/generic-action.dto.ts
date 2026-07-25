@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -22,7 +23,10 @@ export type GenericActionKind =
   | "hide"
   | "ready"
   | "search"
-  | "use-object";
+  | "use-object"
+  | "escape-web"
+  | "flee-fear"
+  | "wake-hypnotized";
 
 export type ReadyTriggerKind = "enemy_enters_range" | "enemy_attacks_ally";
 
@@ -66,6 +70,10 @@ class ObjectRefDto {
 
   @IsString()
   slug: string;
+
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
 }
 
 export class GenericActionDto {
@@ -78,18 +86,28 @@ export class GenericActionDto {
     ready: "ready",
     search: "search",
     "use-object": "use-object",
+    "escape-web": "escape-web",
+    "flee-fear": "flee-fear",
+    "wake-hypnotized": "wake-hypnotized",
   } as const)
   kind: GenericActionKind;
 
   @IsUUID()
   participantId: string;
 
+  @IsOptional()
+  @IsBoolean()
+  useHasteAction?: boolean;
 
   @ValidateIf((o: GenericActionDto) => o.kind === "help")
   @IsUUID()
   allyParticipantId?: string;
 
-  @ValidateIf((o: GenericActionDto) => o.kind === "help")
+  @ValidateIf(
+    (o: GenericActionDto) =>
+      ["help", "wake-hypnotized"].includes(o.kind) ||
+      (o.kind === "use-object" && o.targetParticipantId != null),
+  )
   @IsUUID()
   targetParticipantId?: string;
 
@@ -109,6 +127,10 @@ export class GenericActionDto {
   @IsIn(["perception", "investigation"])
   ability?: "perception" | "investigation";
 
+  @IsOptional()
+  @IsIn(["sight", "hearing", "other"])
+  searchSense?: "sight" | "hearing" | "other";
+
 
   @ValidateIf((o: GenericActionDto) => o.kind === "use-object")
   @ValidateNested()
@@ -123,6 +145,7 @@ export class GenericActionDto {
 
 
   @IsOptional()
+  @IsBoolean()
   asBonusAction?: boolean;
 
 

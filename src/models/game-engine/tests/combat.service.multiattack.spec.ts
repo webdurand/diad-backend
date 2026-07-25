@@ -53,6 +53,11 @@ function createHarness() {
       participants.set(p.id, p);
       return p;
     }),
+    update: jest.fn(async (id: string, patch: Record<string, unknown>) => {
+      const current = participants.get(id);
+      if (current) Object.assign(current, patch);
+      return { affected: current ? 1 : 0 };
+    }),
   };
   const encounterService: any = {
     getParticipant: jest.fn(async (pid: string) => {
@@ -134,6 +139,7 @@ function createHarness() {
         concentrationBroken: false,
       }),
       removeConditionInstance: async () => ({ events: [], removed: false }),
+      removeConditionsEndedByDamage: async () => [],
     } as any,
     {
       addEffect: async () => ({ effect: {} as any, events: [] }),
@@ -218,6 +224,7 @@ function createHarness() {
     { processRoundStart: async () => [] } as any,
     { processAfterPcTurn: async () => [] } as any,
     { tryParryAfterAttackRoll: async () => null } as any,
+    { run: async () => ({ events: [] }) } as any,
   );
 
   return { combat, participants, encounter, hpByChar, diceService };
@@ -287,6 +294,63 @@ describe("CombatService — US2 multiattack", () => {
     expect(res.value.subAttacks[0].subActionName).toBe("Beak");
     expect(res.value.subAttacks[1].subActionName).toBe("Claws");
     expect(owlbear.actionUsed).toBe(true);
+    expect(
+      (h.combat as any).participantRepo.update,
+    ).toHaveBeenCalledWith(owlbear.id, { actionUsed: true });
+  });
+
+  it("uses the active form AC when a transformed PC is attacked", async () => {
+    const h = createHarness();
+    const owlbear = makeParticipant({
+      id: "ob-form-ac",
+      type: "monster",
+      monster: {
+        name: "Owlbear",
+        armor_class: [{ value: 13 }],
+        actions: [
+          {
+            name: "Beak",
+            attack_bonus: 7,
+            damage: [
+              { damage_dice: "1d10", damage_type: { name: "piercing" } },
+            ],
+          },
+        ],
+        multiattack: {
+          sequence: [{ actionName: "Beak", count: 1 }],
+          description: "The owlbear makes one test attack.",
+        },
+      },
+      faction: "enemy",
+    });
+    const transformedPc = makeParticipant({
+      id: "pc-form-ac",
+      characterId: "char-form-ac",
+      transformationState: {
+        source: "wild-shape",
+        rulesMode: "xphb-wild-shape",
+        form: {
+          ac: 18,
+          currentHp: 50,
+          maxHp: 50,
+        },
+      },
+    });
+    h.participants.set(owlbear.id, owlbear);
+    h.participants.set(transformedPc.id, transformedPc);
+    h.encounter.turnOrder = [owlbear.id, transformedPc.id];
+    h.hpByChar["char-form-ac"] = { current: 50, max: 50 };
+
+    const res = await h.combat.resolveMultiattack(h.encounter.id, {
+      attackerParticipantId: owlbear.id,
+      targetParticipantIds: [transformedPc.id],
+      actionName: "Multiattack",
+      ownerUserId: "dm-1",
+    });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.subAttacks[0].attackRoll.targetAc).toBe(18);
   });
 
   it("returns INVALID_PAYLOAD when targetParticipantIds count mismatches expected", async () => {

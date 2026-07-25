@@ -272,6 +272,24 @@ describe("MonsterSelectorService", () => {
         expect(comp.adjustedXp).toBeLessThanOrEqual(225 * 2.0);
       }
     });
+
+    it("mantém encontro de nível alto quando a composição ideal não cabe no pool", async () => {
+      const svc = new MonsterSelectorService(
+        makeRepo([m("forest-guardian", 8, 1000, "giant", ["forest"])]),
+      );
+      svc.rng = fixedRng([0, 0.5]);
+
+      const comp = await svc.selectComposition({
+        ...BASE,
+        partyAvgLevel: 20,
+        partySize: 4,
+        targetDifficulty: "high",
+      });
+
+      expect(comp).not.toBeNull();
+      expect(comp!.monsterSlugs.length).toBeLessThanOrEqual(8);
+      expect(comp!.reasonChain).toContain("composition_relaxed=true");
+    });
   });
 
   describe("displayNames human-friendly", () => {

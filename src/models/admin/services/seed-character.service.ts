@@ -39,6 +39,7 @@ import { isSpellAutomationReady } from "src/models/game-engine/services/spell-au
 export interface SeedCharacterResult {
   id: string;
   name: string;
+  subclassSlug: string;
   sheetSummary: {
     level: number;
     hpMax: number;
@@ -349,10 +350,12 @@ export class SeedCharacterService {
     const isSpellLab = dto.seedMode === "spell-lab";
     this.validateSeedMode(dto);
 
-    const classEntity = await this.resolveClass(dto.classSlug);
+    const classEntity = await this.resolveClass(dto.classSlug, dto.edition);
     const subclassEntity = await this.resolveSubclass(
       dto.subclassSlug,
       classEntity.id,
+      dto.classSlug,
+      dto.edition,
     );
     const ownerUserId = await this.resolveOwner(
       dto.ownerUserId,
@@ -371,8 +374,20 @@ export class SeedCharacterService {
       ownerUserId,
       name,
       weaponMasteryChoices: dto.weaponMasteryChoices,
+      raceTraitChoices: dto.raceTraitChoices,
       fightingStyleSlug: dto.fightingStyleSlug,
       classSlug: dto.classSlug,
+      resolvedClassSlug: classEntity.slug,
+      classEquipmentChoices: this.defaultEquipmentChoices(
+        classEntity.starting_equipment_options,
+      ),
+      edition: dto.edition,
+      raceSlug: dto.raceSlug,
+      subraceSlug: dto.subraceSlug,
+      backgroundSlug: dto.backgroundSlug,
+      backgroundAbilityBonuses: dto.backgroundAbilityBonuses,
+      raceAbilityBonuses: dto.raceAbilityBonuses,
+      subclassSlug: subclassEntity.slug,
       abilityScores,
     });
 
@@ -431,6 +446,7 @@ export class SeedCharacterService {
     return {
       id: character.id,
       name: character.name,
+      subclassSlug: subclassEntity.slug,
       sheetSummary: summary,
     };
   }
@@ -589,6 +605,14 @@ export class SeedCharacterService {
 
     if (!isSpellLab) return;
 
+    if (dto.edition !== "XPHB") {
+      throw new BadRequestException({
+        code: "SPELL_LAB_REQUIRES_XPHB",
+        field: "edition",
+        message: "O modo spell-lab usa apenas regras XPHB.",
+      });
+    }
+
     if (dto.level !== 20) {
       throw new BadRequestException({
         code: "SPELL_LAB_REQUIRES_LEVEL_20",
@@ -606,13 +630,17 @@ export class SeedCharacterService {
     }
   }
 
-  private async resolveClass(slug: SupportedClassSlug): Promise<ClassEntity> {
-    const entity = await this.classRepo.findOneBy({ slug });
+  private async resolveClass(
+    slug: SupportedClassSlug,
+    edition: "PHB" | "XPHB",
+  ): Promise<ClassEntity> {
+    const qualifiedSlug = edition === "PHB" ? `${slug}-phb` : slug;
+    const entity = await this.classRepo.findOneBy({ slug: qualifiedSlug });
     if (!entity) {
       throw new BadRequestException({
         code: "INVALID_CLASS",
         field: "classSlug",
-        message: `Classe "${slug}" não encontrada em comp_sources. Rode /admin/seed-all antes.`,
+        message: `Classe "${qualifiedSlug}" não encontrada em comp_sources. Rode /admin/seed-all antes.`,
       });
     }
     return entity;
@@ -621,23 +649,48 @@ export class SeedCharacterService {
   private async resolveSubclass(
     slug: string,
     classId: string,
+    classSlug: SupportedClassSlug,
+    edition: "PHB" | "XPHB",
   ): Promise<SubclassEntity> {
-    const entity = await this.subclassRepo.findOneBy({ slug });
+    const candidates = this.subclassCandidates(slug, classSlug, edition);
+    let entity: SubclassEntity | null = null;
+    for (const candidate of candidates) {
+      const found = await this.subclassRepo.findOneBy({ slug: candidate });
+      if (found?.class_id === classId) {
+        entity = found;
+        break;
+      }
+    }
     if (!entity) {
       throw new BadRequestException({
         code: "INVALID_SUBCLASS",
         field: "subclassSlug",
-        message: `Subclasse "${slug}" não encontrada.`,
-      });
-    }
-    if (entity.class_id !== classId) {
-      throw new BadRequestException({
-        code: "INVALID_SUBCLASS",
-        field: "subclassSlug",
-        message: `Subclasse "${slug}" não pertence à classe informada.`,
+        message: `Subclasse "${slug}" não encontrada para ${classSlug} (${edition}).`,
       });
     }
     return entity;
+  }
+
+  private subclassCandidates(
+    slug: string,
+    classSlug: SupportedClassSlug,
+    edition: "PHB" | "XPHB",
+  ): string[] {
+    const specialAliases: Record<string, string> = {
+      "XPHB:wizard:evocation": "wizard-evoker",
+      "PHB:wizard:evocation": "wizard-evocation-phb",
+      "PHB:sorcerer:wild-magic": "sorcerer-wild-phb",
+    };
+    const special = specialAliases[`${edition}:${classSlug}:${slug}`];
+    const prefixed = slug.startsWith(`${classSlug}-`)
+      ? slug
+      : `${classSlug}-${slug}`;
+    const qualified =
+      edition === "PHB" && !prefixed.endsWith("-phb")
+        ? `${prefixed}-phb`
+        : prefixed;
+
+    return [...new Set([special, qualified, slug].filter(Boolean))] as string[];
   }
 
   private async resolveOwner(
@@ -740,8 +793,24 @@ export class SeedCharacterService {
     ownerUserId: string;
     name: string;
     classSlug: SupportedClassSlug;
+    resolvedClassSlug: string;
+    classEquipmentChoices: string[];
+    edition: "PHB" | "XPHB";
+    raceSlug?: string;
+    subraceSlug?: string;
+    backgroundSlug?: string;
+    backgroundAbilityBonuses?: Array<{
+      abilityScoreSlug: string;
+      bonus: number;
+    }>;
+    raceAbilityBonuses?: Array<{
+      abilityScoreSlug: string;
+      bonus: number;
+    }>;
+    subclassSlug: string;
     abilityScores: Record<string, number>;
     weaponMasteryChoices?: string[];
+    raceTraitChoices?: string[];
     fightingStyleSlug?: string;
   }): Promise<CharacterEntity> {
 
@@ -752,30 +821,55 @@ export class SeedCharacterService {
 
 
     const spellDefaults = CLASS_SPELL_DEFAULTS[params.classSlug];
+    const qualifySpellSlugs = (slugs: string[] | undefined) =>
+      params.edition === "PHB"
+        ? slugs?.map((slug) => `${slug}-phb`)
+        : slugs;
+    const raceSlug =
+      params.raceSlug ??
+      (params.edition === "PHB" ? "human-phb" : "human");
+    const backgroundSlug =
+      params.backgroundSlug ??
+      (params.edition === "PHB" ? "acolyte-phb" : "acolyte");
     const data: Record<string, unknown> = {
-      sourceCode: "XPHB",
-      classSlug: params.classSlug,
-      raceSlug: "human",
-      backgroundSlug: "acolyte",
+      sourceCode: params.edition,
+      classSlug: params.resolvedClassSlug,
+      subclassSlug: params.subclassSlug,
+      raceSlug,
+      ...(params.subraceSlug ? { subraceSlug: params.subraceSlug } : {}),
+      backgroundSlug,
+      backgroundAbilityBonuses: params.backgroundAbilityBonuses,
+      raceAbilityBonuses: params.raceAbilityBonuses,
       abilityScores: params.abilityScores,
       abilityScoreMethod: "standard-array",
       skills: [],
-      classEquipmentChoices: ["A"],
+      classEquipmentChoices:
+        params.classEquipmentChoices.length > 0
+          ? params.classEquipmentChoices
+          : ["A"],
       backgroundEquipmentChoices: ["A"],
 
 
       ...(spellDefaults.cantrips
-        ? { classCantrips: spellDefaults.cantrips }
+        ? { classCantrips: qualifySpellSlugs(spellDefaults.cantrips) }
         : {}),
       ...(spellDefaults.preparedSpells
-        ? { classPreparedSpells: spellDefaults.preparedSpells }
+        ? {
+            classPreparedSpells: qualifySpellSlugs(
+              spellDefaults.preparedSpells,
+            ),
+          }
         : {}),
       ...(spellDefaults.spellbook
-        ? { classSpellbook: spellDefaults.spellbook }
+        ? { classSpellbook: qualifySpellSlugs(spellDefaults.spellbook) }
         : {}),
 
       ...(params.weaponMasteryChoices?.length
         ? { weaponMasteryChoices: params.weaponMasteryChoices }
+        : {}),
+
+      ...(params.raceTraitChoices?.length
+        ? { raceTraitChoices: params.raceTraitChoices }
         : {}),
 
       ...(params.fightingStyleSlug
@@ -788,6 +882,27 @@ export class SeedCharacterService {
       name: params.name,
       data,
     });
+  }
+
+  private defaultEquipmentChoices(
+    raw:
+      | {
+          defaultData?: Array<Record<string, unknown>>;
+        }
+      | Record<string, unknown>
+      | null
+      | undefined,
+  ): string[] {
+    const groups = (
+      raw as { defaultData?: Array<Record<string, unknown>> } | undefined
+    )?.defaultData;
+    if (!Array.isArray(groups)) return [];
+    return groups
+      .map((group) =>
+        Object.keys(group).find((key) => /^[A-Za-z]$/.test(key)),
+      )
+      .filter((key): key is string => !!key)
+      .map((key) => key.toUpperCase());
   }
 
   private async buildSheetSummary(

@@ -15,12 +15,16 @@ import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { MonsterEntity } from "src/entities/monster.entity";
 import { CharacterEntity } from "src/entities/character.entity";
+import { CharacterClassEntity } from "src/entities/character-class.entity";
 import { EquipmentEntity } from "src/entities/equipment.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { CampaignPartyMemberEntity } from "src/entities/campaign-party-member.entity";
 import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
-import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import {
+  CharacterStateService,
+  QuickPlayCharacterStateSnapshot,
+} from "src/models/characters/services/character-state.service";
 import { InventoryService } from "src/models/characters/services/inventory.service";
 import { SessionMessageService } from "src/models/session/services/session-message.service";
 import { SceneContextCacheService } from "src/models/session/services/scene-context-cache.service";
@@ -36,6 +40,7 @@ import { XpAwardService } from "./xp-award.service";
 import { getAbilityModifier } from "src/shared/srd-utils";
 import { XP_THRESHOLDS } from "src/shared/srd-constants";
 import { EquipmentSourceEnum } from "src/entities/enums";
+import { canTakeReactionFromConditions } from "./condition-effects.service";
 
 export interface CreateEncounterDto {
   name: string;
@@ -122,6 +127,9 @@ export class EncounterService {
     private readonly sceneContextCache: SceneContextCacheService,
     @Optional() private readonly eventBus?: EventBusService,
     @Optional() private readonly envelopeFactory?: EventEnvelopeFactory,
+    @Optional()
+    @InjectRepository(CharacterClassEntity)
+    private readonly characterClassRepo?: Repository<CharacterClassEntity>,
   ) {}
 
   async create(
@@ -315,10 +323,19 @@ export class EncounterService {
 
           if (p.transformationState) {
             const form = p.transformationState.form;
-            (p as any).currentHp = form.currentHp;
-            (p as any).maxHp = form.maxHp;
+            const usesOriginalHp =
+              p.transformationState.rulesMode === "xphb-wild-shape";
+            (p as any).currentHp = usesOriginalHp
+              ? sheet.currentHp
+              : form.currentHp;
+            (p as any).maxHp = usesOriginalHp ? sheet.maxHp : form.maxHp;
             (p as any).armorClass = form.ac;
             (p as any).speed = form.speed.walk ?? 30;
+            if (usesOriginalHp) {
+              form.currentHp = sheet.currentHp;
+              form.maxHp = sheet.maxHp;
+              form.tempHp = sheet.tempHp ?? 0;
+            }
           } else {
             (p as any).currentHp = sheet.currentHp;
             (p as any).maxHp = sheet.maxHp;
@@ -440,7 +457,26 @@ export class EncounterService {
       participants.push(participant);
     }
 
-    return this.participantRepo.save(participants);
+    const saved = await this.participantRepo.save(participants);
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (encounter?.status === "active") {
+      for (const participant of saved) {
+        const initiativeRoll = this.diceService.roll(20);
+        participant.initiativeRoll = initiativeRoll;
+        participant.initiativeTotal =
+          initiativeRoll + (participant.initiativeModifier ?? 0);
+      }
+      await this.participantRepo.save(saved);
+      encounter.turnOrder = [
+        ...(encounter.turnOrder ?? []),
+        ...saved.map((participant) => participant.id),
+      ];
+      await this.encounterRepo.save(encounter);
+    }
+    await this.refreshDifficultyFromRoster(encounterId);
+    return saved;
   }
 
 
@@ -571,11 +607,19 @@ export class EncounterService {
       faction: "ally",
       controlledBy: "pc",
     });
-    return this.participantRepo.save(participant);
+    const saved = await this.participantRepo.save(participant);
+    await this.refreshDifficultyFromRoster(encounterId);
+    return saved;
   }
 
   async removeParticipant(participantId: string): Promise<void> {
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId },
+    });
     await this.participantRepo.delete(participantId);
+    if (participant?.encounterId) {
+      await this.refreshDifficultyFromRoster(participant.encounterId);
+    }
   }
 
 
@@ -755,6 +799,7 @@ export class EncounterService {
   async deleteEncounter(encounterId: string): Promise<void> {
     const encounter = await this.getById(encounterId);
 
+    await this.restoreQuickPlayCharacterState(encounter);
     await this.sessionService.setActiveEncounter(encounter.sessionId, null);
 
     await this.encounterRepo.delete(encounterId);
@@ -1035,6 +1080,63 @@ export class EncounterService {
     };
   }
 
+  private async refreshDifficultyFromRoster(
+    encounterId: string,
+  ): Promise<void> {
+    if (!this.characterClassRepo) return;
+
+    const participants = await this.participantRepo.find({
+      where: { encounterId },
+    });
+    const characterIds = participants
+      .filter(
+        (participant) =>
+          participant.type === "pc" &&
+          participant.faction === "ally" &&
+          Boolean(participant.characterId),
+      )
+      .map((participant) => participant.characterId!);
+    if (characterIds.length === 0) return;
+
+    const characterClasses = await this.characterClassRepo.find({
+      where: { character_id: In(characterIds) },
+    });
+    const levelByCharacter = new Map<string, number>();
+    for (const characterClass of characterClasses) {
+      levelByCharacter.set(
+        characterClass.character_id,
+        (levelByCharacter.get(characterClass.character_id) ?? 0) +
+          characterClass.class_level,
+      );
+    }
+    const partyLevels = characterIds.map((characterId) =>
+      Math.max(1, levelByCharacter.get(characterId) ?? 1),
+    );
+    const difficulty = await this.calculateDifficulty(
+      encounterId,
+      partyLevels,
+    );
+    const partyLevelSummary = partyLevels.reduce<Record<number, number>>(
+      (summary, level) => {
+        summary[level] = (summary[level] ?? 0) + 1;
+        return summary;
+      },
+      {},
+    );
+
+    await this.encounterRepo.update(
+      { id: encounterId },
+      {
+        difficulty: {
+          adjusted_xp: difficulty.adjustedXp,
+          threshold: difficulty.threshold,
+          total_monster_xp: difficulty.totalMonsterXp,
+          party_level_summary: partyLevelSummary,
+        },
+      },
+    );
+  }
+
 
   async normalizeResolvePayload(
     rawBody: any,
@@ -1279,6 +1381,12 @@ export class EncounterService {
       .getById(encounter.sessionId)
       .catch(() => null);
     const campaignId = session?.campaignId ?? undefined;
+    const isQuickPlay = Boolean(this.getQuickPlayState(encounter));
+    if (isQuickPlay) {
+      dto.xpRewards = [];
+      dto.goldRewards = [];
+      dto.itemRewards = [];
+    }
 
 
 
@@ -1518,7 +1626,7 @@ export class EncounterService {
       session?.ownerId ?? null,
     );
 
-    if (campaignId) {
+    if (campaignId && !isQuickPlay) {
       const rounds = Math.max(1, encounter.currentRound ?? 1);
       const hours = Math.max(0.1, (rounds * 6) / 3600);
       try {
@@ -1535,6 +1643,28 @@ export class EncounterService {
       }
     }
 
+    try {
+      await this.clearEncounterHitPointMaximumBonuses(encounter.id);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      warnings.push(`Temporary HP maximum cleanup: ${message}`);
+      this.logger.error(
+        `Temporary HP maximum cleanup failed (encounter=${encounterId}): ${message}`,
+      );
+    }
+
+    try {
+      await this.restoreQuickPlayCharacterState(encounter);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      warnings.push(`Quick Play state restore: ${message}`);
+      this.logger.error(
+        `Quick Play state restore failed (encounter=${encounterId}): ${message}`,
+      );
+    }
+
     return {
       ok: true,
       value: {
@@ -1546,6 +1676,95 @@ export class EncounterService {
       },
       events,
     };
+  }
+
+  private getQuickPlayState(encounter: EncounterEntity): {
+    characterId: string;
+    characterStateSnapshot: QuickPlayCharacterStateSnapshot;
+    restored?: boolean;
+  } | null {
+    const quickPlay = (encounter.mapData as any)?.quickPlay;
+    if (
+      !quickPlay ||
+      typeof quickPlay.characterId !== "string" ||
+      !quickPlay.characterStateSnapshot
+    ) {
+      return null;
+    }
+    return quickPlay;
+  }
+
+  private async clearEncounterHitPointMaximumBonuses(
+    encounterId: string,
+  ): Promise<void> {
+    const participants = await this.participantRepo.find({
+      where: { encounterId },
+    });
+    for (const participant of participants) {
+      const bonuses = (participant.effectInstances ?? []).filter(
+        (effect) => effect.kind === "hit_point_maximum_bonus",
+      );
+      const total = bonuses.reduce(
+        (sum, effect) =>
+          sum +
+          (typeof effect.payload?.amount === "number"
+            ? effect.payload.amount
+            : 0),
+        0,
+      );
+      if (bonuses.length === 0) continue;
+
+      if (total !== 0) {
+        if (participant.type === "pc" && participant.characterId) {
+          const result =
+            await this.stateService.adjustTemporaryHitPointMaximum(
+              participant.characterId,
+              -total,
+            );
+          participant.currentHp = result.currentHpAfter;
+          participant.maxHp = result.maxHpAfter;
+        } else {
+          const maxHpBefore = Math.max(
+            1,
+            participant.maxHp ?? participant.currentHp ?? 1,
+          );
+          const hpBefore = Math.max(
+            0,
+            participant.currentHp ?? maxHpBefore,
+          );
+          participant.maxHp = Math.max(1, maxHpBefore - total);
+          participant.currentHp = Math.max(
+            0,
+            Math.min(participant.maxHp, hpBefore - total),
+          );
+        }
+      }
+      participant.effectInstances = (participant.effectInstances ?? []).filter(
+        (effect) => effect.kind !== "hit_point_maximum_bonus",
+      );
+      await this.participantRepo.save(participant);
+    }
+  }
+
+  private async restoreQuickPlayCharacterState(
+    encounter: EncounterEntity,
+  ): Promise<void> {
+    const quickPlay = this.getQuickPlayState(encounter);
+    if (!quickPlay || quickPlay.restored) return;
+    await this.stateService.restoreQuickPlaySnapshot(
+      quickPlay.characterId,
+      quickPlay.characterStateSnapshot,
+    );
+    encounter.mapData = {
+      ...(encounter.mapData ?? {}),
+      quickPlay: {
+        ...quickPlay,
+        restored: true,
+      },
+    } as any;
+    await this.encounterRepo.update(encounter.id, {
+      mapData: encounter.mapData,
+    });
   }
 
 
@@ -1711,7 +1930,6 @@ export class EncounterService {
   private isHostileDefeatable(participant: EncounterParticipantEntity): boolean {
     return (
       participant.faction === "enemy" &&
-      participant.controlledBy === "ai" &&
       participant.type !== "pc"
     );
   }
@@ -1797,8 +2015,36 @@ export class EncounterService {
       percent: number;
     } | null = null;
     if (pcParticipant?.characterId) {
-      const current = pcParticipant.currentHp ?? 0;
-      const max = pcParticipant.maxHp ?? 0;
+      let current = pcParticipant.currentHp ?? 0;
+      let max = pcParticipant.maxHp ?? 0;
+      const activeTransformation = pcParticipant.transformationState;
+      const activeForm = activeTransformation?.form;
+      if (
+        activeForm &&
+        activeTransformation?.rulesMode !== "xphb-wild-shape"
+      ) {
+        current = activeForm.currentHp;
+        max = activeForm.maxHp;
+      } else {
+        try {
+          const effectiveOwner = await this.resolveEffectiveOwner(
+            pcParticipant.characterId,
+            "system",
+          );
+          const sheet = await this.sheetService.computeSheet(
+            effectiveOwner,
+            pcParticipant.characterId,
+          );
+          current = sheet.currentHp;
+          max = sheet.maxHp;
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `Outcome summary fell back to encounter HP for character=${pcParticipant.characterId}: ${message}`,
+          );
+        }
+      }
       const percent = max > 0 ? Math.round((current / max) * 100) : 0;
       pcFinalHp = {
         characterId: pcParticipant.characterId,
@@ -1837,10 +2083,9 @@ export class EncounterService {
     pcHpPercent: number | null,
     allParticipants: EncounterParticipantEntity[],
   ): string {
-    const names = defeatedNpcs
-      .slice(0, 3)
-      .map((n) => n.name)
-      .join(", ");
+    const names = this.formatParticipantNames(
+      defeatedNpcs.map((participant) => participant.name),
+    );
     if (outcome === "victory") {
       const hpFragment = pcHpPercent !== null ? ` PC ${pcHpPercent}%HP.` : "";
       const rewardParts: string[] = [];
@@ -1851,21 +2096,34 @@ export class EncounterService {
       return `Inimigos derrotados: ${names || "—"}.${hpFragment}${rewards}`;
     }
     if (outcome === "defeat") {
-      const remaining = allParticipants
+      const remaining = this.formatParticipantNames(
+        allParticipants
         .filter(
           (p) =>
             this.isHostileDefeatable(p) &&
             !(p.isDefeated || (p.currentHp ?? 0) <= 0),
         )
-        .map((p) => p.displayName)
-        .slice(0, 3)
-        .join(", ");
+          .map((p) => p.displayName),
+      );
       return `PC caiu em combate. Inimigos restantes: ${remaining || "—"}.`;
     }
     if (outcome === "retreat") {
       return "PC retirou-se. Combate inconcluso.";
     }
     return `Encontro encerrado: ${outcome}.`;
+  }
+
+  private formatParticipantNames(names: string[]): string {
+    const visibleNames = names.filter(Boolean).slice(0, 5);
+    if (visibleNames.length === 0) return "";
+    const hiddenCount = Math.max(0, names.length - visibleNames.length);
+    const formatted =
+      visibleNames.length === 1
+        ? visibleNames[0]
+        : `${visibleNames.slice(0, -1).join(", ")} e ${visibleNames.at(-1)}`;
+    return hiddenCount > 0
+      ? `${formatted} (+${hiddenCount} outros)`
+      : formatted;
   }
 
 
@@ -2258,6 +2516,13 @@ export class EncounterService {
         ok: false,
         error: "Você só pode sacar/guardar no seu turno.",
         code: "NOT_YOUR_TURN",
+      };
+    }
+    if (!canTakeReactionFromConditions(p.conditions ?? [])) {
+      return {
+        ok: false,
+        error: "Você não pode interagir com objetos nesta condição.",
+        code: "ACTION_BLOCKED",
       };
     }
     if ((p.freeObjectInteractionsUsed ?? 0) >= 1) {

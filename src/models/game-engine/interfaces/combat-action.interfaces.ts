@@ -106,6 +106,8 @@ export interface ResolverSheetSlice {
   proficiencyBonus?: number;
 
   totalLevel?: number;
+
+  raceSlug?: string;
 }
 
 
@@ -123,6 +125,7 @@ export interface ParticipantContext {
     movementUsed: number;
     attacksUsedThisTurn: number;
     attacksMaxThisTurn: number;
+    bonusUnarmedAttacksRemainingThisTurn: number;
     isOnTurn: boolean;
   };
 

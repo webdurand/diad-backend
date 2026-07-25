@@ -11,6 +11,7 @@ import type {
 } from "../interfaces/combat.interfaces";
 import type { GameEventData } from "../interfaces/result.type";
 import { narrativeForConditionRemoval } from "./narrative-condition-removal";
+import { randomUUID } from "crypto";
 
 export type ConcentrationBreakReason =
   | "damage"
@@ -18,6 +19,7 @@ export type ConcentrationBreakReason =
   | "replaced"
   | "expired"
   | "death"
+  | "sleet_storm_failed_save"
   | "manual";
 
 const INCAPACITATING: ConditionSlug[] = [
@@ -26,6 +28,8 @@ const INCAPACITATING: ConditionSlug[] = [
   "petrified",
   "stunned",
   "unconscious",
+  "hypnotized",
+  "banished",
 ];
 
 
@@ -88,15 +92,29 @@ export class ConcentrationService {
     }
     const prev = caster.concentratingOn;
     const effects = caster.appliedEffects ?? [];
+    const activeEncounter = await this.encounters.findOne({
+      where: { id: caster.encounterId },
+    });
+    const activeParticipantId =
+      activeEncounter?.turnOrder?.[activeEncounter.currentTurnIndex] ?? null;
 
 
     const targetIds = effects
       .filter((e) => e.kind === "condition" && e.targetParticipantId)
       .map((e) => e.targetParticipantId as string);
     const uniqueIds = Array.from(new Set(targetIds));
-    const targets = uniqueIds.length
+    const fetchedTargets = uniqueIds.length
       ? await this.participants.findByIds(uniqueIds)
       : [];
+    const targets = uniqueIds
+      .map((id) =>
+        id === caster.id
+          ? caster
+          : fetchedTargets.find((target) => target.id === id),
+      )
+      .filter(
+        (target): target is EncounterParticipantEntity => target != null,
+      );
 
     for (const eff of effects) {
       if (eff.kind === "condition" && eff.targetParticipantId) {
@@ -145,7 +163,7 @@ export class ConcentrationService {
             sourceSpell: area?.sourceSpell,
             effectKind: area?.effectKind,
             casterId: caster.id,
-            reason: "concentration_broken",
+            reason,
             narrativeDescriptor: area?.narrativeDescriptor,
             tactical: area?.tacticalMetadata,
           },
@@ -179,7 +197,7 @@ export class ConcentrationService {
             sourceSpell: a.sourceSpell,
             effectKind: a.effectKind,
             casterId: caster.id,
-            reason: "concentration_broken",
+            reason,
             narrativeDescriptor: a.narrativeDescriptor,
             tactical: a.tacticalMetadata,
           },
@@ -197,6 +215,11 @@ export class ConcentrationService {
     });
     for (const p of encounterParticipants) {
       const before = p.effectInstances ?? [];
+      const removedConcentrationEffects = before.filter(
+        (effect) =>
+          effect.requiresConcentration &&
+          effect.sourceCasterParticipantId === caster.id,
+      );
       const kept = before.filter(
         (e) =>
           !(
@@ -221,9 +244,53 @@ export class ConcentrationService {
           }
         }
         p.effectInstances = kept;
+        const hasteEnded = removedConcentrationEffects.some(
+          (effect) =>
+            effect.kind === "extra_action" &&
+            effect.sourceSpellSlug
+              ?.toLowerCase()
+              .replace(/-(phb|xphb|srd52)$/, "") === "haste",
+        );
+        if (
+          hasteEnded &&
+          !(p.conditionInstances ?? []).some(
+            (condition) => condition.slug === "haste_lethargy",
+          )
+        ) {
+          const condition: ConditionInstance = {
+            id: randomUUID(),
+            slug: "haste_lethargy",
+            appliedBy: caster.id,
+            sourceSpell: "haste",
+            sourceConcentration: false,
+            source: "spell:haste",
+            saveAbility: null,
+            saveDc: null,
+            repeatSaveTiming: "end_of_turn",
+            durationRoundsRemaining:
+              activeParticipantId === p.id ? 2 : 1,
+            appliedAt: new Date().toISOString(),
+          };
+          p.conditionInstances = [...(p.conditionInstances ?? []), condition];
+          p.conditions = this.deriveSlugs(p.conditionInstances);
+          events.push({
+            event_type: "condition_applied",
+            actor_participant_id: caster.id,
+            target_participant_id: p.id,
+            data: {
+              instanceId: condition.id,
+              slug: condition.slug,
+              sourceSpell: "haste",
+              durationTurns: condition.durationRoundsRemaining,
+              reason: "haste_ended",
+            },
+          });
+        }
         if (p.id === caster.id) {
 
           caster.effectInstances = kept;
+          caster.conditionInstances = p.conditionInstances;
+          caster.conditions = p.conditions;
         } else {
           await this.participants.save(p);
         }
@@ -256,7 +323,7 @@ export class ConcentrationService {
     }
 
     caster.isConcentrating = false;
-    caster.concentratingOn = undefined as unknown as string;
+    caster.concentratingOn = null;
     caster.concentrationRoundsRemaining = null;
     caster.concentrationSaveDc = null;
     caster.appliedEffects = [];

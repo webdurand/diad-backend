@@ -31,6 +31,8 @@ import {
   CompSourceEntity,
   CampaignPartyMemberEntity,
   CompanionTemplateEntity,
+  SubclassEntity,
+  FeatureEntity,
 } from "src/entities";
 import {
   CharacterProficiencySourceEnum,
@@ -39,6 +41,7 @@ import {
   SpellStatusEnum,
 } from "src/entities/enums";
 import { getAbilityModifier } from "src/shared/srd-utils";
+import { getSubclassLevel } from "src/shared/edition-rules";
 import {
   ensureCharacterReadAccess,
   ensureCharacterWriteAccess,
@@ -49,12 +52,18 @@ interface CharacterChoicesData {
   raceSlug?: string;
   subraceSlug?: string;
   classSlug?: string;
+  subclassSlug?: string;
   backgroundSlug?: string;
   alignmentSlug?: string;
   abilityScores?: Record<string, number>;
   abilityScoreMethod?: string;
   backgroundAbilityBonuses?: Array<{
-    abilityScoreIndex: string;
+    abilityScoreIndex?: string;
+    abilityScoreSlug?: string;
+    bonus: number;
+  }>;
+  raceAbilityBonuses?: Array<{
+    abilityScoreSlug: string;
     bonus: number;
   }>;
   skills?: string[];
@@ -773,10 +782,35 @@ export class CharactersService {
         );
       }
 
+      const subclassSelectionLevel = getSubclassLevel(
+        classEntity.slug.replace(/-phb$/, ""),
+        sourceEntity?.rules,
+      );
+      let subclassEntity: SubclassEntity | null = null;
+      if (subclassSelectionLevel === 1) {
+        if (!choices.subclassSlug) {
+          throw new BadRequestException({
+            ok: false,
+            code: "MISSING_LEVEL_ONE_SUBCLASS",
+            error: `A classe ${classEntity.name} exige uma subclasse no nível 1.`,
+          });
+        }
+        subclassEntity = await manager.findOne(SubclassEntity, {
+          where: { slug: choices.subclassSlug },
+        });
+        if (!subclassEntity || subclassEntity.class_id !== classEntity.id) {
+          throw new BadRequestException({
+            ok: false,
+            code: "INVALID_SUBCLASS_FOR_CLASS",
+            error: `A subclasse ${choices.subclassSlug} não pertence à classe ${classEntity.name}.`,
+          });
+        }
+      }
 
       await manager.save(CharacterClassEntity, {
         character_id: charId,
         class_id: classEntity.id,
+        subclass_id: subclassEntity?.id,
         class_level: 1,
         order: 1,
       });
@@ -788,24 +822,81 @@ export class CharactersService {
 
       const editionGrantsBgBonuses =
         sourceEntity?.rules?.backgroundGrantsAbilityBonuses === true;
-      const raceBonusMap: Record<string, number> = {};
+      const raceBonusMap: Partial<Record<AbilitySlug, number>> = {};
       if (!editionGrantsBgBonuses) {
-        const raceBonuses =
-          (
-            raceEntity as unknown as {
-              ability_bonuses?: Array<{
-                ability_score?: { slug?: string };
-                bonus?: number;
-              }>;
-            }
-          ).ability_bonuses ?? [];
+        const bonusSources = [raceEntity, subraceEntity].filter(
+          (entity): entity is RaceEntity | SubraceEntity => !!entity,
+        );
+        const raceBonuses = bonusSources.flatMap(
+          (entity) =>
+            (
+              entity as unknown as {
+                ability_bonuses?: Array<{
+                  ability_score?: { slug?: string };
+                  bonus?: number;
+                }>;
+              }
+            ).ability_bonuses ?? [],
+        );
         for (const rb of raceBonuses) {
-          const slug = rb.ability_score?.slug;
+          const rawSlug = rb.ability_score?.slug?.toLowerCase();
+          const slug = rawSlug ? SLUG_MAP[rawSlug] : undefined;
           if (slug && typeof rb.bonus === "number") {
             raceBonusMap[slug] = (raceBonusMap[slug] ?? 0) + rb.bonus;
           }
         }
+
+        const raceChoiceConfig = this.getRaceAbilityChoiceConfig(
+          raceEntity,
+          subraceEntity,
+        );
+        const chosenRaceBonuses = choices.raceAbilityBonuses ?? [];
+        if (
+          raceChoiceConfig.count > 0 &&
+          chosenRaceBonuses.length !== raceChoiceConfig.count
+        ) {
+          throw new BadRequestException({
+            ok: false,
+            code: "INVALID_RACE_ABILITY_BONUS_COUNT",
+            error: `Escolha ${raceChoiceConfig.count} bônus de atributo para ${subraceEntity?.name ?? raceEntity.name}.`,
+          });
+        }
+        const seenRaceChoices = new Set<AbilitySlug>();
+        for (const choice of chosenRaceBonuses) {
+          const slug = SLUG_MAP[choice.abilityScoreSlug.toLowerCase()];
+          if (
+            !slug ||
+            !raceChoiceConfig.allowed.has(slug) ||
+            seenRaceChoices.has(slug) ||
+            choice.bonus !== raceChoiceConfig.bonus
+          ) {
+            throw new BadRequestException({
+              ok: false,
+              code: "INVALID_RACE_ABILITY_BONUS",
+              error: `Bônus racial inválido para ${subraceEntity?.name ?? raceEntity.name}.`,
+            });
+          }
+          seenRaceChoices.add(slug);
+          raceBonusMap[slug] = (raceBonusMap[slug] ?? 0) + choice.bonus;
+        }
+
+        if (
+          raceEntity.slug === "human-phb" &&
+          subraceEntity?.slug !== "human-variant-phb"
+        ) {
+          for (const slug of ABILITY_SLUGS) {
+            raceBonusMap[slug] = (raceBonusMap[slug] ?? 0) + 1;
+          }
+        }
       }
+      const backgroundBonusFor = (slug: AbilitySlug): number =>
+        bgBonuses
+          .filter((bonus) => {
+            const rawSlug =
+              bonus.abilityScoreSlug ?? bonus.abilityScoreIndex ?? "";
+            return SLUG_MAP[rawSlug.toLowerCase()] === slug;
+          })
+          .reduce((sum, bonus) => sum + bonus.bonus, 0);
       if (choices.abilityScores) {
         for (const [key, value] of Object.entries(choices.abilityScores)) {
           const slug = SLUG_MAP[key];
@@ -814,8 +905,7 @@ export class CharactersService {
             slug,
           });
           if (!asEntity) continue;
-          const bgBonus =
-            bgBonuses.find((b) => b.abilityScoreIndex === slug)?.bonus ?? 0;
+          const bgBonus = backgroundBonusFor(slug);
           const raceBonus = raceBonusMap[slug] ?? 0;
           await manager.save(CharacterAbilityScoreEntity, {
             character_id: charId,
@@ -933,7 +1023,7 @@ export class CharactersService {
 
       const conScore = choices.abilityScores?.con ?? 10;
       const conBonus =
-        bgBonuses.find((b) => b.abilityScoreIndex === "con")?.bonus ?? 0;
+        backgroundBonusFor("con") + (raceBonusMap.con ?? 0);
       const conMod = getAbilityModifier(conScore + conBonus);
       const startHp = classEntity.hit_die + conMod;
       const gp =
@@ -996,14 +1086,106 @@ export class CharactersService {
           level: 1,
           subclass_id: IsNull(),
         },
-        relations: ["level_features", "level_features.feature"],
+        relations: [
+          "level_features",
+          "level_features.feature",
+          "level_features.feature.source",
+        ],
       });
 
-      if (levelData?.level_features) {
-        for (const lf of levelData.level_features) {
+      const initialClassFeatures = (levelData?.level_features ?? [])
+        .map((levelFeature) => levelFeature.feature)
+        .filter((feature) =>
+          this.isFeatureCompatibleWithClassSource(feature, classEntity),
+        );
+      if (initialClassFeatures.length === 0) {
+        for (const summary of classEntity.class_features_level_1 ?? []) {
+          const slug =
+            typeof summary.slug === "string" ? summary.slug : undefined;
+          if (!slug) continue;
+          const feature = await manager.findOne(FeatureEntity, {
+            where: { slug },
+            relations: ["source"],
+          });
+          if (
+            feature &&
+            this.isFeatureCompatibleWithClassSource(feature, classEntity)
+          ) {
+            initialClassFeatures.push(feature);
+          }
+        }
+      }
+      const directClassFeatures = await manager.find(FeatureEntity, {
+        where: {
+          class_id: classEntity.id,
+          subclass_id: IsNull(),
+          level: 1,
+          ...(classEntity.source_id
+            ? { source_id: classEntity.source_id }
+            : {}),
+        },
+      });
+      const mergedInitialClassFeatures = [
+        ...new Map(
+          [...initialClassFeatures, ...directClassFeatures].map((feature) => [
+            feature.id,
+            feature,
+          ]),
+        ).values(),
+      ];
+      if (mergedInitialClassFeatures.length > 0) {
+        for (const feature of mergedInitialClassFeatures) {
           await manager.save(CharacterFeatureEntity, {
             character_id: charId,
-            feature_id: lf.feature.id,
+            feature_id: feature.id,
+            source_class_id: classEntity.id,
+            active: true,
+            choices: {},
+          });
+        }
+      }
+
+      if (subclassEntity) {
+        const subclassLevelData = await this.levelRepository.findOne({
+          where: {
+            class_id: classEntity.id,
+            level: 1,
+            subclass_id: subclassEntity.id,
+          },
+          relations: [
+            "level_features",
+            "level_features.feature",
+            "level_features.feature.source",
+          ],
+        });
+        const linkedSubclassFeatures = (
+          subclassLevelData?.level_features ?? []
+        )
+          .map((levelFeature) => levelFeature.feature)
+          .filter((feature) =>
+            this.isFeatureCompatibleWithClassSource(feature, classEntity),
+          );
+        const directSubclassFeatures = await manager.find(FeatureEntity, {
+          where: {
+            class_id: classEntity.id,
+            subclass_id: subclassEntity.id,
+            level: 1,
+            ...(classEntity.source_id
+              ? { source_id: classEntity.source_id }
+              : {}),
+          },
+        });
+        const initialSubclassFeatures = [
+          ...new Map(
+            [...linkedSubclassFeatures, ...directSubclassFeatures].map(
+              (feature) => [feature.id, feature],
+            ),
+          ).values(),
+        ];
+        for (const feature of initialSubclassFeatures) {
+          await manager.save(CharacterFeatureEntity, {
+            character_id: charId,
+            feature_id: feature.id,
             source_class_id: classEntity.id,
             active: true,
             choices: {},
@@ -1013,6 +1195,17 @@ export class CharactersService {
 
       return saved;
     });
+  }
+
+  private isFeatureCompatibleWithClassSource(
+    feature: FeatureEntity,
+    classEntity: ClassEntity,
+  ): boolean {
+    return (
+      feature.source_id == null ||
+      feature.source_id === classEntity.source_id ||
+      feature.source?.code === "SRD"
+    );
   }
 
   async createCompanion(
@@ -1068,6 +1261,51 @@ export class CharactersService {
     return typeof value === "object" && value !== null && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : null;
+  }
+
+  private getRaceAbilityChoiceConfig(
+    race: RaceEntity,
+    subrace: SubraceEntity | null,
+  ): { count: number; bonus: number; allowed: Set<AbilitySlug> } {
+    if (subrace?.slug === "human-variant-phb") {
+      return { count: 2, bonus: 1, allowed: new Set(ABILITY_SLUGS) };
+    }
+
+    const raw = race.ability_bonus_options as
+      | {
+          count?: number;
+          choose?: number;
+          from?:
+            | string[]
+            | {
+                options?: Array<{
+                  ability_score?: { slug?: string };
+                  bonus?: number;
+                }>;
+              };
+        }
+      | undefined;
+    const count = raw?.count ?? raw?.choose ?? 0;
+    const options = Array.isArray(raw?.from)
+      ? raw.from.map((slug) => ({ slug, bonus: 1 }))
+      : (raw?.from?.options ?? []).map((option) => ({
+          slug: option.ability_score?.slug ?? "",
+          bonus: option.bonus ?? 1,
+        }));
+    const normalized = options
+      .map((option) => ({
+        slug: SLUG_MAP[option.slug.toLowerCase()],
+        bonus: option.bonus,
+      }))
+      .filter(
+        (option): option is { slug: AbilitySlug; bonus: number } =>
+          !!option.slug,
+      );
+    return {
+      count,
+      bonus: normalized[0]?.bonus ?? 1,
+      allowed: new Set(normalized.map((option) => option.slug)),
+    };
   }
 
 

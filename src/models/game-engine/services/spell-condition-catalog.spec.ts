@@ -17,9 +17,9 @@ describe("spell-condition-catalog", () => {
     expect(e).toEqual({
       conditionSlug: "restrained",
       saveAbility: "dex",
-      durationRounds: 10,
+      durationRounds: 600,
       requiresConcentration: true,
-      repeatSaveTiming: "end_of_turn",
+      repeatSaveTiming: "never",
     });
   });
 
@@ -62,6 +62,57 @@ describe("spell-condition-catalog", () => {
       conditionSlug: "charmed",
       saveAbility: "wis",
       durationRounds: 1,
+      requiresConcentration: false,
+      repeatSaveTiming: "never",
+    });
+  });
+
+  it("suggestion lasts up to 8 hours without repeat saves", () => {
+    expect(getSpellCondition("suggestion")).toEqual(
+      expect.objectContaining({
+        conditionSlug: "charmed",
+        durationRounds: 4_800,
+        requiresConcentration: true,
+        repeatSaveTiming: "never",
+      }),
+    );
+  });
+
+  it("hypnotic-pattern applies the composite hypnotized state", () => {
+    expect(getSpellCondition("hypnotic-pattern")).toEqual({
+      conditionSlug: "hypnotized",
+      saveAbility: "wis",
+      durationRounds: 10,
+      requiresConcentration: true,
+      repeatSaveTiming: "never",
+    });
+  });
+
+  it("banishment applies the composite off-plane banished state", () => {
+    expect(getSpellCondition("banishment")).toEqual({
+      conditionSlug: "banished",
+      saveAbility: "cha",
+      durationRounds: 10,
+      requiresConcentration: true,
+      repeatSaveTiming: "never",
+    });
+  });
+
+  it("sunburst aplica cegueira por 1 minuto com novo save no fim do turno", () => {
+    expect(getSpellCondition("sunburst")).toEqual({
+      conditionSlug: "blinded",
+      saveAbility: "con",
+      durationRounds: 10,
+      requiresConcentration: false,
+      repeatSaveTiming: "end_of_turn",
+    });
+  });
+
+  it("storm of vengeance aplica surdez por 5 minutos sem save repetido", () => {
+    expect(getSpellCondition("storm-of-vengeance")).toEqual({
+      conditionSlug: "deafened",
+      saveAbility: "con",
+      durationRounds: 50,
       requiresConcentration: false,
       repeatSaveTiming: "never",
     });

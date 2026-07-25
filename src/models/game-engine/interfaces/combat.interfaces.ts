@@ -13,8 +13,14 @@ export interface AttackRollResult {
 
   hasAdvantage?: boolean;
   hasDisadvantage?: boolean;
+  advantageCancelled?: boolean;
 
   effectBonuses?: Array<{ source: string; dice?: string; amount?: number }>;
+  halflingLuckRerolls?: Array<{
+    die: "normal" | "first" | "second";
+    original: 1;
+    rerolled: number;
+  }>;
 }
 
 export interface DamageRollResult {
@@ -31,9 +37,21 @@ export interface DamageRollResult {
 export interface AttackResult {
   attackRoll: AttackRollResult;
   damageRoll?: DamageRollResult;
+  targetHpBefore?: number;
   targetHpAfter?: number;
   targetDefeated: boolean;
   concentrationBroken?: boolean;
+  radiantStrikesDamage?: number;
+  divineSmiteAvailable?: boolean;
+  divineSmiteTargetParticipantId?: string;
+  divineSmiteSlotLevels?: number[];
+  divineSmiteFreeCastAvailable?: boolean;
+  divineSmiteCritical?: boolean;
+  openHandTechniqueAvailable?: boolean;
+  openHandTargetParticipantId?: string;
+  giantAncestryAvailable?: boolean;
+  giantAncestryFeatureSlug?: string;
+  giantAncestryTargetParticipantId?: string;
 }
 
 export interface SavingThrowResult {
@@ -44,12 +62,21 @@ export interface SavingThrowResult {
   total: number;
   success: boolean;
   advantage?: AdvantageResult;
+  auraBonus?: number;
+  halfCoverBonus?: number;
+  effectBonus?: number;
+  exhaustionPenalty?: number;
 
   indomitableReroll?: {
     originalRoll: number;
     newRoll: number;
     fighterLevel: number;
   };
+  halflingLuckRerolls?: Array<{
+    die: "normal" | "first" | "second";
+    original: 1;
+    rerolled: number;
+  }>;
 }
 
 export interface ConcentrationCheckResult {
@@ -133,9 +160,29 @@ export interface TurnActionBlock {
   sourceLabel: string;
   description: string;
 
-  kind?: "multiattack" | "spell-opener" | "attack";
+  kind?:
+    | "multiattack"
+    | "spell-opener"
+    | "attack"
+    | "sustained-spell"
+    | "relocate-area"
+    | "familiar-action"
+    | "steed-gift"
+    | "condition-escape"
+    | "wake-hypnotized";
   attackBonus?: number;
   damage?: { dice: string; type: string; bonus?: number };
+  secondarySaveDamage?: {
+    save: {
+      ability: string;
+      dc: number;
+      halfOnSuccess: boolean;
+    };
+    damage: {
+      dice: string;
+      type: string;
+    };
+  };
   range?: string;
   spellLevel?: number;
   requiresConcentration?: boolean;
@@ -161,11 +208,12 @@ export interface TurnActionBlock {
 
   sequence?: Array<{ actionName: string; count: number }>;
 
-  rechargeRequired?: "5-6" | "6" | null;
+  rechargeRequired?: "4-6" | "5-6" | "6" | null;
 
   featureSlug?: string;
 
   weaponSlug?: string;
+  itemSlug?: string;
 
   masterySlug?: string;
 
@@ -178,6 +226,20 @@ export interface TurnActionBlock {
   usesMax?: number;
 
   usesRecharge?: string;
+
+  wildResurgenceSlotRecoveryUsed?: boolean;
+
+  wildResurgenceTurnRecoveryUsed?: boolean;
+
+  faithfulSteedFreeCastUsed?: boolean;
+
+  targetParticipantId?: string;
+
+  spellSlug?: string;
+
+  deliverThroughFamiliar?: boolean;
+
+  targetingOriginParticipantId?: string;
 }
 
 export interface AoEResolveResult {
@@ -189,6 +251,12 @@ export interface AoEResolveResult {
     damageRoll?: DamageRollResult;
     targetHpAfter?: number;
     targetDefeated: boolean;
+    conditionsApplied?: ConditionSlug[];
+    forcedMovement?: {
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+      distanceFt: number;
+    };
   }>;
 }
 
@@ -202,13 +270,22 @@ export interface TurnActionsResult {
   genericActions?: TurnActionBlock[];
   bonusActions: TurnActionBlock[];
   reactions: TurnActionBlock[];
+  freeActions: TurnActionBlock[];
   canMove: boolean;
   remainingMovement: number;
   speed: number;
+  canTakeAction: boolean;
+  actionBlockedBy?: string;
   actionUsed: boolean;
   bonusActionUsed: boolean;
+  reactionUsed: boolean;
+  attacksUsedThisTurn: number;
+  attacksMaxThisTurn: number;
+  bonusUnarmedAttacksRemainingThisTurn: number;
+  freeObjectInteractionUsed: boolean;
   hasDisengaged: boolean;
   hasDashed: boolean;
+  hasteActionAvailable: boolean;
 }
 
 
@@ -236,6 +313,7 @@ export interface HelpingState {
 
 
 export type PlannedActionStep =
+  | { kind: "stand-up" }
   | { kind: "move"; to: { x: number; y: number } }
   | { kind: "attack"; actionName: string; targetParticipantIds: string[] }
   | {
@@ -251,11 +329,22 @@ export type PlannedActionStep =
   | { kind: "help"; allyParticipantId: string; targetParticipantId: string }
   | { kind: "hide"; asBonusAction?: boolean }
   | { kind: "ready"; trigger: ReadyTrigger; readiedAction: PlannedActionStep }
-  | { kind: "search"; ability: "perception" | "investigation" }
+  | {
+      kind: "search";
+      ability: "perception" | "investigation";
+      searchSense?: "sight" | "hearing" | "other";
+    }
   | {
       kind: "use-object";
-      objectRef: { source: "inventory" | "environment"; slug: string };
+      objectRef: {
+        source: "inventory" | "environment";
+        slug: string;
+        itemId?: string;
+      };
     }
+  | { kind: "escape-web" }
+  | { kind: "flee-fear" }
+  | { kind: "wake-hypnotized"; targetParticipantId: string }
   | { kind: "end-turn" };
 
 
@@ -308,7 +397,11 @@ export type ConditionSlug =
   | "stunned"
   | "unconscious"
   | "exhaustion"
-  | "hidden";
+  | "hidden"
+  | "haste_lethargy"
+  | "hypnotized"
+  | "banished"
+  | "truth_bound";
 
 export type SaveAbility = "str" | "dex" | "con" | "int" | "wis" | "cha";
 
@@ -342,6 +435,12 @@ export interface ConditionInstance {
 
   durationRoundsRemaining: number | null;
 
+  /**
+   * Some effects expire at the end of a specific creature's turn instead of
+   * on the global round boundary (for example, Find Steed's Fell Glare).
+   */
+  expiresAtTurnEndParticipantId?: string | null;
+
   level?: number;
   appliedAt: string;
 }
@@ -363,6 +462,7 @@ export interface AppliedEffect {
   targetParticipantId: string | null;
 
   description: string;
+  movementCostFt?: number;
 
   metadata?: Record<string, unknown>;
 }
@@ -373,6 +473,7 @@ export interface AppliedEffect {
 
 export type EffectInstanceKind =
   | "ac_bonus"
+  | "ac_base_override"
   | "attack_bonus"
   | "attack_penalty"
   | "save_bonus"
@@ -386,6 +487,9 @@ export type EffectInstanceKind =
   | "self_advantage_next_attack"
   | "self_disadvantage_next_attack"
   | "speed_reduction"
+  | "speed_bonus"
+  | "healing_blocked"
+  | "opportunity_attacks_blocked"
   | "hp_shield"
   | "statblock_swap"
   | "inspiration_die"
@@ -406,24 +510,77 @@ export type EffectInstanceKind =
   | "stroke_of_luck_armed_check"
   | "stroke_of_luck_used_this_rest"
   | "holy_nimbus_armed"
+  | "wild_resurgence_slot_to_wild_shape_used_turn"
   | "spell_mastery_slot_free"
-  | "signature_spell_used_this_rest";
+  | "signature_spell_used_this_rest"
+  | "call_lightning_active"
+  | "summoning_ritual"
+  | "familiar_shared_senses"
+  | "open_hand_flurry_attacks"
+  | "open_hand_technique_pending"
+  | "deflect_attacks_pending"
+  | "uncanny_dodge_pending"
+  | "cunning_strike_pending"
+  | "divine_smite_pending"
+  | "aura_half_cover"
+  | "protection_from_evil_good"
+  | "hit_point_maximum_bonus"
+  | "giant_ancestry_hit_pending"
+  | "giant_ancestry_reaction_pending"
+  | "druid_hit_rider_pending"
+  | "primal_strike_used_this_turn"
+  | "lunar_radiance_used_this_turn"
+  | "celestial_revelation"
+  | "celestial_revelation_used_turn"
+  | "abjure_foes_turn_choice"
+  | "disintegrated"
+  | "tile_effect_entry_marker"
+  | "tile_effect_turn_trigger_marker";
 
 export type EffectExpirationKind =
   | "rounds"
   | "turns"
   | "concentration"
   | "until_caster_turn"
+  | "until_target_turn"
+  | "caster_turn_ends"
   | "until_consumed"
   | "end_of_encounter";
 
 export interface EffectInstancePayload {
   amount?: number;
   diceExpression?: string;
+  slotLevel?: number;
+  saveDc?: number;
   damageTypes?: string[];
+  creatureTypes?: string[];
   beastSlug?: string;
   absorptionHp?: number;
+  reason?: string;
   triggerEventId?: string;
+  attackerParticipantId?: string;
+  turnParticipantIdAtTrigger?: string;
+  incomingDamage?: number;
+  damageType?: string;
+  hpBefore?: number;
+  hpAfter?: number;
+  maxHpBefore?: number;
+  maxHpAfter?: number;
+  tempHpBefore?: number;
+  tempHpAfter?: number;
+  isMeleeAttack?: boolean;
+  minimumReduction?: number;
+  maximumReduction?: number;
+  focusRemaining?: number;
+  sneakAttackDice?: string;
+  sneakAttackRolls?: number[];
+  sneakAttackCritical?: boolean;
+  cunningStrikeOptions?: string[];
+  targetHpAfterAttack?: number;
+  wasHiddenBeforeAttack?: boolean;
+  hitWasCritical?: boolean;
+  sourceEdition?: string;
+  weaponSlug?: string;
   scope?: "any" | "melee" | "ranged" | "str-check" | "str-save" | "dex-save";
 
   requiredTargetId?: string;
@@ -433,6 +590,39 @@ export interface EffectInstancePayload {
   riderDice?: string;
 
   riderType?: string;
+
+  areaId?: string;
+
+  turnKey?: string;
+
+  usedThisTurn?: boolean;
+
+  consumeOn?: "targeted_by_attack";
+
+  ritualGroupId?: string;
+  ritualParticipantIds?: string[];
+  ritualProgress?: number;
+  ritualLastRound?: number;
+
+  familiarParticipantId?: string;
+  familiarName?: string;
+  size?: string;
+  usesRemaining?: number;
+  usesMax?: number;
+  primalStrikeAvailable?: boolean;
+  lunarRadianceAvailable?: boolean;
+  lunarRadianceDice?: string;
+  form?: "heavenly-wings" | "inner-radiance" | "necrotic-shroud";
+  extraDamageAmount?: number;
+  targetParticipantId?: string;
+  frightenedTargetIds?: string[];
+  fearSourceTurnsRemaining?: number;
+  abjureFoesTurnChoice?: "movement" | "action" | "bonus";
+  brightLightRadiusFt?: number;
+  dimLightRadiusFt?: number;
+  radiusFeet?: number;
+  armorClassBonus?: number;
+  dexteritySaveBonus?: number;
 }
 
 

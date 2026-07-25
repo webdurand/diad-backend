@@ -60,7 +60,7 @@ const SPELL_DAMAGE_CATALOG: Record<string, SpellDamageEntry> = {
   "acid-splash": cantripScaling(1, 6, "acid"),
   "poison-spray": cantripScaling(1, 12, "poison"),
   "ray-of-frost": cantripScaling(1, 8, "cold"),
-  "chill-touch": cantripScaling(1, 8, "necrotic"),
+  "chill-touch": cantripScaling(1, 10, "necrotic"),
   thunderclap: cantripScaling(1, 6, "thunder"),
 
 
@@ -73,13 +73,13 @@ const SPELL_DAMAGE_CATALOG: Record<string, SpellDamageEntry> = {
   },
   "burning-hands": bySlotLinear(1, 3, "fire", 6, 1),
   thunderwave: bySlotLinear(1, 2, "thunder", 8, 1),
-  "witch-bolt": bySlotLinear(1, 1, "lightning", 12, 1),
+  "witch-bolt": bySlotLinear(1, 2, "lightning", 12, 1),
   "guiding-bolt": bySlotLinear(1, 4, "radiant", 6, 1),
   "inflict-wounds": bySlotLinear(1, 3, "necrotic", 10, 1),
 
 
 
-  "chromatic-orb": bySlotLinear(1, 3, "fire", 8, 1),
+  "chromatic-orb": bySlotLinear(1, 3, "acid", 8, 1),
 
 
 
@@ -132,12 +132,14 @@ const SPELL_DAMAGE_CATALOG: Record<string, SpellDamageEntry> = {
     if (slot < 8) return null;
     return { expression: "10d8", type: "fire" };
   },
+  sunburst: bySlotLinear(8, 12, "radiant", 6, 0),
 
 
   "meteor-swarm": (slot) => {
     if (slot < 9) return null;
     return { expression: "20d6+20d6", type: "fire" };
   },
+  "storm-of-vengeance": bySlotLinear(9, 2, "thunder", 6, 0),
   "power-word-kill": () => null,
 };
 

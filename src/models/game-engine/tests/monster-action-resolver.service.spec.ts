@@ -98,6 +98,117 @@ describe("MonsterActionResolver", () => {
     expect(resolved.damageType).toBe("bludgeoning");
   });
 
+  it("recognizes a restraining attack with an escape check and no damage", () => {
+    const action = {
+      name: "Web",
+      desc: "Ranged Weapon Attack: +5 to hit, range 30/60 ft., one creature. Hit: The target is restrained by webbing. As an action, the restrained target can make a DC 12 Strength check, bursting the webbing on a success.",
+      attack_bonus: 5,
+    };
+
+    const resolved = resolver.resolve(action, "Giant Spider");
+
+    expect(resolved.damageDice).toBeUndefined();
+    expect(resolved.onHitCondition).toEqual({
+      slug: "restrained",
+      saveAbility: "str",
+      saveDc: 12,
+    });
+  });
+
+  it("parses Giant Spider Bite poison as save-for-half secondary damage", () => {
+    const action = {
+      name: "Bite",
+      desc: "Melee Weapon Attack: +5 to hit, reach 5 ft., one creature. Hit: 7 (1d8 + 3) piercing damage, and the target must make a DC 11 Constitution saving throw, taking 9 (2d8) poison damage on a failed save, or half as much damage on a successful one. If the poison damage reduces the target to 0 hit points, the target is stable but poisoned for 1 hour, even after regaining hit points, and is paralyzed while poisoned in this way.",
+      attack_bonus: 5,
+      damage: [
+        {
+          damage_type: { name: "Piercing" },
+          damage_dice: "1d8+3",
+        },
+      ],
+    };
+
+    const resolved = resolver.resolve(action, "Giant Spider");
+
+    expect(resolved.damageDice).toBe("1d8+3");
+    expect(resolved.damageType).toBe("piercing");
+    expect(resolved.secondarySaveDamage).toEqual({
+      saveAbility: "con",
+      saveDc: 11,
+      damageDice: "2d8",
+      damageType: "poison",
+      halfOnSuccess: true,
+      zeroHpEffect: {
+        stable: true,
+        conditions: ["poisoned", "paralyzed"],
+        durationRounds: 600,
+      },
+    });
+  });
+
+  it("parses Ghoul Claws as a repeatable Constitution save against paralysis", () => {
+    const resolved = resolver.resolve(
+      {
+        name: "Claws",
+        desc: "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 7 (2d4 + 2) slashing damage. If the target is a creature other than an elf or undead, it must succeed on a DC 10 Constitution saving throw or be paralyzed for 1 minute. The target can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success.",
+      },
+      "Ghoul",
+    );
+
+    expect(resolved.onHitSaveCondition).toEqual({
+      slug: "paralyzed",
+      saveAbility: "con",
+      saveDc: 10,
+      durationRounds: 10,
+      repeatSaveTiming: "end_of_turn",
+      excludedCreatureTypes: ["undead"],
+      excludedRaceTerms: ["elf"],
+    });
+  });
+
+  it("parses Frightful Presence as a targeted Wisdom save condition action", () => {
+    const resolved = resolver.resolve(
+      {
+        name: "Frightful Presence",
+        desc: "Each creature of the dragon's choice that is within 120 feet of the dragon and aware of it must succeed on a DC 16 Wisdom saving throw or become frightened for 1 minute. A creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success.",
+      },
+      "Adult Black Dragon",
+    );
+
+    expect(resolved.hasAttack).toBe(false);
+    expect(resolved.range).toBe("120 ft.");
+    expect(resolved.saveConditionAction).toEqual({
+      slug: "frightened",
+      saveAbility: "wis",
+      saveDc: 16,
+      rangeFt: 120,
+      durationRounds: 10,
+      repeatSaveTiming: "end_of_turn",
+    });
+  });
+
+  it.each([
+    ["Fey Charm", "Dryad", 14],
+    ["Charm", "Succubus/Incubus", 15],
+  ])("parses %s as a charmed save action", (name, monsterName, dc) => {
+    const resolved = resolver.resolve(
+      {
+        name,
+        desc: `The ${monsterName} targets one creature it can see within 30 ft. of it. The target must succeed on a DC ${dc} Wisdom saving throw or be magically charmed for 24 hours.`,
+      },
+      monsterName,
+    );
+
+    expect(resolved.saveConditionAction).toEqual({
+      slug: "charmed",
+      saveAbility: "wis",
+      saveDc: dc,
+      rangeFt: 30,
+      durationRounds: 14400,
+      repeatSaveTiming: "never",
+    });
+  });
+
   it("resolveByName finds action case-insensitively", () => {
     const monster = {
       name: "Owlbear",

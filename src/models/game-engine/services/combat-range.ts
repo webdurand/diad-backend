@@ -31,6 +31,11 @@ export function parseRangeString(
   if (s === "") return null;
   if (s === "self") return { normal: 0 };
   if (s === "touch") return { normal: 5 };
+  if (/\bmiles?\b/.test(s)) {
+    const miles = Number.parseFloat(s.replace(",", "."));
+    if (Number.isNaN(miles)) return null;
+    return { normal: miles * 5_280 };
+  }
   if (s.includes("/")) {
     const [nStr, lStr] = s.split("/");
     const normal = parseInt(nStr.replace(/[^0-9]/g, ""), 10);

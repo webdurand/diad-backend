@@ -27,6 +27,8 @@ export interface TileEffectSnapshot {
     end?: { x: number; y: number } | null;
   };
   radiusCells: number;
+  damageDice: string;
+  damageType: string;
   durationRoundsRemaining: number | null;
   saveDc: number | null;
   saveAbility: string | null;
@@ -45,6 +47,7 @@ export interface TileEffectSnapshot {
 export interface SnapshotParticipant {
   id: string;
   type: "pc" | "monster" | "npc";
+  creatureType?: string | null;
   isCompanion?: boolean;
   companionTemplateId?: string | null;
   faction: "ally" | "enemy" | "neutral";

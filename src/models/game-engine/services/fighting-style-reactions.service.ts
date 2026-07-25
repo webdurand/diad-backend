@@ -9,6 +9,7 @@ import { EncounterService } from "./encounter.service";
 import { DiceService } from "./dice.service";
 import { EventService } from "./event.service";
 import { EffectInstanceService } from "./effect-instance.service";
+import { canTakeReactionFromConditions } from "./condition-effects.service";
 import {
   GameResult,
   GameEventData,
@@ -52,6 +53,12 @@ export class FightingStyleReactionsService {
     }
     if (fighter.reactionsUsed >= 1) {
       return failure("Reação já usada neste turno.", "NO_REACTION_AVAILABLE");
+    }
+    if (!canTakeReactionFromConditions(fighter.conditions)) {
+      return failure(
+        "A condição atual impede reactions.",
+        "CONDITION_PREVENTS_REACTION",
+      );
     }
 
 
@@ -163,6 +170,12 @@ export class FightingStyleReactionsService {
     }
     if (fighter.reactionsUsed >= 1) {
       return failure("Reação já usada neste turno.", "NO_REACTION_AVAILABLE");
+    }
+    if (!canTakeReactionFromConditions(fighter.conditions)) {
+      return failure(
+        "A condição atual impede reactions.",
+        "CONDITION_PREVENTS_REACTION",
+      );
     }
 
     const sheet = await this.sheetService.computeSheet(

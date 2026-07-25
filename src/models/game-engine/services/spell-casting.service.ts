@@ -9,6 +9,7 @@ import { CharacterSheetService } from "src/models/characters/services/character-
 import { SpellService } from "src/models/characters/services/spell.service";
 import { DiceService } from "./dice.service";
 import { SavingThrowService } from "./saving-throw.service";
+import { hasHasteDexSaveAdvantage } from "./haste-action";
 import { CombatService } from "./combat.service";
 import { EncounterService } from "./encounter.service";
 import { MonsterSpellcastingService } from "./monster-spellcasting.service";
@@ -25,7 +26,9 @@ import {
   maxTargetsFor,
   getAoeShape,
   cellInAoe,
+  cellInSelfOriginAoe,
   getPerHitDamage,
+  repeatsFirstTargetToMaximum,
 } from "./spell-targeting";
 import { parseRangeString, chebyshevDistanceFt } from "./combat-range";
 import { getSpellEffectiveRange } from "./spell-effective-range";
@@ -36,12 +39,38 @@ import {
   type TargetMetadata,
 } from "./spell-effect-catalog";
 import { getAbilityModifier } from "src/shared/srd-utils";
+import { getMonsterSavingThrowBonus } from "./monster-saving-throw";
+import { findFearCompulsion } from "./fear-compulsion";
+import {
+  abjureFoesChoiceError,
+  chooseAbjureFoesTurnOption,
+} from "./abjure-foes";
+import {
+  getBlightCreatureRules,
+  maximumDiceExpression,
+} from "./blight-rules";
+import {
+  MovementService,
+  reconcileRemainingMovement,
+} from "./movement.service";
 import { getSpellDamage } from "./spell-damage-catalog";
 import { getSpellHealing } from "./spell-healing-catalog";
-import { substituteSpellcastingMod } from "./spellcasting-mod";
+import {
+  getSpellcastingModifier,
+  substituteSpellcastingMod,
+} from "./spellcasting-mod";
 import { getSpellCondition } from "./spell-condition-catalog";
 import { ConditionLifecycleService } from "./condition-lifecycle.service";
 import { SummoningService } from "./summoning.service";
+import {
+  buildBestialSpiritStatBlock,
+  buildElementalSpiritStatBlock,
+  getSummonMetadata,
+  type FamiliarCreatureType,
+  type FamiliarForm,
+  type SummonBeastForm,
+  type SummonElementalForm,
+} from "./summon-stat-block";
 import type {
   SummonConcentrationBreakBehavior,
   SummonControlMode,
@@ -55,7 +84,51 @@ import {
 } from "./tile-effect-catalog";
 import { TransformationService } from "./transformation.service";
 import { ConcentrationService } from "./concentration.service";
+import type {
+  AttackRollResult,
+  ConditionSlug,
+} from "../interfaces/combat.interfaces";
+import {
+  chromaticOrbRollCanLeap,
+  isChromaticOrbDamageType,
+  type ChromaticOrbDamageType,
+} from "./chromatic-orb";
+import { getForcedPushDestination } from "./spell-forced-movement";
+import {
+  createWitchBoltTether,
+  findWitchBoltTether,
+  witchBoltDistanceFt,
+} from "./witch-bolt";
+import {
+  isBlindnessDeafnessChoice,
+  resolveSpellConditionSlug,
+  type BlindnessDeafnessChoice,
+} from "./spell-condition-choice";
+import { isHumanoidSpellTarget } from "./spell-target-eligibility";
+import {
+  canTakeReactionFromConditions,
+  hasDodgeDexSaveAdvantage,
+  isTargetingCharmer,
+} from "./condition-effects.service";
+import { getSpellAutomationEntry } from "./spell-automation-catalog";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import { shouldDisintegrateTarget } from "./disintegrate-rules";
+import { validateFireStormLayout } from "./fire-storm";
 
+export function concentrationSupportsSpell(
+  caster: Pick<
+    EncounterParticipantEntity,
+    "isConcentrating" | "concentratingOn"
+  >,
+  normalizedSpellSlug: string,
+): boolean {
+  return (
+    caster.isConcentrating &&
+    caster.concentratingOn
+      ?.toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "") === normalizedSpellSlug
+  );
+}
 
 
 export interface SpellCastResult {
@@ -114,12 +187,16 @@ export interface CastSpellInCombatDto {
   slotLevel: number;
   targetParticipantIds: string[];
   ownerUserId: string;
+  damageType?: ChromaticOrbDamageType;
+  conditionChoice?: BlindnessDeafnessChoice;
 
   asReaction?: boolean;
 
   triggerEventId?: string;
 
   aoeOriginCell?: TileEffectOriginCell;
+
+  aoeOriginCells?: TileEffectOriginCell[];
 
   metamagic?: {
     type:
@@ -142,17 +219,115 @@ export interface CastSpellInCombatDto {
   summonPosition?: { x: number; y: number };
 
   summonControlMode?: SummonControlMode;
+
+  summonBeastForm?: SummonBeastForm;
+
+  summonElementalForm?: SummonElementalForm;
+
+  summonFamiliarForm?: FamiliarForm;
+
+  summonFamiliarCreatureType?: FamiliarCreatureType;
+
+  deliverThroughFamiliar?: boolean;
 }
 
 export interface CombatSpellResult extends SpellCastResult {
   targetsHit: Array<{
     participantId: string;
     displayName: string;
+    attackRoll?: AttackRollResult;
+    hit?: boolean;
+    damageRolled?: number;
     damageDealt?: number;
+    resisted?: boolean;
+    immune?: boolean;
+    vulnerable?: boolean;
+    damageRolls?: number[];
+    triggeredLeap?: boolean;
     healingApplied?: number;
+    healingPrevented?: boolean;
     savedSuccessfully?: boolean;
+    conditionApplied?: {
+      instanceId: string;
+      slug: ConditionSlug;
+      durationRoundsRemaining: number;
+    };
     defeated?: boolean;
+    forcedMovement?: {
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+      distanceFt: number;
+    };
   }>;
+}
+
+export function hasVerbalSpellComponent(components: unknown): boolean {
+  if (Array.isArray(components)) {
+    return components.some((component) =>
+      ["v", "verbal"].includes(String(component).trim().toLowerCase()),
+    );
+  }
+  if (typeof components === "string") {
+    return components
+      .split(/[\s,;/]+/)
+      .some((component) =>
+        ["v", "verbal"].includes(component.trim().toLowerCase()),
+      );
+  }
+  if (components && typeof components === "object") {
+    const record = components as Record<string, unknown>;
+    return record.v === true || record.V === true || record.verbal === true;
+  }
+  return false;
+}
+
+export interface SustainedWitchBoltResult {
+  targetParticipantId: string;
+  targetName: string;
+  damageRolled: number;
+  damageDealt: number;
+  targetHpAfter: number;
+  targetDefeated: boolean;
+  ended: boolean;
+  endReason?: "out_of_range" | "target_defeated";
+}
+
+export interface SustainedCallLightningResult {
+  originCell: TileEffectOriginCell;
+  expression: string;
+  damageRolled: number;
+  targetsHit: Array<{
+    participantId: string;
+    displayName: string;
+    savedSuccessfully: boolean;
+    damageDealt: number;
+    targetHpAfter: number;
+    targetDefeated: boolean;
+  }>;
+}
+
+export interface RelocatedCloudOfDaggersResult {
+  areaId: string;
+  from: TileEffectOriginCell;
+  to: TileEffectOriginCell;
+  affectedParticipantIds: string[];
+  totalDamage: number;
+}
+
+export type RelocatedConjureAnimalsResult = RelocatedCloudOfDaggersResult;
+
+export interface RelocatedSpiritualWeaponResult {
+  areaId: string;
+  from: TileEffectOriginCell;
+  to: TileEffectOriginCell;
+  targetParticipantId?: string;
+  targetName?: string;
+  attackRoll?: AttackRollResult;
+  hit?: boolean;
+  damageRolled: number;
+  damageDealt: number;
+  targetHpAfter?: number;
+  targetDefeated?: boolean;
 }
 
 @Injectable()
@@ -179,22 +354,1049 @@ export class SpellCastingService {
     private readonly summoning: SummoningService,
     private readonly persistentArea: PersistentAreaService,
     private readonly transformation: TransformationService,
+    private readonly movementService: MovementService,
+    private readonly characterStateService: CharacterStateService,
   ) {}
+
+  async sustainWitchBolt(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+  ): Promise<GameResult<SustainedWitchBoltResult>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    }
+    if (encounter.turnOrder[encounter.currentTurnIndex] !== participantId) {
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
+    }
+
+    const caster = await this.encounterService.getParticipant(participantId);
+    if (
+      (caster.conditions ?? []).some((condition) =>
+        [
+          "incapacitated",
+          "stunned",
+          "paralyzed",
+          "petrified",
+          "unconscious",
+        ].includes(condition),
+      )
+    ) {
+      return failure(
+        "Ações bônus indisponíveis enquanto incapacitado.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    if (caster.bonusActionUsed) {
+      return failure(
+        "Bonus action ja utilizada neste turno.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    const abjureChoice = chooseAbjureFoesTurnOption(
+      caster,
+      "bonus",
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (!abjureChoice.allowed) {
+      return failure(
+        abjureFoesChoiceError(abjureChoice.currentChoice),
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+
+    const tether = findWitchBoltTether(caster);
+    if (!tether) {
+      return failure(
+        "Nenhum vínculo ativo de Witch Bolt.",
+        "INVALID_ACTION",
+      );
+    }
+    if (encounter.currentRound <= tether.createdRound) {
+      return failure(
+        "Witch Bolt só pode ser sustentado em um turno posterior à conjuração.",
+        "INVALID_ACTION",
+      );
+    }
+    const target = await this.encounterService
+      .getParticipant(tether.targetParticipantId)
+      .catch(() => null);
+
+    if (!target || target.isDefeated) {
+      const breakResult = await this.concentration.break(caster, "expired");
+      return success(
+        {
+          targetParticipantId: tether.targetParticipantId,
+          targetName: tether.targetName,
+          damageRolled: 0,
+          damageDealt: 0,
+          targetHpAfter: target?.currentHp ?? 0,
+          targetDefeated: true,
+          ended: true,
+          endReason: "target_defeated",
+        },
+        [
+          {
+            event_type: "witch_bolt_ended",
+            actor_participant_id: caster.id,
+            target_participant_id: tether.targetParticipantId,
+            data: { reason: "target_defeated" },
+          },
+          ...breakResult.events,
+        ],
+      );
+    }
+
+    const distanceFt = witchBoltDistanceFt(caster, target);
+    if (distanceFt != null && distanceFt > tether.rangeFt) {
+      const breakResult = await this.concentration.break(caster, "expired");
+      return success(
+        {
+          targetParticipantId: target.id,
+          targetName: target.displayName,
+          damageRolled: 0,
+          damageDealt: 0,
+          targetHpAfter: target.currentHp ?? 0,
+          targetDefeated: false,
+          ended: true,
+          endReason: "out_of_range",
+        },
+        [
+          {
+            event_type: "witch_bolt_ended",
+            actor_participant_id: caster.id,
+            target_participant_id: target.id,
+            data: {
+              reason: "out_of_range",
+              distanceFt,
+              rangeFt: tether.rangeFt,
+            },
+          },
+          ...breakResult.events,
+        ],
+      );
+    }
+
+    const damageRoll = this.diceService.rollExpression("1d12");
+    const damageResult = await this.combatService.applyDamage(encounterId, {
+      targetParticipantId: target.id,
+      amount: damageRoll.total,
+      damageType: "lightning",
+      ownerUserId,
+    });
+    if (!damageResult.ok) return damageResult as never;
+
+    caster.bonusActionUsed = true;
+    await this.participantRepo.update(caster.id, { bonusActionUsed: true });
+
+    const events: GameEventData[] = [
+      {
+        event_type: "witch_bolt_sustained",
+        actor_participant_id: caster.id,
+        target_participant_id: target.id,
+        data: {
+          spellSlug: "witch-bolt",
+          expression: "1d12",
+          rolled: damageRoll.total,
+          damageDealt: damageResult.value.damageApplied,
+          targetHpAfter: damageResult.value.hpAfter,
+        },
+      },
+    ];
+
+    if (damageResult.value.defeated) {
+      const freshCaster = await this.encounterService.getParticipant(caster.id);
+      if (findWitchBoltTether(freshCaster)) {
+        const breakResult = await this.concentration.break(
+          freshCaster,
+          "expired",
+        );
+        events.push(...breakResult.events);
+      }
+    }
+
+    return success(
+      {
+        targetParticipantId: target.id,
+        targetName: target.displayName,
+        damageRolled: damageRoll.total,
+        damageDealt: damageResult.value.damageApplied,
+        targetHpAfter: damageResult.value.hpAfter,
+        targetDefeated: damageResult.value.defeated,
+        ended: damageResult.value.defeated,
+        ...(damageResult.value.defeated
+          ? { endReason: "target_defeated" as const }
+          : {}),
+      },
+      events,
+    );
+  }
+
+  async sustainCallLightning(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+    originCell: TileEffectOriginCell,
+  ): Promise<GameResult<SustainedCallLightningResult>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    }
+    if (encounter.turnOrder[encounter.currentTurnIndex] !== participantId) {
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
+    }
+
+    const caster = await this.encounterService.getParticipant(participantId);
+    if (
+      (caster.conditions ?? []).some((condition) =>
+        [
+          "incapacitated",
+          "stunned",
+          "paralyzed",
+          "petrified",
+          "unconscious",
+        ].includes(condition),
+      )
+    ) {
+      return failure(
+        "Ação Mágica indisponível enquanto incapacitado.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    if (caster.actionUsed) {
+      return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
+    }
+    const abjureChoice = chooseAbjureFoesTurnOption(
+      caster,
+      "action",
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (!abjureChoice.allowed) {
+      return failure(
+        abjureFoesChoiceError(abjureChoice.currentChoice),
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+    if (
+      !caster.isConcentrating ||
+      caster.concentratingOn
+        ?.trim()
+        .toLowerCase()
+        .replace(/-(phb|xphb|srd52)$/, "") !== "call-lightning"
+    ) {
+      return failure(
+        "Nenhuma Call Lightning ativa sob sua concentração.",
+        "NO_CONCENTRATION",
+      );
+    }
+
+    const activeEffect = (caster.effectInstances ?? []).find(
+      (effect) =>
+        effect.kind === "call_lightning_active" &&
+        effect.requiresConcentration &&
+        effect.sourceCasterParticipantId === caster.id,
+    );
+    if (!activeEffect) {
+      return failure(
+        "A tempestade ativa não preservou o nível do slot.",
+        "INVALID_ACTION",
+      );
+    }
+    if (caster.positionX == null || caster.positionY == null) {
+      return failure(
+        "O conjurador precisa estar posicionado no mapa.",
+        "INVALID_ACTION",
+      );
+    }
+
+    const targetCell = {
+      x: Math.trunc(originCell.x),
+      y: Math.trunc(originCell.y),
+    };
+    const columns =
+      encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+    const rows =
+      encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+    if (
+      targetCell.x < 0 ||
+      targetCell.y < 0 ||
+      targetCell.x >= columns ||
+      targetCell.y >= rows
+    ) {
+      return failure("Ponto fora dos limites do mapa.", "INVALID_ACTION");
+    }
+    const distanceFt = chebyshevDistanceFt(
+      { x: caster.positionX, y: caster.positionY },
+      targetCell,
+    );
+    if (distanceFt > 120) {
+      return failure(
+        "O ponto do relâmpago está além de 120 pés.",
+        "OUT_OF_RANGE",
+      );
+    }
+
+    const slotLevel = Math.max(3, Number(activeEffect.payload.slotLevel ?? 3));
+    const expression =
+      activeEffect.payload.diceExpression ??
+      `${slotLevel}d10`;
+    let saveDc = Number(activeEffect.payload.saveDc ?? 0);
+    if (saveDc <= 0 && caster.characterId) {
+      const sheet = await this.sheetService.computeSheet(
+        ownerUserId,
+        caster.characterId,
+      );
+      saveDc =
+        sheet.classes.find((classBlock) => classBlock.spellSaveDc != null)
+          ?.spellSaveDc ?? 13;
+    }
+    if (saveDc <= 0) saveDc = 13;
+
+    const shape = {
+      kind: "sphere" as const,
+      radiusCells: 1,
+      sizeFt: 5,
+    };
+    const targets = (
+      await this.participantRepo.find({
+        where: { encounterId },
+        relations: ["monster"],
+      })
+    ).filter(
+      (target) =>
+        !target.isDefeated &&
+        target.positionX != null &&
+        target.positionY != null &&
+        cellInAoe(
+          { x: target.positionX, y: target.positionY },
+          targetCell,
+          shape,
+        ),
+    );
+
+    const damageRoll = this.diceService.rollExpression(expression);
+    const events: GameEventData[] = [];
+    const targetsHit: SustainedCallLightningResult["targetsHit"] = [];
+    for (const target of targets) {
+      const save = await this.rollMonsterOrPcSave(
+        target,
+        "dex",
+        saveDc,
+        ownerUserId,
+      );
+      const damageBeforeDefenses = save.success
+        ? Math.floor(damageRoll.total / 2)
+        : damageRoll.total;
+      const damageResult = await this.combatService.applyDamage(
+        encounterId,
+        {
+          targetParticipantId: target.id,
+          amount: damageBeforeDefenses,
+          damageType: "lightning",
+          ownerUserId,
+        },
+        { emitEvents: false },
+      );
+      if (!damageResult.ok) return damageResult as never;
+      events.push(...damageResult.events);
+      targetsHit.push({
+        participantId: target.id,
+        displayName: target.displayName,
+        savedSuccessfully: save.success,
+        damageDealt: damageResult.value.damageApplied,
+        targetHpAfter: damageResult.value.hpAfter,
+        targetDefeated: damageResult.value.defeated,
+      });
+      events.push({
+        event_type: "call_lightning_sustained",
+        actor_participant_id: caster.id,
+        target_participant_id: target.id,
+        data: {
+          spellSlug: "call-lightning",
+          originCell: targetCell,
+          expression,
+          rolled: damageRoll.total,
+          save: {
+            ability: "dex",
+            dc: saveDc,
+            roll: save.roll,
+            total: save.total,
+            success: save.success,
+          },
+          damageDealt: damageResult.value.damageApplied,
+          targetHpAfter: damageResult.value.hpAfter,
+        },
+      });
+    }
+
+    caster.actionUsed = true;
+    await this.participantRepo.update(caster.id, { actionUsed: true });
+    return success(
+      {
+        originCell: targetCell,
+        expression,
+        damageRolled: damageRoll.total,
+        targetsHit,
+      },
+      events,
+    );
+  }
+
+  async relocateCloudOfDaggers(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+    originCell: TileEffectOriginCell,
+  ): Promise<GameResult<RelocatedCloudOfDaggersResult>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    }
+    if (encounter.turnOrder[encounter.currentTurnIndex] !== participantId) {
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
+    }
+
+    const caster = await this.encounterService.getParticipant(participantId);
+    if (
+      (caster.conditions ?? []).some((condition) =>
+        [
+          "incapacitated",
+          "stunned",
+          "paralyzed",
+          "petrified",
+          "unconscious",
+        ].includes(condition),
+      )
+    ) {
+      return failure(
+        "Ação indisponível enquanto incapacitado.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    if (caster.actionUsed) {
+      return failure(
+        "Ação já utilizada neste turno.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    const abjureChoice = chooseAbjureFoesTurnOption(
+      caster,
+      "action",
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (!abjureChoice.allowed) {
+      return failure(
+        abjureFoesChoiceError(abjureChoice.currentChoice),
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+    if (
+      !caster.isConcentrating ||
+      caster.concentratingOn !== "cloud-of-daggers"
+    ) {
+      return failure(
+        "Nenhuma Nuvem de Adagas ativa sob sua concentração.",
+        "NO_CONCENTRATION",
+      );
+    }
+    if (caster.positionX == null || caster.positionY == null) {
+      return failure(
+        "O conjurador precisa estar posicionado no mapa.",
+        "INVALID_ACTION",
+      );
+    }
+
+    const x = Math.trunc(originCell.x);
+    const y = Math.trunc(originCell.y);
+    const columns =
+      encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+    const rows =
+      encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+    if (x < 0 || y < 0 || x >= columns || y >= rows) {
+      return failure(
+        "Destino fora dos limites do mapa.",
+        "POSITION_OUT_OF_BOUNDS",
+      );
+    }
+    const distanceFt = chebyshevDistanceFt(
+      { x: caster.positionX, y: caster.positionY },
+      { x, y },
+    );
+    if (distanceFt > 30) {
+      return failure(
+        `O novo espaço está a ${distanceFt} pés; o limite é 30 pés.`,
+        "OUT_OF_RANGE",
+      );
+    }
+
+    const areas = await this.persistentArea.listByEncounter(encounterId);
+    const area = areas.find(
+      (candidate) =>
+        candidate.casterParticipantId === participantId &&
+        candidate.sourceSpell === "cloud-of-daggers",
+    );
+    if (!area) {
+      return failure(
+        "A área da Nuvem de Adagas não foi encontrada.",
+        "PERSISTENT_AREA_NOT_FOUND",
+      );
+    }
+
+    const from = area.originCell;
+    const to: TileEffectOriginCell = { x, y };
+    await this.persistentArea.relocate(area, to);
+    caster.actionUsed = true;
+    await this.participantRepo.save(caster);
+
+    const participants = await this.participantRepo.find({
+      where: { encounterId, isDefeated: false },
+    });
+    const inArea = participants.filter(
+      (participant) =>
+        participant.positionX != null &&
+        participant.positionY != null &&
+        this.persistentArea.cellInArea(
+          participant.positionX,
+          participant.positionY,
+          area,
+        ),
+    );
+    const triggerResult = await this.persistentArea.resolveOnCast(
+      area,
+      inArea,
+      async () => ({ modifier: 0 }),
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (inArea.length > 0) {
+      await this.participantRepo.save(inArea);
+    }
+    const movedEvents = triggerResult.events.map((event) =>
+      event.event_type === "tile_effect_damage_applied"
+        ? {
+            ...event,
+            data: {
+              ...event.data,
+              triggerKind: "on-area-moved-into",
+            },
+          }
+        : event,
+    );
+    const hpEvents = await this.combatService.applyPersistentAreaDamageEvents(
+      encounterId,
+      movedEvents,
+      ownerUserId,
+    );
+    const events: GameEventData[] = [
+      {
+        event_type: "tile_effect_relocated",
+        actor_participant_id: caster.id,
+        data: {
+          areaId: area.id,
+          sourceSpell: area.sourceSpell,
+          effectKind: area.effectKind,
+          from,
+          to,
+          rangeFt: 30,
+          affectedParticipantIds: inArea.map((participant) => participant.id),
+        },
+      },
+      ...movedEvents,
+      ...hpEvents,
+    ];
+
+    return success(
+      {
+        areaId: area.id,
+        from,
+        to,
+        affectedParticipantIds: inArea.map((participant) => participant.id),
+        totalDamage: movedEvents.reduce(
+          (sum, event) =>
+            sum +
+            (event.event_type === "tile_effect_damage_applied"
+              ? Number(event.data?.finalDamage ?? event.data?.amount ?? 0)
+              : 0),
+          0,
+        ),
+      },
+      events,
+    );
+  }
+
+  async relocateConjureAnimals(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+    originCell: TileEffectOriginCell,
+  ): Promise<GameResult<RelocatedConjureAnimalsResult>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    }
+    if (encounter.turnOrder[encounter.currentTurnIndex] !== participantId) {
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
+    }
+
+    const caster = await this.encounterService.getParticipant(participantId);
+    if (
+      (caster.conditions ?? []).some((condition) =>
+        [
+          "incapacitated",
+          "stunned",
+          "paralyzed",
+          "petrified",
+          "unconscious",
+        ].includes(condition),
+      )
+    ) {
+      return failure(
+        "Movimento da matilha indisponível enquanto incapacitado.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    const normalizedConcentration = caster.concentratingOn
+      ?.trim()
+      .toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "");
+    if (
+      !caster.isConcentrating ||
+      normalizedConcentration !== "conjure-animals"
+    ) {
+      return failure(
+        "Nenhuma matilha de Conjure Animals ativa sob sua concentração.",
+        "NO_CONCENTRATION",
+      );
+    }
+
+    const baseMovement = await this.movementService.getBaseSpeed(
+      caster,
+      ownerUserId,
+    );
+    if ((caster.movementRemaining ?? baseMovement) >= baseMovement) {
+      return failure(
+        "Mova o conjurador antes de mover a matilha espiritual.",
+        "MOVEMENT_REQUIRED",
+      );
+    }
+
+    const areas = await this.persistentArea.listByEncounter(encounterId);
+    const area = areas.find(
+      (candidate) =>
+        candidate.casterParticipantId === participantId &&
+        candidate.sourceSpell === "conjure-animals",
+    );
+    if (!area) {
+      return failure(
+        "A área de Conjure Animals não foi encontrada.",
+        "PERSISTENT_AREA_NOT_FOUND",
+      );
+    }
+
+    const turnKey = `${encounter.currentRound}:${encounter.currentTurnIndex}`;
+    if (area.tacticalMetadata?.relocatedTurnKey === turnKey) {
+      return failure(
+        "A matilha espiritual já foi movida neste turno.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+
+    const x = Math.trunc(originCell.x);
+    const y = Math.trunc(originCell.y);
+    const columns =
+      encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+    const rows =
+      encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+    if (x < 0 || y < 0 || x + 1 >= columns || y + 1 >= rows) {
+      return failure(
+        "A matilha Grande precisa caber em um espaço desocupado do mapa.",
+        "POSITION_OUT_OF_BOUNDS",
+      );
+    }
+
+    const distanceFt = chebyshevDistanceFt(area.originCell, { x, y });
+    if (distanceFt > 30) {
+      return failure(
+        `A matilha se moveria ${distanceFt} pés; o limite é 30 pés.`,
+        "OUT_OF_RANGE",
+      );
+    }
+
+    const participants = await this.participantRepo.find({
+      where: { encounterId, isDefeated: false },
+    });
+    const largeFootprint = new Set([
+      `${x},${y}`,
+      `${x + 1},${y}`,
+      `${x},${y + 1}`,
+      `${x + 1},${y + 1}`,
+    ]);
+    if (
+      participants.some(
+        (participant) =>
+          participant.positionX != null &&
+          participant.positionY != null &&
+          largeFootprint.has(
+            `${participant.positionX},${participant.positionY}`,
+          ),
+      )
+    ) {
+      return failure(
+        "Escolha um espaço desocupado para a matilha Grande.",
+        "POSITION_OCCUPIED",
+      );
+    }
+
+    const from = { ...area.originCell };
+    const to: TileEffectOriginCell = { x, y };
+    area.tacticalMetadata = {
+      ...(area.tacticalMetadata ?? {
+        tags: [],
+        tacticalValue: 0,
+        beneficiaryFaction: "caster",
+      }),
+      relocatedTurnKey: turnKey,
+    };
+    await this.persistentArea.relocate(area, to);
+
+    const triggerResult = await this.persistentArea.resolveAreaMovedInto(
+      area,
+      participants,
+      from,
+      async (ability, target) => ({
+        modifier: target
+          ? await this.getTargetSaveModifier(target, ability, ownerUserId)
+          : 0,
+      }),
+      turnKey,
+    );
+    if (participants.length > 0) {
+      await this.participantRepo.save(participants);
+    }
+    const hpEvents = await this.combatService.applyPersistentAreaDamageEvents(
+      encounterId,
+      triggerResult.events,
+      ownerUserId,
+    );
+    const affectedParticipantIds = [
+      ...new Set(
+        triggerResult.events
+          .filter(
+            (event) => event.event_type === "tile_effect_damage_applied",
+          )
+          .map((event) => event.target_participant_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const events: GameEventData[] = [
+      {
+        event_type: "tile_effect_relocated",
+        actor_participant_id: caster.id,
+        data: {
+          areaId: area.id,
+          sourceSpell: area.sourceSpell,
+          effectKind: area.effectKind,
+          from,
+          to,
+          rangeFt: 30,
+          movementRequired: true,
+          affectedParticipantIds,
+        },
+      },
+      ...triggerResult.events,
+      ...hpEvents,
+    ];
+
+    return success(
+      {
+        areaId: area.id,
+        from,
+        to,
+        affectedParticipantIds,
+        totalDamage: triggerResult.totalDamage,
+      },
+      events,
+    );
+  }
+
+  async relocateSpiritualWeapon(
+    encounterId: string,
+    participantId: string,
+    ownerUserId: string,
+    originCell: TileEffectOriginCell,
+    targetParticipantId?: string,
+  ): Promise<GameResult<RelocatedSpiritualWeaponResult>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    }
+    if (encounter.turnOrder[encounter.currentTurnIndex] !== participantId) {
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
+    }
+
+    const caster = await this.encounterService.getParticipant(participantId);
+    if (
+      (caster.conditions ?? []).some((condition) =>
+        [
+          "incapacitated",
+          "stunned",
+          "paralyzed",
+          "petrified",
+          "unconscious",
+        ].includes(condition),
+      )
+    ) {
+      return failure(
+        "Ações bônus indisponíveis enquanto incapacitado.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    if (caster.bonusActionUsed) {
+      return failure(
+        "Bonus action ja utilizada neste turno.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    const abjureChoice = chooseAbjureFoesTurnOption(
+      caster,
+      "bonus",
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (!abjureChoice.allowed) {
+      return failure(
+        abjureFoesChoiceError(abjureChoice.currentChoice),
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+
+    const areas = await this.persistentArea.listByEncounter(encounterId);
+    const area = areas.find(
+      (candidate) =>
+        candidate.casterParticipantId === participantId &&
+        candidate.sourceSpell
+          .toLowerCase()
+          .replace(/-(phb|xphb|srd52)$/, "") === "spiritual-weapon",
+    );
+    if (!area) {
+      return failure(
+        "Nenhuma Spiritual Weapon ativa foi encontrada.",
+        "PERSISTENT_AREA_NOT_FOUND",
+      );
+    }
+
+    const x = Math.trunc(originCell.x);
+    const y = Math.trunc(originCell.y);
+    const columns =
+      encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+    const rows =
+      encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+    if (x < 0 || y < 0 || x >= columns || y >= rows) {
+      return failure(
+        "Escolha um espaço dentro do mapa.",
+        "POSITION_OUT_OF_BOUNDS",
+      );
+    }
+    const to: TileEffectOriginCell = { x, y };
+    const distanceFt = chebyshevDistanceFt(area.originCell, to);
+    if (distanceFt > 20) {
+      return failure(
+        `A arma se moveria ${distanceFt} pés; o limite é 20 pés.`,
+        "OUT_OF_RANGE",
+      );
+    }
+
+    const participants = await this.participantRepo.find({
+      where: { encounterId, isDefeated: false },
+      relations: ["monster"],
+    });
+    if (
+      participants.some(
+        (participant) =>
+          participant.positionX === x && participant.positionY === y,
+      )
+    ) {
+      return failure(
+        "Escolha um espaço desocupado para a arma espectral.",
+        "POSITION_OCCUPIED",
+      );
+    }
+
+    const target = targetParticipantId
+      ? participants.find((participant) => participant.id === targetParticipantId)
+      : undefined;
+    if (targetParticipantId && !target) {
+      return failure("Alvo inválido ou derrotado.", "INVALID_TARGET");
+    }
+    if (
+      target &&
+      (target.positionX == null ||
+        target.positionY == null ||
+        chebyshevDistanceFt(to, {
+          x: target.positionX,
+          y: target.positionY,
+        }) > 5)
+    ) {
+      return failure(
+        "O alvo precisa estar a até 5 pés da Spiritual Weapon.",
+        "SPELL_OUT_OF_RANGE",
+      );
+    }
+
+    const sheet = await this.sheetService.computeSheet(
+      ownerUserId,
+      caster.characterId!,
+    );
+    const spellAttackBonus =
+      sheet.classes.find((classBlock) => classBlock.spellAttackBonus != null)
+        ?.spellAttackBonus ?? 0;
+    const from = { ...area.originCell };
+    await this.persistentArea.relocate(area, to);
+    // Keep the in-memory entity aligned with the atomic DB update. The spell
+    // attack resolver persists this same entity after consuming one-shot
+    // effects; leaving it stale would write bonusActionUsed=false back.
+    caster.bonusActionUsed = true;
+    await this.participantRepo.update(caster.id, { bonusActionUsed: true });
+
+    const events: GameEventData[] = [
+      {
+        event_type: "spiritual_weapon_moved",
+        actor_participant_id: caster.id,
+        target_participant_id: target?.id,
+        data: {
+          areaId: area.id,
+          sourceSpell: "spiritual-weapon",
+          from,
+          to,
+          distanceFt,
+          targetParticipantId: target?.id,
+        },
+      },
+    ];
+
+    if (!target) {
+      return success(
+        {
+          areaId: area.id,
+          from,
+          to,
+          damageRolled: 0,
+          damageDealt: 0,
+        },
+        events,
+      );
+    }
+
+    const resolution = await this.combatService.resolveSpellAttackRoll(
+      caster,
+      target,
+      {
+        attackBonus: spellAttackBonus,
+        actionName: "Spiritual Weapon",
+        isMelee: true,
+        ownerUserId,
+      },
+    );
+    events.push(...resolution.events);
+    if (!resolution.attackRoll.hit) {
+      events.push({
+        event_type: "spiritual_weapon_attack",
+        actor_participant_id: caster.id,
+        target_participant_id: target.id,
+        data: {
+          areaId: area.id,
+          expression: area.damageDice,
+          attackRoll: resolution.attackRoll,
+          hit: false,
+          damageRolled: 0,
+          damageDealt: 0,
+        },
+      });
+      return success(
+        {
+          areaId: area.id,
+          from,
+          to,
+          targetParticipantId: target.id,
+          targetName: target.displayName,
+          attackRoll: resolution.attackRoll,
+          hit: false,
+          damageRolled: 0,
+          damageDealt: 0,
+          targetHpAfter: target.currentHp,
+          targetDefeated: target.isDefeated,
+        },
+        events,
+      );
+    }
+
+    const expression =
+      area.damageDice ||
+      `${1 + Math.floor(Math.max(0, (area.slotLevel ?? 2) - 2) / 2)}d8 + ${getSpellcastingModifier(sheet)}`;
+    const damageRoll = this.diceService.rollExpression(expression);
+    const damageResult = await this.combatService.applyDamage(encounterId, {
+      targetParticipantId: target.id,
+      amount: damageRoll.total,
+      damageType: "force",
+      ownerUserId,
+    });
+    if (!damageResult.ok) return damageResult as never;
+
+    events.push({
+      event_type: "spiritual_weapon_attack",
+      actor_participant_id: caster.id,
+      target_participant_id: target.id,
+      data: {
+        areaId: area.id,
+        expression,
+        attackRoll: resolution.attackRoll,
+        hit: true,
+        damageRolled: damageRoll.total,
+        damageDealt: damageResult.value.damageApplied,
+        targetHpAfter: damageResult.value.hpAfter,
+        targetDefeated: damageResult.value.defeated,
+      },
+    });
+
+    return success(
+      {
+        areaId: area.id,
+        from,
+        to,
+        targetParticipantId: target.id,
+        targetName: target.displayName,
+        attackRoll: resolution.attackRoll,
+        hit: true,
+        damageRolled: damageRoll.total,
+        damageDealt: damageResult.value.damageApplied,
+        targetHpAfter: damageResult.value.hpAfter,
+        targetDefeated: damageResult.value.defeated,
+      },
+      events,
+    );
+  }
 
 
   private getSummonMonsterForSpell(
     spellSlug: string,
     slotLevel: number,
   ): string | null {
-    const map: Record<string, Record<number, string>> = {
-      "summon-beast": { 2: "wolf", 3: "wolf", 4: "panther", 5: "brown-bear" },
-      "conjure-animals": { 3: "wolf", 4: "wolf", 5: "brown-bear" },
-      "conjure-woodland-beings": { 4: "giant-spider" },
-      "conjure-elemental": { 5: "fire-elemental" },
-      "summon-elemental": { 4: "air-elemental" },
-      "find-familiar": { 1: "giant-owl" },
-      "spiritual-weapon": { 2: "giant-badger" },
-    };
+    if (spellSlug.replace(/-(phb|xphb|srd52)$/, "") === "summon-beast") {
+      return "bestial-spirit";
+    }
+    if (spellSlug.replace(/-(phb|xphb|srd52)$/, "") === "summon-elemental") {
+      return "elemental-spirit";
+    }
+    const map: Record<string, Record<number, string>> = {};
     return (
       map[spellSlug]?.[slotLevel] ??
       map[spellSlug]?.[
@@ -210,11 +1412,9 @@ export class SpellCastingService {
     const sourceBySpell: Record<string, SummonSource> = {
       "find-familiar": "find-familiar-spell",
       "conjure-animals": "conjure-animals-spell",
-      "conjure-woodland-beings": "conjure-woodland-beings-spell",
       "conjure-elemental": "summon-elemental-spell",
       "summon-elemental": "summon-elemental-spell",
       "summon-beast": "summon-beast-spell",
-      "spiritual-weapon": "spiritual-weapon-spell",
     };
     return sourceBySpell[spellSlug] ?? "summon-beast-spell";
   }
@@ -222,7 +1422,7 @@ export class SpellCastingService {
   private getSummonConcentrationBreakBehavior(
     spellSlug: string,
   ): SummonConcentrationBreakBehavior {
-    return spellSlug === "conjure-elemental" ? "turn-hostile" : "dismiss";
+    return "dismiss";
   }
 
   async castSpell(dto: CastSpellDto): Promise<GameResult<SpellCastResult>> {
@@ -315,7 +1515,10 @@ export class SpellCastingService {
 
 
     let previousConcentration: string | undefined;
-    const isConcentration = spell.concentration ?? false;
+    const spellAutomation = getSpellAutomationEntry(spell.slug);
+    const isConcentration =
+      (spell.concentration ?? false) &&
+      !spellAutomation?.automationTags.includes("no_concentration");
 
 
 
@@ -335,11 +1538,16 @@ export class SpellCastingService {
 
 
 
-    const catalogDmg = getSpellDamage(
-      spell.slug,
-      dto.slotLevel,
-      sheet.totalLevel,
-    );
+    const normalizedSpellSlug = spell.slug
+      .toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "");
+    const catalogDmg =
+      normalizedSpellSlug === "spiritual-weapon"
+        ? {
+            expression: `${1 + Math.floor(Math.max(0, dto.slotLevel - 2) / 2)}d8 + ${getSpellcastingModifier(sheet)}`,
+            type: "force",
+          }
+        : getSpellDamage(spell.slug, dto.slotLevel, sheet.totalLevel);
     if (catalogDmg) {
       const rollResult = this.diceService.rollExpression(catalogDmg.expression);
       result.damage = {
@@ -371,11 +1579,15 @@ export class SpellCastingService {
           .sort((a, b) => b - a);
         return validKeys.length > 0 ? map[String(validKeys[0])] : null;
       })();
-      const expression =
+      const expressionTemplate =
         damageInfo?.damage_at_slot_level?.[slotKey] ??
         cantripScalingExpr ??
         damageInfo?.base ??
         null;
+      const expression =
+        typeof expressionTemplate === "string"
+          ? substituteSpellcastingMod(expressionTemplate, sheet)
+          : null;
 
       if (expression) {
         const rollResult = this.diceService.rollExpression(expression);
@@ -488,10 +1700,17 @@ export class SpellCastingService {
     const participant = await this.encounterService.getParticipant(
       dto.participantId,
     );
+    if (!dto.asReaction && findFearCompulsion(participant)) {
+      return failure(
+        "Fear obriga esta criatura a usar Disparada e fugir.",
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
     if (participant.type === "monster") {
       return this.castMonsterSpellInCombat(
         { ...dto, targetParticipantIds: requestedTargetIds },
         participant,
+        encounter,
       );
     }
     if (!participant.characterId)
@@ -519,6 +1738,156 @@ export class SpellCastingService {
     const spellData =
       spell ??
       (await this.spellRepo.findOne({ where: { slug: dto.spellSlug } }))!;
+    let touchDeliveryFamiliar: EncounterParticipantEntity | null = null;
+    if (dto.deliverThroughFamiliar) {
+      if ((spellData.range ?? "").trim().toLowerCase() !== "touch") {
+        return failure(
+          "O familiar só pode entregar magias com alcance Toque.",
+          "INVALID_ACTION",
+        );
+      }
+      const familiar = await this.summoning.getFindFamiliarOf(participant.id);
+      const familiarMetadata = getSummonMetadata(familiar);
+      if (
+        !familiar ||
+        familiar.encounterId !== dto.encounterId ||
+        familiar.isDefeated ||
+        !familiar.isVisible ||
+        familiarMetadata?.pocketed === true
+      ) {
+        return failure(
+          "O familiar precisa estar presente para entregar a magia.",
+          "INVALID_ACTION",
+        );
+      }
+      if ((familiar.reactionsUsed ?? 0) >= 1) {
+        return failure(
+          "O familiar já usou a reação nesta rodada.",
+          "NO_REACTION_AVAILABLE",
+        );
+      }
+      if (
+        participant.positionX == null ||
+        participant.positionY == null ||
+        familiar.positionX == null ||
+        familiar.positionY == null
+      ) {
+        return failure(
+          "Conjurador e familiar precisam estar posicionados no mapa.",
+          "INVALID_ACTION",
+        );
+      }
+      const familiarDistanceFt = chebyshevDistanceFt(
+        { x: participant.positionX, y: participant.positionY },
+        { x: familiar.positionX, y: familiar.positionY },
+      );
+      if (familiarDistanceFt > 100) {
+        return failure(
+          `O familiar está fora do vínculo telepático (${familiarDistanceFt}ft > 100ft).`,
+          "SPELL_OUT_OF_RANGE",
+        );
+      }
+      touchDeliveryFamiliar = familiar;
+    }
+    const normalizedSpellSlug = dto.spellSlug
+      .toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "");
+    const tileEffectDefinition = getTileEffectDefinition(normalizedSpellSlug);
+    const delegatesInitialDamageToTileEffect =
+      tileEffectDefinition?.triggers.some(
+        (trigger) => trigger.kind === "on-cast" && Boolean(trigger.damage),
+      ) === true;
+    const isChromaticOrb = normalizedSpellSlug === "chromatic-orb";
+    const isChainLightning = normalizedSpellSlug === "chain-lightning";
+    if (isChromaticOrb && !isChromaticOrbDamageType(dto.damageType)) {
+      return failure(
+        "Chromatic Orb exige escolher Acid, Cold, Fire, Lightning, Poison ou Thunder.",
+        "INVALID_ACTION",
+      );
+    }
+    const conjureElementalDamageTypes = [
+      "cold",
+      "fire",
+      "lightning",
+      "thunder",
+    ] as const;
+    if (
+      normalizedSpellSlug === "conjure-elemental" &&
+      !conjureElementalDamageTypes.includes(
+        dto.damageType as (typeof conjureElementalDamageTypes)[number],
+      )
+    ) {
+      return failure(
+        "Conjure Elemental exige escolher ar (lightning), terra (thunder), fogo (fire) ou água (cold).",
+        "INVALID_ACTION",
+      );
+    }
+    if (
+      normalizedSpellSlug === "summon-beast" &&
+      !["air", "land", "water"].includes(dto.summonBeastForm ?? "")
+    ) {
+      return failure(
+        "Summon Beast exige escolher Espírito Bestial do Ar, Terra ou Água.",
+        "INVALID_ACTION",
+      );
+    }
+    if (
+      normalizedSpellSlug === "summon-elemental" &&
+      !["air", "earth", "fire", "water"].includes(
+        dto.summonElementalForm ?? "",
+      )
+    ) {
+      return failure(
+        "Summon Elemental exige escolher Espírito Elemental do Ar, Terra, Fogo ou Água.",
+        "INVALID_ACTION",
+      );
+    }
+    const familiarForms: FamiliarForm[] = [
+      "bat",
+      "cat",
+      "crab",
+      "frog",
+      "hawk",
+      "lizard",
+      "octopus",
+      "owl",
+      "poisonous-snake",
+      "quipper",
+      "rat",
+      "raven",
+      "sea-horse",
+      "spider",
+      "weasel",
+    ];
+    if (
+      normalizedSpellSlug === "find-familiar" &&
+      !familiarForms.includes(dto.summonFamiliarForm as FamiliarForm)
+    ) {
+      return failure(
+        "Find Familiar exige escolher uma das quinze formas de familiar.",
+        "INVALID_ACTION",
+      );
+    }
+    if (
+      normalizedSpellSlug === "find-familiar" &&
+      !["celestial", "fey", "fiend"].includes(
+        dto.summonFamiliarCreatureType ?? "",
+      )
+    ) {
+      return failure(
+        "Find Familiar exige escolher Celestial, Feérico ou Corruptor.",
+        "INVALID_ACTION",
+      );
+    }
+    if (
+      normalizedSpellSlug === "blindness-deafness" &&
+      !isBlindnessDeafnessChoice(dto.conditionChoice)
+    ) {
+      return failure(
+        "Blindness/Deafness exige escolher Blinded ou Deafened.",
+        "INVALID_ACTION",
+      );
+    }
 
 
 
@@ -531,6 +1900,31 @@ export class SpellCastingService {
 
 
     let effectiveOriginCell = dto.aoeOriginCell;
+    let effectiveAoeOriginCells: TileEffectOriginCell[] = [];
+    if (normalizedSpellSlug === "fire-storm") {
+      const rawOrigins =
+        dto.aoeOriginCells?.length
+          ? dto.aoeOriginCells
+          : dto.aoeOriginCell
+            ? [dto.aoeOriginCell]
+            : [];
+      const columns =
+        encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+      const rows =
+        encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+      const layout = validateFireStormLayout(rawOrigins, {
+        columns,
+        rows,
+        caster:
+          participant.positionX != null && participant.positionY != null
+            ? { x: participant.positionX, y: participant.positionY }
+            : null,
+      });
+      if (!layout.ok) return failure(layout.message, layout.code);
+      effectiveAoeOriginCells = layout.origins;
+      effectiveOriginCell = effectiveAoeOriginCells[0];
+      effectiveTargetIds = [];
+    }
     if (
       aoeShape &&
       !effectiveOriginCell &&
@@ -545,7 +1939,183 @@ export class SpellCastingService {
       };
     }
 
-    if (aoeShape && effectiveOriginCell && effectiveTargetIds.length === 0) {
+    if (
+      normalizedSpellSlug === "conjure-animals" &&
+      effectiveOriginCell
+    ) {
+      const x = Math.trunc(effectiveOriginCell.x);
+      const y = Math.trunc(effectiveOriginCell.y);
+      const columns =
+        encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+      const rows =
+        encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+      if (x < 0 || y < 0 || x + 1 >= columns || y + 1 >= rows) {
+        return failure(
+          "A matilha Grande precisa caber em um espaço do mapa.",
+          "POSITION_OUT_OF_BOUNDS",
+        );
+      }
+      const largeFootprint = new Set([
+        `${x},${y}`,
+        `${x + 1},${y}`,
+        `${x},${y + 1}`,
+        `${x + 1},${y + 1}`,
+      ]);
+      const occupants = await this.participantRepo.find({
+        where: { encounterId: dto.encounterId, isDefeated: false },
+      });
+      if (
+        occupants.some(
+          (occupant) =>
+            occupant.positionX != null &&
+            occupant.positionY != null &&
+            largeFootprint.has(
+              `${occupant.positionX},${occupant.positionY}`,
+            ),
+        )
+      ) {
+        return failure(
+          "Conjure Animals exige um espaço desocupado para a matilha Grande.",
+          "POSITION_OCCUPIED",
+        );
+      }
+    }
+    if (
+      normalizedSpellSlug === "conjure-elemental" &&
+      effectiveOriginCell
+    ) {
+      const x = Math.trunc(effectiveOriginCell.x);
+      const y = Math.trunc(effectiveOriginCell.y);
+      const columns =
+        encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+      const rows =
+        encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+      if (
+        x - 1 < 0 ||
+        y - 1 < 0 ||
+        x + 2 >= columns ||
+        y + 2 >= rows
+      ) {
+        return failure(
+          "O espírito elemental e seu perímetro de 5 pés precisam caber no mapa.",
+          "POSITION_OUT_OF_BOUNDS",
+        );
+      }
+      const largeFootprint = new Set([
+        `${x},${y}`,
+        `${x + 1},${y}`,
+        `${x},${y + 1}`,
+        `${x + 1},${y + 1}`,
+      ]);
+      const occupants = await this.participantRepo.find({
+        where: { encounterId: dto.encounterId, isDefeated: false },
+      });
+      if (
+        occupants.some(
+          (occupant) =>
+            occupant.positionX != null &&
+            occupant.positionY != null &&
+            largeFootprint.has(
+              `${occupant.positionX},${occupant.positionY}`,
+            ),
+        )
+      ) {
+        return failure(
+          "Conjure Elemental exige um espaço desocupado para o espírito Large.",
+          "POSITION_OCCUPIED",
+        );
+      }
+    }
+    if (normalizedSpellSlug === "spiritual-weapon") {
+      if (!effectiveOriginCell) {
+        return failure(
+          "Escolha um espaço para a Spiritual Weapon.",
+          "INVALID_ACTION",
+        );
+      }
+      if (effectiveTargetIds.length > 1) {
+        return failure(
+          "Spiritual Weapon pode atacar no máximo uma criatura.",
+          "INVALID_ACTION",
+        );
+      }
+      const x = Math.trunc(effectiveOriginCell.x);
+      const y = Math.trunc(effectiveOriginCell.y);
+      effectiveOriginCell = { x, y };
+      const columns =
+        encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+      const rows =
+        encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+      if (x < 0 || y < 0 || x >= columns || y >= rows) {
+        return failure(
+          "Escolha um espaço dentro do mapa.",
+          "POSITION_OUT_OF_BOUNDS",
+        );
+      }
+      const occupants = await this.participantRepo.find({
+        where: { encounterId: dto.encounterId, isDefeated: false },
+      });
+      if (
+        occupants.some(
+          (occupant) =>
+            occupant.positionX === x && occupant.positionY === y,
+        )
+      ) {
+        return failure(
+          "Escolha um espaço desocupado para a arma espectral.",
+          "POSITION_OCCUPIED",
+        );
+      }
+      if (effectiveTargetIds.length === 1) {
+        const target = occupants.find(
+          (occupant) => occupant.id === effectiveTargetIds[0],
+        );
+        if (
+          !target ||
+          target.positionX == null ||
+          target.positionY == null ||
+          chebyshevDistanceFt(effectiveOriginCell, {
+            x: target.positionX,
+            y: target.positionY,
+          }) > 5
+        ) {
+          return failure(
+            "O alvo precisa estar a até 5 pés da Spiritual Weapon.",
+            "SPELL_OUT_OF_RANGE",
+          );
+        }
+      }
+    }
+
+    if (
+      normalizedSpellSlug === "fire-storm" &&
+      aoeShape &&
+      effectiveAoeOriginCells.length > 0
+    ) {
+      const allParticipants = await this.participantRepo.find({
+        where: { encounterId: dto.encounterId },
+      });
+      effectiveTargetIds = allParticipants
+        .filter((target) => !target.isDefeated)
+        .filter((target) => !(target.conditions ?? []).includes("banished"))
+        .filter(
+          (target) =>
+            target.positionX != null &&
+            target.positionY != null &&
+            effectiveAoeOriginCells.some((origin) =>
+              cellInAoe(
+                { x: target.positionX!, y: target.positionY! },
+                origin,
+                aoeShape,
+              ),
+            ),
+        )
+        .map((target) => target.id);
+    } else if (
+      aoeShape &&
+      effectiveOriginCell &&
+      effectiveTargetIds.length === 0
+    ) {
       const allParticipants = await this.participantRepo.find({
         where: { encounterId: dto.encounterId },
       });
@@ -560,12 +2130,13 @@ export class SpellCastingService {
 
       effectiveTargetIds = allParticipants
         .filter((p) => !p.isDefeated)
+        .filter((p) => !(p.conditions ?? []).includes("banished"))
         .filter((p) => !(isSelfRangeSpell && p.id === participant.id))
         .filter(
           (p) =>
             p.positionX != null &&
             p.positionY != null &&
-            cellInAoe(
+            (isSelfRangeSpell ? cellInSelfOriginAoe : cellInAoe)(
               { x: p.positionX, y: p.positionY },
               effectiveOriginCell,
               aoeShape,
@@ -574,13 +2145,45 @@ export class SpellCastingService {
         .map((p) => p.id);
     }
 
+    if (normalizedSpellSlug === "hold-person") {
+      for (const targetId of effectiveTargetIds) {
+        const target = await this.encounterService
+          .getParticipant(targetId)
+          .catch(() => null);
+        if (!target || !isHumanoidSpellTarget(target)) {
+          return failure(
+            "Hold Person só pode afetar uma criatura Humanoide.",
+            GameErrorCode.INVALID_TARGET,
+          );
+        }
+      }
+    }
+
 
 
 
 
 
     const targetCount = effectiveTargetIds.length;
-    if (targetCount > 1 && !isAoeSpell(spellData)) {
+    const requiresDistinctTargets =
+      isChromaticOrb ||
+      isChainLightning ||
+      normalizedSpellSlug === "aid" ||
+      normalizedSpellSlug === "bless";
+    if (
+      requiresDistinctTargets &&
+      new Set(effectiveTargetIds).size !== effectiveTargetIds.length
+    ) {
+      return failure(
+        `${spellData.name} não pode selecionar a mesma criatura mais de uma vez.`,
+        "INVALID_ACTION",
+      );
+    }
+    if (
+      targetCount > 1 &&
+      !isAoeSpell(spellData) &&
+      !tileEffectDefinition
+    ) {
       let casterLevel = 0;
       if (isMultiTargetNonAoeSpell(spellData)) {
         const sheet = await this.sheetService.computeSheet(
@@ -600,7 +2203,11 @@ export class SpellCastingService {
 
 
 
-    if (effectiveTargetIds.length >= 1 && isMultiTargetNonAoeSpell(spellData)) {
+    if (
+      effectiveTargetIds.length >= 1 &&
+      isMultiTargetNonAoeSpell(spellData) &&
+      repeatsFirstTargetToMaximum(spellData)
+    ) {
       const sheet = await this.sheetService.computeSheet(
         dto.ownerUserId,
         participant.characterId,
@@ -616,6 +2223,23 @@ export class SpellCastingService {
           effectiveTargetIds.push(firstTarget);
         }
       }
+    }
+
+    const automationBehavior =
+      getSpellAutomationEntry(normalizedSpellSlug)?.behaviorKind;
+    const isHarmfulSpell =
+      automationBehavior != null &&
+      !["healing", "buff", "summon"].includes(automationBehavior);
+    if (
+      isHarmfulSpell &&
+      effectiveTargetIds.some((targetId) =>
+        isTargetingCharmer(participant.conditionInstances, targetId),
+      )
+    ) {
+      return failure(
+        "Enfeitiçado: não pode usar efeitos nocivos contra quem aplicou a condição.",
+        "CONDITION_PREVENTS_ACTION",
+      );
     }
 
 
@@ -659,13 +2283,22 @@ export class SpellCastingService {
         ? { normal: effectiveRange.attackRangeFt }
         : parseRangeString(spellData.range);
     if (parsedRange && parsedRange.normal > 0) {
+      const rangeOriginParticipant = touchDeliveryFamiliar ?? participant;
       const casterPos =
-        participant.positionX != null && participant.positionY != null
-          ? { x: participant.positionX, y: participant.positionY }
+        rangeOriginParticipant.positionX != null &&
+        rangeOriginParticipant.positionY != null
+          ? {
+              x: rangeOriginParticipant.positionX,
+              y: rangeOriginParticipant.positionY,
+            }
           : null;
 
 
-      if (aoeShape && effectiveOriginCell && casterPos) {
+      if (
+        (aoeShape || tileEffectDefinition) &&
+        effectiveOriginCell &&
+        casterPos
+      ) {
         const dist = chebyshevDistanceFt(casterPos, effectiveOriginCell);
         const maxFt =
           (parsedRange.long ?? parsedRange.normal) * distantRangeMultiplier;
@@ -679,17 +2312,44 @@ export class SpellCastingService {
 
 
       if (!aoeShape && effectiveTargetIds.length > 0 && casterPos) {
-        for (const tid of effectiveTargetIds) {
+        for (let targetIndex = 0; targetIndex < effectiveTargetIds.length; targetIndex += 1) {
+          const tid = effectiveTargetIds[targetIndex];
           const t = await this.encounterService
             .getParticipant(tid)
             .catch(() => null);
           if (!t || t.positionX == null || t.positionY == null) continue;
-          const dist = chebyshevDistanceFt(casterPos, {
+          const previousTarget =
+            isChromaticOrb && targetIndex > 0
+              ? await this.encounterService
+                  .getParticipant(effectiveTargetIds[targetIndex - 1])
+                  .catch(() => null)
+              : null;
+          const chainPrimaryTarget =
+            isChainLightning && targetIndex > 0
+              ? await this.encounterService
+                  .getParticipant(effectiveTargetIds[0])
+                  .catch(() => null)
+              : null;
+          const rangeOrigin =
+            chainPrimaryTarget?.positionX != null &&
+            chainPrimaryTarget?.positionY != null
+              ? {
+                  x: chainPrimaryTarget.positionX,
+                  y: chainPrimaryTarget.positionY,
+                }
+              : previousTarget?.positionX != null &&
+            previousTarget?.positionY != null
+              ? { x: previousTarget.positionX, y: previousTarget.positionY }
+              : casterPos;
+          const dist = chebyshevDistanceFt(rangeOrigin, {
             x: t.positionX,
             y: t.positionY,
           });
           const maxFt =
-            (parsedRange.long ?? parsedRange.normal) * distantRangeMultiplier;
+            (isChromaticOrb || isChainLightning) && targetIndex > 0
+              ? 30
+              : (parsedRange.long ?? parsedRange.normal) *
+                distantRangeMultiplier;
           if (dist > maxFt) {
             return failure(
               `Alvo fora do alcance (${dist}ft > ${maxFt}ft).`,
@@ -704,6 +2364,19 @@ export class SpellCastingService {
     const castingTime = (spellData.casting_time ?? "action").toLowerCase();
     const baseIsBonusAction = castingTime.includes("bonus");
     const isReactionSpell = castingTime.includes("reaction");
+    const isCombatCastingTime =
+      castingTime.includes("action") ||
+      baseIsBonusAction ||
+      isReactionSpell;
+    const isQuickPlayTraining = Boolean(
+      (encounter.mapData as Record<string, unknown> | undefined)?.quickPlay,
+    );
+    if (!isCombatCastingTime && !isQuickPlayTraining) {
+      return failure(
+        `${spellData.name} exige tempo de conjuração ${spellData.casting_time} e não pode ser iniciada durante o combate.`,
+        "INVALID_ACTION",
+      );
+    }
 
 
 
@@ -852,6 +2525,12 @@ export class SpellCastingService {
     }
 
     if (dto.asReaction) {
+      if (!canTakeReactionFromConditions(participant.conditions)) {
+        return failure(
+          "A condição atual impede reactions.",
+          "CONDITION_PREVENTS_REACTION",
+        );
+      }
       if (participant.reactionsUsed > 0)
         return failure("Reacao ja utilizada.", "REACTION_ALREADY_USED");
     } else if (isBonusAction) {
@@ -864,6 +2543,19 @@ export class SpellCastingService {
       if (participant.actionUsed)
         return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
+    if (!dto.asReaction) {
+      const abjureChoice = chooseAbjureFoesTurnOption(
+        participant,
+        isBonusAction ? "bonus" : "action",
+        `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+      );
+      if (!abjureChoice.allowed) {
+        return failure(
+          abjureFoesChoiceError(abjureChoice.currentChoice),
+          "CONDITION_PREVENTS_ACTION",
+        );
+      }
+    }
 
 
     const targetMeta: TargetMetadata[] = [];
@@ -872,6 +2564,12 @@ export class SpellCastingService {
         .getParticipant(tid)
         .catch(() => null);
       if (!t) continue;
+      if ((t.conditions ?? []).includes("banished")) {
+        return failure(
+          `${t.displayName} está banido e fora do plano atual.`,
+          GameErrorCode.INVALID_TARGET,
+        );
+      }
       const isWearingArmor = await this.isTargetWearingArmor(
         t,
         dto.ownerUserId,
@@ -942,6 +2640,9 @@ export class SpellCastingService {
     if (!castResult.ok) return castResult as any;
 
     const spellResult = castResult.value;
+    if (isChromaticOrb && spellResult.damage) {
+      spellResult.damage.type = dto.damageType!;
+    }
 
 
     if (signatureSpellApplied) {
@@ -983,14 +2684,79 @@ export class SpellCastingService {
 
     const concentrationEvents: GameEventData[] = [];
     if (spellResult.concentration) {
-      if (participant.isConcentrating) {
-        spellResult.previousConcentration =
-          participant.concentratingOn ?? undefined;
-        const breakRes = await this.concentration.break(participant, "replaced");
-        concentrationEvents.push(...breakRes.events);
+      spellResult.previousConcentration = participant.isConcentrating
+        ? (participant.concentratingOn ?? undefined)
+        : undefined;
+      const speedBeforeConcentrationChange =
+        await this.movementService.getBaseSpeed(participant, dto.ownerUserId);
+      const startResult = await this.concentration.startNew(
+        participant,
+        dto.spellSlug,
+        null,
+        null,
+      );
+      concentrationEvents.push(...startResult.events);
+      const speedAfterConcentrationChange =
+        await this.movementService.getBaseSpeed(participant, dto.ownerUserId);
+      if (speedAfterConcentrationChange !== speedBeforeConcentrationChange) {
+        participant.movementRemaining = reconcileRemainingMovement(
+          participant.movementRemaining,
+          speedBeforeConcentrationChange,
+          speedAfterConcentrationChange,
+        );
+        concentrationEvents.push({
+          event_type: "movement_speed_changed",
+          actor_participant_id: participant.id,
+          target_participant_id: participant.id,
+          data: {
+            sourceSpell: spellResult.previousConcentration ?? "concentração",
+            previousSpeed: speedBeforeConcentrationChange,
+            newSpeed: speedAfterConcentrationChange,
+            movementRemaining: participant.movementRemaining,
+          },
+        });
       }
-      participant.isConcentrating = true;
-      participant.concentratingOn = dto.spellSlug;
+      if (normalizedSpellSlug === "call-lightning") {
+        let callLightningSaveDc = spellResult.saves?.[0]?.dc ?? 0;
+        if (callLightningSaveDc <= 0) {
+          const casterSheet = await this.sheetService.computeSheet(
+            dto.ownerUserId,
+            participant.characterId,
+          );
+          callLightningSaveDc =
+            casterSheet.classes.find(
+              (classBlock) => classBlock.spellSaveDc != null,
+            )?.spellSaveDc ?? 13;
+        }
+        participant.effectInstances = [
+          ...(participant.effectInstances ?? []).filter(
+            (effect) => effect.kind !== "call_lightning_active",
+          ),
+          {
+            id: require("crypto").randomUUID(),
+            kind: "call_lightning_active",
+            sourceSpellSlug: dto.spellSlug,
+            sourceCasterParticipantId: participant.id,
+            payload: {
+              slotLevel: dto.slotLevel,
+              saveDc: callLightningSaveDc,
+              diceExpression: `${Math.max(3, dto.slotLevel)}d10`,
+            },
+            expiresAt: { kind: "concentration" },
+            requiresConcentration: true,
+            appliedAt: new Date().toISOString(),
+          },
+        ];
+      }
+    }
+
+    const hiddenBrokenByVerbalSpell =
+      (participant.conditions ?? []).includes("hidden") &&
+      hasVerbalSpellComponent(spellData.components);
+    if (hiddenBrokenByVerbalSpell) {
+      participant.conditions = (participant.conditions ?? []).filter(
+        (condition) => condition !== "hidden",
+      );
     }
 
     await this.participantRepo.save(participant);
@@ -1001,13 +2767,78 @@ export class SpellCastingService {
       [];
     const summonMonsterSlug =
       dto.summonMonsterSlug ??
-      this.getSummonMonsterForSpell(dto.spellSlug, dto.slotLevel);
+      (normalizedSpellSlug === "find-familiar"
+        ? dto.summonFamiliarForm!
+        : this.getSummonMonsterForSpell(dto.spellSlug, dto.slotLevel));
     if (summonMonsterSlug) {
       try {
+        const spellAttackBonus =
+          (
+            await this.sheetService.computeSheet(
+              dto.ownerUserId,
+              participant.characterId,
+            )
+          ).classes.find(
+            (classBlock) => classBlock.spellAttackBonus != null,
+          )?.spellAttackBonus ?? 0;
+        const summonStatBlock =
+          normalizedSpellSlug === "summon-beast"
+            ? buildBestialSpiritStatBlock({
+                form: dto.summonBeastForm!,
+                slotLevel: dto.slotLevel,
+                spellAttackBonus,
+              })
+            : normalizedSpellSlug === "summon-elemental"
+              ? buildElementalSpiritStatBlock({
+                  form: dto.summonElementalForm!,
+                  slotLevel: dto.slotLevel,
+                  spellAttackBonus,
+                })
+              : undefined;
+        if (normalizedSpellSlug === "find-familiar") {
+          const existingFamiliars = (
+            await this.summoning.getSummonsOf(participant.id)
+          ).filter(
+            (candidate) =>
+              getSummonMetadata(candidate)?.source === "find-familiar-spell" ||
+              candidate.displayName.toLowerCase().startsWith("find familiar"),
+          );
+          for (const existing of existingFamiliars) {
+            const dismissed = await this.summoning.dismissSummon(
+              existing.id,
+              "form-change",
+            );
+            summonEvents.push(...dismissed.events);
+          }
+        }
+        const familiarFormLabels: Record<FamiliarForm, string> = {
+          bat: "Morcego",
+          cat: "Gato",
+          crab: "Caranguejo",
+          frog: "Sapo",
+          hawk: "Falcão",
+          lizard: "Lagarto",
+          octopus: "Polvo",
+          owl: "Coruja",
+          "poisonous-snake": "Cobra Venenosa",
+          quipper: "Peixe",
+          rat: "Rato",
+          raven: "Corvo",
+          "sea-horse": "Cavalo-marinho",
+          spider: "Aranha",
+          weasel: "Doninha",
+        };
         const summon = await this.summoning.spawnSummon(dto.encounterId, {
           casterParticipantId: participant.id,
           monsterSlug: summonMonsterSlug,
-          displayName: `${dto.spellSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} (${summonMonsterSlug})`,
+          displayName:
+            summonStatBlock?.kind === "bestial-spirit"
+              ? `Bestial Spirit (${summonStatBlock.form === "air" ? "Ar" : summonStatBlock.form === "land" ? "Terra" : "Água"})`
+              : summonStatBlock?.kind === "elemental-spirit"
+                ? `Elemental Spirit (${summonStatBlock.form === "air" ? "Ar" : summonStatBlock.form === "earth" ? "Terra" : summonStatBlock.form === "fire" ? "Fogo" : "Água"})`
+              : normalizedSpellSlug === "find-familiar"
+                ? `Familiar ${familiarFormLabels[dto.summonFamiliarForm!]}`
+              : `${dto.spellSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} (${summonMonsterSlug})`,
           position:
             dto.summonPosition ??
             (participant.positionX != null && participant.positionY != null
@@ -1019,17 +2850,39 @@ export class SpellCastingService {
           concentrationBreakBehavior: this.getSummonConcentrationBreakBehavior(
             dto.spellSlug,
           ),
-          durationRoundsTotal: spellResult.concentration ? 10 : 60,
+          durationRoundsTotal:
+            normalizedSpellSlug === "find-familiar"
+              ? null
+              : spellResult.concentration
+                ? 600
+                : 60,
           source: this.getSummonSourceForSpell(dto.spellSlug),
+          statBlock: summonStatBlock,
+          metadata:
+            normalizedSpellSlug === "find-familiar"
+              ? {
+                  familiarForm: dto.summonFamiliarForm,
+                  familiarCreatureType: dto.summonFamiliarCreatureType,
+                  cannotAttack: true,
+                  telepathyRangeFt: 100,
+                }
+              : undefined,
         });
         summonEvents.push({
           event_type: "summon_spawned",
           actor_participant_id: participant.id,
+          target_participant_id: summon.id,
           data: {
             spellSlug: dto.spellSlug,
             summonId: summon.id,
+            displayName: summon.displayName,
             summonMonsterSlug,
             slotLevel: dto.slotLevel,
+            summonBeastForm: dto.summonBeastForm,
+            summonElementalForm: dto.summonElementalForm,
+            summonFamiliarForm: dto.summonFamiliarForm,
+            summonFamiliarCreatureType: dto.summonFamiliarCreatureType,
+            statBlock: summonStatBlock,
           },
         });
       } catch (err) {
@@ -1046,10 +2899,48 @@ export class SpellCastingService {
 
     const targetsHit: CombatSpellResult["targetsHit"] = [];
     const events = [
-      ...(castResult.events ?? []),
+      ...(castResult.events ?? [])
+        .filter(
+          (event) =>
+            !(
+              event.event_type === "spell_damage" &&
+              (spellData.attack_type ||
+                normalizedSpellSlug === "blight" ||
+                delegatesInitialDamageToTileEffect)
+            ),
+        )
+        .map((event) => ({
+          ...event,
+          actor_participant_id:
+            event.actor_participant_id ?? participant.id,
+        })),
       ...concentrationEvents,
       ...summonEvents,
     ];
+    if (hiddenBrokenByVerbalSpell) {
+      events.push({
+        event_type: "condition_removed",
+        actor_participant_id: participant.id,
+        target_participant_id: participant.id,
+        data: {
+          condition: "hidden",
+          reason: "verbal_spell",
+          spellSlug: dto.spellSlug,
+        },
+      });
+    }
+    if (!isCombatCastingTime && isQuickPlayTraining) {
+      events.push({
+        event_type: "casting_time_accelerated",
+        actor_participant_id: participant.id,
+        data: {
+          spellSlug: dto.spellSlug,
+          spellName: spellData.name,
+          originalCastingTime: spellData.casting_time,
+          reason: "quick-play-training",
+        },
+      });
+    }
 
 
     if (metamagicAppliedType) {
@@ -1082,6 +2973,17 @@ export class SpellCastingService {
           participant.characterId,
         )
       : null;
+    const sheetForSpellAttack = spellData.attack_type
+      ? (sheetForPerHit ??
+        (await this.sheetService.computeSheet(
+          dto.ownerUserId,
+          participant.characterId,
+        )))
+      : null;
+    const spellAttackBonus =
+      sheetForSpellAttack?.classes?.find(
+        (classBlock: any) => classBlock.spellAttackBonus != null,
+      )?.spellAttackBonus ?? 0;
     const perHitBase = sheetForPerHit
       ? getPerHitDamage(
           dto.spellSlug,
@@ -1090,13 +2992,44 @@ export class SpellCastingService {
         )
       : null;
 
-    for (const targetId of effectiveTargetIds) {
-      const target = await this.encounterService.getParticipant(targetId);
+    let chromaticCanContinue = true;
+    for (let targetIndex = 0; targetIndex < effectiveTargetIds.length; targetIndex += 1) {
+      if (isChromaticOrb && targetIndex > 0 && !chromaticCanContinue) break;
+      const targetId = effectiveTargetIds[targetIndex];
+      let target = await this.encounterService.getParticipant(targetId);
       const targetResult: CombatSpellResult["targetsHit"][0] = {
         participantId: targetId,
         displayName: target.displayName,
       };
 
+      let spellAttackCritical = false;
+      let damageSaveResult: {
+        success: boolean;
+        roll: number;
+        total: number;
+        dc: number;
+      } | null = null;
+      if (spellData.attack_type) {
+        const resolution = await this.combatService.resolveSpellAttackRoll(
+          participant,
+          target,
+          {
+            attackBonus: spellAttackBonus,
+            actionName: spellData.name,
+            isMelee: spellData.attack_type === "melee",
+            ownerUserId: dto.ownerUserId,
+          },
+        );
+        targetResult.attackRoll = resolution.attackRoll;
+        targetResult.hit = resolution.attackRoll.hit;
+        spellAttackCritical = resolution.attackRoll.critical;
+        events.push(...resolution.events);
+        if (!resolution.attackRoll.hit) {
+          targetsHit.push(targetResult);
+          if (isChromaticOrb) chromaticCanContinue = false;
+          continue;
+        }
+      }
 
 
       let damageThisHit = 0;
@@ -1104,14 +3037,58 @@ export class SpellCastingService {
       if (perHitBase) {
         const rolled = this.diceService.rollExpression(perHitBase.expression);
         damageThisHit = rolled.total;
-        damageType = perHitBase.type;
-      } else if (spellResult.damage && spellResult.damage.total > 0) {
+        damageType = isChromaticOrb ? dto.damageType! : perHitBase.type;
+        if (isChromaticOrb) {
+          targetResult.damageRolls = rolled.rolls;
+          chromaticCanContinue = chromaticOrbRollCanLeap(rolled.rolls);
+          targetResult.triggeredLeap =
+            chromaticCanContinue &&
+            targetIndex < effectiveTargetIds.length - 1 &&
+            targetIndex < dto.slotLevel;
+        }
+      } else if (
+        !delegatesInitialDamageToTileEffect &&
+        spellResult.damage &&
+        spellResult.damage.total > 0
+      ) {
         damageThisHit = spellResult.damage.total;
         damageType = spellResult.damage.type;
+      }
+      const damageExpression =
+        perHitBase?.expression ?? spellResult.damage?.expression;
+      const blightRules =
+        normalizedSpellSlug === "blight"
+          ? getBlightCreatureRules(target)
+          : null;
+      if (blightRules?.hasNoEffect) {
+        targetResult.damageRolled = damageThisHit;
+        targetResult.damageDealt = 0;
+        targetResult.immune = true;
+        events.push({
+          event_type: "spell_no_effect",
+          actor_participant_id: participant.id,
+          target_participant_id: target.id,
+          data: {
+            spellSlug: normalizedSpellSlug,
+            reason: "creature_type",
+            creatureType: blightRules.creatureType,
+          },
+        });
+        targetsHit.push(targetResult);
+        continue;
+      }
+      if (blightRules?.dealsMaximumDamage) {
+        const maximumDamage = maximumDiceExpression(damageExpression);
+        if (maximumDamage > 0) damageThisHit = maximumDamage;
+      }
+      if (spellAttackCritical && damageExpression) {
+        damageThisHit +=
+          this.diceService.rollExpression(damageExpression).total;
       }
 
       if (damageThisHit > 0) {
         let finalDamage = damageThisHit;
+        targetResult.damageRolled = damageThisHit;
 
 
 
@@ -1134,13 +3111,35 @@ export class SpellCastingService {
           const heightenedDisadvantage =
             metamagicAppliedType === "heightened" &&
             heightenedTargetIdForSave === targetId;
+          const forcedDisadvantage =
+            heightenedDisadvantage ||
+            blightRules?.saveHasDisadvantage === true;
           const saveResult = await this.rollMonsterOrPcSave(
             target,
             saveAbility,
             spellSaveDc,
             dto.ownerUserId,
-            heightenedDisadvantage,
+            forcedDisadvantage,
           );
+          damageSaveResult = saveResult;
+          events.push({
+            event_type: "save_rolled",
+            actor_participant_id: participant.id,
+            target_participant_id: target.id,
+            data: {
+              spellSlug: normalizedSpellSlug,
+              ability: saveAbility,
+              dc: spellSaveDc,
+              roll: saveResult.roll,
+              modifier: saveResult.total - saveResult.roll,
+              total: saveResult.total,
+              success: saveResult.success,
+              advantage: saveResult.advantage,
+              hasAdvantage: saveResult.hasAdvantage,
+              hasDisadvantage: saveResult.hasDisadvantage,
+              advantageCancelled: saveResult.advantageCancelled,
+            },
+          });
           if (saveResult.success) {
             const dcSuccess = dcInfo.dc_success ?? "half";
             if (dcSuccess === "half") {
@@ -1160,27 +3159,181 @@ export class SpellCastingService {
             damageType,
             ownerUserId: dto.ownerUserId,
           },
+          { emitEvents: false },
         );
 
-        targetResult.damageDealt = finalDamage;
         if (dmgResult.ok) {
+          events.push(...(dmgResult.events ?? []));
+          targetResult.damageDealt = dmgResult.value.damageApplied;
+          targetResult.resisted = dmgResult.value.resisted;
+          targetResult.immune = dmgResult.value.immune;
+          targetResult.vulnerable = dmgResult.value.vulnerable;
           targetResult.defeated = dmgResult.value.defeated;
+
+          if (
+            shouldDisintegrateTarget({
+              spellSlug: normalizedSpellSlug,
+              hpBefore: target.currentHp ?? 0,
+              hpAfter: dmgResult.value.hpAfter,
+              damageApplied: dmgResult.value.damageApplied,
+            })
+          ) {
+            const freshTarget =
+              await this.encounterService.getParticipant(targetId);
+
+            if (freshTarget.type === "pc" && freshTarget.characterId) {
+              await this.characterStateService.updateDeathSaves(
+                dto.ownerUserId,
+                freshTarget.characterId,
+                { failuresDelta: 3 },
+              );
+            }
+
+            freshTarget.currentHp = 0;
+            freshTarget.dyingState = "dead";
+            freshTarget.isDefeated = true;
+            freshTarget.effectInstances = [
+              ...(freshTarget.effectInstances ?? []).filter(
+                (effect) => effect.kind !== "disintegrated",
+              ),
+              {
+                id: require("crypto").randomUUID(),
+                sourceSpellSlug: normalizedSpellSlug,
+                sourceCasterParticipantId: participant.id,
+                kind: "disintegrated",
+                payload: {},
+                expiresAt: { kind: "end_of_encounter" },
+                requiresConcentration: false,
+                appliedAt: new Date().toISOString(),
+              },
+            ];
+            await this.participantRepo.save(freshTarget);
+
+            targetResult.defeated = true;
+            events.push({
+              event_type: "target_disintegrated",
+              actor_participant_id: participant.id,
+              target_participant_id: target.id,
+              data: {
+                spell: spellData.name,
+                nonmagicalEquipmentDisintegrated: true,
+                revivalRequires: ["true-resurrection", "wish"],
+              },
+            });
+          }
+
+          // applyDamage persists the participant independently. Any later
+          // condition or forced-movement mutation must start from that fresh
+          // row, otherwise saving the pre-damage entity restores stale HP.
+          target = await this.encounterService.getParticipant(targetId);
+        }
+        if (normalizedSpellSlug === "blight") {
+          events.push({
+            event_type: "spell_damage",
+            actor_participant_id: participant.id,
+            target_participant_id: target.id,
+            data: {
+              spell: spellData.name,
+              expression: damageExpression,
+              total: damageThisHit,
+              type: damageType,
+              slot_level: dto.slotLevel,
+              maximized: blightRules?.dealsMaximumDamage === true,
+              source: "spell-save",
+            },
+          });
+        }
+        if (spellData.attack_type) {
+          events.push({
+            event_type: "spell_damage",
+            actor_participant_id: participant.id,
+            target_participant_id: target.id,
+            data: {
+              spell: spellData.name,
+              expression: damageExpression,
+              total: damageThisHit,
+              type: damageType,
+              slot_level: dto.slotLevel,
+              critical: spellAttackCritical,
+              ...(isChromaticOrb
+                ? {
+                    rolls: targetResult.damageRolls,
+                    triggeredLeap: targetResult.triggeredLeap,
+                  }
+                : {}),
+              source: "spell-attack",
+            },
+          });
         }
       }
 
 
       if (spellResult.healing && spellResult.healing.total > 0) {
-        await this.combatService.applyHealing(dto.encounterId, {
+        const healingResult = await this.combatService.applyHealing(dto.encounterId, {
           targetParticipantId: targetId,
           amount: spellResult.healing.total,
           ownerUserId: dto.ownerUserId,
         });
-        targetResult.healingApplied = spellResult.healing.total;
+        if (healingResult.ok) {
+          targetResult.healingApplied = healingResult.value.healingApplied;
+          targetResult.healingPrevented =
+            healingResult.value.healingPrevented;
+
+          await this.combatService.resolveFaithfulSteedLifeBond(
+            dto.encounterId,
+            {
+              casterParticipantId: targetId,
+              healingFromSpell: healingResult.value.healingApplied,
+              spellLevel: spellData.level,
+              spellSlug: normalizedSpellSlug,
+              ownerUserId: dto.ownerUserId,
+            },
+          );
+
+          // Keep subsequent condition removal (notably Heal) from saving the
+          // participant snapshot captured before healing.
+          target = await this.encounterService.getParticipant(targetId);
+        }
+
+        if (normalizedSpellSlug === "heal") {
+          for (const conditionSlug of ["blinded", "deafened"] as const) {
+            const matchingInstances = (target.conditionInstances ?? []).filter(
+              (instance) => instance.slug === conditionSlug,
+            );
+            for (const instance of matchingInstances) {
+              const removed =
+                await this.conditionLifecycle.removeConditionInstance(
+                  target,
+                  instance.id,
+                  "manual",
+                );
+              events.push(...removed.events);
+            }
+            if (
+              matchingInstances.length === 0 &&
+              (target.conditions ?? []).includes(conditionSlug)
+            ) {
+              target.conditions = (target.conditions ?? []).filter(
+                (condition) => condition !== conditionSlug,
+              );
+              await this.participantRepo.save(target);
+              events.push({
+                event_type: "condition_removed",
+                actor_participant_id: participant.id,
+                target_participant_id: target.id,
+                data: {
+                  condition: conditionSlug,
+                  reason: "spell:heal",
+                },
+              });
+            }
+          }
+        }
       }
 
 
-      const condEntry = getSpellCondition(dto.spellSlug);
-      if (condEntry && target.id !== participant.id) {
+      const condEntry = getSpellCondition(normalizedSpellSlug);
+      if (condEntry && normalizedSpellSlug !== "web") {
         const sheet = await this.sheetService.computeSheet(
           dto.ownerUserId,
           participant.characterId,
@@ -1190,18 +3343,49 @@ export class SpellCastingService {
         );
         const spellSaveDc: number = casterClass?.spellSaveDc ?? 13;
 
-        const saveRoll = this.rollMonsterOrPcSave(
-          target,
-          condEntry.saveAbility,
-          spellSaveDc,
-          dto.ownerUserId,
-        );
-        const saveResult = await saveRoll;
+        let saveResult = damageSaveResult;
+        if (!saveResult) {
+          const conditionSaveResult = await this.rollMonsterOrPcSave(
+            target,
+            condEntry.saveAbility,
+            spellSaveDc,
+            dto.ownerUserId,
+          );
+          saveResult = conditionSaveResult;
+          events.push({
+            event_type: "save_rolled",
+            actor_participant_id: participant.id,
+            target_participant_id: target.id,
+            data: {
+              spellSlug: normalizedSpellSlug,
+              ability: condEntry.saveAbility,
+              dc: spellSaveDc,
+              roll: conditionSaveResult.roll,
+              modifier:
+                conditionSaveResult.total - conditionSaveResult.roll,
+              total: conditionSaveResult.total,
+              success: conditionSaveResult.success,
+              advantage: conditionSaveResult.advantage,
+              hasAdvantage: conditionSaveResult.hasAdvantage,
+              hasDisadvantage: conditionSaveResult.hasDisadvantage,
+              advantageCancelled:
+                conditionSaveResult.advantageCancelled,
+              ...(normalizedSpellSlug === "blindness-deafness"
+                ? { conditionChoice: dto.conditionChoice }
+                : {}),
+            },
+          });
+        }
         if (!saveResult.success) {
+          const conditionSlug = resolveSpellConditionSlug(
+            normalizedSpellSlug,
+            condEntry.conditionSlug,
+            dto.conditionChoice,
+          )!;
           const condResult = await this.conditionLifecycle.applyCondition(
             target,
             {
-              slug: condEntry.conditionSlug,
+              slug: conditionSlug,
               appliedBy: participant.id,
               sourceSpell: dto.spellSlug,
               sourceConcentration: condEntry.requiresConcentration,
@@ -1212,7 +3396,7 @@ export class SpellCastingService {
             },
           );
           events.push(...condResult.events);
-          (targetResult as any).conditionApplied = {
+          targetResult.conditionApplied = {
             instanceId: condResult.instance.id,
             slug: condResult.instance.slug,
             durationRoundsRemaining: condEntry.durationRounds,
@@ -1222,7 +3406,80 @@ export class SpellCastingService {
         }
       }
 
+      if (
+        normalizedSpellSlug === "thunderwave" &&
+        damageSaveResult &&
+        !damageSaveResult.success &&
+        !targetResult.defeated
+      ) {
+        const forcedMovement = await this.pushTargetAwayFromCaster(
+          encounter,
+          participant,
+          target,
+          10,
+        );
+        if (forcedMovement) {
+          targetResult.forcedMovement = forcedMovement;
+          events.push({
+            event_type: "movement_forced",
+            actor_participant_id: participant.id,
+            target_participant_id: target.id,
+            data: {
+              sourceSpell: normalizedSpellSlug,
+              from: forcedMovement.from,
+              to: forcedMovement.to,
+              distanceFt: forcedMovement.distanceFt,
+            },
+          });
+        }
+      }
+
       targetsHit.push(targetResult);
+    }
+
+    if (normalizedSpellSlug === "witch-bolt" && effectiveTargetIds[0]) {
+      const tetherTarget = await this.encounterService
+        .getParticipant(effectiveTargetIds[0])
+        .catch(() => null);
+      const targetResult = targetsHit.find(
+        (candidate) => candidate.participantId === effectiveTargetIds[0],
+      );
+      if (tetherTarget && !targetResult?.defeated) {
+        const tether = createWitchBoltTether(
+          tetherTarget.id,
+          tetherTarget.displayName,
+          encounter.currentRound,
+        );
+        participant.appliedEffects = [
+          ...(participant.appliedEffects ?? []).filter(
+            (effect) => effect.metadata?.type !== "witch-bolt-tether",
+          ),
+          tether,
+        ];
+        await this.participantRepo.update(participant.id, {
+          appliedEffects: participant.appliedEffects as never,
+        });
+        events.push({
+          event_type: "witch_bolt_tethered",
+          actor_participant_id: participant.id,
+          target_participant_id: tetherTarget.id,
+          data: {
+            spellSlug: "witch-bolt",
+            targetName: tetherTarget.displayName,
+            initialAttackHit: targetResult?.hit === true,
+            rangeFt: 60,
+          },
+        });
+      } else if (targetResult?.defeated) {
+        const freshCaster = await this.encounterService.getParticipant(
+          participant.id,
+        );
+        const breakResult = await this.concentration.break(
+          freshCaster,
+          "expired",
+        );
+        events.push(...breakResult.events);
+      }
     }
 
 
@@ -1230,22 +3487,96 @@ export class SpellCastingService {
       spellResult && (spellResult as any).casterDex != null
         ? (spellResult as any).casterDex
         : await this.getCasterDexModifier(participant, dto.ownerUserId);
+    const effectEligibleTargetIds = spellData.attack_type
+      ? Array.from(
+          new Set(
+            targetsHit
+              .filter((target) => target.hit)
+              .map((target) => target.participantId),
+          ),
+        )
+      : effectiveTargetIds;
+    const targetDexModifiers: Record<string, number> = {};
+    for (const targetId of effectEligibleTargetIds) {
+      const targetParticipant =
+        targetMeta.find((target) => target.id === targetId)?.participant ??
+        (targetId === participant.id ? participant : null);
+      if (!targetParticipant) continue;
+      targetDexModifiers[targetId] = await this.getParticipantDexModifier(
+        targetParticipant,
+        dto.ownerUserId,
+      );
+    }
     const materializations = materializeSpellEffects(dto.spellSlug, {
       casterParticipantId: participant.id,
-      targetParticipantIds: effectiveTargetIds,
+      targetParticipantIds: effectEligibleTargetIds,
       slotLevel: dto.slotLevel,
       casterDexModifier: casterDex,
+      targetDexModifiers,
     });
     const appliedEffectIds: string[] = [];
+    const cleanedSpellEffectTargets = new Set<string>();
     for (const m of materializations) {
       const targetP = await this.encounterService
         .getParticipant(m.targetParticipantId)
         .catch(() => null);
       if (!targetP) continue;
+      const movementSpeedBefore = await this.movementService.getBaseSpeed(
+        targetP,
+        dto.ownerUserId,
+      );
+      const cleanupKey = [
+        m.targetParticipantId,
+        m.input.sourceSpellSlug ?? "",
+      ].join(":");
+      if (!cleanedSpellEffectTargets.has(cleanupKey)) {
+        const previousSameCast = (targetP.effectInstances ?? []).filter(
+          (effect) =>
+            effect.sourceSpellSlug === m.input.sourceSpellSlug,
+        );
+        for (const previous of previousSameCast) {
+          const removed = await this.effectInstanceService.removeEffect(
+            targetP,
+            previous.id,
+            "manual",
+          );
+          events.push(...removed.events);
+        }
+        cleanedSpellEffectTargets.add(cleanupKey);
+      }
       const { effect, events: effectEvents } =
         await this.effectInstanceService.addEffect(targetP, m.input);
       appliedEffectIds.push(effect.id);
       events.push(...effectEvents);
+      if (
+        m.input.kind === "flight_speed" ||
+        m.input.kind === "speed_multiplier"
+      ) {
+        const movementSpeedAfter = await this.movementService.getBaseSpeed(
+          targetP,
+          dto.ownerUserId,
+        );
+        const speedDelta = movementSpeedAfter - movementSpeedBefore;
+        if (speedDelta !== 0) {
+          targetP.movementRemaining = reconcileRemainingMovement(
+            targetP.movementRemaining,
+            movementSpeedBefore,
+            movementSpeedAfter,
+          );
+          await this.participantRepo.save(targetP);
+          events.push({
+            event_type: "movement_speed_changed",
+            actor_participant_id: participant.id,
+            target_participant_id: targetP.id,
+            data: {
+              sourceSpell: dto.spellSlug,
+              previousSpeed: movementSpeedBefore,
+              newSpeed: movementSpeedAfter,
+              movementRemaining: targetP.movementRemaining,
+            },
+          });
+        }
+      }
     }
 
 
@@ -1254,12 +3585,23 @@ export class SpellCastingService {
 
 
 
-    const slugNorm = dto.spellSlug
-      .toLowerCase()
-      .replace(/-(phb|xphb|srd52)$/, "");
-    const tileDef = getTileEffectDefinition(slugNorm);
+    const slugNorm = normalizedSpellSlug;
+    const tileDef = tileEffectDefinition;
+    const casterAfterTargetEffects = tileDef?.sourceConcentration
+      ? await this.encounterService.getParticipant(participant.id)
+      : participant;
+    const concentrationAreaCanPersist =
+      !tileDef?.sourceConcentration ||
+      concentrationSupportsSpell(
+        casterAfterTargetEffects,
+        normalizedSpellSlug,
+      );
+    if (tileDef?.sourceConcentration && !concentrationAreaCanPersist) {
+      spellResult.concentration = false;
+    }
     if (
       tileDef &&
+      concentrationAreaCanPersist &&
       participant.positionX != null &&
       participant.positionY != null
     ) {
@@ -1291,6 +3633,22 @@ export class SpellCastingService {
       }
 
       const tileEffectKind = tileDef.spellSlug as TileEffectKind;
+      if (tileDef.sourceConcentration) {
+        const staleAreaCleanup =
+          await this.persistentArea.removeByCasterConcentrationBreak(
+            participant.id,
+            "concentration_replaced",
+          );
+        events.push(...staleAreaCleanup.events);
+      }
+      if (normalizedSpellSlug === "spiritual-weapon") {
+        const recastCleanup = await this.persistentArea.removeByCasterAndSpell(
+          participant.id,
+          "spiritual-weapon",
+          "recast",
+        );
+        events.push(...recastCleanup.events);
+      }
       const area = await this.persistentArea.createFromCatalog({
         encounterId: dto.encounterId,
         casterParticipantId: participant.id,
@@ -1298,6 +3656,23 @@ export class SpellCastingService {
         slotLevel: dto.slotLevel ?? 1,
         originCell,
         saveDc,
+        casterFaction: participant.faction,
+        currentRound: encounter.currentRound,
+        ...(normalizedSpellSlug === "spiritual-weapon"
+          ? {
+              damageDiceOverride: spellResult.damage?.expression ?? "",
+              damageTypeOverride: "force",
+            }
+          : {}),
+        ...(normalizedSpellSlug === "conjure-elemental" && dto.damageType
+          ? {
+              damageTypeOverride: dto.damageType as
+                | "cold"
+                | "fire"
+                | "lightning"
+                | "thunder",
+            }
+          : {}),
       });
 
       events.push({
@@ -1317,6 +3692,8 @@ export class SpellCastingService {
           saveAbility: area.saveAbility,
           narrativeDescriptor: area.narrativeDescriptor,
           tactical: area.tacticalMetadata,
+          damageDice: area.damageDice,
+          damageType: area.damageType,
         },
       });
 
@@ -1328,6 +3705,7 @@ export class SpellCastingService {
       });
       const inArea = allParticipants.filter(
         (p) =>
+          p.id !== participant.id &&
           p.positionX != null &&
           p.positionY != null &&
           this.persistentArea.cellInArea(p.positionX, p.positionY, area),
@@ -1335,11 +3713,41 @@ export class SpellCastingService {
       const onCastRes = await this.persistentArea.resolveOnCast(
         area,
         inArea,
-
-
-        async () => ({ modifier: 0 }),
+        async (ability, target) => ({
+          modifier: target
+            ? await this.getTargetSaveModifier(
+                target,
+                ability,
+                dto.ownerUserId,
+              )
+            : 0,
+        }),
+        `${encounter.currentRound}:${encounter.currentTurnIndex}`,
       );
+      if (
+        tileDef.triggers.some(
+          (trigger) => trigger.kind === "on-cast" && trigger.oncePerTurn,
+        )
+      ) {
+        await Promise.all(
+          inArea.map((target) =>
+            this.participantRepo.update(target.id, {
+              effectInstances: target.effectInstances,
+            }),
+          ),
+        );
+      }
+      if (inArea.length > 0) {
+        await this.participantRepo.save(inArea);
+      }
       events.push(...onCastRes.events);
+      events.push(
+        ...(await this.combatService.applyPersistentAreaDamageEvents(
+          dto.encounterId,
+          onCastRes.events,
+          dto.ownerUserId,
+        )),
+      );
 
 
 
@@ -1463,6 +3871,23 @@ export class SpellCastingService {
       }
     }
 
+    if (touchDeliveryFamiliar) {
+      touchDeliveryFamiliar.reactionsUsed =
+        (touchDeliveryFamiliar.reactionsUsed ?? 0) + 1;
+      await this.participantRepo.save(touchDeliveryFamiliar);
+      events.push({
+        event_type: "familiar_touch_spell_delivered",
+        actor_participant_id: participant.id,
+        target_participant_id: effectiveTargetIds[0],
+        data: {
+          familiarParticipantId: touchDeliveryFamiliar.id,
+          familiarName: touchDeliveryFamiliar.displayName,
+          spellSlug: dto.spellSlug,
+          reactionUsed: true,
+        },
+      });
+    }
+
     if (spellMasteryApplied) {
       events.push({
         event_type: "spell_mastery_free_cast",
@@ -1557,6 +3982,8 @@ export class SpellCastingService {
           d?.damage?.finalDamage ??
           d?.damage?.total ??
           (typeof d?.damage === "number" ? d.damage : undefined) ??
+          d?.finalDamage ??
+          d?.total ??
           d?.amount ??
           0;
         if (dmg > 0) {
@@ -1617,7 +4044,18 @@ export class SpellCastingService {
     participant: EncounterParticipantEntity,
     ownerUserId: string,
   ): Promise<number> {
+    return this.getParticipantDexModifier(participant, ownerUserId);
+  }
+
+  private async getParticipantDexModifier(
+    participant: EncounterParticipantEntity,
+    fallbackUserId: string,
+  ): Promise<number> {
     if (participant.type === "pc" && participant.characterId) {
+      const ownerUserId = await this.encounterService.resolveCharacterOwner(
+        participant.characterId,
+        fallbackUserId,
+      );
       const sheet = await this.sheetService.computeSheet(
         ownerUserId,
         participant.characterId,
@@ -1636,6 +4074,7 @@ export class SpellCastingService {
   private async castMonsterSpellInCombat(
     dto: CastSpellInCombatDto,
     participant: EncounterParticipantEntity,
+    encounter: EncounterEntity,
   ): Promise<GameResult<CombatSpellResult>> {
     const sc = (participant.monster as any)?.spellcasting;
     if (!sc) return failure("Este monstro não possui magia.", "INVALID_SPELL");
@@ -1676,6 +4115,17 @@ export class SpellCastingService {
     } else {
       if (participant.actionUsed)
         return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
+    }
+    const abjureChoice = chooseAbjureFoesTurnOption(
+      participant,
+      isBonusAction ? "bonus" : "action",
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (!abjureChoice.allowed) {
+      return failure(
+        abjureFoesChoiceError(abjureChoice.currentChoice),
+        "CONDITION_PREVENTS_ACTION",
+      );
     }
 
 
@@ -1736,6 +4186,7 @@ export class SpellCastingService {
               ability: saveAbility,
               dc: sc.saveDc,
               userId: dto.ownerUserId,
+              participantId: target.id,
             });
             if (saveRes.ok && saveRes.value?.success) {
               finalDamage = Math.floor(finalDamage / 2);
@@ -1796,6 +4247,80 @@ export class SpellCastingService {
     return ability.toLowerCase().substring(0, 3);
   }
 
+  private async pushTargetAwayFromCaster(
+    encounter: EncounterEntity,
+    caster: EncounterParticipantEntity,
+    target: EncounterParticipantEntity,
+    distanceFt: number,
+  ): Promise<{
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+    distanceFt: number;
+  } | null> {
+    if (
+      caster.positionX == null ||
+      caster.positionY == null ||
+      target.positionX == null ||
+      target.positionY == null
+    ) {
+      return null;
+    }
+    const from = { x: target.positionX, y: target.positionY };
+    const participants = await this.participantRepo.find({
+      where: { encounterId: encounter.id, isDefeated: false },
+    });
+    const occupied = new Set(
+      participants
+        .filter(
+          (participant) =>
+            participant.id !== target.id &&
+            participant.positionX != null &&
+            participant.positionY != null,
+        )
+        .map(
+          (participant) =>
+            `${participant.positionX as number},${participant.positionY as number}`,
+        ),
+    );
+    const destination = getForcedPushDestination({
+      caster: { x: caster.positionX, y: caster.positionY },
+      target: from,
+      distanceCells: Math.max(1, Math.floor(distanceFt / 5)),
+      bounds: {
+        cols:
+          encounter.mapData?.gridColumns ??
+          encounter.mapData?.gridSize ??
+          20,
+        rows:
+          encounter.mapData?.gridRows ??
+          encounter.mapData?.gridSize ??
+          20,
+      },
+      occupied,
+    });
+    if (destination.x === from.x && destination.y === from.y) return null;
+
+    target.positionX = destination.x;
+    target.positionY = destination.y;
+    // Damage is persisted before forced movement. Saving the participant entity
+    // loaded at the start of the cast would write its stale HP back to the row.
+    // Restrict this write to the coordinates so movement cannot undo damage.
+    await this.participantRepo.update(target.id, {
+      positionX: destination.x,
+      positionY: destination.y,
+    });
+    await this.persistentArea.relocateAurasByCaster(target.id, destination);
+    return {
+      from,
+      to: destination,
+      distanceFt:
+        Math.max(
+          Math.abs(destination.x - from.x),
+          Math.abs(destination.y - from.y),
+        ) * 5,
+    };
+  }
+
 
   private async rollMonsterOrPcSave(
     target: EncounterParticipantEntity,
@@ -1804,22 +4329,43 @@ export class SpellCastingService {
     ownerUserId: string,
 
     withDisadvantage: boolean = false,
-  ): Promise<{ success: boolean; roll: number; total: number; dc: number }> {
+  ): Promise<{
+    success: boolean;
+    roll: number;
+    total: number;
+    dc: number;
+    advantage?: {
+      roll1: number;
+      roll2: number;
+      chosen: number;
+      discarded: number;
+    };
+    hasAdvantage?: boolean;
+    hasDisadvantage?: boolean;
+    advantageCancelled?: boolean;
+  }> {
+    const withAdvantage =
+      hasHasteDexSaveAdvantage(target, ability) ||
+      hasDodgeDexSaveAdvantage(target, ability);
     if (target.type === "pc" && target.characterId) {
       const saveResult = await this.savingThrowService.rollSavingThrow({
         characterId: target.characterId,
         ability,
         dc,
         userId: ownerUserId,
-
-        forceDisadvantage: withDisadvantage || undefined,
-      } as any);
+        participantId: target.id,
+        disadvantage: withDisadvantage || undefined,
+      });
       if (saveResult.ok && saveResult.value) {
         return {
           success: saveResult.value.success,
           roll: saveResult.value.roll,
           total: saveResult.value.total,
           dc,
+          advantage: saveResult.value.advantage,
+          hasAdvantage: withAdvantage && !withDisadvantage,
+          hasDisadvantage: withDisadvantage && !withAdvantage,
+          advantageCancelled: withAdvantage && withDisadvantage,
         };
       }
     }
@@ -1835,42 +4381,104 @@ export class SpellCastingService {
 
     if (!monster) {
       const rollA = this.diceService.roll(20);
-      const rollB = withDisadvantage ? this.diceService.roll(20) : rollA;
-      const chosen = withDisadvantage ? Math.min(rollA, rollB) : rollA;
-      return { success: chosen >= dc, roll: chosen, total: chosen, dc };
+      const rollsTwice = withDisadvantage !== withAdvantage;
+      const rollB = rollsTwice ? this.diceService.roll(20) : rollA;
+      const chosen =
+        withDisadvantage && !withAdvantage
+          ? Math.min(rollA, rollB)
+          : withAdvantage && !withDisadvantage
+            ? Math.max(rollA, rollB)
+            : rollA;
+      return {
+        success: chosen >= dc,
+        roll: chosen,
+        total: chosen,
+        dc,
+        ...(rollsTwice
+          ? {
+              advantage: {
+                roll1: rollA,
+                roll2: rollB,
+                chosen,
+                discarded: chosen === rollA ? rollB : rollA,
+              },
+            }
+          : {}),
+        hasAdvantage: withAdvantage && !withDisadvantage,
+        hasDisadvantage: withDisadvantage && !withAdvantage,
+        advantageCancelled: withAdvantage && withDisadvantage,
+      };
     }
 
-    const abilityMap: Record<string, number> = {
-      str: monster.strength,
-      dex: monster.dexterity,
-      con: monster.constitution,
-      int: monster.intelligence,
-      wis: monster.wisdom,
-      cha: monster.charisma,
-    };
-    const score = abilityMap[ability.toLowerCase().substring(0, 3)] ?? 10;
-    const mod = Math.floor((score - 10) / 2);
-
-    const profs = Array.isArray(monster.proficiencies)
-      ? monster.proficiencies
-      : [];
-    const hasSaveProf = profs.some(
-      (p: any) =>
-        p.type === "saving-throw" &&
-        (p.name ?? "")
-          .toLowerCase()
-          .includes(ability.toLowerCase().substring(0, 3)),
+    const bonus = getMonsterSavingThrowBonus(
+      monster as unknown as Record<string, unknown>,
+      ability,
     );
-    const bonus = mod + (hasSaveProf ? (monster.proficiency_bonus ?? 0) : 0);
 
     const rollA = this.diceService.roll(20);
-    const rollB = withDisadvantage ? this.diceService.roll(20) : rollA;
-    const chosen = withDisadvantage ? Math.min(rollA, rollB) : rollA;
+    const rollsTwice = withDisadvantage !== withAdvantage;
+    const rollB = rollsTwice ? this.diceService.roll(20) : rollA;
+    const chosen =
+      withDisadvantage && !withAdvantage
+        ? Math.min(rollA, rollB)
+        : withAdvantage && !withDisadvantage
+          ? Math.max(rollA, rollB)
+          : rollA;
     return {
       success: chosen + bonus >= dc,
       roll: chosen,
       total: chosen + bonus,
       dc,
+      ...(rollsTwice
+        ? {
+            advantage: {
+              roll1: rollA,
+              roll2: rollB,
+              chosen,
+              discarded: chosen === rollA ? rollB : rollA,
+            },
+          }
+        : {}),
+      hasAdvantage: withAdvantage && !withDisadvantage,
+      hasDisadvantage: withDisadvantage && !withAdvantage,
+      advantageCancelled: withAdvantage && withDisadvantage,
     };
+  }
+
+  private async getTargetSaveModifier(
+    target: EncounterParticipantEntity,
+    ability: string,
+    ownerUserId: string,
+  ): Promise<number> {
+    if (target.type === "pc" && target.characterId) {
+      try {
+        const sheet = await this.sheetService.computeSheet(
+          ownerUserId,
+          target.characterId,
+        );
+        return (
+          sheet.savingThrows.find(
+            (savingThrow) => savingThrow.slug === ability,
+          )?.bonus ?? 0
+        );
+      } catch {
+        return 0;
+      }
+    }
+
+    const monster =
+      target.monster ??
+      (target.monsterId
+        ? await this.encounterService
+            .getParticipant(target.id)
+            .then((participant) => participant.monster)
+            .catch(() => null)
+        : null);
+    return monster
+      ? getMonsterSavingThrowBonus(
+          monster as unknown as Record<string, unknown>,
+          ability,
+        )
+      : 0;
   }
 }

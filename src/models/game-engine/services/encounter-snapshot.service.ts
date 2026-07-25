@@ -93,6 +93,7 @@ export class EncounterSnapshotService {
         return {
           id: p.id,
           type: p.type,
+          creatureType: p.monster?.type ?? null,
           isCompanion: companionMeta.get(p.id)?.isCompanion,
           companionTemplateId: companionMeta.get(p.id)?.companionTemplateId,
           faction: p.faction,
@@ -204,6 +205,8 @@ export class EncounterSnapshotService {
         shapeKind: a.shapeKind,
         originCell: a.originCell,
         radiusCells: a.radiusCells,
+        damageDice: a.damageDice,
+        damageType: a.damageType,
         durationRoundsRemaining: a.durationRoundsRemaining,
         saveDc: a.saveDc,
         saveAbility: a.saveAbility,
@@ -374,13 +377,15 @@ function parseMonsterSpeedFt(
   speed: Record<string, unknown> | null | undefined,
 ): number {
   if (!speed) return 30;
-  const walk = speed.walk;
-  if (typeof walk === "number") return walk;
-  if (typeof walk === "string") {
-    const match = walk.match(/(\d+)/);
-    return match ? parseInt(match[1], 10) : 30;
-  }
-  return 30;
+  const speeds = Object.values(speed)
+    .map((value) => {
+      if (typeof value === "number") return value;
+      if (typeof value !== "string") return 0;
+      const match = value.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    })
+    .filter((value) => value > 0);
+  return speeds.length > 0 ? Math.max(...speeds) : 30;
 }
 
 function buildSpellcastingSnapshot(

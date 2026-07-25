@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -13,8 +13,13 @@ import {
   CampaignPartyMemberEntity,
   EquipmentCategoryItemEntity,
   ClassProficiencyEntity,
+  SpellEntity,
 } from "src/entities";
-import { ProficiencyTypeEnum } from "src/entities/enums";
+import {
+  ProficiencyTypeEnum,
+  SpellSourceEnum,
+  SpellStatusEnum,
+} from "src/entities/enums";
 import {
   PROF_BONUS_BY_LEVEL,
   getSpellcastingAbility,
@@ -33,6 +38,14 @@ import {
   type SpellAutomationStatus,
 } from "src/models/game-engine/services/spell-automation-catalog";
 import { getTileEffectDefinition } from "src/models/game-engine/services/tile-effect-catalog";
+import { getAoeShape } from "src/models/game-engine/services/spell-targeting";
+import { getWildShapeUses } from "src/shared/druid-rules";
+import { getSecondWindMaxUses } from "src/shared/fighter-rules";
+import { findGiantAncestryChoice } from "src/shared/goliath-rules";
+import {
+  getAlwaysPreparedPaladinSpells,
+  normalizePreparedSpellSlug,
+} from "src/shared/paladin-spell-rules";
 
 
 
@@ -75,6 +88,7 @@ export interface ActionBlock {
   properties?: string[];
 
   weaponSlug?: string;
+  itemSlug?: string;
 
   masterySlug?: string;
 
@@ -84,6 +98,8 @@ export interface ActionBlock {
   uses?: number;
   usesMax?: number;
   usesRecharge?: string;
+  wildResurgenceSlotRecoveryUsed?: boolean;
+  faithfulSteedFreeCastUsed?: boolean;
   spellLevel?: number;
   requiresConcentration?: boolean;
   isRitual?: boolean;
@@ -97,6 +113,7 @@ export interface ActionBlock {
     shape: "sphere" | "cone" | "line" | "cube" | "cylinder";
     sizeFt: number;
     rangeFt: number;
+    maxPlacements?: number;
   };
 }
 
@@ -104,6 +121,7 @@ export interface ActionsResponse {
   actions: ActionBlock[];
   bonusActions: ActionBlock[];
   reactions: ActionBlock[];
+  freeActions: ActionBlock[];
   movement: { speed: number };
   summary: {
     attackCount: number;
@@ -111,6 +129,15 @@ export interface ActionsResponse {
     spellSaveDc: Record<string, number>;
     spellAttackBonus: Record<string, number>;
   };
+}
+
+export function parseActionRangeFeet(range: string | null | undefined): number {
+  const normalized = String(range ?? "").trim().toLowerCase();
+  if (!normalized || normalized.includes("self")) return 0;
+  const numeric = normalized.match(/(\d+(?:\.\d+)?)/);
+  if (!numeric) return 0;
+  const value = Number(numeric[1]);
+  return normalized.includes("mile") ? Math.round(value * 5280) : Math.round(value);
 }
 
 @Injectable()
@@ -138,6 +165,8 @@ export class ActionsService {
     private readonly equipCatItemRepo: Repository<EquipmentCategoryItemEntity>,
     @InjectRepository(ClassProficiencyEntity)
     private readonly classProfRepo: Repository<ClassProficiencyEntity>,
+    @InjectRepository(SpellEntity)
+    private readonly spellRepo: Repository<SpellEntity>,
   ) {}
 
   async getActions(
@@ -172,6 +201,45 @@ export class ActionsService {
       this.charFeatureRepo.find({ where: { character_id: characterId } }),
       this.charStateRepo.findOne({ where: { character_id: characterId } }),
     ]);
+
+    const alwaysPreparedSpecs = getAlwaysPreparedPaladinSpells(
+      charClasses,
+      character.source?.code !== "PHB",
+    );
+    const existingSpellSlugs = new Set(
+      charSpells.map((characterSpell) =>
+        normalizePreparedSpellSlug(characterSpell.spell.slug),
+      ),
+    );
+    const missingAlwaysPreparedSlugs = alwaysPreparedSpecs
+      .map((spell) => spell.slug)
+      .filter((slug) => !existingSpellSlugs.has(slug));
+    if (missingAlwaysPreparedSlugs.length > 0) {
+      const spellEntities = await this.spellRepo.find({
+        where: { slug: In(missingAlwaysPreparedSlugs) },
+      });
+      const spellsBySlug = new Map(
+        spellEntities.map((spell) => [
+          normalizePreparedSpellSlug(spell.slug),
+          spell,
+        ]),
+      );
+      for (const spellSpec of alwaysPreparedSpecs) {
+        if (existingSpellSlugs.has(spellSpec.slug)) continue;
+        const spell = spellsBySlug.get(spellSpec.slug);
+        if (!spell) continue;
+        charSpells.push({
+          id: `virtual:${characterId}:${spell.id}`,
+          character_id: characterId,
+          spell_id: spell.id,
+          spell,
+          source: SpellSourceEnum.Class,
+          status: SpellStatusEnum.Prepared,
+          always_prepared: true,
+        } as CharacterSpellEntity);
+        existingSpellSlugs.add(spellSpec.slug);
+      }
+    }
 
 
     const abilityMap = new Map<string, number>();
@@ -257,7 +325,48 @@ export class ActionsService {
       }
     }
 
-    const speed = character.character_origin?.race?.speed ?? 30;
+    let speed = character.character_origin?.race?.speed ?? 30;
+    const hasEquippedArmorOrShield = charEquip.some(
+      (ce) => ce.equipped && Boolean(ce.equipment?.armor_class),
+    );
+    const monkLevel =
+      charClasses.find(
+        (cc) => normalizeClassSlug(cc.class.slug) === "monk",
+      )?.class_level ?? 0;
+    if (monkLevel >= 2 && !hasEquippedArmorOrShield) {
+      speed +=
+        monkLevel >= 18
+          ? 30
+          : monkLevel >= 14
+            ? 25
+            : monkLevel >= 10
+              ? 20
+              : monkLevel >= 6
+                ? 15
+                : 10;
+    }
+    const barbarianLevel =
+      charClasses.find(
+        (cc) => normalizeClassSlug(cc.class.slug) === "barbarian",
+      )?.class_level ?? 0;
+    const heavyArmorSlugs = new Set([
+      "chain-mail",
+      "splint",
+      "plate",
+      "ring-mail",
+    ]);
+    const hasEquippedHeavyArmor = charEquip.some(
+      (ce) =>
+        ce.equipped &&
+        heavyArmorSlugs.has(
+          (ce.equipment?.slug ?? "")
+            .toLowerCase()
+            .replace(/-(?:phb|xphb|srd52)$/i, ""),
+        ),
+    );
+    if (barbarianLevel >= 5 && !hasEquippedHeavyArmor) {
+      speed += 10;
+    }
 
 
 
@@ -321,12 +430,14 @@ export class ActionsService {
       charState,
       profBonus,
       mod,
+      character.source?.code !== "PHB",
       allActions,
     );
 
 
     this.buildRaceTraitActions(
       character,
+      charState,
       totalLevel,
       profBonus,
       mod,
@@ -337,11 +448,13 @@ export class ActionsService {
     const actions = allActions.filter((a) => a.timing === "action");
     const bonusActions = allActions.filter((a) => a.timing === "bonus_action");
     const reactions = allActions.filter((a) => a.timing === "reaction");
+    const freeActions = allActions.filter((a) => a.timing === "free");
 
     return {
       actions,
       bonusActions,
       reactions,
+      freeActions,
       movement: { speed },
       summary: {
         attackCount,
@@ -401,25 +514,27 @@ export class ActionsService {
 
       const propSlugs = props.map((p) => p.index ?? p.slug ?? "");
       const isFinesse = propSlugs.includes("finesse");
-      const isRanged =
-        propSlugs.includes("ammunition") || propSlugs.includes("thrown");
       const isTwoHanded = propSlugs.includes("two-handed");
       const isVersatile = propSlugs.includes("versatile");
       const isThrown = propSlugs.includes("thrown");
       const propNames = props.map((p) => p.name ?? "").filter(Boolean);
 
+      const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
+      const isRangedWeapon =
+        cats.has("simple-ranged-weapons") ||
+        cats.has("martial-ranged-weapons") ||
+        propSlugs.includes("ammunition");
 
       let abilityMod: number;
       if (isFinesse) {
         abilityMod = Math.max(strMod, dexMod);
-      } else if (isRanged && !isThrown) {
+      } else if (isRangedWeapon) {
         abilityMod = dexMod;
       } else {
         abilityMod = strMod;
       }
 
 
-      const cats = equipCatMap.get(ce.equipment_id) ?? new Set<string>();
       const isProficient =
         isEquipmentProficient(eq.slug, cats, profSlugs) === true;
 
@@ -429,7 +544,7 @@ export class ActionsService {
 
       const range = eq.range as { normal?: number; long?: number } | null;
       let rangeStr = "5 ft";
-      if (range) {
+      if (range && !(isThrown && !isRangedWeapon)) {
         if (range.long) {
           rangeStr = `${range.normal ?? 5}/${range.long} ft`;
         } else if (range.normal) {
@@ -493,7 +608,12 @@ export class ActionsService {
       out.push(action);
 
 
-      if (isThrown && range && (range.normal ?? 0) > 5) {
+      if (
+        isThrown &&
+        !isRangedWeapon &&
+        range &&
+        (range.normal ?? 0) > 5
+      ) {
         out.push({
           ...action,
           id: `weapon-thrown-${ce.id}`,
@@ -517,6 +637,9 @@ export class ActionsService {
     charEquip: CharacterEquipmentEntity[],
     out: ActionBlock[],
   ) {
+    const hasMainHand = charEquip.some((item) => item.mainHand);
+    const hasOffHand = charEquip.some((item) => item.offHand);
+
     for (const ce of charEquip) {
       const eq = ce.equipment;
       const isShield =
@@ -536,6 +659,7 @@ export class ActionsService {
           description: `Guarda ${label}. Libera a(s) mão(s) empunhando. RAW 2024: 1 free object interaction por turno.`,
         });
       } else {
+        if (hasMainHand && hasOffHand) continue;
         out.push({
           id: `draw-${ce.id}`,
           name: `Sacar ${label}`,
@@ -543,6 +667,7 @@ export class ActionsService {
           source: "base",
           sourceLabel: "Interação com objeto (1×/turno)",
           description: `Saca ${label} do inventário. RAW 2024: 1 free object interaction por turno.`,
+          handSlot: hasMainHand ? "off" : "main",
         });
       }
     }
@@ -629,6 +754,9 @@ export class ActionsService {
     for (const cs of activeSpells) {
       const spell = cs.spell;
       const automation = getSpellAutomationEntry(spell.slug);
+      const normalizedSpellSlug = spell.slug
+        .toLowerCase()
+        .replace(/-(phb|xphb|srd52)$/, "");
       const castingTime = (spell.casting_time ?? "").toLowerCase();
       let timing: ActionTiming = "action";
       if (castingTime.includes("bonus")) timing = "bonus_action";
@@ -692,6 +820,12 @@ export class ActionsService {
           };
         }
       }
+      if (!damage && normalizedSpellSlug === "spiritual-weapon") {
+        damage = {
+          dice: "1d8 + MOD",
+          type: "Force",
+        };
+      }
 
       const description = Array.isArray(spell.description)
         ? (spell.description[0] ?? "")
@@ -711,11 +845,19 @@ export class ActionsService {
         timing,
         source: "spell",
         sourceLabel:
-          spell.level === 0 ? "Truque" : `Magia Nivel ${spell.level}`,
+          spell.level === 0
+            ? "Truque"
+            : cs.always_prepared
+              ? `Magia Nivel ${spell.level} · Sempre preparada`
+              : `Magia Nivel ${spell.level}`,
         description: shortDesc,
         range: spell.range ?? "Self",
         spellLevel: spell.level,
-        requiresConcentration: spell.concentration ?? false,
+        requiresConcentration: automation?.automationTags.includes(
+          "no_concentration",
+        )
+          ? false
+          : (spell.concentration ?? false),
         isRitual: spell.ritual ?? false,
         castingTime: spell.casting_time,
         ...(automation
@@ -733,7 +875,28 @@ export class ActionsService {
         | { type?: string; size?: number }
         | null
         | undefined;
-      if (aoeRaw && aoeRaw.type && typeof aoeRaw.size === "number") {
+      // Curated canonical shapes take precedence over stale imported rows.
+      // This is especially important for self-origin cubes such as
+      // Thunderwave, which older local data represented as a sphere.
+      const canonicalAoe = getAoeShape({
+        slug: spell.slug,
+        area_of_effect: null,
+      } as any);
+      if (canonicalAoe) {
+        const rangeStr = spell.range ?? "Self";
+        const isSelf = rangeStr.toLowerCase().includes("self");
+        action.aoe = {
+          originType: isSelf ? "self" : "point",
+          shape: canonicalAoe.kind,
+          sizeFt: canonicalAoe.sizeFt,
+          rangeFt: isSelf
+            ? 0
+            : parseActionRangeFeet(rangeStr),
+          ...(normalizedSpellSlug === "fire-storm"
+            ? { maxPlacements: 10 }
+            : {}),
+        };
+      } else if (aoeRaw && aoeRaw.type && typeof aoeRaw.size === "number") {
         const validShapes = [
           "sphere",
           "cone",
@@ -746,12 +909,9 @@ export class ActionsService {
           : "sphere";
         const rangeStr = spell.range ?? "Self";
         const isSelf = rangeStr.toLowerCase().includes("self");
-        const rangeMatch = rangeStr.match(/(\d+)/);
         const rangeFt = isSelf
           ? 0
-          : rangeMatch
-            ? parseInt(rangeMatch[1], 10)
-            : 0;
+          : parseActionRangeFeet(rangeStr);
         action.aoe = {
           originType: isSelf ? "self" : "point",
           shape,
@@ -767,12 +927,9 @@ export class ActionsService {
           const isSelf =
             tileDef.auraFollowsCaster === true ||
             rangeStr.toLowerCase().includes("self");
-          const rangeMatch = rangeStr.match(/(\d+)/);
           const rangeFt = isSelf
             ? 0
-            : rangeMatch
-              ? parseInt(rangeMatch[1], 10)
-              : 0;
+            : parseActionRangeFeet(rangeStr);
           action.aoe = {
             originType: isSelf ? "self" : "point",
             shape: tileDef.shapeKind,
@@ -790,6 +947,11 @@ export class ActionsService {
       }
 
       if (damage) {
+        if (
+          normalizedSpellSlug === "chromatic-orb"
+        ) {
+          damage.type = "tipo à escolha";
+        }
         action.damage = damage;
       }
 
@@ -845,6 +1007,7 @@ export class ActionsService {
 
       const action: ActionBlock = {
         id: `consumable-${ce.id}`,
+        itemSlug: eq.slug,
         name: `${eq.name} (${effect.label})`,
         timing,
         source: "consumable",
@@ -879,6 +1042,7 @@ export class ActionsService {
     charState: CharacterStateEntity | null,
     profBonus: number,
     mod: (s: string) => number,
+    is2024Rules: boolean,
     out: ActionBlock[],
   ) {
     const classMap = new Map(charClasses.map((cc) => [cc.class_id, cc]));
@@ -888,6 +1052,7 @@ export class ActionsService {
       profBonus,
       mod,
       charClasses,
+      is2024Rules,
     );
 
 
@@ -898,15 +1063,38 @@ export class ActionsService {
         ?.feature_uses_used ?? {};
     const SHARED_POOLS: Record<string, string> = {
       "cutting-words": "bardic-inspiration",
-
+      "sacred-weapon": "channel-divinity",
+      "abjure-foes": "channel-divinity",
     };
     const resolveUsesForDef = (actionDef: ActionBlock): ActionBlock => {
-      if (actionDef.uses == null || actionDef.usesMax == null) return actionDef;
+      const withWildResurgenceState =
+        actionDef.id === "faithful-steed"
+          ? {
+              ...actionDef,
+              faithfulSteedFreeCastUsed:
+                (featureUsesUsed["faithful-steed-free-cast"] ?? 0) > 0,
+            }
+          : actionDef.id === "wild-resurgence"
+          ? {
+              ...actionDef,
+              wildResurgenceSlotRecoveryUsed:
+                (featureUsesUsed["wild-resurgence-slot-recovery"] ?? 0) > 0,
+            }
+          : actionDef;
+      if (actionDef.uses == null || actionDef.usesMax == null)
+        return withWildResurgenceState;
       const poolKey = SHARED_POOLS[actionDef.id] ?? actionDef.id;
-      const used = featureUsesUsed[poolKey] ?? 0;
+      const used = [
+        "flurry-of-blows",
+        "patient-defense",
+        "step-of-the-wind",
+        "stunning-strike",
+      ].includes(actionDef.id)
+        ? (charState?.ki_points_used ?? 0)
+        : (featureUsesUsed[poolKey] ?? 0);
       return {
-        ...actionDef,
-        uses: Math.max(0, actionDef.usesMax - used),
+        ...withWildResurgenceState,
+        uses: Math.max(0, withWildResurgenceState.usesMax! - used),
       };
     };
 
@@ -937,7 +1125,6 @@ export class ActionsService {
 
 
       if (
-        classification?.kind === "alias" &&
         emittedCanonicals.has(effectiveSlug)
       ) {
         continue;
@@ -948,6 +1135,12 @@ export class ActionsService {
       if (mapped) {
 
         for (const actionDef of mapped) {
+          if (
+            actionDef.id === "moonlight-step-recover" &&
+            (featureUsesUsed["moonlight-step"] ?? 0) <= 0
+          ) {
+            continue;
+          }
 
           const withUses = resolveUsesForDef(actionDef);
           out.push({
@@ -1011,6 +1204,7 @@ export class ActionsService {
 
   private buildRaceTraitActions(
     character: CharacterEntity,
+    charState: CharacterStateEntity | null,
     totalLevel: number,
     profBonus: number,
     mod: (s: string) => number,
@@ -1020,9 +1214,99 @@ export class ActionsService {
     if (!origin) return;
 
     const raceSlug = origin.race?.slug ?? "";
+    const traitChoices: string[] = origin.race_trait_choices ?? [];
+
+    if (raceSlug === "goliath") {
+      const giantAncestry = findGiantAncestryChoice(traitChoices);
+      const ancestryUsesMax = profBonus;
+      const ancestryUsesUsed =
+        charState?.feature_uses_used?.["giant-ancestry"] ?? 0;
+      const ancestryUses = Math.max(
+        0,
+        ancestryUsesMax - ancestryUsesUsed,
+      );
+      if (giantAncestry === "clouds-jaunt") {
+        out.push({
+          id: "clouds-jaunt",
+          name: "Salto das Nuvens",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Golias · Ancestralidade Gigante",
+          description:
+            `Teleporte-se magicamente até 30 ft para um espaço desocupado que você possa ver. ` +
+            `${ancestryUses}/${ancestryUsesMax} usos compartilhados por descanso longo.`,
+          featureSlug: "clouds-jaunt",
+          range: "30 ft",
+          uses: ancestryUses,
+          usesMax: ancestryUsesMax,
+          usesRecharge: "long_rest",
+        });
+      }
+      if (totalLevel >= 5) {
+        const usesMax = 1;
+        const usesUsed =
+          charState?.feature_uses_used?.["large-form"] ?? 0;
+        const uses = Math.max(0, usesMax - usesUsed);
+        out.push({
+          id: "large-form",
+          name: "Forma Grande",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Golias",
+          description:
+            `Torna-se Grande por 10 minutos: vantagem em testes de FOR e +10 ft de deslocamento. ` +
+            `Pode encerrar sem ação. ${uses}/${usesMax} uso por descanso longo.`,
+          featureSlug: "large-form",
+          uses,
+          usesMax,
+          usesRecharge: "long_rest",
+        });
+      }
+      return;
+    }
+
+    if (raceSlug === "aasimar") {
+      const healingHandsUsesMax = 1;
+      const healingHandsUsesUsed =
+        charState?.feature_uses_used?.["healing-hands"] ?? 0;
+      out.push({
+        id: "healing-hands",
+        name: "Mãos Curativas",
+        timing: "action",
+        source: "feature",
+        sourceLabel: "Aasimar",
+        description:
+          `Toque uma criatura e role ${profBonus}d4; ela recupera os PV rolados. ` +
+          "Um uso por descanso longo.",
+        featureSlug: "healing-hands",
+        range: "5 ft",
+        uses: Math.max(0, healingHandsUsesMax - healingHandsUsesUsed),
+        usesMax: healingHandsUsesMax,
+        usesRecharge: "long_rest",
+      });
+      if (totalLevel >= 3) {
+        const revelationUsesMax = 1;
+        const revelationUsesUsed =
+          charState?.feature_uses_used?.["celestial-revelation"] ?? 0;
+        out.push({
+          id: "celestial-revelation",
+          name: "Revelação Celestial",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Aasimar",
+          description:
+            "Transforme-se por 1 minuto escolhendo Asas Celestiais, Radiância Interior ou Manto Necrótico. Cada forma também causa dano extra uma vez por turno.",
+          featureSlug: "celestial-revelation",
+          uses: Math.max(0, revelationUsesMax - revelationUsesUsed),
+          usesMax: revelationUsesMax,
+          usesRecharge: "long_rest",
+        });
+      }
+      return;
+    }
+
     if (raceSlug !== "dragonborn") return;
 
-    const traitChoices: string[] = origin.race_trait_choices ?? [];
     const dragonColor = traitChoices.find((c) => DRACONIC_ANCESTRY_MAP[c]);
     if (!dragonColor) return;
 
@@ -1036,26 +1320,68 @@ export class ActionsService {
             ? "2d10"
             : "1d10";
     const saveDc = 8 + mod("con") + profBonus;
-    const uses = profBonus;
+    const usesMax = profBonus;
+    const usesUsed = charState?.feature_uses_used?.["breath-weapon"] ?? 0;
+    const uses = Math.max(0, usesMax - usesUsed);
 
     const dragonName =
       dragonColor.charAt(0).toUpperCase() + dragonColor.slice(1);
 
-    out.push({
-      id: "breath-weapon",
-      name: `Sopro de Dragao (${dragonName})`,
+    const common: Pick<
+      ActionBlock,
+      | "timing"
+      | "source"
+      | "sourceLabel"
+      | "damage"
+      | "saveDc"
+      | "saveAbility"
+      | "saveSuccess"
+      | "featureSlug"
+      | "uses"
+      | "usesMax"
+      | "usesRecharge"
+    > = {
       timing: "action",
       source: "feature",
       sourceLabel: "Dragonborn",
-      description: `Exala ${damageType} em cone de 15 ft ou linha de 30x5 ft. Cada criatura na area faz save de DES (DC ${saveDc}). Falha: ${damageDice} dano ${damageType}. Sucesso: metade. ${uses} usos por descanso longo.`,
       damage: { dice: damageDice, type: damageType },
       saveDc,
       saveAbility: "DES",
-      range: "15 ft cone / 30 ft line",
+      saveSuccess: "half",
+      featureSlug: "breath-weapon",
       uses,
-      usesMax: uses,
+      usesMax,
       usesRecharge: "long_rest",
-    });
+    };
+
+    out.push(
+      {
+        ...common,
+        id: "breath-weapon-cone",
+        name: `Sopro de Dragao — Cone (${dragonName})`,
+        description: `Exala ${damageType} em cone de 15 ft. Cada criatura na area faz save de DES (DC ${saveDc}). Falha: ${damageDice} dano ${damageType}. Sucesso: metade. ${uses}/${usesMax} usos por descanso longo.`,
+        range: "15 ft cone",
+        aoe: {
+          originType: "self",
+          shape: "cone",
+          sizeFt: 15,
+          rangeFt: 0,
+        },
+      },
+      {
+        ...common,
+        id: "breath-weapon-line",
+        name: `Sopro de Dragao — Linha (${dragonName})`,
+        description: `Exala ${damageType} em linha de 30x5 ft. Cada criatura na area faz save de DES (DC ${saveDc}). Falha: ${damageDice} dano ${damageType}. Sucesso: metade. ${uses}/${usesMax} usos por descanso longo.`,
+        range: "30 ft line",
+        aoe: {
+          originType: "self",
+          shape: "line",
+          sizeFt: 30,
+          rangeFt: 0,
+        },
+      },
+    );
   }
 
 
@@ -1064,6 +1390,7 @@ export class ActionsService {
     profBonus: number,
     mod: (s: string) => number,
     charClasses: CharacterClassEntity[],
+    is2024Rules: boolean,
   ): Map<string, ActionBlock[]> {
     const map = new Map<string, ActionBlock[]>();
     const conMod = mod("con");
@@ -1076,6 +1403,10 @@ export class ActionsService {
       (cc) => normalizeClassSlug(cc.class.slug) === "fighter",
     );
     if (fighterClass) {
+      const secondWindMax = getSecondWindMaxUses(
+        fighterClass.class_level,
+        is2024Rules,
+      );
       map.set("second-wind", [
         {
           id: "second-wind",
@@ -1083,10 +1414,10 @@ export class ActionsService {
           timing: "bonus_action",
           source: "feature",
           sourceLabel: "Guerreiro",
-          description: `Recupera 1d10+${fighterClass.class_level} HP. 1 uso por descanso curto/longo.`,
+          description: `Recupera 1d10+${fighterClass.class_level} HP. ${secondWindMax} usos; recupera 1 uso por descanso curto e todos no descanso longo.`,
           damage: { dice: `1d10+${fighterClass.class_level}`, type: "Healing" },
-          uses: 1,
-          usesMax: 1,
+          uses: secondWindMax,
+          usesMax: secondWindMax,
           usesRecharge: "short_rest",
         },
       ]);
@@ -1222,6 +1553,20 @@ export class ActionsService {
           description: "Usa Esconder como acao bonus.",
         },
       ]);
+
+      if (rogueClass.class_level >= 3) {
+        map.set("steady-aim", [
+          {
+            id: "steady-aim",
+            name: "Mira Firme (Steady Aim)",
+            timing: "bonus_action",
+            source: "feature",
+            sourceLabel: "Ladino",
+            description:
+              "Se ainda não se moveu neste turno, zera seu deslocamento e concede Vantagem ao próximo ataque deste turno.",
+          },
+        ]);
+      }
     }
 
 
@@ -1246,13 +1591,21 @@ export class ActionsService {
 
       map.set("patient-defense", [
         {
+          id: "patient-defense-disengage",
+          name: "Defesa Paciente: Desengajar",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Monge",
+          description: "Usa Desengajar como acao bonus sem gastar Foco.",
+        },
+        {
           id: "patient-defense",
-          name: "Defesa Paciente (Patient Defense)",
+          name: "Defesa Paciente: Desengajar + Esquivar",
           timing: "bonus_action",
           source: "feature",
           sourceLabel: "Monge",
           description:
-            "Gasta 1 ponto de Ki para usar Esquivar como acao bonus.",
+            "Gasta 1 ponto de Foco para usar Desengajar e Esquivar como acao bonus.",
           uses: kiPoints,
           usesMax: kiPoints,
           usesRecharge: "short_rest",
@@ -1261,13 +1614,21 @@ export class ActionsService {
 
       map.set("step-of-the-wind", [
         {
+          id: "step-of-the-wind-dash",
+          name: "Passo do Vento: Disparada",
+          timing: "bonus_action",
+          source: "feature",
+          sourceLabel: "Monge",
+          description: "Usa Disparada como acao bonus sem gastar Foco.",
+        },
+        {
           id: "step-of-the-wind",
-          name: "Passo do Vento (Step of the Wind)",
+          name: "Passo do Vento: Disparada + Desengajar",
           timing: "bonus_action",
           source: "feature",
           sourceLabel: "Monge",
           description:
-            "Gasta 1 ponto de Ki para usar Disparada ou Retirada como acao bonus, e distancia de salto dobra neste turno.",
+            "Gasta 1 ponto de Foco para usar Disparada e Desengajar como acao bonus; a distancia de salto dobra neste turno.",
           uses: kiPoints,
           usesMax: kiPoints,
           usesRecharge: "short_rest",
@@ -1283,7 +1644,7 @@ export class ActionsService {
           source: "feature",
           sourceLabel: "Monge",
           description:
-            "Apos usar a acao de Ataque com arma de monge ou ataque desarmado, faz um ataque desarmado como acao bonus.",
+            "Faz um ataque desarmado como acao bonus.",
         },
       ]);
 
@@ -1331,27 +1692,91 @@ export class ActionsService {
 
     const paladinClass = charClasses.find((cc) => cc.class.slug === "paladin");
     if (paladinClass) {
-      map.set("divine-smite", [
+      const divineSenseUses = Math.max(1, 1 + chaMod);
+      map.set("divine-sense", [
         {
-          id: "divine-smite",
-          name: "Destruicao Divina (Divine Smite)",
-          timing: "free",
+          id: "divine-sense",
+          name: "Sentido Divino (Divine Sense)",
+          timing: is2024Rules ? "bonus_action" : "action",
           source: "feature",
           sourceLabel: "Paladino",
           description:
-            "Ao acertar com ataque melee, gasta 1 spell slot para causar 2d8 dano radiante extra (+1d8 por nivel de slot acima do 1o, max 5d8, +1d8 vs mortos-vivos/fadas).",
-          damage: { dice: "2d8", type: "Radiant" },
+            "Por 10 minutos, detecta Celestiais, Corruptores e Mortos-Vivos a até 60 pés que não estejam atrás de cobertura total.",
+          uses: divineSenseUses,
+          usesMax: divineSenseUses,
+          usesRecharge: "long_rest",
         },
       ]);
+
+      const channelDivinityUses = is2024Rules ? 2 : 1;
+      map.set("sacred-weapon", [
+        {
+          id: "sacred-weapon",
+          name: "Arma Sagrada (Sacred Weapon)",
+          timing: is2024Rules ? "free" : "action",
+          source: "feature",
+          sourceLabel: "Paladino · Devoção",
+          description: is2024Rules
+            ? "Ao iniciar a ação Atacar, gasta Canalizar Divindade e adiciona Carisma (mínimo +1) aos ataques com a arma empunhada por 10 minutos."
+            : "Gasta uma ação e Canalizar Divindade para adicionar Carisma aos ataques com a arma empunhada por 1 minuto.",
+          uses: channelDivinityUses,
+          usesMax: channelDivinityUses,
+          usesRecharge: "short_rest",
+        },
+      ]);
+
+      if (is2024Rules && paladinClass.class_level >= 9) {
+        const maxTargets = Math.max(1, chaMod);
+        const saveDc = 8 + profBonus + chaMod;
+        map.set("abjure-foes", [
+          {
+            id: "abjure-foes",
+            name: "Abjurar Inimigos (Abjure Foes)",
+            timing: "action",
+            source: "feature",
+            sourceLabel: "Paladino",
+            description:
+              `Escolha até ${maxTargets} criatura(s) a 60 pés. Cada alvo faz resistência de SAB CD ${saveDc}; ` +
+              "na falha fica Amedrontado por 1 minuto ou até sofrer dano e, no próprio turno, escolhe apenas Movimento, Ação ou Ação Bônus.",
+            saveDc,
+            saveAbility: "WIS",
+            range: "60 ft",
+            uses: channelDivinityUses,
+            usesMax: channelDivinityUses,
+            usesRecharge: "short_rest",
+          },
+        ]);
+      }
+
+      if (is2024Rules && paladinClass.class_level >= 5) {
+        map.set("faithful-steed", [
+          {
+            id: "faithful-steed",
+            name: "Corcel Fiel (Find Steed)",
+            timing: "action",
+            source: "feature",
+            sourceLabel: "Paladino · Magia sempre preparada",
+            description:
+              "Conjura Find Steed a até 30 pés. Uma conjuração gratuita por descanso longo; depois disso, pode gastar um slot de nível 2 ou maior.",
+            range: "30 ft",
+          },
+        ]);
+      }
 
       map.set("lay-on-hands", [
         {
           id: "lay-on-hands",
           name: "Imposicao de Maos (Lay on Hands)",
-          timing: "action",
+          timing: is2024Rules ? "bonus_action" : "action",
           source: "feature",
           sourceLabel: "Paladino",
-          description: `Pool de cura: ${paladinClass.class_level * 5} HP. Toque para curar ou gastar 5 para curar doenca/veneno.`,
+          description:
+            `Pool de cura: ${paladinClass.class_level * 5} HP. Toque para curar` +
+            (is2024Rules
+              ? paladinClass.class_level >= 14
+                ? " ou gaste 5 PV do pool por condição removida: Cego, Enfeitiçado, Surdo, Amedrontado, Paralisado, Envenenado ou Atordoado."
+                : " ou gaste 5 PV do pool para remover Envenenado."
+              : " ou gaste 5 PV do pool para curar uma doença ou neutralizar um veneno."),
           damage: { dice: `${paladinClass.class_level * 5}`, type: "Healing" },
           uses: paladinClass.class_level * 5,
           usesMax: paladinClass.class_level * 5,
@@ -1363,6 +1788,12 @@ export class ActionsService {
 
     const druidClass = charClasses.find((cc) => cc.class.slug === "druid");
     if (druidClass && druidClass.class_level >= 2) {
+      const wildShapeUses = getWildShapeUses(
+        druidClass.class_level,
+        is2024Rules,
+      );
+      const wildShapeUsesLabel =
+        wildShapeUses >= 9999 ? "Usos ilimitados" : `${wildShapeUses} usos`;
       map.set("wild-shape", [
         {
           id: "wild-shape",
@@ -1370,12 +1801,66 @@ export class ActionsService {
           timing: "bonus_action",
           source: "feature",
           sourceLabel: "Druida",
-          description: `Transforma-se em uma besta. ${druidClass.class_level >= 20 ? "Usos ilimitados" : "2 usos"} por descanso curto/longo.`,
-          uses: druidClass.class_level >= 20 ? 999 : 2,
-          usesMax: druidClass.class_level >= 20 ? 999 : 2,
+          description: `Transforma-se em uma fera. ${wildShapeUsesLabel} por descanso curto/longo.`,
+          uses: wildShapeUses,
+          usesMax: wildShapeUses,
           usesRecharge: "short_rest",
         },
       ]);
+      if (is2024Rules) {
+        map.set("wild-companion", [
+          {
+            id: "wild-companion",
+            name: "Companheiro Selvagem (Wild Companion)",
+            timing: "action",
+            source: "feature",
+            sourceLabel: "Druida",
+            description:
+              "Conjura Find Familiar sem componentes materiais. Gaste um slot de magia ou um uso de Forma Selvagem; o familiar é Feérico e dura até o próximo descanso longo.",
+          },
+        ]);
+        if (druidClass.class_level >= 5) {
+          map.set("wild-resurgence", [
+            {
+              id: "wild-resurgence",
+              name: "Ressurgência Selvagem (Wild Resurgence)",
+              timing: "free",
+              source: "feature",
+              sourceLabel: "Druida",
+              description:
+                "Sem ação: troque um slot por um uso de Forma Selvagem quando estiver sem usos (1× por turno), ou troque um uso por um slot de nível 1 (1× por descanso longo).",
+            },
+          ]);
+        }
+        if (druidClass.class_level >= 10) {
+          const moonlightStepMax = Math.max(1, wisMod);
+          map.set("moonlight-step", [
+            {
+              id: "moonlight-step",
+              name: "Passo ao Luar",
+              timing: "bonus_action",
+              source: "feature",
+              sourceLabel: "Druida · Círculo da Lua",
+              description:
+                `Teleporte-se até 30 pés para um espaço desocupado e tenha Vantagem no próximo ataque antes do fim deste turno. ` +
+                `${moonlightStepMax} usos por descanso longo.`,
+              range: "30 ft",
+              uses: moonlightStepMax,
+              usesMax: moonlightStepMax,
+              usesRecharge: "long_rest",
+            },
+            {
+              id: "moonlight-step-recover",
+              name: "Recuperar Passo ao Luar",
+              timing: "free",
+              source: "feature",
+              sourceLabel: "Druida · Círculo da Lua",
+              description:
+                "Sem ação: gaste um slot de magia de nível 2 ou maior para recuperar um uso de Passo ao Luar.",
+            },
+          ]);
+        }
+      }
     }
 
 

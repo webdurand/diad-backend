@@ -15,6 +15,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { LocationEntity } from "src/entities/location.entity";
 import { SceneEntity } from "src/entities/scene.entity";
+import { CampaignEntity } from "src/entities/campaign.entity";
 import { AuthGuard } from "src/models/auth/auth.guard";
 import { CampaignIdPipe } from "src/models/world/pipes/campaign-id.pipe";
 import {
@@ -25,6 +26,7 @@ import {
 import { RandomEncounterMaterializerService } from "../services/random-encounter-materializer.service";
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
+import { EncounterDifficultyPolicyService } from "../services/encounter-difficulty-policy.service";
 
 interface AuthRequest extends Request {
   user?: { id: string };
@@ -92,8 +94,11 @@ export class RandomEncounterController {
     private readonly locationRepo: Repository<LocationEntity>,
     @InjectRepository(SceneEntity)
     private readonly sceneRepo: Repository<SceneEntity>,
+    @InjectRepository(CampaignEntity)
+    private readonly campaignRepo: Repository<CampaignEntity>,
     private readonly selector: MonsterSelectorService,
     private readonly materializer: RandomEncounterMaterializerService,
+    private readonly difficultyPolicy: EncounterDifficultyPolicyService,
   ) {}
 
   private async resolveLocation(
@@ -164,12 +169,21 @@ export class RandomEncounterController {
       );
     }
 
+    const campaign = await this.campaignRepo.findOne({
+      where: { id: campaignId },
+      select: ["id", "difficulty"],
+    });
+    const difficultyDecision = this.difficultyPolicy.resolve(
+      campaign?.difficulty,
+      body.targetDifficulty,
+    );
+
     const composition = await this.selector.selectComposition({
       partyAvgLevel: body.partyAvgLevel,
       partySize: body.partySize,
       biomeTags,
       locationType,
-      targetDifficulty: body.targetDifficulty,
+      targetDifficulty: difficultyDecision.effectiveDifficulty,
       recentAnchors: body.recentAnchors,
       creatureTypeHint: body.creatureTypeHint ?? null,
       narrativeTags: body.narrativeTags,
@@ -178,7 +192,7 @@ export class RandomEncounterController {
     if (!composition) {
       this.logger.warn(
         `🎲 PREVIEW POOL EMPTY locationType=${locationType} biomeTags=${JSON.stringify(biomeTags ?? [])} ` +
-          `partyAvgLevel=${body.partyAvgLevel} difficulty=${body.targetDifficulty}`,
+          `partyAvgLevel=${body.partyAvgLevel} difficulty=${difficultyDecision.effectiveDifficulty}`,
       );
       throw new DomainException(
         ErrorCode.RANDOM_ENCOUNTER_POOL_EMPTY,
@@ -205,9 +219,11 @@ export class RandomEncounterController {
       anchor: composition.anchor,
       mode: composition.mode,
       adjustedXp: composition.adjustedXp,
-      reasonChain: composition.reasonChain,
+      reasonChain: [difficultyDecision.reason, ...composition.reasonChain],
       biome: biomeTags?.[0] ?? null,
-      difficulty: body.targetDifficulty,
+      requestedDifficulty: body.targetDifficulty,
+      difficulty: difficultyDecision.effectiveDifficulty,
+      campaignDifficulty: difficultyDecision.campaignDifficulty,
       locationType,
     };
   }

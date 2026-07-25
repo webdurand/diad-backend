@@ -32,9 +32,9 @@ const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
   web: {
     conditionSlug: "restrained",
     saveAbility: "dex",
-    durationRounds: 10,
+    durationRounds: 600,
     requiresConcentration: true,
-    repeatSaveTiming: "end_of_turn",
+    repeatSaveTiming: "never",
   },
   "dominate-monster": {
     conditionSlug: "charmed",
@@ -51,7 +51,7 @@ const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
     repeatSaveTiming: "never",
   },
   "hypnotic-pattern": {
-    conditionSlug: "incapacitated",
+    conditionSlug: "hypnotized",
     saveAbility: "wis",
     durationRounds: 10,
     requiresConcentration: true,
@@ -88,7 +88,7 @@ const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
     repeatSaveTiming: "never",
   },
   banishment: {
-    conditionSlug: "incapacitated",
+    conditionSlug: "banished",
     saveAbility: "cha",
     durationRounds: 10,
     requiresConcentration: true,
@@ -101,17 +101,31 @@ const SPELL_CONDITION_CATALOG: Record<string, SpellConditionEntry> = {
     requiresConcentration: false,
     repeatSaveTiming: "end_of_turn",
   },
-  sleep: {
-    conditionSlug: "unconscious",
-    saveAbility: "wis",
+  sunburst: {
+    conditionSlug: "blinded",
+    saveAbility: "con",
     durationRounds: 10,
     requiresConcentration: false,
+    repeatSaveTiming: "end_of_turn",
+  },
+  "storm-of-vengeance": {
+    conditionSlug: "deafened",
+    saveAbility: "con",
+    durationRounds: 50,
+    requiresConcentration: false,
     repeatSaveTiming: "never",
+  },
+  sleep: {
+    conditionSlug: "incapacitated",
+    saveAbility: "wis",
+    durationRounds: 10,
+    requiresConcentration: true,
+    repeatSaveTiming: "end_of_turn",
   },
   suggestion: {
     conditionSlug: "charmed",
     saveAbility: "wis",
-    durationRounds: 10,
+    durationRounds: 4_800,
     requiresConcentration: true,
     repeatSaveTiming: "never",
   },

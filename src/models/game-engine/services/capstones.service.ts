@@ -55,6 +55,7 @@ export class CapstonesService {
       hasArcaneApotheosis?: boolean;
       hasSuperiorInspiration?: boolean;
       hasBardicInspiration?: boolean;
+      hasArchdruid?: boolean;
       classes?: Array<{ slug?: string; level?: number }>;
     };
 
@@ -143,6 +144,33 @@ export class CapstonesService {
       }
     }
 
+    if (s.hasArchdruid) {
+      const featureUsesUsed =
+        typeof st.feature_uses_used === "object" &&
+        st.feature_uses_used !== null
+          ? (st.feature_uses_used as Record<string, number>)
+          : {};
+      const usedBefore = Math.max(0, featureUsesUsed["wild-shape"] ?? 0);
+      if (usedBefore > 0) {
+        const usedAfter = usedBefore - 1;
+        st.feature_uses_used = {
+          ...featureUsesUsed,
+          "wild-shape": usedAfter,
+        };
+        stateDirty = true;
+        events.push({
+          event_type: "capstone_archdruid_evergreen_triggered",
+          actor_participant_id: participant.id,
+          data: {
+            featureSlug: "archdruid-evergreen-wild-shape",
+            usesRegained: 1,
+            usedBefore,
+            usedAfter,
+          },
+        });
+      }
+    }
+
     if (stateDirty) {
       await this.stateRepo.save(stEntity);
     }
@@ -204,12 +232,13 @@ export class CapstonesService {
     if (!stEntity) {
       return { ok: false, code: "STATE_NOT_FOUND", events: [] };
     }
-    const st = stEntity as unknown as { pact_slots_used?: number };
-    const slotsUsed =
-      typeof st.pact_slots_used === "number" ? st.pact_slots_used : 0;
+    const slotsUsed = stEntity.spell_slots_used?.pact ?? 0;
     const regained = slotsUsed;
     if (regained > 0) {
-      st.pact_slots_used = 0;
+      stEntity.spell_slots_used = {
+        ...stEntity.spell_slots_used,
+        pact: 0,
+      };
       await this.stateRepo.save(stEntity);
     }
 

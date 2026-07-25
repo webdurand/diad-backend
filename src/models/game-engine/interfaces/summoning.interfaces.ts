@@ -18,7 +18,8 @@ export type SummonSource =
   | "flaming-sphere-spell"
   | "animate-dead-spell"
   | "beast-master-companion"
-  | "echo-knight-echo";
+  | "echo-knight-echo"
+  | "aarakocra-air-elemental-ritual";
 
 export type SummonControlMode =
 
@@ -50,4 +51,8 @@ export interface SummonSpawnDto {
   concentrationBreakBehavior?: SummonConcentrationBreakBehavior;
 
   source: SummonSource;
+
+  statBlock?: import("../services/summon-stat-block").SummonStatBlock;
+
+  metadata?: Record<string, unknown>;
 }

@@ -11,6 +11,7 @@ import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { CombatService } from "./combat.service";
 import type { GameEventData } from "../interfaces/result.type";
+import { canTakeReactionFromConditions } from "./condition-effects.service";
 
 export interface OpportunityAttackDto {
   encounterId: string;
@@ -62,6 +63,25 @@ export class OpportunityAttackService {
         ok: false,
         code: "REACTION_UNAVAILABLE",
         message: "Attacker já usou sua reaction nesta rodada.",
+      };
+    }
+    if (!canTakeReactionFromConditions(attacker.conditions)) {
+      return {
+        ok: false,
+        code: "CONDITION_PREVENTS_REACTION",
+        message: "A condição atual impede reactions.",
+      };
+    }
+    if (
+      (attacker.effectInstances ?? []).some(
+        (effect) => effect.kind === "opportunity_attacks_blocked",
+      )
+    ) {
+      return {
+        ok: false,
+        code: "OPPORTUNITY_ATTACK_BLOCKED",
+        message:
+          "Attacker não pode fazer Opportunity Attacks enquanto este efeito durar.",
       };
     }
 

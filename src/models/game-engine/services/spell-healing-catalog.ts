@@ -12,10 +12,11 @@ function slotLinear(
   baseDice: number,
   diceSize: number,
   withMod: boolean,
+  dicePerSlot = 1,
 ): SpellHealingEntry {
   return (slot) => {
     if (slot < baseSlot) return null;
-    const totalDice = baseDice + (slot - baseSlot);
+    const totalDice = baseDice + (slot - baseSlot) * dicePerSlot;
     const suffix = withMod ? " + MOD" : "";
     return { expression: `${totalDice}d${diceSize}${suffix}` };
   };
@@ -25,10 +26,10 @@ function slotLinear(
 const SPELL_HEALING_CATALOG: Record<string, SpellHealingEntry> = {
 
 
-  "healing-word": slotLinear(1, 1, 4, true),
+  "healing-word": slotLinear(1, 2, 4, true, 2),
 
 
-  "cure-wounds": slotLinear(1, 1, 8, true),
+  "cure-wounds": slotLinear(1, 2, 8, true, 2),
 
 
 
@@ -36,9 +37,13 @@ const SPELL_HEALING_CATALOG: Record<string, SpellHealingEntry> = {
 
 
 
-  "mass-healing-word": slotLinear(3, 1, 4, true),
+  "mass-healing-word": slotLinear(3, 2, 4, true),
 
   revivify: () => ({ expression: "1" }),
+  heal: (slot) =>
+    slot < 6
+      ? null
+      : { expression: String(70 + Math.max(0, slot - 6) * 10) },
 };
 
 export function getSpellHealing(

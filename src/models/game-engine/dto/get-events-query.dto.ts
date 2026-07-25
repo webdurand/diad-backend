@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsOptional,
   IsString,
   IsInt,
@@ -34,6 +35,12 @@ export class GetEventsQueryDto {
   @IsInt()
   @Min(0)
   offset?: number;
+
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  latest?: boolean;
 }
 
 

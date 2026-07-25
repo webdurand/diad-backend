@@ -123,7 +123,7 @@ describe("SummoningService (spec 012)", () => {
       expect(summon.controlledBy).toBe("pc");
       expect(summon.currentHp).toBe(11);
       expect(summon.maxHp).toBe(11);
-      expect(summon.positionX).toBe(5);
+      expect(summon.positionX).toBe(6);
       expect(summon.positionY).toBe(5);
     });
 
@@ -188,6 +188,52 @@ describe("SummoningService (spec 012)", () => {
       expect(summon.positionY).toBe(3);
     });
 
+    it("reposiciona a invocação quando a célula pedida está ocupada", async () => {
+      const { svc } = setup({
+        existingSummons: [
+          {
+            id: "occupant-1",
+            encounterId: "enc-1",
+            positionX: 6,
+            positionY: 5,
+            isDefeated: false,
+          } as any,
+        ],
+      });
+      const summon = await svc.spawnSummon("enc-1", {
+        casterParticipantId: "caster-1",
+        monsterSlug: "wolf",
+        source: "summon-beast-spell",
+        position: { x: 6, y: 5 },
+      });
+
+      expect({ x: summon.positionX, y: summon.positionY }).toEqual({
+        x: 4,
+        y: 4,
+      });
+    });
+
+    it("mantém a invocação dentro do grid quando o conjurador está na borda", async () => {
+      const { svc, mocks } = setup();
+      const caster = await mocks.participantFindOne({
+        where: { id: "caster-1" },
+      });
+      caster.positionX = 19;
+      caster.positionY = 19;
+
+      const summon = await svc.spawnSummon("enc-1", {
+        casterParticipantId: "caster-1",
+        monsterSlug: "wolf",
+        source: "summon-beast-spell",
+        position: { x: 20, y: 19 },
+      });
+
+      expect({ x: summon.positionX, y: summon.positionY }).toEqual({
+        x: 18,
+        y: 18,
+      });
+    });
+
     it("usa displayName custom", async () => {
       const { svc } = setup();
       const summon = await svc.spawnSummon("enc-1", {
@@ -197,6 +243,52 @@ describe("SummoningService (spec 012)", () => {
         displayName: "Celestial Wolf",
       });
       expect(summon.displayName).toBe("Celestial Wolf");
+    });
+
+    it("materializa HP e ficha dinâmica no participante invocado", async () => {
+      const { svc } = setup();
+      const statBlock = {
+        kind: "bestial-spirit" as const,
+        form: "land" as const,
+        slotLevel: 4,
+        armorClass: 15,
+        maxHp: 40,
+        speed: 30,
+        movementModes: { walk: 30, climb: 30 },
+        attack: {
+          name: "Rend" as const,
+          attackBonus: 9,
+          damageDice: "1d8" as const,
+          damageBonus: 8,
+          damageType: "piercing" as const,
+          reachFt: 5 as const,
+          attacksPerAction: 2,
+        },
+        traits: {
+          flyby: false,
+          packTactics: true,
+          waterBreathing: false,
+        },
+      };
+
+      const summon = await svc.spawnSummon("enc-1", {
+        casterParticipantId: "caster-1",
+        monsterSlug: "wolf",
+        source: "summon-beast-spell",
+        statBlock,
+      });
+
+      expect(summon.currentHp).toBe(40);
+      expect(summon.maxHp).toBe(40);
+      expect(summon.appliedEffects).toContainEqual(
+        expect.objectContaining({
+          kind: "summon",
+          metadata: {
+            source: "summon-beast-spell",
+            statBlock,
+          },
+        }),
+      );
     });
 
     it("rejeita quando caster n\u00e3o existe", async () => {
@@ -337,6 +429,150 @@ describe("SummoningService (spec 012)", () => {
         { findOne: jest.fn(), save: jest.fn() } as any,
       );
       expect(await svc.dismissAllOfCaster("c1", "caster-death")).toBe(0);
+    });
+  });
+
+  describe("ações especiais de Find Familiar", () => {
+    function setupFamiliar(pocketed = false) {
+      const caster: any = {
+        id: "caster-1",
+        encounterId: "enc-1",
+        displayName: "Wizard",
+        positionX: 5,
+        positionY: 5,
+        actionUsed: false,
+        conditions: [],
+        effectInstances: [],
+      };
+      const familiar: any = {
+        id: "familiar-1",
+        encounterId: "enc-1",
+        linkedCasterParticipantId: caster.id,
+        displayName: "Familiar Coruja",
+        positionX: pocketed ? null : 7,
+        positionY: pocketed ? null : 5,
+        isVisible: !pocketed,
+        isDefeated: false,
+        reactionsUsed: 0,
+        monster: { slug: "owl" },
+        appliedEffects: [
+          {
+            kind: "summon",
+            refId: "find-familiar-spell",
+            targetParticipantId: "familiar-1",
+            description: "find-familiar-spell",
+            metadata: {
+              source: "find-familiar-spell",
+              familiarForm: "owl",
+              pocketed,
+            },
+          },
+        ],
+      };
+      const encounter: any = {
+        id: "enc-1",
+        status: "active",
+        turnOrder: pocketed
+          ? [caster.id, "enemy-1"]
+          : [caster.id, familiar.id, "enemy-1"],
+        currentTurnIndex: 0,
+        mapData: { gridColumns: 20, gridRows: 20 },
+      };
+      const participantSave = jest
+        .fn()
+        .mockImplementation(async (value: any) => value);
+      const participantFindOne = jest
+        .fn()
+        .mockImplementation(async ({ where }: any) => {
+          if (where.id === caster.id) return caster;
+          if (where.id === familiar.id) return familiar;
+          return null;
+        });
+      const participantFind = jest.fn().mockResolvedValue([familiar]);
+      const encounterSave = jest
+        .fn()
+        .mockImplementation(async (value: any) => value);
+      const svc = new SummoningService(
+        {
+          find: participantFind,
+          findOne: participantFindOne,
+          save: participantSave,
+        } as any,
+        { findOne: jest.fn() } as any,
+        {
+          findOne: jest.fn().mockResolvedValue(encounter),
+          save: encounterSave,
+        } as any,
+      );
+      return {
+        svc,
+        caster,
+        familiar,
+        encounter,
+        participantSave,
+        encounterSave,
+      };
+    }
+
+    it("compartilha sentidos, consome a ação e persiste efeito até o próximo turno", async () => {
+      const { svc, caster, familiar } = setupFamiliar();
+      const result = await svc.shareFamiliarSenses("enc-1", caster.id);
+
+      expect(result.ok).toBe(true);
+      expect(caster.actionUsed).toBe(true);
+      expect(caster.effectInstances).toEqual([
+        expect.objectContaining({
+          kind: "familiar_shared_senses",
+          payload: expect.objectContaining({
+            familiarParticipantId: familiar.id,
+          }),
+          expiresAt: { kind: "until_caster_turn" },
+        }),
+      ]);
+      if (result.ok) {
+        expect(result.events.map((event) => event.event_type)).toEqual([
+          "effect_applied",
+          "familiar_senses_shared",
+        ]);
+      }
+    });
+
+    it("move o familiar para o bolsão e o remove da iniciativa", async () => {
+      const { svc, caster, familiar, encounter } = setupFamiliar();
+      const result = await svc.pocketFindFamiliar("enc-1", caster.id);
+
+      expect(result.ok).toBe(true);
+      expect(caster.actionUsed).toBe(true);
+      expect(familiar.isVisible).toBe(false);
+      expect(familiar.positionX).toBeNull();
+      expect(familiar.positionY).toBeNull();
+      expect(encounter.turnOrder).toEqual([caster.id, "enemy-1"]);
+      expect(
+        familiar.appliedEffects[0].metadata.pocketed,
+      ).toBe(true);
+    });
+
+    it("faz o familiar reaparecer em espaço livre até 30 pés e restaura a iniciativa", async () => {
+      const { svc, caster, familiar, encounter } = setupFamiliar(true);
+      const result = await svc.reappearFindFamiliar(
+        "enc-1",
+        caster.id,
+        { x: 9, y: 5 },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(caster.actionUsed).toBe(true);
+      expect(familiar.isVisible).toBe(true);
+      expect({ x: familiar.positionX, y: familiar.positionY }).toEqual({
+        x: 9,
+        y: 5,
+      });
+      expect(familiar.appliedEffects[0].metadata.pocketed).toBe(false);
+      expect(encounter.turnOrder).toEqual([
+        caster.id,
+        familiar.id,
+        "enemy-1",
+      ]);
     });
   });
 });

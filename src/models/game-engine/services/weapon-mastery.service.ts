@@ -6,7 +6,7 @@ import { DiceService } from "./dice.service";
 import { EffectInstanceService } from "./effect-instance.service";
 import { ConditionLifecycleService } from "./condition-lifecycle.service";
 import { GameEventData } from "../interfaces/result.type";
-import { getAbilityModifier } from "src/shared/srd-utils";
+import { getMonsterSavingThrowBonus } from "./monster-saving-throw";
 
 
 
@@ -218,6 +218,18 @@ export class WeaponMasteryService {
     ctx: MasteryContext,
     result: MasteryOnHitResult,
   ): Promise<void> {
+    const existing = (ctx.target.effectInstances ?? []).filter(
+      (effect) =>
+        effect.kind === "self_disadvantage_next_attack" &&
+        effect.sourceFeatureSlug === "weapon-mastery:sap",
+    );
+    for (const effect of existing) {
+      await this.effectInstances.removeEffect(
+        ctx.target,
+        effect.id,
+        "manual",
+      );
+    }
     const { effect, events } = await this.effectInstances.addEffect(
       ctx.target,
       {
@@ -386,20 +398,10 @@ export class WeaponMasteryService {
   } {
     let mod = 0;
     if (target.type === "monster" && target.monster) {
-      const m = target.monster as unknown as {
-        constitution?: number;
-        proficiency_bonus?: number;
-        proficiencies?: Array<{ type?: string; name?: string }>;
-      };
-      const con = m.constitution ?? 10;
-      mod = getAbilityModifier(con);
-      const profs = Array.isArray(m.proficiencies) ? m.proficiencies : [];
-      const hasProf = profs.some(
-        (p) =>
-          p?.type === "saving-throw" &&
-          (p?.name ?? "").toLowerCase().includes("con"),
+      mod = getMonsterSavingThrowBonus(
+        target.monster as unknown as Record<string, unknown>,
+        "con",
       );
-      if (hasProf) mod += m.proficiency_bonus ?? 0;
     }
 
     const roll = this.dice.roll(20);

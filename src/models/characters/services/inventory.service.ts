@@ -90,6 +90,7 @@ export interface InventoryItemResponse {
     properties?: Record<string, unknown>;
     range?: Record<string, unknown>;
     description?: string;
+    consumableEffect?: Record<string, unknown>;
   };
   quantity: number;
   equipped: boolean;
@@ -216,6 +217,9 @@ export class InventoryService {
         properties: eq.properties ?? undefined,
         range: eq.range ?? undefined,
         description: eq.description ?? undefined,
+        consumableEffect:
+          (eq.consumable_effect as Record<string, unknown> | null) ??
+          undefined,
       },
       quantity: ce.quantity,
       equipped: ce.equipped,
@@ -718,6 +722,7 @@ export class InventoryService {
     userId: string,
     characterId: string,
     itemId: string,
+    options?: { healingBlocked?: boolean },
   ): Promise<UseItemResult> {
     await this.ensureWriteAccess(userId, characterId);
 
@@ -744,6 +749,17 @@ export class InventoryService {
 
     if (effect?.autoApply && effect?.type === "healing" && effect?.dice) {
       const rolled = this.rollDice(effect.dice as string);
+      if (options?.healingBlocked) {
+        return {
+          consumed: true,
+          remainingQuantity: Math.max(0, item.quantity),
+          effect: {
+            type: "healing_blocked",
+            healingApplied: 0,
+            message: `${item.equipment.name}: a cura foi bloqueada.`,
+          },
+        };
+      }
       const hpResult = await this.stateService.updateHp(userId, characterId, {
         healing: rolled,
       });

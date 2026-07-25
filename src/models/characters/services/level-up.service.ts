@@ -34,8 +34,11 @@ import {
   XP_THRESHOLDS,
   CasterClassType,
   FULL_CASTER_SLOTS,
+  WARLOCK_SLOTS,
   getCasterClassType,
+  getCasterSlotType,
   getSpellcastingAbility,
+  getStandardCasterLevelContribution,
   normalizeClassSlug,
 } from "src/shared/srd-constants";
 import { getAbilityModifier } from "src/shared/srd-utils";
@@ -54,6 +57,11 @@ import {
   getCanonicalSubclassSlugs,
 } from "src/shared/class-availability";
 import { Logger } from "@nestjs/common";
+import {
+  isElementalFuryFeatureSlug,
+  normalizeElementalFuryChoice,
+  type ElementalFuryChoice,
+} from "src/shared/druid-rules";
 
 type CasterType = CasterClassType;
 
@@ -96,6 +104,15 @@ export interface AvailableClassOption {
     name: string;
     description: unknown;
     isSubclassFeature: boolean;
+    choice?: {
+      key: string;
+      required: boolean;
+      options: Array<{
+        value: string;
+        label: string;
+        description: string;
+      }>;
+    };
   }>;
   spellcasting: Record<string, unknown> | null;
   newProficiencies: Array<{ slug: string; name: string }>;
@@ -174,6 +191,8 @@ export class LevelUpService {
     private readonly classRepo: Repository<ClassEntity>,
     @InjectRepository(LevelEntity)
     private readonly levelRepo: Repository<LevelEntity>,
+    @InjectRepository(FeatureEntity)
+    private readonly featureRepo: Repository<FeatureEntity>,
     @InjectRepository(SubclassEntity)
     private readonly subclassRepo: Repository<SubclassEntity>,
     @InjectRepository(SpellEntity)
@@ -304,11 +323,24 @@ export class LevelUpService {
           character.source?.rules,
           charClass.subclass_id,
         );
-        if (subLevelData?.level_features) {
-          subclassFeatures = subLevelData.level_features.map((lf) => ({
-            slug: lf.feature.slug,
-            name: lf.feature.name,
-            description: lf.feature.description,
+        const directOrLinked = this.mergeFeatures(
+          this.filterCompatibleLinkedFeatures(
+            subLevelData?.level_features?.map((lf) => lf.feature) ?? [],
+            cls,
+            character.source?.rules,
+          ),
+          await this.findDirectFeatures(
+            cls.id,
+            nextClassLevel,
+            charClass.subclass_id,
+            cls.source_id,
+          ),
+        );
+        if (directOrLinked.length > 0) {
+          subclassFeatures = directOrLinked.map((feature) => ({
+            slug: feature.slug,
+            name: feature.name,
+            description: feature.description,
             isSubclassFeature: true,
           }));
         }
@@ -336,11 +368,46 @@ export class LevelUpService {
       }
 
 
-      const features = (levelData?.level_features ?? []).map((lf) => ({
-        slug: lf.feature.slug,
-        name: lf.feature.name,
-        description: lf.feature.description,
+      const classFeatures = this.mergeFeatures(
+        this.filterCompatibleLinkedFeatures(
+          levelData?.level_features?.map((lf) => lf.feature) ?? [],
+          cls,
+          character.source?.rules,
+        ),
+        await this.findDirectFeatures(
+          cls.id,
+          nextClassLevel,
+          null,
+          cls.source_id,
+        ),
+      );
+      const features = classFeatures.map((feature) => ({
+        slug: feature.slug,
+        name: feature.name,
+        description: feature.description,
         isSubclassFeature: false,
+        ...(feature.slug.startsWith("elemental-fury-")
+          ? {
+              choice: {
+                key: "option",
+                required: true,
+                options: [
+                  {
+                    value: "primal-strike",
+                    label: "Ataque Primordial",
+                    description:
+                      "Uma vez por turno, adiciona dano elemental a um acerto com arma ou ataque de Fera em Forma Selvagem.",
+                  },
+                  {
+                    value: "potent-spellcasting",
+                    label: "Conjuração Potente",
+                    description:
+                      "Adiciona o modificador de Sabedoria ao dano dos truques de Druida.",
+                  },
+                ],
+              },
+            }
+          : {}),
       }));
 
 
@@ -456,6 +523,23 @@ export class LevelUpService {
     const isNewClass = !existingCharClass;
     const newClassLevel = isNewClass ? 1 : existingCharClass.class_level + 1;
     const newTotalLevel = totalLevel + 1;
+    const elementalFuryChoice =
+      inputCanonical === "druid" && newClassLevel === 7
+        ? this.resolveElementalFuryChoice(dto.featureChoices)
+        : null;
+    if (
+      inputCanonical === "druid" &&
+      newClassLevel === 7 &&
+      !elementalFuryChoice
+    ) {
+      throw new BadRequestException({
+        code: "FEATURE_CHOICE_REQUIRED",
+        field: "featureChoices",
+        featureSlug: "elemental-fury",
+        error:
+          "Escolha Ataque Primordial ou Conjuração Potente para Fúria Elemental.",
+      });
+    }
 
 
 
@@ -601,17 +685,43 @@ export class LevelUpService {
         null,
       );
 
-      if (levelData?.level_features) {
-        for (const lf of levelData.level_features) {
+      const classFeatures = this.mergeFeatures(
+        this.filterCompatibleLinkedFeatures(
+          levelData?.level_features?.map((lf) => lf.feature) ?? [],
+          classEntity,
+          character.source?.rules,
+        ),
+        await manager.find(FeatureEntity, {
+          where: {
+            class_id: classEntity.id,
+            subclass_id: IsNull(),
+            level: newClassLevel,
+            ...(classEntity.source_id
+              ? { source_id: classEntity.source_id }
+              : {}),
+          },
+        }),
+      );
+      for (const feature of classFeatures) {
+          if (
+            elementalFuryChoice &&
+            (feature.slug.startsWith("primal-strike-") ||
+              feature.slug.startsWith("potent-spellcasting-")) &&
+            !isElementalFuryFeatureSlug(feature.slug, elementalFuryChoice)
+          ) {
+            continue;
+          }
+          const choices = feature.slug.startsWith("elemental-fury-")
+            ? { option: elementalFuryChoice }
+            : (dto.featureChoices?.[feature.slug] ?? {});
           await manager.save(CharacterFeatureEntity, {
             character_id: characterId,
-            feature_id: lf.feature.id,
+            feature_id: feature.id,
             source_class_id: classEntity.id,
             active: true,
-            choices: dto.featureChoices?.[lf.feature.slug] ?? {},
+            choices,
           });
-          newFeatures.push(lf.feature.name);
-        }
+          newFeatures.push(feature.name);
       }
 
 
@@ -643,24 +753,40 @@ export class LevelUpService {
             character.source?.rules,
             charClass.subclass_id,
           );
-          if (!subLevelData?.level_features) continue;
-          for (const lf of subLevelData.level_features) {
+          const subclassFeatures = this.mergeFeatures(
+            this.filterCompatibleLinkedFeatures(
+              subLevelData?.level_features?.map((lf) => lf.feature) ?? [],
+              classEntity,
+              character.source?.rules,
+            ),
+            await manager.find(FeatureEntity, {
+              where: {
+                class_id: classEntity.id,
+                subclass_id: charClass.subclass_id,
+                level: lv,
+                ...(classEntity.source_id
+                  ? { source_id: classEntity.source_id }
+                  : {}),
+              },
+            }),
+          );
+          for (const feature of subclassFeatures) {
 
             const existing = await manager.findOne(CharacterFeatureEntity, {
               where: {
                 character_id: characterId,
-                feature_id: lf.feature.id,
+                feature_id: feature.id,
               },
             });
             if (existing) continue;
             await manager.save(CharacterFeatureEntity, {
               character_id: characterId,
-              feature_id: lf.feature.id,
+              feature_id: feature.id,
               source_class_id: classEntity.id,
               active: true,
-              choices: dto.featureChoices?.[lf.feature.slug] ?? {},
+              choices: dto.featureChoices?.[feature.slug] ?? {},
             });
-            newFeatures.push(lf.feature.name);
+            newFeatures.push(feature.name);
           }
         }
       }
@@ -907,6 +1033,20 @@ export class LevelUpService {
         maxSpellLevel = i;
       }
     }
+    if (maxSpellLevel === 0) {
+      const slotType = getCasterSlotType(cls.slug);
+      if (slotType === "full" || slotType === "half") {
+        const casterLevel = getStandardCasterLevelContribution(
+          cls.slug,
+          newClassLevel,
+          false,
+        );
+        maxSpellLevel =
+          FULL_CASTER_SLOTS[Math.min(casterLevel, 20)]?.length ?? 0;
+      } else if (slotType === "pact") {
+        maxSpellLevel = WARLOCK_SLOTS[newClassLevel - 1]?.level ?? 0;
+      }
+    }
 
 
 
@@ -1082,6 +1222,47 @@ export class LevelUpService {
     );
   }
 
+  private findDirectFeatures(
+    classId: string,
+    level: number,
+    subclassId: string | null,
+    sourceId?: string,
+  ): Promise<FeatureEntity[]> {
+    return this.featureRepo.find({
+      where: {
+        class_id: classId,
+        subclass_id: subclassId ?? IsNull(),
+        level,
+        ...(sourceId ? { source_id: sourceId } : {}),
+      },
+    });
+  }
+
+  private mergeFeatures(
+    linked: FeatureEntity[],
+    direct: FeatureEntity[],
+  ): FeatureEntity[] {
+    return [
+      ...new Map(
+        [...linked, ...direct].map((feature) => [feature.id, feature]),
+      ).values(),
+    ];
+  }
+
+  private filterCompatibleLinkedFeatures(
+    linked: FeatureEntity[],
+    classEntity: ClassEntity,
+    rules: EditionRules | undefined,
+  ): FeatureEntity[] {
+    const fallbackSource = rules?.featureFallbackSource;
+    return linked.filter(
+      (feature) =>
+        feature.source_id == null ||
+        feature.source_id === classEntity.source_id ||
+        feature.source?.code === "SRD" ||
+        (fallbackSource != null && feature.source?.code === fallbackSource),
+    );
+  }
 
   private async resolveLevelData(
     classEntity: ClassEntity,
@@ -1101,26 +1282,20 @@ export class LevelUpService {
 
     const nativeRows = await this.levelRepo.find({
       where: whereClause,
-      relations: ["level_features", "level_features.feature"],
+      relations: [
+        "level_features",
+        "level_features.feature",
+        "level_features.feature.source",
+      ],
     });
     if (nativeRows.length > 0) {
-      const seen = new Set<string>();
-      const merged = [] as NonNullable<LevelEntity["level_features"]>;
-      for (const row of nativeRows) {
-        for (const lf of row.level_features ?? []) {
-          if (lf.feature?.id && !seen.has(lf.feature.id)) {
-            seen.add(lf.feature.id);
-            merged.push(lf);
-          }
-        }
-      }
-      if (merged.length > 0) {
-        const aggregated: LevelEntity = {
-          ...nativeRows[0],
-          level_features: merged,
-        };
-        return { levelData: aggregated };
-      }
+      const sourceMatched =
+        nativeRows.find(
+          (row) =>
+            classEntity.source_id != null &&
+            row.source_id === classEntity.source_id,
+        ) ?? nativeRows[0];
+      return { levelData: sourceMatched };
     }
 
 
@@ -1145,7 +1320,11 @@ export class LevelUpService {
         level: nextLevel,
         subclass_id: IsNull(),
       },
-      relations: ["level_features", "level_features.feature"],
+      relations: [
+        "level_features",
+        "level_features.feature",
+        "level_features.feature.source",
+      ],
     });
     if (fallbackData) {
       this.logger.warn(
@@ -1290,6 +1469,20 @@ export class LevelUpService {
         });
       }
     }
+  }
+
+  private resolveElementalFuryChoice(
+    featureChoices?: Record<string, unknown>,
+  ): ElementalFuryChoice | null {
+    for (const [slug, value] of Object.entries(featureChoices ?? {})) {
+      if (
+        slug === "elemental-fury" ||
+        slug.startsWith("elemental-fury-")
+      ) {
+        return normalizeElementalFuryChoice(value);
+      }
+    }
+    return null;
   }
 
 

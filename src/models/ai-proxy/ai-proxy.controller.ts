@@ -897,7 +897,20 @@ export class AiProxyController {
       );
       res.setHeader("X-Session-Is-Resumed", ctx.isResumed ? "true" : "false");
 
-      const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+      const session = await this.sessionRepo.findOne({
+        where: { id: sessionId },
+      });
+      if (session?.status === "completed") {
+        earlyReturnReason = `blocked:${ErrorCode.SESSION_NOT_JOINABLE}`;
+        this.emitNarrativeTurnError(
+          res,
+          409,
+          ErrorCode.SESSION_NOT_JOINABLE,
+          "Esta história já terminou. O epílogo e o resultado final estão disponíveis na tela da campanha.",
+          { sessionId, storyStatus: "completed" },
+        );
+        return;
+      }
       const hintNormalization = this.normalizeSystemHintForIdleLoop(
         body.systemHint,
         session,
@@ -1274,6 +1287,20 @@ export class AiProxyController {
     }
 
     try {
+      const session = await this.sessionRepo.findOne({
+        where: { id: sessionId },
+      });
+      if (session?.status === "completed") {
+        earlyReturnReason = `blocked:${ErrorCode.SESSION_NOT_JOINABLE}`;
+        this.emitNarrativeTurnError(
+          res,
+          409,
+          ErrorCode.SESSION_NOT_JOINABLE,
+          "Esta história já terminou. Inicie uma nova aventura para continuar jogando.",
+          { sessionId, storyStatus: "completed" },
+        );
+        return;
+      }
       emitStatus("Recolhendo memórias da cena...");
 
       const ctx = await this.resumeService.assemble(sessionId);

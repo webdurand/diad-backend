@@ -24,5 +24,12 @@ export function substituteSpellcastingMod(
   sheet: CharacterSheet,
 ): string {
   const mod = getSpellcastingModifier(sheet);
-  return template.replace(/\bMOD\b/gi, String(mod));
+  return template
+    .replace(/([+-])\s*MOD\b/gi, (_match, operator: "+" | "-") => {
+      const signedModifier = operator === "-" ? -mod : mod;
+      return signedModifier < 0
+        ? `- ${Math.abs(signedModifier)}`
+        : `+ ${signedModifier}`;
+    })
+    .replace(/\bMOD\b/gi, String(mod));
 }

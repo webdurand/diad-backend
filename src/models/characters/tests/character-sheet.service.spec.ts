@@ -38,6 +38,7 @@ describe("CharacterSheetService", () => {
       charLevelUp: createMockRepository(),
       charFeature: createMockRepository(),
       charOrigin: createMockRepository(),
+      raceTrait: createMockRepository(),
       level: createMockRepository(),
       classSavingThrow: createMockRepository(),
       classProf: createMockRepository(),
@@ -59,6 +60,7 @@ describe("CharacterSheetService", () => {
       repos.charLevelUp as any,
       repos.charFeature as any,
       repos.charOrigin as any,
+      repos.raceTrait as any,
       repos.level as any,
       repos.classSavingThrow as any,
       repos.classProf as any,
@@ -90,6 +92,7 @@ describe("CharacterSheetService", () => {
     repos.charLevelUp.find!.mockResolvedValue([]);
     repos.charFeature.find!.mockResolvedValue([]);
     repos.charOrigin.findOne!.mockResolvedValue(origin);
+    repos.raceTrait.find!.mockResolvedValue([]);
     repos.classSavingThrow.createQueryBuilder!.mockReturnValue({
       innerJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -262,13 +265,23 @@ describe("CharacterSheetService", () => {
       expect(slotLevels).toEqual([4, 3, 2]);
     });
 
-    it("paladin level 5 (half caster, effective floor(5/2)=2): [3]", async () => {
+    it("paladin level 5 uses its class table: [4,2]", async () => {
       setupBasicSheet("paladin", 5, { cha: 16 });
       const sheet = await service.computeSheet("user-1", "char-1");
       const slotLevels = sheet.spellSlots.map((s) => s.total);
+      expect(slotLevels).toEqual([4, 2]);
+    });
 
+    it("2024 paladin level 1 starts with spell slots", async () => {
+      setupBasicSheet("paladin", 1, { cha: 16 });
+      const sheet = await service.computeSheet("user-1", "char-1");
+      expect(sheet.spellSlots.map((s) => s.total)).toEqual([2]);
+    });
 
-      expect(slotLevels).toEqual([3]);
+    it("2014 paladin level 1 has no spell slots", async () => {
+      setupBasicSheet("paladin-phb", 1, { cha: 16 });
+      const sheet = await service.computeSheet("user-1", "char-1");
+      expect(sheet.spellSlots).toEqual([]);
     });
 
     it("warlock level 5: pact slot {level: 3, slots: 2}", async () => {
@@ -342,6 +355,21 @@ describe("CharacterSheetService", () => {
     });
   });
 
+  describe("Species speed", () => {
+    it("uses a subrace speed override when present", async () => {
+      const { origin } = setupBasicSheet();
+      (origin as any).subrace = {
+        slug: "elf-wood-phb",
+        name: "Wood",
+        raw: { speed: 35 },
+      };
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+
+      expect(sheet.speed).toBe(35);
+    });
+  });
+
   describe("Carrying capacity", () => {
     it("STR 10: capacity = 150", async () => {
       setupBasicSheet("fighter", 1, { str: 10 });
@@ -373,6 +401,49 @@ describe("CharacterSheetService", () => {
       );
       const sheet = await service.computeSheet("user-1", "char-1");
       expect(sheet.levelUpAvailable).toBe(false);
+    });
+  });
+
+  describe("Always-prepared Paladin spells", () => {
+    it("adds Paladin's Smite and the level-15 Devotion table to the sheet", async () => {
+      const { cc } = setupBasicSheet("paladin", 15);
+      cc.subclass = {
+        slug: "paladin-devotion",
+        name: "Oath of Devotion",
+      } as never;
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+      const alwaysPrepared = sheet.spells
+        .filter((spell) => spell.alwaysPrepared)
+        .map((spell) => spell.slug);
+
+      expect(alwaysPrepared).toEqual([
+        "divine-smite",
+        "find-steed",
+        "protection-from-evil-and-good",
+        "shield-of-faith",
+        "aid",
+        "zone-of-truth",
+        "beacon-of-hope",
+        "dispel-magic",
+        "freedom-of-movement",
+        "guardian-of-faith",
+      ]);
+    });
+
+    it("does not add the XPHB table to a PHB Paladin", async () => {
+      const { cc } = setupBasicSheet("paladin", 15);
+      cc.subclass = {
+        slug: "devotion",
+        name: "Devotion",
+      } as never;
+      repos.character.findOne!.mockResolvedValue(
+        makeCharacter({ source: { code: "PHB" } }),
+      );
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+
+      expect(sheet.spells).toEqual([]);
     });
   });
 

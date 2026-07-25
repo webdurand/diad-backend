@@ -8,6 +8,8 @@ export type RemovalReason =
   | "target_saved"
   | "duration_expired"
   | "source_ended"
+  | "damage_received"
+  | "shaken_awake"
   | "manual"
   | "unknown";
 
@@ -27,6 +29,7 @@ const CONDITION_LABEL_PT: Record<string, string> = {
   restrained: "Restrito",
   stunned: "Atordoado",
   unconscious: "Inconsciente",
+  hypnotized: "Hipnotizado",
 };
 
 const CURATED: Record<string, Partial<Record<RemovalReason, string>>> = {
@@ -84,6 +87,12 @@ const CURATED: Record<string, Partial<Record<RemovalReason, string>>> = {
   stunned: {
     duration_expired: "Se recupera do atordoamento.",
     target_saved: "Sacode a cabeça e recobra o foco.",
+  },
+  hypnotized: {
+    damage_received: "O impacto rompe o transe hipnótico.",
+    shaken_awake: "É sacudido e desperta do transe hipnótico.",
+    concentration_broken: "O padrão se desfaz e o transe termina.",
+    duration_expired: "O transe hipnótico chega ao fim.",
   },
   poisoned: {
     duration_expired: "O veneno perde efeito.",

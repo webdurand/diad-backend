@@ -196,6 +196,8 @@ describe("classifyFeatureForActions", () => {
       ["channel-divinity-paladin-3", "channel-divinity"],
       ["divine-smite-paladin-2", "divine-smite"],
       ["lay-on-hands-paladin-1", "lay-on-hands"],
+      ["faithful-steed-paladin-5", "faithful-steed"],
+      ["abjure-foes-paladin-9", "abjure-foes"],
       ["font-of-magic-sorcerer-2", "font-of-magic"],
       ["arcane-recovery-wizard-1", "arcane-recovery"],
       ["eldritch-invocations-warlock-2", "eldritch-invocations"],

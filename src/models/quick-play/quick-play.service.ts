@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  Optional,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { CampaignEntity } from "src/entities/campaign.entity";
@@ -6,7 +11,13 @@ import { GameSessionEntity } from "src/entities/game-session.entity";
 import { CampaignPlayerEntity } from "src/entities/campaign-player.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterStateEntity } from "src/entities/character-state.entity";
 import { EncounterService } from "src/models/game-engine/services/encounter.service";
+import {
+  CharacterStateService,
+  QuickPlayCharacterStateSnapshot,
+} from "src/models/characters/services/character-state.service";
+import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 
 export interface CreateQuickPlayEncounterDto {
   characterId: string;
@@ -37,6 +48,11 @@ export class QuickPlayService {
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
     private readonly encounterService: EncounterService,
+    @Optional()
+    @InjectRepository(CharacterStateEntity)
+    private readonly characterStateRepo?: Repository<CharacterStateEntity>,
+    @Optional()
+    private readonly characterSheetService?: CharacterSheetService,
   ) {}
 
   async getOrCreateSandbox(
@@ -113,45 +129,156 @@ export class QuickPlayService {
     const { campaignId, sessionId } =
       await this.getOrCreateSandbox(ownerUserId);
 
-    const encounter = await this.encounterService.create(sessionId, {
-      name: `Quick Play ${new Date().toISOString()}`,
-    });
-
-    await this.encounterService.addCharacter(
-      encounter.id,
-      dto.characterId,
+    const trainingState = await this.prepareCharacterForTraining(
       ownerUserId,
+      dto.characterId,
     );
 
-    for (const m of dto.monsters) {
-      await this.encounterService.addMonster(encounter.id, {
-        monsterId: m.monsterId,
-        count: m.count,
+    try {
+      const encounter = await this.encounterService.create(sessionId, {
+        name: `Quick Play ${new Date().toISOString()}`,
       });
+
+      await this.encounterService.addCharacter(
+        encounter.id,
+        dto.characterId,
+        ownerUserId,
+      );
+
+      for (const m of dto.monsters) {
+        await this.encounterService.addMonster(encounter.id, {
+          monsterId: m.monsterId,
+          count: m.count,
+        });
+      }
+
+      let difficulty:
+        | {
+            adjusted_xp: number;
+            threshold: string;
+            total_monster_xp: number;
+            party_level_summary: Record<number, number>;
+          }
+        | undefined;
+      if (this.characterSheetService) {
+        const sheet = await this.characterSheetService.computeSheet(
+          ownerUserId,
+          dto.characterId,
+        );
+        const calculated = await this.encounterService.calculateDifficulty(
+          encounter.id,
+          [sheet.totalLevel],
+        );
+        difficulty = {
+          adjusted_xp: calculated.adjustedXp,
+          threshold: calculated.threshold,
+          total_monster_xp: calculated.totalMonsterXp,
+          party_level_summary: { [sheet.totalLevel]: 1 },
+        };
+      }
+
+      await this.participantRepo.update(
+        { encounterId: encounter.id, type: "monster" },
+        { controlledBy: "ai" },
+      );
+
+      const gridSize =
+        dto.gridSize && dto.gridSize > 0 ? Math.floor(dto.gridSize) : 20;
+      await this.encounterRepo.update(encounter.id, {
+        mapData: {
+          ...(encounter.mapData ?? {}),
+          gridSize,
+          gridColumns: gridSize,
+          gridRows: gridSize,
+          gridVisible: true,
+          quickPlay: trainingState
+            ? {
+                characterId: dto.characterId,
+                characterStateSnapshot: trainingState,
+                restored: false,
+              }
+            : undefined,
+        } as any,
+        inLair: dto.inLair === true,
+        difficulty,
+      });
+
+      await this.sessionRepo.update(sessionId, {
+        activeEncounterId: encounter.id,
+      });
+
+      return { encounterId: encounter.id, sessionId, campaignId };
+    } catch (error) {
+      if (trainingState) {
+        await this.restorePreparedState(dto.characterId, trainingState).catch(
+          (restoreError: unknown) => {
+            this.logger.error(
+              `Falha ao restaurar estado após erro no Quick Play: ${
+                restoreError instanceof Error
+                  ? restoreError.message
+                  : String(restoreError)
+              }`,
+            );
+          },
+        );
+      }
+      throw error;
     }
+  }
 
-    await this.participantRepo.update(
-      { encounterId: encounter.id, type: "monster" },
-      { controlledBy: "ai" },
+  private async prepareCharacterForTraining(
+    ownerUserId: string,
+    characterId: string,
+  ): Promise<QuickPlayCharacterStateSnapshot | null> {
+    if (!this.characterStateRepo || !this.characterSheetService) return null;
+    const state = await this.characterStateRepo.findOne({
+      where: { character_id: characterId },
+    });
+    if (!state) return null;
+
+    const sheet = await this.characterSheetService.computeSheet(
+      ownerUserId,
+      characterId,
     );
+    const snapshot: QuickPlayCharacterStateSnapshot = {
+      current_hp: state.current_hp,
+      temp_hp: state.temp_hp,
+      max_hp_bonus: state.max_hp_bonus,
+      death_saves_success: state.death_saves_success,
+      death_saves_fail: state.death_saves_fail,
+      conditions: [...(state.conditions ?? [])],
+      spell_slots_used: { ...(state.spell_slots_used ?? {}) },
+      hit_dice_used: { ...(state.hit_dice_used ?? {}) },
+      ki_points_used: state.ki_points_used,
+      feature_uses_used: { ...(state.feature_uses_used ?? {}) },
+      exhaustion_level: state.exhaustion_level,
+      inspiration: state.inspiration,
+    };
 
-    const gridSize =
-      dto.gridSize && dto.gridSize > 0 ? Math.floor(dto.gridSize) : 20;
-    await this.encounterRepo.update(encounter.id, {
-      mapData: {
-        ...(encounter.mapData ?? {}),
-        gridSize,
-        gridColumns: gridSize,
-        gridRows: gridSize,
-        gridVisible: true,
-      },
-      inLair: dto.inLair === true,
+    state.current_hp = sheet.maxHp;
+    state.temp_hp = 0;
+    state.death_saves_success = 0;
+    state.death_saves_fail = 0;
+    state.conditions = [];
+    state.spell_slots_used = {};
+    state.hit_dice_used = {};
+    state.ki_points_used = 0;
+    state.feature_uses_used = {};
+    state.exhaustion_level = 0;
+    await this.characterStateRepo.save(state);
+    return snapshot;
+  }
+
+  private async restorePreparedState(
+    characterId: string,
+    snapshot: QuickPlayCharacterStateSnapshot,
+  ): Promise<void> {
+    if (!this.characterStateRepo) return;
+    const state = await this.characterStateRepo.findOne({
+      where: { character_id: characterId },
     });
-
-    await this.sessionRepo.update(sessionId, {
-      activeEncounterId: encounter.id,
-    });
-
-    return { encounterId: encounter.id, sessionId, campaignId };
+    if (!state) return;
+    Object.assign(state, snapshot);
+    await this.characterStateRepo.save(state);
   }
 }

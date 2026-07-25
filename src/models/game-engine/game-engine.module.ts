@@ -100,6 +100,8 @@ import { SummoningService } from "./services/summoning.service";
 import { MarkTransferService } from "./services/mark-transfer.service";
 
 import { OpportunityAttackService } from "./services/opportunity-attack.service";
+import { ReadyActionService } from "./services/ready-action.service";
+import { AarakocraRitualService } from "./services/aarakocra-ritual.service";
 
 import { ReactionOpportunityService } from "./services/reaction-opportunity.service";
 
@@ -159,6 +161,8 @@ import { DialogueActionService } from "./services/dialogue-action.service";
 import { DialogueActionGeneratorService } from "./services/dialogue-action-generator.service";
 import { OpenModeActionGeneratorService } from "./services/open-mode-action-generator.service";
 import { ScenePoiObservationService } from "./services/scene-poi-observation.service";
+import { EncounterDifficultyPolicyService } from "./services/encounter-difficulty-policy.service";
+import { PaladinAuraService } from "./services/paladin-aura.service";
 
 @Module({
   imports: [
@@ -279,6 +283,7 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
     BerserkerService,
     ClericFeaturesService,
     PaladinFeaturesService,
+    PaladinAuraService,
     SorcererFeaturesService,
     TransformationService,
     SummoningService,
@@ -287,6 +292,8 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
     MarkTransferService,
 
     OpportunityAttackService,
+    ReadyActionService,
+    AarakocraRitualService,
 
     ReactionOpportunityService,
 
@@ -322,6 +329,7 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
     DialogueActionGeneratorService,
     OpenModeActionGeneratorService,
     ScenePoiObservationService,
+    EncounterDifficultyPolicyService,
   ],
   exports: [
     DiceService,
@@ -377,6 +385,8 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
     MarkTransferService,
 
     OpportunityAttackService,
+    ReadyActionService,
+    AarakocraRitualService,
 
     ReactionOpportunityService,
 
@@ -392,8 +402,10 @@ import { ScenePoiObservationService } from "./services/scene-poi-observation.ser
     DiceRollService,
     StartEncounterFromNarrativeService,
     RandomEncounterMaterializerService,
+    MonsterSelectorService,
     DialogueActionGeneratorService,
     OpenModeActionGeneratorService,
+    EncounterDifficultyPolicyService,
   ],
 })
 export class GameEngineModule implements OnModuleInit {

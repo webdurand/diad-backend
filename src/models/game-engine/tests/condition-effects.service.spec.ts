@@ -1,4 +1,7 @@
-import { ConditionEffectsService } from "../services/condition-effects.service";
+import {
+  ConditionEffectsService,
+  isTargetingCharmer,
+} from "../services/condition-effects.service";
 
 describe("ConditionEffectsService", () => {
   let service: ConditionEffectsService;
@@ -57,6 +60,12 @@ describe("ConditionEffectsService", () => {
     it("should auto-fail when petrified", () => {
       const result = service.getAttackModifiers(["petrified"]);
       expect(result.autoFail).toBe(true);
+    });
+
+    it("should prevent actions while banished", () => {
+      expect(service.canTakeAction(["banished"])).toBe(false);
+      expect(service.canTakeReaction(["banished"])).toBe(false);
+      expect(service.getAttackModifiers(["banished"]).autoFail).toBe(true);
     });
 
     it("should handle no conditions", () => {
@@ -183,6 +192,10 @@ describe("ConditionEffectsService", () => {
     it("should return false when unconscious", () => {
       expect(service.canTakeAction(["unconscious"])).toBe(false);
     });
+
+    it("should return false when hypnotized", () => {
+      expect(service.canTakeAction(["hypnotized"])).toBe(false);
+    });
   });
 
   describe("canTakeReaction", () => {
@@ -220,6 +233,10 @@ describe("ConditionEffectsService", () => {
 
     it("should return false when unconscious", () => {
       expect(service.canMove(["unconscious"])).toBe(false);
+    });
+
+    it("should return false when hypnotized", () => {
+      expect(service.canMove(["hypnotized"])).toBe(false);
     });
 
     it("should return true when blinded (can still move)", () => {
@@ -311,6 +328,30 @@ describe("ConditionEffectsService", () => {
       ];
       const summaries = service.getConditionSummary(all);
       expect(summaries).toHaveLength(14);
+    });
+  });
+
+  describe("isTargetingCharmer", () => {
+    const charmed = {
+      id: "condition-1",
+      slug: "charmed" as const,
+      appliedBy: "charmer-1",
+      sourceSpell: "suggestion",
+      sourceConcentration: true,
+      source: "spell:suggestion" as const,
+      saveAbility: "wis" as const,
+      saveDc: 15,
+      repeatSaveTiming: "never" as const,
+      durationRoundsRemaining: 4800,
+      appliedAt: "2026-07-24T00:00:00.000Z",
+    };
+
+    it("blocks harmful targeting against the participant who applied charm", () => {
+      expect(isTargetingCharmer([charmed], "charmer-1")).toBe(true);
+    });
+
+    it("does not block targeting a different participant", () => {
+      expect(isTargetingCharmer([charmed], "someone-else")).toBe(false);
     });
   });
 });

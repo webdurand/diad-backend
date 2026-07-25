@@ -61,11 +61,25 @@ export class LibraryController {
       excludeBurrowRaw === "true" || excludeBurrowRaw === "1";
 
     const monsters = await this.libraryService.findBeastsForForm(maxCr);
-    const filtered = monsters
+    const summaries = monsters
       .filter((m) =>
         passesLocomotionFilter(m, { excludeFly, excludeSwim, excludeBurrow }),
       )
       .map(toBeastSummary)
+      .filter((beast) => beast.hitPoints > 0 && beast.armorClass > 0);
+    const uniqueByName = new Map<string, (typeof summaries)[number]>();
+    for (const beast of summaries) {
+      const key = beast.name.trim().toLocaleLowerCase();
+      const existing = uniqueByName.get(key);
+      if (
+        !existing ||
+        beast.hitPoints + beast.armorClass >
+          existing.hitPoints + existing.armorClass
+      ) {
+        uniqueByName.set(key, beast);
+      }
+    }
+    const filtered = [...uniqueByName.values()]
       .sort((a, b) => a.cr - b.cr || a.name.localeCompare(b.name));
 
     return { beasts: filtered, total: filtered.length };

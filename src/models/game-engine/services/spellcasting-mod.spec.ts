@@ -148,7 +148,10 @@ describe("spellcasting-mod", () => {
         ],
       });
       expect(substituteSpellcastingMod("1d4 + MOD", weakSheet)).toBe(
-        "1d4 + -1",
+        "1d4 - 1",
+      );
+      expect(substituteSpellcastingMod("1d4 - MOD", weakSheet)).toBe(
+        "1d4 + 1",
       );
     });
   });

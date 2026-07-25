@@ -40,6 +40,10 @@ export interface TransformationForm {
     cha: number;
   };
   actions: MonsterActionLike[];
+  multiattack?: {
+    sequence: Array<{ actionName: string; count: number }>;
+    description?: string;
+  } | null;
   senses?: Record<string, unknown>;
   challengeRating?: number;
 }
@@ -49,12 +53,14 @@ export interface TransformationOriginalSnapshot {
   maxHp: number;
   currentHp: number;
   tempHp: number;
+  walkSpeed?: number;
 
   displayName: string;
 }
 
 export interface TransformationState {
   source: TransformationSource;
+  rulesMode?: "legacy-form-hp" | "xphb-wild-shape";
   enteredAtRound: number;
 
   sourceCasterParticipantId?: string | null;
@@ -64,6 +70,7 @@ export interface TransformationState {
 
   original: TransformationOriginalSnapshot;
   form: TransformationForm;
+  grantedTempHp?: number;
 
 
   retainedAbilities: Array<

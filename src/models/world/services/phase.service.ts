@@ -13,6 +13,7 @@ import { GameSessionEntity } from "src/entities/game-session.entity";
 import { LocationPoiEntity } from "src/entities/location-poi.entity";
 import { NpcEntity } from "src/entities/npc.entity";
 import { SceneEntity } from "src/entities/scene.entity";
+import { SceneNpcEntity } from "src/entities/scene-npc.entity";
 import {
   PhaseArcBeat,
   PhaseConditionSet,
@@ -27,6 +28,7 @@ import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
 import { SessionEventEntity } from "src/entities/session-event.entity";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { SessionStoryArcStateEntity } from "src/entities/session-story-arc-state.entity";
+import { SessionNpcStateEntity } from "src/entities/session-npc-state.entity";
 import { StoryArcEntity } from "src/entities/story-arc.entity";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { EventAudience } from "src/common/event-bus/event-envelope.types";
@@ -34,6 +36,7 @@ import { EventEnvelopeFactory } from "src/common/event-bus/event-envelope.factor
 import { DomainException } from "src/common/observability/errors/diad-exception";
 import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 import {
+  countMarkedXpTriggers,
   createEmptyXpTriggerState,
   normalizeXpTriggerState,
 } from "src/models/story-hidden-layer/domain/hidden-layer.types";
@@ -130,6 +133,23 @@ export interface PhaseDto {
 }
 
 export interface MissionPanelPayload {
+  story: {
+    premise: string;
+    dramaticQuestion: string;
+    protagonistHook: string;
+    stakes: { personal?: string; world?: string };
+  };
+  storyStatus: "active" | "completed" | "failed";
+  ending: {
+    title: string;
+    subtitle: string;
+    outcomeTier: "TRIUMPH" | "BITTERSWEET" | "COSTLY" | "FAILURE";
+    completedAt: string | null;
+    finalPhaseName: string;
+    objectivesCompleted: number;
+    objectivesTotal: number;
+    epilogue: string;
+  } | null;
   quest: {
     id: string;
     name: string;
@@ -152,6 +172,9 @@ export interface MissionPanelPayload {
     satisfiedCount: number;
     totalConditions: number;
     satisfiedKinds: string[];
+    ready: boolean;
+    canAdvance: boolean;
+    nextPhase: { index: number; name: string } | null;
   };
   mainClock: {
     id: string;
@@ -172,6 +195,13 @@ export interface MissionPanelPayload {
     objectivesCompleted: number;
     objectivesTotal: number;
     turnsSinceProgress: number;
+    scenesUsed: number;
+    minScenes: number;
+    targetScenes: number;
+    maxScenes: number;
+    scenesRemaining: number;
+    storyLength: "short" | "standard" | "epic";
+    pressure: "calm" | "rising" | "urgent" | "finale";
   };
   phaseHistory: Array<{
     index: number;
@@ -378,15 +408,29 @@ export class PhaseService {
     });
     if (!quest) throw new NotFoundException("Missão principal não encontrada.");
 
-    const activeObjective = await this.ensureMissionObjective(
+    let activeObjective = await this.ensureMissionObjective(
       sessionId,
       quest,
       storyArc,
       state,
     );
+    activeObjective = await this.ensureObjectivePlayable(
+      session,
+      activeObjective,
+    );
 
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
     const progress = this.evaluateGate(phase.completionConditions, facts);
+    const nextPhase = await this.phaseRepo.findOne({
+      where: { storyArcId: storyArc.id, index: state.currentPhaseIndex + 1 },
+    });
+    const nextPhaseProgress = nextPhase
+      ? this.evaluateGate(nextPhase.unlockConditions, facts)
+      : null;
+    const phaseReady = progress.status === "pending";
+    const canAdvance = Boolean(
+      nextPhase && phaseReady && nextPhaseProgress?.status === "pending",
+    );
     const phaseHistory = await this.loadPhaseHistory(sessionId, storyArc.id);
     const mainClock = session.campaignId
       ? await this.loadMainClock(sessionId, session.campaignId)
@@ -405,8 +449,61 @@ export class PhaseService {
       (await this.bookendArtifactRepo?.count({
         where: { gameSessionId: sessionId },
       })) ?? 0;
+    const campaign = session.campaignId
+      ? await this.dataSource
+          .getRepository(CampaignEntity)
+          .findOne({ where: { id: session.campaignId } })
+      : null;
+    const storySeed = campaign
+      ? this.resolveStorySeed(campaign)
+      : PhaseService.buildDefaultStorySeed({
+          name: storyArc.name ?? "Aventura",
+          description: storyArc.description ?? undefined,
+          setting: undefined,
+          theme: undefined,
+        });
+    const scenesUsed = await this.dataSource
+      .getRepository(SceneEntity)
+      .count({ where: { sessionId } });
+    const maxScenes = Math.max(1, campaign?.contentBudget?.maxScenes ?? 18);
+    const targetScenes = Math.max(
+      1,
+      campaign?.contentBudget?.targetScenes ?? maxScenes - 3,
+    );
+    const minScenes = Math.max(
+      1,
+      campaign?.contentBudget?.minScenes ?? Math.floor(maxScenes * 0.6),
+    );
+    const storyLength =
+      campaign?.contentBudget?.storyLength ?? this.inferStoryLength(maxScenes);
+    const storyStatus: MissionPanelPayload["storyStatus"] =
+      state.currentPhase === "failed"
+        ? "failed"
+        : state.currentPhase === "completed" || session.status === "completed"
+          ? "completed"
+          : "active";
+    const ending =
+      storyStatus === "active"
+        ? null
+        : this.buildEndingPayload({
+            storyStatus,
+            storySeed,
+            state,
+            phase,
+            session,
+            objectivesCompleted,
+            objectivesTotal: requiredObjectives.length,
+          });
 
     const payload: MissionPanelPayload = {
+      story: {
+        premise: storySeed.premise,
+        dramaticQuestion: storySeed.dramaticQuestion,
+        protagonistHook: storySeed.protagonistHook,
+        stakes: storySeed.stakes ?? {},
+      },
+      storyStatus,
+      ending,
       quest: {
         id: quest.id,
         name: quest.name,
@@ -429,6 +526,11 @@ export class PhaseService {
         satisfiedCount: progress.satisfiedCount,
         totalConditions: progress.totalConditions,
         satisfiedKinds: progress.satisfiedKinds,
+        ready: phaseReady,
+        canAdvance,
+        nextPhase: nextPhase
+          ? { index: nextPhase.index, name: nextPhase.name }
+          : null,
       },
       mainClock,
       pullState: {
@@ -443,6 +545,13 @@ export class PhaseService {
         objectivesCompleted,
         objectivesTotal: requiredObjectives.length,
         turnsSinceProgress: session.turnsSinceMissionProgress ?? 0,
+        scenesUsed,
+        minScenes,
+        targetScenes,
+        maxScenes,
+        scenesRemaining: Math.max(0, maxScenes - scenesUsed),
+        storyLength,
+        pressure: this.resolveStoryPressure(scenesUsed, maxScenes),
       },
       phaseHistory,
       bookendsCount,
@@ -499,8 +608,27 @@ export class PhaseService {
     }
 
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
-    const evaluation = this.evaluateGate(toPhase.unlockConditions, facts);
-    if (evaluation.status !== "pending") {
+    const completionEvaluation = this.evaluateGate(
+      fromPhase.completionConditions,
+      facts,
+    );
+    if (completionEvaluation.status !== "pending") {
+      throw new DomainException(
+        ErrorCode.LOCATION_REQUIREMENTS_NOT_MET,
+        `O capítulo ${fromPhase.name} ainda não chegou ao seu ponto de virada.`,
+        {
+          context: {
+            sessionId,
+            fromPhaseIndex: fromPhase.index,
+            toPhaseIndex: toPhase.index,
+            phaseProgress: completionEvaluation,
+          },
+          hint: "Avance o objetivo principal deste capítulo antes de cruzar o limiar.",
+        },
+      );
+    }
+    const unlockEvaluation = this.evaluateGate(toPhase.unlockConditions, facts);
+    if (unlockEvaluation.status !== "pending") {
       throw new DomainException(
         ErrorCode.LOCATION_REQUIREMENTS_NOT_MET,
         `A fase ${toPhase.name} ainda não foi destravada pela história.`,
@@ -509,7 +637,7 @@ export class PhaseService {
             sessionId,
             fromPhaseIndex: fromPhase.index,
             toPhaseIndex: toPhase.index,
-            phaseProgress: evaluation,
+            phaseProgress: unlockEvaluation,
           },
           hint: "Continue a cena atual até algum gate narrativo ficar satisfeito.",
         },
@@ -528,6 +656,14 @@ export class PhaseService {
         toPhase,
         pending,
         traceId,
+      );
+      throw new DomainException(
+        ErrorCode.PHASE_GATE_PENDING_CONFIRMATION,
+        `O capítulo ${fromPhase.name} está pronto para terminar.`,
+        {
+          context: { pending },
+          hint: "Confirme a transição para iniciar o próximo capítulo.",
+        },
       );
     }
 
@@ -577,8 +713,13 @@ export class PhaseService {
     }
 
     const facts = await this.collectFacts(sessionId, storyArc.id, state);
-    const evaluation = this.evaluateGate(toPhase.unlockConditions, facts);
-    if (evaluation.status !== "pending") return null;
+    const completionEvaluation = this.evaluateGate(
+      fromPhase.completionConditions,
+      facts,
+    );
+    if (completionEvaluation.status !== "pending") return null;
+    const unlockEvaluation = this.evaluateGate(toPhase.unlockConditions, facts);
+    if (unlockEvaluation.status !== "pending") return null;
 
     const pending = await this.buildPendingPayload(
       sessionId,
@@ -675,6 +816,67 @@ export class PhaseService {
       },
       audiences: STORY_AUDIENCES,
       narrativeDescriptor: `A questão dramática se fecha: ${storyArc.name ?? "a campanha"} chega ao desfecho.`,
+    });
+    await this.eventBus.publish(envelope);
+    return true;
+  }
+
+  /**
+   * O teto de cenas é um contrato, não uma sugestão para o LLM. A última cena
+   * ainda pode resolver a missão normalmente; ao tentar abrir uma cena além do
+   * teto, a campanha recebe um fim de derrota e o stream corrente narra essa
+   * consequência. Nenhuma história fica aberta para sempre por gate quebrado.
+   */
+  async failStoryAtDeadline(
+    sessionId: string,
+    input: { scenesUsed: number; maxScenes: number; traceId?: string },
+  ): Promise<boolean> {
+    const { session, storyArc, state } = await this.loadMainArcState(sessionId);
+    if (state.currentPhase === "completed" || state.currentPhase === "failed") {
+      return false;
+    }
+
+    state.currentPhase = "failed";
+    await this.stateRepo.save(state);
+
+    const mainQuest = await this.questRepo.findOne({
+      where: { gameSessionId: sessionId, isMainQuest: true },
+    });
+    if (mainQuest && mainQuest.status !== "completed") {
+      mainQuest.status = "failed";
+      await this.questRepo.save(mainQuest);
+    }
+
+    session.status = "completed";
+    session.endedAt = new Date();
+    await this.sessionRepo.save(session);
+    this.invalidateMainQuestCache(sessionId);
+
+    const envelope = this.envelopeFactory.build({
+      eventCategory: "NarrativeEvent",
+      eventType: "story_failed",
+      source: {
+        service: "diad-backend",
+        module: "PhaseService.failStoryAtDeadline",
+        traceId: input.traceId,
+      },
+      scope: {
+        campaignId: session.campaignId ?? storyArc.campaignId,
+        sessionId,
+      },
+      payload: {
+        sessionId,
+        storyArcId: storyArc.id,
+        questId: mainQuest?.id ?? null,
+        questName: mainQuest?.name ?? null,
+        isMainQuest: true,
+        reason: "scene_deadline",
+        scenesUsed: input.scenesUsed,
+        maxScenes: input.maxScenes,
+      },
+      audiences: STORY_AUDIENCES,
+      narrativeDescriptor:
+        "O tempo da aventura se esgotou: a ameaça vence e a história chega a um fim definitivo.",
     });
     await this.eventBus.publish(envelope);
     return true;
@@ -1211,6 +1413,197 @@ export class PhaseService {
     if (fallback) return fallback;
 
     throw new NotFoundException("Objetivo ativo da missão principal não encontrado.");
+  }
+
+  /**
+   * Compatibilidade para mundos já materializados antes da validação de
+   * referências: se um objetivo obrigatório pede conversa com um NPC que não
+   * existe, cria uma âncora canônica no ponto atual e a conecta ao estado da
+   * sessão. É idempotente e transforma um softlock em conteúdo jogável.
+   */
+  private async ensureObjectivePlayable(
+    session: GameSessionEntity,
+    objective: QuestObjectiveEntity,
+  ): Promise<QuestObjectiveEntity> {
+    const conditions = {
+      ...(objective.completionConditions ?? {}),
+    } as Record<string, unknown>;
+    if (conditions.kind !== "talk_to_npc" || !session.campaignId) {
+      return objective;
+    }
+
+    const targetName = this.stringOrNull(conditions.targetName);
+    if (!targetName) return objective;
+
+    let npc =
+      typeof conditions.targetNpcId === "string"
+        ? await this.npcRepo.findOne({
+            where: { id: conditions.targetNpcId },
+          })
+        : null;
+
+    if (!npc) {
+      const candidates = await this.npcRepo.find({
+        where: [
+          { campaignId: session.campaignId, gameSessionId: IsNull() },
+          { campaignId: session.campaignId, gameSessionId: session.id },
+        ],
+      });
+      const targetKey = this.normalizeFactKey(targetName);
+      npc =
+        candidates.find(
+          (candidate) => this.normalizeFactKey(candidate.name) === targetKey,
+        ) ?? null;
+    }
+
+    const sceneRepo = this.dataSource.getRepository(SceneEntity);
+    const activeScene = await sceneRepo.findOne({
+      where: { sessionId: session.id, isActive: true },
+      order: { sceneNumber: "DESC" },
+    });
+    let createdNow = false;
+
+    if (!npc) {
+      const slugBase =
+        this.normalizeConditionKey(targetName).replace(/_/g, "-") ||
+        "ancora-da-missao";
+      npc = await this.npcRepo.save(
+        this.npcRepo.create({
+          campaignId: session.campaignId,
+          gameSessionId: undefined,
+          name: targetName,
+          slug: `${slugBase}-${objective.id.slice(0, 6)}`,
+          title: "Âncora da missão",
+          description:
+            "Uma figura ligada aos acontecimentos que movem a aventura.",
+          motivation: "Ajudar o herói a compreender a ameaça central.",
+          knowledgeScope: [`quest-objective:${objective.id}`],
+          personalityBig5: {},
+          dialogueStyle: "Direto, atento e carregado de urgência.",
+          profileDepth: "core",
+          homeLocationId: activeScene?.locationId,
+          homePoiId: activeScene?.poiId,
+          tags: ["objective-anchor", "quest-critical", "disposition:friendly"],
+          phaseIndex: null,
+          narrativeRole: "quest_anchor",
+          provenance: "auto-materialized",
+        }),
+      );
+      createdNow = true;
+    }
+
+    conditions.targetNpcId = npc.id;
+    objective.completionConditions = conditions;
+    await this.objectiveRepo.save(objective);
+
+    const npcStateRepo = this.dataSource.getRepository(SessionNpcStateEntity);
+    let npcState = await npcStateRepo.findOne({
+      where: { gameSessionId: session.id, npcId: npc.id },
+    });
+    if (!npcState) {
+      npcState = await npcStateRepo.save(
+        npcStateRepo.create({
+          gameSessionId: session.id,
+          npcId: npc.id,
+          status: "alive",
+          disposition: "friendly",
+          posture: "peaceful",
+          currentLocationId:
+            npc.homeLocationId ?? activeScene?.locationId ?? undefined,
+          currentPoiId: npc.homePoiId ?? activeScene?.poiId ?? undefined,
+          treasure: [],
+          currency: { cp: 0, sp: 0, gp: 0, pp: 0 },
+          wealthTier: "modest",
+        }),
+      );
+    }
+
+    if (createdNow && activeScene) {
+      npcState.currentLocationId = activeScene.locationId;
+      npcState.currentPoiId = activeScene.poiId;
+      await npcStateRepo.save(npcState);
+
+      const sceneNpcRepo = this.dataSource.getRepository(SceneNpcEntity);
+      const existingPresence = await sceneNpcRepo.findOne({
+        where: { sceneId: activeScene.id, npcId: npc.id },
+      });
+      if (!existingPresence) {
+        await sceneNpcRepo.save(
+          sceneNpcRepo.create({
+            sceneId: activeScene.id,
+            npcId: npc.id,
+            presenceRole: "present",
+          }),
+        );
+      }
+    }
+
+    return objective;
+  }
+
+  private inferStoryLength(maxScenes: number): "short" | "standard" | "epic" {
+    if (maxScenes <= 12) return "short";
+    if (maxScenes >= 30) return "epic";
+    return "standard";
+  }
+
+  private resolveStoryPressure(
+    scenesUsed: number,
+    maxScenes: number,
+  ): MissionPanelPayload["pacing"]["pressure"] {
+    const ratio = scenesUsed / Math.max(1, maxScenes);
+    if (ratio >= 1) return "finale";
+    if (ratio >= 0.75) return "urgent";
+    if (ratio >= 0.45) return "rising";
+    return "calm";
+  }
+
+  private buildEndingPayload(input: {
+    storyStatus: Exclude<MissionPanelPayload["storyStatus"], "active">;
+    storySeed: StorySeed;
+    state: SessionStoryArcStateEntity;
+    phase: PhaseEntity;
+    session: GameSessionEntity;
+    objectivesCompleted: number;
+    objectivesTotal: number;
+  }): NonNullable<MissionPanelPayload["ending"]> {
+    const marked = countMarkedXpTriggers(
+      normalizeXpTriggerState(input.state.xpTriggerState),
+    );
+    const outcomeTier =
+      input.storyStatus === "failed"
+        ? "FAILURE"
+        : marked >= 4
+          ? "TRIUMPH"
+          : marked >= 2
+            ? "BITTERSWEET"
+            : "COSTLY";
+    const worldStake =
+      input.storySeed.stakes?.world ??
+      "O mundo carrega as consequências das escolhas feitas.";
+    const personalStake =
+      input.storySeed.stakes?.personal ??
+      "O protagonista sai transformado pelo caminho.";
+
+    return {
+      title:
+        input.storyStatus === "failed"
+          ? "A história encontrou seu fim"
+          : "A jornada está completa",
+      subtitle:
+        input.storyStatus === "failed"
+          ? "A derrota também deixa uma verdade no mundo."
+          : "A pergunta dramática recebeu uma resposta.",
+      outcomeTier,
+      completedAt: input.session.endedAt?.toISOString() ?? null,
+      finalPhaseName: input.phase.name,
+      objectivesCompleted: input.objectivesCompleted,
+      objectivesTotal: input.objectivesTotal,
+      epilogue:
+        input.storyStatus === "failed"
+          ? `${worldStake} ${personalStake} O que aconteceu aqui permanece encerrado — não como promessa de continuação, mas como consequência.`
+          : `${worldStake} ${personalStake} A aventura termina aqui, com as escolhas do herói inscritas no destino deste lugar.`,
+    };
   }
 
   private async loadMainClock(

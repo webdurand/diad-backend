@@ -30,6 +30,12 @@ describe("parseRangeString", () => {
     expect(parseRangeString("Touch")).toEqual({ normal: 5 });
   });
 
+  it("converte milhas para pés", () => {
+    expect(parseRangeString("1 mile")).toEqual({ normal: 5_280 });
+    expect(parseRangeString("2 miles")).toEqual({ normal: 10_560 });
+    expect(parseRangeString("0.5 mile")).toEqual({ normal: 2_640 });
+  });
+
   it("retorna null em string vazia ou lixo", () => {
     expect(parseRangeString("")).toBeNull();
     expect(parseRangeString("???")).toBeNull();

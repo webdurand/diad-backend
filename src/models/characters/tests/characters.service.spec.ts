@@ -1141,7 +1141,23 @@ describe("CharactersService", () => {
           id: "race-1",
           slug: "dwarf",
           ability_bonuses: [
-            { ability_score: { slug: "con", name: "CON" }, bonus: 2 },
+            {
+              ability_score: {
+                slug: "constitution",
+                name: "Constitution",
+              },
+              bonus: 2,
+            },
+          ],
+        };
+        const hillDwarfSubrace = {
+          id: "subrace-1",
+          slug: "dwarf-hill",
+          ability_bonuses: [
+            {
+              ability_score: { slug: "wisdom", name: "Wisdom" },
+              bonus: 1,
+            },
           ],
         };
         const phbSource = {
@@ -1152,6 +1168,7 @@ describe("CharactersService", () => {
 
         repos.class.findOneBy!.mockResolvedValue(fighterClass);
         repos.race.findOneBy!.mockResolvedValue(dwarfRace);
+        repos.subrace.findOneBy!.mockResolvedValue(hillDwarfSubrace);
         repos.background.findOneBy!.mockResolvedValue({
           id: "bg-1",
           slug: "soldier",
@@ -1210,6 +1227,7 @@ describe("CharactersService", () => {
             sourceCode: "PHB",
             classSlug: "fighter",
             raceSlug: "dwarf",
+            subraceSlug: "dwarf-hill",
             backgroundSlug: "soldier",
             abilityScores: {
               str: 15,
@@ -1231,6 +1249,138 @@ describe("CharactersService", () => {
         );
         expect(conSave!.data.base_score).toBe(13);
         expect(conSave!.data.bonus).toBe(2);
+        const wisSave = abilitySaves.find(
+          (s) => s.data.ability_score_id === "as-wis",
+        );
+        expect(wisSave!.data.bonus).toBe(1);
+        const stateSave = saves.find(
+          (s) => s.entity === "CharacterStateEntity",
+        );
+        expect(stateSave!.data.current_hp).toBe(12);
+      });
+
+      it("persists a required PHB level-one subclass and its features", async () => {
+        const saves: Array<{ entity: string; data: any }> = [];
+        const clericClass = {
+          ...makeClass("cleric-phb"),
+          id: "class-cleric-phb",
+          name: "Cleric",
+        };
+        const lifeDomain = {
+          id: "subclass-life-phb",
+          slug: "cleric-life-phb",
+          class_id: clericClass.id,
+        };
+        const discipleOfLife = {
+          id: "feature-disciple-of-life",
+          slug: "disciple-of-life-phb",
+          name: "Disciple of Life",
+        };
+
+        repos.class.findOneBy!.mockResolvedValue(clericClass);
+        repos.race.findOneBy!.mockResolvedValue({
+          id: "race-human-phb",
+          slug: "human-phb",
+        });
+        repos.background.findOneBy!.mockResolvedValue({
+          id: "background-acolyte-phb",
+          slug: "acolyte-phb",
+        });
+        repos.compSource.findOneBy!.mockResolvedValue({
+          id: "source-phb",
+          code: "PHB",
+          rules: {
+            backgroundGrantsAbilityBonuses: false,
+            subclassLevels: { cleric: 1 },
+          },
+        });
+        repos.abilityScore.findOneBy!.mockImplementation(
+          async ({ slug }: any) => ({ id: `as-${slug}`, slug }),
+        );
+        repos.level.findOne!
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({
+            level_features: [{ feature: discipleOfLife }],
+          });
+
+        dataSource.transaction.mockImplementation(async (cb: any) =>
+          cb({
+            create: jest.fn((_: any, data: any) => ({
+              id: "char-new",
+              ...data,
+            })),
+            save: jest.fn(async (entityClass: any, data: any) => {
+              const entityName =
+                typeof entityClass === "function"
+                  ? entityClass.name
+                  : entityClass;
+              saves.push({ entity: entityName, data });
+              return { id: data?.id ?? "rec-auto", ...data };
+            }),
+            findOne: jest.fn().mockResolvedValue(lifeDomain),
+            find: jest.fn().mockResolvedValue([]),
+            createQueryBuilder: jest.fn().mockReturnValue({
+              update: jest.fn().mockReturnThis(),
+              set: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({}),
+            }),
+          }),
+        );
+
+        await service.create({
+          userId: "user-1",
+          name: "PHB Life Cleric",
+          data: {
+            sourceCode: "PHB",
+            classSlug: "cleric-phb",
+            subclassSlug: "cleric-life-phb",
+            raceSlug: "human-phb",
+            backgroundSlug: "acolyte-phb",
+            abilityScores: {
+              str: 10,
+              dex: 12,
+              con: 14,
+              int: 8,
+              wis: 15,
+              cha: 13,
+            },
+            classStartingGold: { amount: 10 },
+          },
+        });
+
+        expect(
+          saves.find((save) => save.entity === "CharacterClassEntity")?.data,
+        ).toMatchObject({ subclass_id: lifeDomain.id });
+        expect(
+          saves.find((save) => save.entity === "CharacterFeatureEntity")?.data,
+        ).toMatchObject({ feature_id: discipleOfLife.id });
+      });
+
+      it("rejects optional-book features when creating a PHB character", () => {
+        const rangerClass = {
+          ...makeClass("ranger-phb"),
+          source_id: "source-phb",
+        };
+
+        expect(
+          (service as any).isFeatureCompatibleWithClassSource(
+            {
+              source_id: "source-tce",
+              source: { code: "TCE" },
+            },
+            rangerClass,
+          ),
+        ).toBe(false);
+        expect(
+          (service as any).isFeatureCompatibleWithClassSource(
+            {
+              source_id: "source-srd",
+              source: { code: "SRD" },
+            },
+            rangerClass,
+          ),
+        ).toBe(true);
       });
 
       it("does NOT auto-apply race ability bonuses when edition grants them via background (XPHB)", async () => {
@@ -1280,7 +1430,7 @@ describe("CharactersService", () => {
               wis: 12,
               cha: 8,
             },
-            backgroundAbilityBonuses: [{ abilityScoreIndex: "str", bonus: 1 }],
+            backgroundAbilityBonuses: [{ abilityScoreSlug: "str", bonus: 1 }],
             classEquipmentChoices: ["chain-mail"],
           },
         });

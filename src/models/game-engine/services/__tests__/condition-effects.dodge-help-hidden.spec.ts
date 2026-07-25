@@ -1,4 +1,7 @@
-import { ConditionEffectsService } from "../condition-effects.service";
+import {
+  ConditionEffectsService,
+  hasDodgeDexSaveAdvantage,
+} from "../condition-effects.service";
 import type { HelpingState } from "../../interfaces/combat.interfaces";
 
 
@@ -42,6 +45,18 @@ describe("ConditionEffectsService — reactive states (dodge / help / hidden)", 
       });
       const mods = svc.getReactiveAttackModifiers(attacker, target);
       expect(mods.disadvantage).toBe(false);
+    });
+
+    it("concede vantagem apenas em DEX saves enquanto Dodge está ativo", () => {
+      const target = mk({ id: "t", dodgingUntilTurnOfParticipantId: "t" });
+      expect(hasDodgeDexSaveAdvantage(target, "dex")).toBe(true);
+      expect(hasDodgeDexSaveAdvantage(target, "wis")).toBe(false);
+      expect(
+        hasDodgeDexSaveAdvantage(
+          mk({ id: "t", dodgingUntilTurnOfParticipantId: "other" }),
+          "dex",
+        ),
+      ).toBe(false);
     });
   });
 

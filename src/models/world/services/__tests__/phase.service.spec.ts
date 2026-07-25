@@ -2,6 +2,7 @@ import { PhaseService } from "../phase.service";
 import { SceneEntity } from "src/entities/scene.entity";
 import { SessionMessageEntity } from "src/entities/session-message.entity";
 import { QuestObjectiveEntity } from "src/entities/quest-objective.entity";
+import { ErrorCode } from "src/common/observability/errors/error-codes.catalog";
 
 function makeService(
   overrides: {
@@ -160,6 +161,80 @@ describe("PhaseService", () => {
       }),
     );
     jest.useRealTimers();
+  });
+
+  it("não avança sem confirmação quando o capítulo está pronto", async () => {
+    const eventBus = { publish: jest.fn(async () => undefined) };
+    const envelopeFactory = { build: jest.fn((input) => input) };
+    const service = makeService({ eventBus, envelopeFactory });
+    const from = {
+      ...phase(1, "O Chamado"),
+      completionConditions: { any: [{ objective_progressed: "any" }] },
+    };
+    const to = {
+      ...phase(2, "A Travessia"),
+      unlockConditions: { any: [{ always: true }] },
+    };
+    (service as any).loadMainArcState = jest.fn().mockResolvedValue({
+      session: { id: "session-1", campaignId: "campaign-1" },
+      storyArc: { id: "arc-1" },
+      state: { currentPhaseIndex: 1 },
+    });
+    (service as any).phaseRepo = {
+      findOne: jest.fn().mockResolvedValueOnce(from).mockResolvedValueOnce(to),
+    };
+    (service as any).collectFacts = jest.fn().mockResolvedValue({
+      objectiveProgress: new Map([["objective-1", 1]]),
+    });
+    (service as any).buildPendingPayload = jest.fn().mockResolvedValue({
+      sessionId: "session-1",
+      fromPhase: { index: 1, name: "O Chamado" },
+      toPhase: { index: 2, name: "A Travessia" },
+      narrativeDescriptor: "O limiar está aberto.",
+      lostObjectives: [],
+      migratingNpcs: [],
+      deprecatedPois: [],
+      expiresAt: new Date().toISOString(),
+    });
+    (service as any).publishPhaseGatePending = jest
+      .fn()
+      .mockResolvedValue(undefined);
+
+    await expect(
+      service.advancePhase("session-1", "user-1", false),
+    ).rejects.toMatchObject({
+      code: ErrorCode.PHASE_GATE_PENDING_CONFIRMATION,
+    });
+    expect((service as any).publishPhaseGatePending).toHaveBeenCalled();
+  });
+
+  it("exige o ponto de virada atual mesmo se a próxima fase estiver liberada", async () => {
+    const service = makeService();
+    const from = {
+      ...phase(1, "O Chamado"),
+      completionConditions: { any: [{ objective_progressed: "any" }] },
+    };
+    const to = {
+      ...phase(2, "A Travessia"),
+      unlockConditions: { any: [{ always: true }] },
+    };
+    (service as any).loadMainArcState = jest.fn().mockResolvedValue({
+      session: { id: "session-1", campaignId: "campaign-1" },
+      storyArc: { id: "arc-1" },
+      state: { currentPhaseIndex: 1 },
+    });
+    (service as any).phaseRepo = {
+      findOne: jest.fn().mockResolvedValueOnce(from).mockResolvedValueOnce(to),
+    };
+    (service as any).collectFacts = jest.fn().mockResolvedValue({
+      objectiveProgress: new Map([["objective-1", 0]]),
+    });
+
+    await expect(
+      service.advancePhase("session-1", "user-1", true),
+    ).rejects.toMatchObject({
+      code: ErrorCode.LOCATION_REQUIREMENTS_NOT_MET,
+    });
   });
 });
 

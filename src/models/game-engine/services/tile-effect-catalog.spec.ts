@@ -9,11 +9,16 @@ describe("tile-effect-catalog", () => {
     "grease",
     "web",
     "fog-cloud",
+    "zone-of-truth",
     "spike-growth",
     "wall-of-fire",
     "cloud-of-daggers",
     "sleet-storm",
     "spirit-guardians",
+    "spiritual-weapon",
+    "conjure-animals",
+    "conjure-elemental",
+    "conjure-woodland-beings",
   ];
 
   describe("catalog invariants (Princípio X)", () => {
@@ -56,7 +61,7 @@ describe("tile-effect-catalog", () => {
   describe("Grease (PHB 2024 p.273)", () => {
     const def = TILE_EFFECT_CATALOG.grease;
 
-    it("is a 10ft cube (2 cells radius)", () => {
+    it("is a 10ft square (2 cells per side)", () => {
       expect(def.shapeKind).toBe("cube");
       expect(def.defaultRadiusCells(1)).toBe(2);
     });
@@ -66,20 +71,26 @@ describe("tile-effect-catalog", () => {
       expect(def.speedMultiplier).toBe(0.5);
     });
 
-    it("is concentration 1min (10 rounds)", () => {
-      expect(def.sourceConcentration).toBe(true);
+    it("lasts 1min (10 rounds) without concentration", () => {
+      expect(def.sourceConcentration).toBe(false);
       expect(def.durationRoundsAtSlot(1)).toBe(10);
     });
 
-    it("has on-cast and on-enter DEX save → prone", () => {
+    it("saves on cast, entry, and end of turn → prone", () => {
       const onCast = def.triggers.find((t) => t.kind === "on-cast");
       const onEnter = def.triggers.find((t) => t.kind === "on-enter");
+      const onEndTurn = def.triggers.find(
+        (t) => t.kind === "on-end-turn-in",
+      );
       expect(onCast).toBeDefined();
       expect(onEnter).toBeDefined();
+      expect(onEndTurn).toBeDefined();
       expect(onCast?.save?.ability).toBe("dex");
       expect(onCast?.save?.onFailCondition).toBe("prone");
       expect(onEnter?.save?.ability).toBe("dex");
       expect(onEnter?.save?.onFailCondition).toBe("prone");
+      expect(onEndTurn?.save?.ability).toBe("dex");
+      expect(onEndTurn?.save?.onFailCondition).toBe("prone");
     });
   });
 
@@ -143,6 +154,33 @@ describe("tile-effect-catalog", () => {
     });
   });
 
+  describe("Zone of Truth (PHB 2024)", () => {
+    const def = TILE_EFFECT_CATALOG["zone-of-truth"];
+
+    it("is a 15ft sphere lasting 10 minutes without concentration", () => {
+      expect(def.shapeKind).toBe("sphere");
+      expect(def.defaultRadiusCells(2)).toBe(3);
+      expect(def.durationRoundsAtSlot(2)).toBe(100);
+      expect(def.sourceConcentration).toBe(false);
+      expect(def.isDifficultTerrain).toBe(false);
+    });
+
+    it("uses CHA saves on first entry and at the start of a turn", () => {
+      const onEnter = def.triggers.find((trigger) => trigger.kind === "on-enter");
+      const onStart = def.triggers.find(
+        (trigger) => trigger.kind === "on-start-turn-in",
+      );
+      expect(onEnter?.save?.ability).toBe("cha");
+      expect(onEnter?.save?.onFailCondition).toBe("truth_bound");
+      expect(onEnter?.oncePerTurn).toBe(true);
+      expect(onStart?.save?.ability).toBe("cha");
+      expect(onStart?.save?.onFailCondition).toBe("truth_bound");
+      expect(def.triggers.some((trigger) => trigger.kind === "on-cast")).toBe(
+        false,
+      );
+    });
+  });
+
   describe("Wall of Fire (PHB 2024 p.353)", () => {
     const def = TILE_EFFECT_CATALOG["wall-of-fire"];
 
@@ -159,20 +197,21 @@ describe("tile-effect-catalog", () => {
       expect(onCast?.damage?.type).toBe("fire");
     });
 
-    it("has on-pass-through-wall 5d8 fire (no save)", () => {
+    it("has on-pass-through-wall 5d8 fire once per turn (no save)", () => {
       const passThrough = def.triggers.find(
         (t) => t.kind === "on-pass-through-wall",
       );
       expect(passThrough).toBeDefined();
       expect(passThrough?.damage?.expressionPerSlot(4)).toBe("5d8");
+      expect(passThrough?.oncePerTurn).toBe(true);
     });
 
-    it("has on-end-turn-adjacent 5d8 fire range:1", () => {
+    it("has on-end-turn-adjacent 5d8 fire at the full 10-foot range", () => {
       const endTurn = def.triggers.find(
         (t) => t.kind === "on-end-turn-adjacent",
       );
       expect(endTurn).toBeDefined();
-      expect(endTurn?.range).toBe(1);
+      expect(endTurn?.range).toBe(2);
       expect(endTurn?.damage?.expressionPerSlot(4)).toBe("5d8");
     });
 
@@ -197,11 +236,13 @@ describe("tile-effect-catalog", () => {
       expect(onCast?.damage?.type).toBe("slashing");
     });
 
-    it("damages on-enter and on-start-turn-in (no save)", () => {
+    it("damages on-enter and on-end-turn-in once per turn (no save)", () => {
       const onEnter = def.triggers.find((t) => t.kind === "on-enter");
-      const onStart = def.triggers.find((t) => t.kind === "on-start-turn-in");
+      const onEnd = def.triggers.find((t) => t.kind === "on-end-turn-in");
       expect(onEnter?.damage?.expressionPerSlot(2)).toBe("4d4");
-      expect(onStart?.damage?.expressionPerSlot(2)).toBe("4d4");
+      expect(onEnd?.damage?.expressionPerSlot(2)).toBe("4d4");
+      expect(onEnter?.oncePerTurn).toBe(true);
+      expect(onEnd?.oncePerTurn).toBe(true);
       expect(onEnter?.save).toBeUndefined();
     });
 
@@ -262,6 +303,155 @@ describe("tile-effect-catalog", () => {
       const startTurn = def.triggers.find((t) => t.kind === "on-start-turn-in");
       expect(startTurn?.damage?.expressionPerSlot(4)).toBe("4d8");
       expect(startTurn?.damage?.expressionPerSlot(9)).toBe("9d8");
+    });
+  });
+
+  describe("Spiritual Weapon (SRD 2014)", () => {
+    const def = TILE_EFFECT_CATALOG["spiritual-weapon"];
+
+    it("is a ten-round point effect without concentration", () => {
+      expect(def.shapeKind).toBe("sphere");
+      expect(def.defaultRadiusCells(2)).toBe(0);
+      expect(def.durationRoundsAtSlot(2)).toBe(10);
+      expect(def.sourceConcentration).toBe(false);
+      expect(def.isDifficultTerrain).toBe(false);
+    });
+
+    it("is not a creature and has no automatic area triggers", () => {
+      expect(def.triggers).toEqual([]);
+      expect(def.tactical.tags).toEqual(
+        expect.arrayContaining(["movable", "bonus-action", "force"]),
+      );
+    });
+  });
+
+  describe("Conjure Woodland Beings (PHB 2024)", () => {
+    const def = TILE_EFFECT_CATALOG["conjure-woodland-beings"];
+
+    it("is a 10ft emanation that follows the caster", () => {
+      expect(def.shapeKind).toBe("sphere");
+      expect(def.defaultRadiusCells(4)).toBe(2);
+      expect(def.auraFollowsCaster).toBe(true);
+      expect(def.isDifficultTerrain).toBe(false);
+    });
+
+    it("damages on cast, entry, and end of turn at most once per turn", () => {
+      for (const kind of ["on-cast", "on-enter", "on-end-turn-in"] as const) {
+        const trigger = def.triggers.find((candidate) => candidate.kind === kind);
+        expect(trigger?.save?.ability).toBe("wis");
+        expect(trigger?.save?.halfOnSave).toBe(true);
+        expect(trigger?.damage?.expressionPerSlot(4)).toBe("5d8");
+        expect(trigger?.damage?.type).toBe("force");
+        expect(trigger?.oncePerTurn).toBe(true);
+      }
+    });
+
+    it("scales +1d8 per slot above 4", () => {
+      const onCast = def.triggers.find((trigger) => trigger.kind === "on-cast");
+      expect(onCast?.damage?.expressionPerSlot(5)).toBe("6d8");
+      expect(onCast?.damage?.expressionPerSlot(9)).toBe("10d8");
+    });
+  });
+
+  describe("Storm of Vengeance", () => {
+    const def = TILE_EFFECT_CATALOG["storm-of-vengeance"];
+
+    it("persists a 360ft concentration cylinder for ten rounds", () => {
+      expect(def.shapeKind).toBe("cylinder");
+      expect(def.defaultRadiusCells(9)).toBe(72);
+      expect(def.durationRoundsAtSlot(9)).toBe(10);
+      expect(def.sourceConcentration).toBe(true);
+      expect(def.isDifficultTerrain).toBe(true);
+      expect(def.speedMultiplier).toBe(0.5);
+      expect(def.triggers).toEqual([]);
+      expect(def.tactical.tags).toEqual(
+        expect.arrayContaining([
+          "heavily-obscured",
+          "difficult-terrain",
+          "ranged-attacks-impossible",
+          "multi-round",
+        ]),
+      );
+    });
+  });
+
+  describe("Conjure Animals (PHB 2024)", () => {
+    const def = TILE_EFFECT_CATALOG["conjure-animals"];
+
+    it("uses a Large pack plus a 10ft surrounding envelope", () => {
+      expect(def.shapeKind).toBe("cube");
+      expect(def.defaultRadiusCells(3)).toBe(6);
+      expect(def.isDifficultTerrain).toBe(false);
+      expect(def.sourceConcentration).toBe(true);
+      expect(def.durationRoundsAtSlot(3)).toBe(100);
+    });
+
+    it("damages on relocation, entry, and end of turn at most once per turn", () => {
+      for (const kind of [
+        "on-area-moved-into",
+        "on-enter",
+        "on-end-turn-in",
+      ] as const) {
+        const trigger = def.triggers.find((candidate) => candidate.kind === kind);
+        expect(trigger?.save?.ability).toBe("dex");
+        expect(trigger?.save?.halfOnSave).toBe(true);
+        expect(trigger?.damage?.expressionPerSlot(3)).toBe("3d10");
+        expect(trigger?.damage?.type).toBe("slashing");
+        expect(trigger?.oncePerTurn).toBe(true);
+      }
+    });
+
+    it("scales +1d10 per slot above 3", () => {
+      const onMove = def.triggers.find(
+        (trigger) => trigger.kind === "on-area-moved-into",
+      );
+      expect(onMove?.damage?.expressionPerSlot(4)).toBe("4d10");
+      expect(onMove?.damage?.expressionPerSlot(5)).toBe("5d10");
+      expect(onMove?.damage?.expressionPerSlot(9)).toBe("9d10");
+    });
+  });
+
+  describe("Conjure Elemental (PHB 2024)", () => {
+    const def = TILE_EFFECT_CATALOG["conjure-elemental"];
+
+    it("uses a stationary Large core plus the 5ft start-turn perimeter", () => {
+      expect(def.shapeKind).toBe("cube");
+      expect(def.defaultRadiusCells(5)).toBe(4);
+      expect(def.auraFollowsCaster).not.toBe(true);
+      expect(def.isDifficultTerrain).toBe(false);
+      expect(def.durationRoundsAtSlot(5)).toBe(100);
+    });
+
+    it("uses 8d8 initially and 4d8 on a restrained target's repeated save", () => {
+      const onEnter = def.triggers.find(
+        (trigger) => trigger.kind === "on-enter",
+      );
+      const onStart = def.triggers.find(
+        (trigger) => trigger.kind === "on-start-turn-in",
+      );
+      const repeat = def.triggers.find(
+        (trigger) => trigger.kind === "on-restrained-start-turn",
+      );
+      for (const trigger of [onEnter, onStart]) {
+        expect(trigger?.save?.ability).toBe("dex");
+        expect(trigger?.save?.onFailCondition).toBe("restrained");
+        expect(trigger?.damage?.expressionPerSlot(5)).toBe("8d8");
+      }
+      expect(repeat?.save?.ability).toBe("dex");
+      expect(repeat?.damage?.expressionPerSlot(5)).toBe("4d8");
+    });
+
+    it("scales both damage rolls +1d8 per slot above 5", () => {
+      const initial = def.triggers.find(
+        (trigger) => trigger.kind === "on-enter",
+      );
+      const repeat = def.triggers.find(
+        (trigger) => trigger.kind === "on-restrained-start-turn",
+      );
+      expect(initial?.damage?.expressionPerSlot(7)).toBe("10d8");
+      expect(repeat?.damage?.expressionPerSlot(7)).toBe("6d8");
+      expect(initial?.damage?.expressionPerSlot(9)).toBe("12d8");
+      expect(repeat?.damage?.expressionPerSlot(9)).toBe("8d8");
     });
   });
 

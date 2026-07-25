@@ -48,6 +48,7 @@ import {
   SessionFactionStateEntity,
   SessionStoryArcStateEntity,
   CompanionTemplateEntity,
+  CharacterClassEntity,
 } from "src/entities";
 import { EventBusService } from "src/common/event-bus/event-bus.service";
 import { QuestDefeatListener } from "src/common/event-bus/listeners/quest-defeat.listener";
@@ -158,6 +159,7 @@ import { EvaluateNaturalLanguageTriggerListener } from "../narrative-memory/list
       EncounterParticipantEntity,
       EventListenerProcessedEntity,
       CompanionTemplateEntity,
+      CharacterClassEntity,
     ]),
     AuthModule,
     forwardRef(() => AiProxyModule),

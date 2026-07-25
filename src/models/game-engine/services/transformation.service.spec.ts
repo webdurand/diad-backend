@@ -28,6 +28,7 @@ describe("TransformationService (spec 012)", () => {
         characterId: string | null;
         displayName: string;
         type: "pc" | "monster";
+        movementRemaining: number;
       }>;
       characterState?: Partial<{ current_hp: number; temp_hp: number }> | null;
       monsterExists?: boolean;
@@ -45,6 +46,7 @@ describe("TransformationService (spec 012)", () => {
       currentHp: 20,
       maxHp: 20,
       tempHp: 0,
+      movementRemaining: opts.participantState?.movementRemaining ?? 30,
     };
     const participantFindOne = jest.fn().mockResolvedValue({ ...participant });
     const participantSave = jest
@@ -140,6 +142,20 @@ describe("TransformationService (spec 012)", () => {
         "Lobo Majestoso",
       );
     });
+
+    it("reconcilia o movimento restante ao entrar numa forma mais rápida", async () => {
+      const { svc } = setup({
+        participantState: { movementRemaining: 20 },
+      });
+      const result = await svc.enterForm("p1", {
+        source: "wild-shape",
+        monsterSlug: "wolf",
+        originalWalkSpeed: 30,
+      });
+
+      expect(result.movementRemaining).toBe(30);
+      expect(result.transformationState?.original.walkSpeed).toBe(30);
+    });
   });
 
   describe("revertForm", () => {
@@ -166,6 +182,31 @@ describe("TransformationService (spec 012)", () => {
       const result = await svc.revertForm("p1", "player-dismiss");
       expect(result.transformationState).toBeNull();
       expect(mocks.participantSave).not.toHaveBeenCalled();
+    });
+
+    it("restaura a velocidade original sem conceder movimento extra", async () => {
+      const state = {
+        source: "wild-shape",
+        form: { formName: "Wolf", speed: { walk: 40 } },
+        original: {
+          currentHp: 20,
+          displayName: "Araxis",
+          maxHp: 20,
+          tempHp: 0,
+          walkSpeed: 30,
+        },
+      };
+      const { svc } = setup({
+        participantState: {
+          transformationState: state,
+          displayName: "Wolf",
+          movementRemaining: 25,
+        },
+      });
+
+      const result = await svc.revertForm("p1", "player-dismiss");
+
+      expect(result.movementRemaining).toBe(15);
     });
   });
 

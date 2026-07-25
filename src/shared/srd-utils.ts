@@ -2,6 +2,67 @@
 
 import { PROF_TO_CATEGORIES } from "./srd-constants";
 
+const SIMPLE_MELEE_WEAPONS = new Set([
+  "club",
+  "dagger",
+  "greatclub",
+  "handaxe",
+  "javelin",
+  "light-hammer",
+  "mace",
+  "quarterstaff",
+  "sickle",
+  "spear",
+]);
+
+const SIMPLE_RANGED_WEAPONS = new Set([
+  "dart",
+  "light-crossbow",
+  "shortbow",
+  "sling",
+]);
+
+const MARTIAL_MELEE_WEAPONS = new Set([
+  "battleaxe",
+  "flail",
+  "glaive",
+  "greataxe",
+  "greatsword",
+  "halberd",
+  "lance",
+  "longsword",
+  "maul",
+  "morningstar",
+  "pike",
+  "rapier",
+  "scimitar",
+  "shortsword",
+  "trident",
+  "war-pick",
+  "warhammer",
+  "whip",
+]);
+
+const MARTIAL_RANGED_WEAPONS = new Set([
+  "blowgun",
+  "hand-crossbow",
+  "heavy-crossbow",
+  "longbow",
+  "net",
+]);
+
+function canonicalEquipmentSlug(slug: string): string {
+  return slug.toLowerCase().replace(/-(?:phb|xphb|srd52)$/i, "");
+}
+
+export function inferWeaponCategory(equipSlug: string): string | null {
+  const slug = canonicalEquipmentSlug(equipSlug);
+  if (SIMPLE_MELEE_WEAPONS.has(slug)) return "simple-melee-weapons";
+  if (SIMPLE_RANGED_WEAPONS.has(slug)) return "simple-ranged-weapons";
+  if (MARTIAL_MELEE_WEAPONS.has(slug)) return "martial-melee-weapons";
+  if (MARTIAL_RANGED_WEAPONS.has(slug)) return "martial-ranged-weapons";
+  return null;
+}
 
 export function getAbilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
@@ -13,29 +74,40 @@ export function isEquipmentProficient(
   categorySlugs: Set<string>,
   profSlugs: Set<string>,
 ): boolean | null {
+  const effectiveCategories = new Set(categorySlugs);
+  const inferredWeaponCategory = inferWeaponCategory(equipSlug);
+  if (inferredWeaponCategory) {
+    effectiveCategories.add(inferredWeaponCategory);
+  }
   const isArmor =
-    categorySlugs.has("light-armor") ||
-    categorySlugs.has("medium-armor") ||
-    categorySlugs.has("heavy-armor") ||
-    categorySlugs.has("shields") ||
-    categorySlugs.has("shield");
+    effectiveCategories.has("light-armor") ||
+    effectiveCategories.has("medium-armor") ||
+    effectiveCategories.has("heavy-armor") ||
+    effectiveCategories.has("shields") ||
+    effectiveCategories.has("shield");
 
   const isWeapon =
-    categorySlugs.has("simple-melee-weapons") ||
-    categorySlugs.has("simple-ranged-weapons") ||
-    categorySlugs.has("martial-melee-weapons") ||
-    categorySlugs.has("martial-ranged-weapons");
+    effectiveCategories.has("simple-melee-weapons") ||
+    effectiveCategories.has("simple-ranged-weapons") ||
+    effectiveCategories.has("martial-melee-weapons") ||
+    effectiveCategories.has("martial-ranged-weapons");
 
   if (!isArmor && !isWeapon) return null;
 
 
-  if (profSlugs.has(equipSlug)) return true;
+  const canonicalSlug = canonicalEquipmentSlug(equipSlug);
+  if (profSlugs.has(equipSlug) || profSlugs.has(canonicalSlug)) return true;
 
-  if (profSlugs.has(equipSlug + "s")) return true;
+  if (profSlugs.has(equipSlug + "s") || profSlugs.has(canonicalSlug + "s")) {
+    return true;
+  }
 
 
   for (const [profSlug, cats] of Object.entries(PROF_TO_CATEGORIES)) {
-    if (profSlugs.has(profSlug) && cats.some((c) => categorySlugs.has(c))) {
+    if (
+      profSlugs.has(profSlug) &&
+      cats.some((c) => effectiveCategories.has(c))
+    ) {
       return true;
     }
   }

@@ -127,6 +127,29 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
     automationTags: ["defense"],
   },
   {
+    slug: "shield-of-faith",
+    status: "ready",
+    behaviorKind: "buff",
+    automationTags: ["concentration", "defense", "bonus_action"],
+  },
+  {
+    slug: "protection-from-evil-and-good",
+    status: "ready",
+    behaviorKind: "buff",
+    automationTags: [
+      "concentration",
+      "defense",
+      "condition_immunity",
+      "creature_type",
+    ],
+  },
+  {
+    slug: "aid",
+    status: "ready",
+    behaviorKind: "buff",
+    automationTags: ["buff", "multi_target", "hit_points"],
+  },
+  {
     slug: "poison-spray",
     status: "ready",
     behaviorKind: "save_damage",
@@ -289,6 +312,36 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
     automationTags: ["concentration", "damage", "aoe"],
   },
   {
+    slug: "heal",
+    status: "ready",
+    behaviorKind: "healing",
+    automationTags: ["healing", "condition_removal"],
+  },
+  {
+    slug: "fire-storm",
+    status: "ready",
+    behaviorKind: "save_damage",
+    automationTags: ["damage", "aoe", "multi_cube"],
+  },
+  {
+    slug: "sunburst",
+    status: "ready",
+    behaviorKind: "save_damage",
+    automationTags: ["damage", "aoe", "control", "blinded"],
+  },
+  {
+    slug: "storm-of-vengeance",
+    status: "ready",
+    behaviorKind: "persistent_area",
+    automationTags: [
+      "concentration",
+      "damage",
+      "aoe",
+      "control",
+      "multi_round",
+    ],
+  },
+  {
     slug: "blight",
     status: "ready",
     behaviorKind: "save_damage",
@@ -305,6 +358,12 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
     status: "ready",
     behaviorKind: "persistent_area",
     automationTags: ["concentration", "area", "obscurement"],
+  },
+  {
+    slug: "zone-of-truth",
+    status: "ready",
+    behaviorKind: "persistent_area",
+    automationTags: ["area", "control", "charisma_save", "no_concentration"],
   },
   {
     slug: "grease",
@@ -357,24 +416,33 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
   {
     slug: "conjure-animals",
     status: "ready",
-    behaviorKind: "summon",
-    automationTags: ["concentration", "summon", "controlled_token"],
+    behaviorKind: "persistent_area",
+    automationTags: [
+      "concentration",
+      "area",
+      "damage",
+      "movable",
+      "strength_save_advantage",
+    ],
   },
   {
     slug: "conjure-woodland-beings",
     status: "ready",
-    behaviorKind: "summon",
-    automationTags: ["concentration", "summon", "controlled_token"],
+    behaviorKind: "persistent_area",
+    automationTags: ["concentration", "aura", "damage", "bonus_action"],
   },
   {
     slug: "conjure-elemental",
     status: "ready",
-    behaviorKind: "summon",
+    behaviorKind: "persistent_area",
     automationTags: [
       "concentration",
-      "summon",
-      "controlled_token",
-      "control_loss_on_concentration_break",
+      "area",
+      "damage",
+      "control",
+      "restrained",
+      "stationary",
+      "element_choice",
     ],
   },
   {
@@ -392,8 +460,14 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
   {
     slug: "spiritual-weapon",
     status: "ready",
-    behaviorKind: "summon",
-    automationTags: ["summon", "controlled_token", "bonus_action"],
+    behaviorKind: "persistent_area",
+    automationTags: [
+      "persistent_effect",
+      "movable",
+      "spell_attack",
+      "bonus_action",
+      "no_concentration",
+    ],
   },
   {
     slug: "fly",

@@ -38,6 +38,9 @@ export interface WorldSeedMaterializeBody {
     maxScenes?: number;
     maxNpcs?: number;
     maxLocations?: number;
+    storyLength?: "short" | "standard" | "epic";
+    targetScenes?: number;
+    minScenes?: number;
   };
   tonalAnchor?: JsonObject;
   chaosFactor?: number;
@@ -407,7 +410,7 @@ export class WorldSeedMaterializationService {
   private extractContent(body: WorldSeedMaterializeBody): MaterializedContent {
     const context = body.context ?? {};
     const additions = body.additions ?? {};
-    return {
+    const content: MaterializedContent = {
       locations: this.uniqueByName([
         ...asArray(context.locations),
         ...asArray(additions.locations),
@@ -435,6 +438,145 @@ export class WorldSeedMaterializationService {
         ...asArray(additions.quests),
       ]),
     };
+    this.repairQuestReferences(
+      content,
+      clean(body.startingLocationName) ||
+        clean(content.locations[0]?.name) ||
+        "Ponto de Partida",
+    );
+    return content;
+  }
+
+  /**
+   * A passagem narrativa e a passagem de perfis são geradas em paralelo. Isso
+   * significa que a quest pode citar uma âncora que não chegou no roster final
+   * (o caso real da Dra. Elara). Antes de persistir o mundo, promovemos toda
+   * referência obrigatória a conteúdo canônico. A história deixa de nascer com
+   * objetivos impossíveis sem depender de uma nova chamada de IA.
+   */
+  private repairQuestReferences(
+    content: MaterializedContent,
+    startingLocationName: string,
+  ): void {
+    const npcNames = new Set(
+      content.npcs.map((npc) => normalizeKey(clean(npc.name))).filter(Boolean),
+    );
+    const locationNames = new Set(
+      content.locations
+        .map((location) => normalizeKey(clean(location.name)))
+        .filter(Boolean),
+    );
+    const factionNames = new Set(
+      content.factions
+        .flatMap((faction) => [clean(faction.name), clean(faction.slug)])
+        .map(normalizeKey)
+        .filter(Boolean),
+    );
+    const poiNames = new Set(
+      content.locations
+        .flatMap((location) => asArray(location.pois))
+        .map((poi) => normalizeKey(clean(poi.name)))
+        .filter(Boolean),
+    );
+
+    for (const quest of content.quests) {
+      for (const rawObjective of asArray(quest.objectives)) {
+        if (!rawObjective || typeof rawObjective !== "object") continue;
+        const objective = rawObjective as Record<string, unknown>;
+        const kind = clean(objective.kind);
+        const targetName = clean(objective.targetName);
+        if (!kind || !targetName) continue;
+        const key = normalizeKey(targetName);
+
+        if (kind === "talk_to_npc" && !npcNames.has(key)) {
+          content.npcs.unshift({
+            name: targetName,
+            title: "Âncora da missão",
+            role: "objective-anchor",
+            disposition: "friendly",
+            profile_depth: "core",
+            archetype_slug: "commoner",
+            location_name: startingLocationName,
+            motivation: "Ajudar o herói a compreender a ameaça central.",
+            knowledge_scope: [`quest:${clean(quest.name) || "main"}`],
+            description:
+              "Uma figura atenta, claramente ligada aos acontecimentos que movem a aventura.",
+            reputation_seed: {
+              tags: ["objective-anchor", "quest-critical"],
+            },
+          });
+          npcNames.add(key);
+          continue;
+        }
+
+        if (kind === "travel_to" && !locationNames.has(key)) {
+          content.locations.push({
+            name: targetName,
+            type: "wilderness",
+            description:
+              "Um destino ligado à trilha principal da aventura, alcançável a partir do ponto de partida.",
+            atmosphere: "O caminho parece puxar a história adiante.",
+            tags: ["objective-location", "quest-critical"],
+            pois: [
+              {
+                name: `Entrada de ${targetName}`,
+                type: "landmark",
+                description: "O primeiro marco visível ao chegar.",
+                isDefault: true,
+                isKnownToParty: true,
+              },
+            ],
+          });
+          content.connections.push({
+            from_name: startingLocationName,
+            to_name: targetName,
+            travel_hours: 2,
+            description: "Rota principal da missão.",
+          });
+          locationNames.add(key);
+          continue;
+        }
+
+        if (kind === "gain_reputation" && !factionNames.has(key)) {
+          content.factions.push({
+            name: targetName,
+            description:
+              "Uma força local cuja confiança influencia o desfecho da aventura.",
+            alignment: "neutral",
+            influenceLevel: 5,
+            headquartersLocationName: startingLocationName,
+            tags: ["quest-critical"],
+          });
+          factionNames.add(key);
+          continue;
+        }
+
+        if (
+          (kind === "visit_poi" || kind === "investigate_poi") &&
+          !poiNames.has(key)
+        ) {
+          const host =
+            content.locations.find(
+              (location) =>
+                normalizeKey(clean(location.name)) ===
+                normalizeKey(startingLocationName),
+            ) ?? content.locations[0];
+          if (host) {
+            host.pois = [
+              ...asArray(host.pois),
+              {
+                name: targetName,
+                type: "objective",
+                description: "Um ponto decisivo para a missão principal.",
+                isKnownToParty: true,
+                tags: ["quest-critical"],
+              },
+            ];
+            poiNames.add(key);
+          }
+        }
+      }
+    }
   }
 
   private emptyStats(content: MaterializedContent): MaterializeStats {
@@ -462,7 +604,9 @@ export class WorldSeedMaterializationService {
     }
     if (body.contentBudget) {
       campaign.contentBudget = {
-        maxScenes: body.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
+        ...campaign.contentBudget,
+        maxScenes:
+          body.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
         maxNpcs:
           body.contentBudget.maxNpcs ??
           campaign.contentBudget.maxNpcs ??
@@ -471,6 +615,30 @@ export class WorldSeedMaterializationService {
           body.contentBudget.maxLocations ??
           campaign.contentBudget.maxLocations ??
           Math.max(6, content.locations.length),
+        storyLength:
+          body.contentBudget.storyLength ??
+          campaign.contentBudget.storyLength ??
+          this.inferStoryLength(
+            body.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
+          ),
+        targetScenes:
+          body.contentBudget.targetScenes ??
+          campaign.contentBudget.targetScenes ??
+          Math.max(
+            1,
+            (body.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes) -
+              3,
+          ),
+        minScenes:
+          body.contentBudget.minScenes ??
+          campaign.contentBudget.minScenes ??
+          Math.max(
+            1,
+            Math.floor(
+              (body.contentBudget.maxScenes ??
+                campaign.contentBudget.maxScenes) * 0.6,
+            ),
+          ),
       };
     }
     const tonalAnchor = body.tonalAnchor ?? body.context?.tonal_anchor;
@@ -481,6 +649,12 @@ export class WorldSeedMaterializationService {
         campaign.questionStatedAtScene = 1;
       }
     }
+  }
+
+  private inferStoryLength(maxScenes: number): "short" | "standard" | "epic" {
+    if (maxScenes <= 12) return "short";
+    if (maxScenes >= 30) return "epic";
+    return "standard";
   }
 
   private async persistLocations(

@@ -96,6 +96,13 @@ function createHarness() {
   };
 
   const participantRepo: any = {
+    find: jest.fn(async ({ where }: any) =>
+      [...participants.values()].filter((participant) =>
+        Object.entries(where ?? {}).every(
+          ([key, value]) => participant[key as keyof MockParticipant] === value,
+        ),
+      ),
+    ),
     findOne: jest.fn(
       async ({ where: { id } }: any) => participants.get(id) ?? null,
     ),
@@ -215,6 +222,9 @@ function createHarness() {
     tryAutoEnd: jest.fn(async () => null),
     detectOutcome: jest.fn(async () => null),
   };
+  const startTurnOrchestrator: any = {
+    run: jest.fn(async () => ({ events: [] })),
+  };
 
   const combat = new CombatService(
     encounterRepo,
@@ -242,12 +252,21 @@ function createHarness() {
         concentrationBroken: false,
       }),
       removeConditionInstance: async () => ({ events: [], removed: false }),
+      removeConditionsEndedByDamage: async () => [],
+      processEndOfTurn: async () => ({ events: [] }),
+      expireAtParticipantTurnEnd: async () => ({ events: [] }),
     } as any,
     {
       addEffect: async () => ({ effect: {} as any, events: [] }),
       removeEffect: async () => ({ removed: false, events: [] }),
       removeAllByConcentrationBreak: async () => ({ events: [] }),
       tickAtEndOfTurn: async () => ({ events: [], ticked: [], expired: [] }),
+      tickAtEndOfCasterTurn: async () => ({
+        events: [],
+        ticked: [],
+        expired: [],
+      }),
+      expireAtStartOfTurn: async () => ({ events: [] }),
     } as any,
     {
       startNew: async () => ({ events: [], broken: false }),
@@ -326,6 +345,12 @@ function createHarness() {
     { processRoundStart: async () => [] } as any,
     { processAfterPcTurn: async () => [] } as any,
     { tryParryAfterAttackRoll: async () => null } as any,
+    startTurnOrchestrator,
+    {
+      resolveEndTurnAdjacent: async () => ({ events: [] }),
+      resolveEndTurnIn: async () => ({ events: [] }),
+      releaseConjureElementalTarget: async () => ({ events: [] }),
+    } as any,
   );
 
   return {
@@ -338,6 +363,7 @@ function createHarness() {
     eventService,
     diceService,
     encounterEndDetector,
+    startTurnOrchestrator,
   };
 }
 
@@ -514,6 +540,38 @@ describe("CombatService — US1 death-save flow", () => {
       if (res.ok) return;
       expect(res.code).toBe("ALREADY_DEAD");
     });
+
+    it("registra no evento somente a cura realmente aplicada no teto de PV", async () => {
+      const h = createHarness();
+      const monster = makeParticipant({
+        id: "monster-heal-cap",
+        type: "monster",
+        currentHp: 9,
+        maxHp: 10,
+        monster: { slug: "guard", name: "Guard" },
+      });
+      h.participants.set(monster.id, monster);
+
+      const res = await h.combat.applyHealing(h.encounter.id, {
+        targetParticipantId: monster.id,
+        amount: 5,
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value.healingApplied).toBe(1);
+      expect(res.events).toContainEqual(
+        expect.objectContaining({
+          event_type: "hp_change",
+          data: expect.objectContaining({
+            healing: 1,
+            healingRequested: 5,
+            hpAfter: 10,
+          }),
+        }),
+      );
+    });
   });
 
   describe("resolveDeathSave", () => {
@@ -658,6 +716,10 @@ describe("CombatService — US1 death-save flow", () => {
       expect(res.value.participantId).toBe(dying.id);
       expect(res.value.dyingState).toBe("dying");
       expect(res.value.autoSkip).toBeFalsy();
+      expect(h.startTurnOrchestrator.run).toHaveBeenCalledWith(
+        dying,
+        expect.objectContaining({ isStartOfRound: false }),
+      );
     });
 
     it("marks autoSkip when turn lands on stable PC", async () => {

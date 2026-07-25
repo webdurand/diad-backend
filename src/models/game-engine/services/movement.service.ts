@@ -3,6 +3,11 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import {
+  ConditionEffectsService,
+  canMoveFromConditions,
+  canTakeReactionFromConditions,
+} from "./condition-effects.service";
 import { ActionsService } from "src/models/characters/services/actions.service";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
@@ -10,12 +15,27 @@ import { EncounterService } from "./encounter.service";
 import { PersistentAreaService } from "./persistent-area.service";
 import { ExhaustionService } from "./exhaustion.service";
 import { DiadLogger } from "src/common/observability/logger/diad-logger.service";
+import { ConcentrationService } from "./concentration.service";
+import { findWitchBoltTether, witchBoltDistanceFt } from "./witch-bolt";
+import { ConditionLifecycleService } from "./condition-lifecycle.service";
+import {
+  movementCellCostFt,
+  standingMovementCost,
+} from "./prone-movement";
+import { getMonsterSavingThrowBonus } from "./monster-saving-throw";
+import type { SaveAbility } from "../interfaces/combat.interfaces";
+import { findFearCompulsion } from "./fear-compulsion";
 import {
   GameResult,
   GameEventData,
   success,
   failure,
 } from "../interfaces/result.type";
+import { getSummonStatBlock } from "./summon-stat-block";
+import {
+  abjureFoesChoiceError,
+  chooseAbjureFoesTurnOption,
+} from "./abjure-foes";
 
 export interface MovementResult {
   participantId: string;
@@ -30,6 +50,11 @@ export interface MovementResult {
     attackerParticipantId: string;
     attackerName: string;
   }>;
+  readyActions: Array<{
+    reactorParticipantId: string;
+    reactorName: string;
+    actionName: string;
+  }>;
 }
 
 export interface MovementState {
@@ -39,6 +64,63 @@ export interface MovementState {
   hasDisengaged: boolean;
   actionUsed: boolean;
   bonusActionUsed: boolean;
+}
+
+export function applyEffectSpeedModifiers(
+  baseSpeed: number,
+  effects: EncounterParticipantEntity["effectInstances"],
+): number {
+  const activeEffects = effects ?? [];
+  const flightSpeed = activeEffects
+    .filter((effect) => effect.kind === "flight_speed")
+    .reduce(
+      (highest, effect) =>
+        Math.max(
+          highest,
+          (effect.payload as { amount?: number } | undefined)?.amount ?? 0,
+        ),
+      0,
+    );
+  const multiplier = activeEffects
+    .filter((effect) => effect.kind === "speed_multiplier")
+    .reduce(
+      (product, effect) =>
+        product *
+        ((effect.payload as { amount?: number } | undefined)?.amount ?? 1),
+      1,
+    );
+  const reduction = activeEffects
+    .filter((effect) => effect.kind === "speed_reduction")
+    .reduce(
+      (sum, effect) =>
+        sum +
+        ((effect.payload as { amount?: number } | undefined)?.amount ?? 0),
+      0,
+    );
+  const bonus = activeEffects
+    .filter((effect) => effect.kind === "speed_bonus")
+    .reduce(
+      (sum, effect) =>
+        sum +
+        ((effect.payload as { amount?: number } | undefined)?.amount ?? 0),
+      0,
+    );
+
+  return Math.max(
+    0,
+    (Math.max(baseSpeed, flightSpeed) + bonus) * multiplier - reduction,
+  );
+}
+
+export function reconcileRemainingMovement(
+  currentRemaining: number | null | undefined,
+  previousSpeed: number,
+  newSpeed: number,
+): number {
+  return Math.max(
+    0,
+    (currentRemaining ?? previousSpeed) + (newSpeed - previousSpeed),
+  );
 }
 
 @Injectable()
@@ -55,6 +137,9 @@ export class MovementService {
     private readonly persistentArea: PersistentAreaService,
     private readonly exhaustion: ExhaustionService,
     private readonly logger: DiadLogger,
+    private readonly concentration: ConcentrationService,
+    private readonly conditionLifecycle: ConditionLifecycleService,
+    private readonly conditionEffects: ConditionEffectsService,
   ) {
     this.logger.setContext(MovementService.name);
   }
@@ -64,8 +149,29 @@ export class MovementService {
     participant: EncounterParticipantEntity,
     ownerUserId?: string,
   ): Promise<number> {
+    if (!canMoveFromConditions(participant.conditions)) return 0;
+    return this.getBaseSpeed(participant, ownerUserId);
+  }
+
+  async getBaseSpeed(
+    participant: EncounterParticipantEntity,
+    ownerUserId?: string,
+  ): Promise<number> {
     let baseSpeed = 30;
-    if (participant.type === "pc" && participant.characterId && ownerUserId) {
+    const summonStatBlock = getSummonStatBlock(participant);
+    const transformedWalk = participant.transformationState?.form?.speed?.walk;
+    if (summonStatBlock) {
+      baseSpeed = summonStatBlock.speed;
+    } else if (typeof transformedWalk === "number") {
+      baseSpeed = transformedWalk;
+    } else if (typeof transformedWalk === "string") {
+      const parsed = Number.parseInt(transformedWalk, 10);
+      baseSpeed = Number.isFinite(parsed) ? parsed : 30;
+    } else if (
+      participant.type === "pc" &&
+      participant.characterId &&
+      ownerUserId
+    ) {
       try {
         const actions = await this.actionsService.getActions(
           ownerUserId,
@@ -81,14 +187,6 @@ export class MovementService {
     ) {
       baseSpeed = this.parseMonsterSpeed(participant.monster.speed);
     }
-
-
-    const reductionTotal = (participant.effectInstances ?? [])
-      .filter((e) => e.kind === "speed_reduction")
-      .reduce(
-        (sum, e) => sum + ((e.payload as { amount?: number })?.amount ?? 0),
-        0,
-      );
 
 
     let exhaustionSpeedPenalty = 0;
@@ -113,19 +211,25 @@ export class MovementService {
       }
     }
 
-    return Math.max(0, baseSpeed - reductionTotal - exhaustionSpeedPenalty);
+    return Math.max(
+      0,
+      applyEffectSpeedModifiers(baseSpeed, participant.effectInstances) -
+        exhaustionSpeedPenalty,
+    );
   }
 
 
   private parseMonsterSpeed(speed: Record<string, unknown>): number {
     if (!speed) return 30;
-    const walk = speed.walk;
-    if (typeof walk === "number") return walk;
-    if (typeof walk === "string") {
-      const match = walk.match(/(\d+)/);
-      return match ? parseInt(match[1], 10) : 30;
-    }
-    return 30;
+    const speeds = Object.values(speed)
+      .map((value) => {
+        if (typeof value === "number") return value;
+        if (typeof value !== "string") return 0;
+        const match = value.match(/(\d+)/);
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter((value) => value > 0);
+    return speeds.length > 0 ? Math.max(...speeds) : 30;
   }
 
   async getMovementState(
@@ -136,10 +240,13 @@ export class MovementService {
     const participant =
       await this.encounterService.getParticipant(participantId);
     const speed = await this.getSpeed(participant, ownerUserId);
+    const canMove = canMoveFromConditions(participant.conditions);
 
     return success({
       speed,
-      remainingMovement: participant.movementRemaining ?? speed,
+      remainingMovement: canMove
+        ? (participant.movementRemaining ?? speed)
+        : 0,
       hasDashed: participant.hasDashed,
       hasDisengaged: participant.hasDisengaged,
       actionUsed: participant.actionUsed,
@@ -170,10 +277,58 @@ export class MovementService {
       await this.encounterService.getParticipant(participantId);
     if (participant.isDefeated)
       return failure("Participante derrotado.", "CONDITION_PREVENTS_ACTION");
+    if (
+      participant.type === "pc" &&
+      participant.dyingState !== "none"
+    ) {
+      return failure(
+        "Personagem incapacitado não pode se mover.",
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+    if (!canMoveFromConditions(participant.conditions)) {
+      const blockingCondition = (participant.conditions ?? []).find(
+        (condition) =>
+          [
+            "grappled",
+            "restrained",
+            "stunned",
+            "paralyzed",
+            "petrified",
+            "unconscious",
+          ].includes(condition),
+      );
+      return failure(
+        `${blockingCondition ?? "Uma condição"} reduz a velocidade a 0.`,
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
 
     const fromX = participant.positionX ?? 0;
     const fromY = participant.positionY ?? 0;
 
+    const fearCompulsion = findFearCompulsion(participant);
+    if (fearCompulsion?.appliedBy) {
+      const fearSource = await this.participantRepo.findOne({
+        where: { id: fearCompulsion.appliedBy },
+      });
+      if (fearSource?.positionX != null && fearSource.positionY != null) {
+        const before = Math.hypot(
+          fromX - fearSource.positionX,
+          fromY - fearSource.positionY,
+        );
+        const after = Math.hypot(
+          targetX - fearSource.positionX,
+          targetY - fearSource.positionY,
+        );
+        if (after <= before) {
+          return failure(
+            "Fear obriga a criatura a se afastar do conjurador pela rota disponível.",
+            "CONDITION_PREVENTS_ACTION",
+          );
+        }
+      }
+    }
 
     const gridCols =
       encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
@@ -240,6 +395,7 @@ export class MovementService {
       Math.abs(targetX - fromX),
       Math.abs(targetY - fromY),
     );
+    const isProne = (participant.conditions ?? []).includes("prone");
     const {
       costFt: distanceFt,
       difficultCellsCrossed,
@@ -251,6 +407,7 @@ export class MovementService {
       targetY,
       difficultCells,
       hasLandsStride,
+      isProne,
     );
 
 
@@ -265,8 +422,21 @@ export class MovementService {
         "OUT_OF_RANGE",
       );
 
+    const abjureChoice = chooseAbjureFoesTurnOption(
+      participant,
+      "movement",
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (!abjureChoice.allowed) {
+      return failure(
+        abjureFoesChoiceError(abjureChoice.currentChoice),
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
 
-    const opportunityAttacks = participant.hasDisengaged
+    const opportunityAttacks =
+      participant.hasDisengaged ||
+      getSummonStatBlock(participant)?.traits.flyby === true
       ? []
       : await this.checkOpportunityAttacks(
           participant,
@@ -276,6 +446,7 @@ export class MovementService {
           targetY,
           encounterId,
         );
+    let readyActions: MovementResult["readyActions"] = [];
 
 
 
@@ -286,18 +457,24 @@ export class MovementService {
     const tileEvents: GameEventData[] = [];
     let stopAtCell: { x: number; y: number } | null = null;
     let cellsConsumed = 0;
+    let previousCell = { x: fromX, y: fromY };
     for (const cell of traversedCells) {
       const entryRes = await this.persistentArea.resolveEntry(
         participant,
         cell,
         encounterId,
-
-
-
-
+        (ability) =>
+          this.getPersistentAreaSaveModifier(
+            participant,
+            ability,
+            ownerUserId,
+          ),
+        `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+        previousCell,
       );
       tileEvents.push(...entryRes.events);
       cellsConsumed++;
+      previousCell = cell;
       if (entryRes.stopMovement) {
         stopAtCell = cell;
         break;
@@ -308,12 +485,21 @@ export class MovementService {
       participant,
       traversedUpToStop,
       encounterId,
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
     );
     tileEvents.push(...moveThroughRes.events);
 
 
     const finalX = stopAtCell?.x ?? targetX;
     const finalY = stopAtCell?.y ?? targetY;
+    readyActions = await this.checkReadyActions(
+      participant,
+      fromX,
+      fromY,
+      finalX,
+      finalY,
+      encounterId,
+    );
     participant.positionX = finalX;
     participant.positionY = finalY;
 
@@ -325,16 +511,48 @@ export class MovementService {
           finalY,
           difficultCells,
           hasLandsStride,
+          isProne,
         ).costFt
       : distanceFt;
     participant.movementRemaining -= finalCostFt;
     await this.participantRepo.save(participant);
 
+    const locationBoundConditionEvents =
+      (await this.persistentArea.removeLocationBoundConditionsOutsideAreas?.(
+        participant,
+        { x: finalX, y: finalY },
+      )) ?? [];
+    tileEvents.push(...locationBoundConditionEvents);
 
-    await this.persistentArea.relocateAurasByCaster(participant.id, {
-      x: finalX,
-      y: finalY,
+
+    const auraParticipants = await this.participantRepo.find({
+      where: { encounterId },
+      relations: ["monster"],
     });
+    const auraEntry = await this.persistentArea.relocateAurasByCaster(
+      participant.id,
+      {
+        x: finalX,
+        y: finalY,
+      },
+      {
+        participants: auraParticipants,
+        getSaveModifier: (ability, target) =>
+          this.getPersistentAreaSaveModifier(
+            target ?? participant,
+            ability,
+            ownerUserId,
+          ),
+        turnKey: `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+        persistParticipant: (target) =>
+          this.participantRepo.update(target.id, {
+            effectInstances: target.effectInstances,
+          }),
+      },
+    );
+    tileEvents.push(...auraEntry.events);
+    const witchBoltEvents =
+      await this.breakOutOfRangeWitchBoltTethers(encounterId);
 
     const events: GameEventData[] = [
       {
@@ -357,6 +575,7 @@ export class MovementService {
       },
 
       ...tileEvents,
+      ...witchBoltEvents,
     ];
     if (difficultCellsCrossed > 0) {
       events.push({
@@ -388,6 +607,22 @@ export class MovementService {
         },
       });
     }
+    for (const ready of readyActions) {
+      events.push({
+        event_type: "ready_action_available",
+        actor_participant_id: ready.reactorParticipantId,
+        target_participant_id: participantId,
+        data: {
+          reactorName: ready.reactorName,
+          actionName: ready.actionName,
+          mover: participantId,
+          fromX,
+          fromY,
+          toX: finalX,
+          toY: finalY,
+        },
+      });
+    }
 
     return success(
       {
@@ -399,9 +634,126 @@ export class MovementService {
         distanceFt: finalCostFt,
         remainingMovement: participant.movementRemaining,
         opportunityAttacks,
+        readyActions,
       },
       events,
     );
+  }
+
+  async standUp(
+    encounterId: string,
+    participantId: string,
+    ownerUserId?: string,
+  ): Promise<
+    GameResult<{
+      participantId: string;
+      movementSpent: number;
+      remainingMovement: number;
+    }>
+  > {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    }
+    if (encounter.turnOrder[encounter.currentTurnIndex] !== participantId) {
+      return failure("Nao e o turno deste participante.", "NOT_YOUR_TURN");
+    }
+
+    const participant = await this.encounterService.getParticipant(participantId);
+    const proneInstances = (participant.conditionInstances ?? []).filter(
+      (condition) => condition.slug === "prone",
+    );
+    if (
+      proneInstances.length === 0 &&
+      !(participant.conditions ?? []).includes("prone")
+    ) {
+      return failure("O participante nao esta caido.", "INVALID_ACTION");
+    }
+
+    const speed = await this.getSpeed(participant, ownerUserId);
+    if (speed <= 0) {
+      return failure(
+        "Velocidade 0 impede levantar-se.",
+        "CONDITION_PREVENTS_MOVEMENT",
+      );
+    }
+    const movementSpent = standingMovementCost(speed);
+    const remainingMovement = participant.movementRemaining ?? speed;
+    if (remainingMovement < movementSpent) {
+      return failure(
+        `Levantar exige ${movementSpent}ft de movimento; restam ${remainingMovement}ft.`,
+        "INSUFFICIENT_MOVEMENT",
+      );
+    }
+
+    participant.movementRemaining = remainingMovement - movementSpent;
+    const events: GameEventData[] = [];
+    for (const condition of proneInstances) {
+      const removed = await this.conditionLifecycle.removeConditionInstance(
+        participant,
+        condition.id,
+        "stood_up",
+      );
+      events.push(...removed.events);
+    }
+    if (proneInstances.length === 0) {
+      participant.conditions = (participant.conditions ?? []).filter(
+        (condition) => condition !== "prone",
+      );
+      await this.participantRepo.save(participant);
+    }
+
+    events.unshift({
+      event_type: "stood_up",
+      actor_participant_id: participant.id,
+      data: {
+        movementSpent,
+        remainingMovement: participant.movementRemaining,
+      },
+    });
+    return success(
+      {
+        participantId,
+        movementSpent,
+        remainingMovement: participant.movementRemaining,
+      },
+      events,
+    );
+  }
+
+  private async breakOutOfRangeWitchBoltTethers(
+    encounterId: string,
+  ): Promise<GameEventData[]> {
+    const events: GameEventData[] = [];
+    const participants = await this.participantRepo.find({
+      where: { encounterId, isDefeated: false },
+    });
+    for (const caster of participants) {
+      const tether = findWitchBoltTether(caster);
+      if (!tether) continue;
+      const target = participants.find(
+        (participant) => participant.id === tether.targetParticipantId,
+      );
+      if (!target) continue;
+      const distanceFt = witchBoltDistanceFt(caster, target);
+      if (distanceFt == null || distanceFt <= tether.rangeFt) continue;
+
+      const breakResult = await this.concentration.break(caster, "expired");
+      events.push({
+        event_type: "witch_bolt_ended",
+        actor_participant_id: caster.id,
+        target_participant_id: target.id,
+        data: {
+          reason: "out_of_range",
+          distanceFt,
+          rangeFt: tether.rangeFt,
+        },
+      });
+      events.push(...breakResult.events);
+    }
+    return events;
   }
 
 
@@ -412,6 +764,7 @@ export class MovementService {
     toY: number,
     difficultCells: Set<string>,
     hasLandsStride: boolean,
+    isProne: boolean,
   ): {
     costFt: number;
     difficultCellsCrossed: number;
@@ -438,26 +791,79 @@ export class MovementService {
       traversed.push({ x: cx, y: cy });
       const isDiff = difficultCells.has(`${cx},${cy}`);
       if (isDiff) crossed++;
-      cost += isDiff && !hasLandsStride ? 10 : 5;
+      cost += movementCellCostFt({
+        difficultTerrain: isDiff,
+        ignoresDifficultTerrain: hasLandsStride,
+        prone: isProne,
+      });
     }
     while (cx !== toX) {
       cx += Math.sign(toX - cx);
       traversed.push({ x: cx, y: cy });
       const isDiff = difficultCells.has(`${cx},${cy}`);
       if (isDiff) crossed++;
-      cost += isDiff && !hasLandsStride ? 10 : 5;
+      cost += movementCellCostFt({
+        difficultTerrain: isDiff,
+        ignoresDifficultTerrain: hasLandsStride,
+        prone: isProne,
+      });
     }
     while (cy !== toY) {
       cy += Math.sign(toY - cy);
       traversed.push({ x: cx, y: cy });
       const isDiff = difficultCells.has(`${cx},${cy}`);
       if (isDiff) crossed++;
-      cost += isDiff && !hasLandsStride ? 10 : 5;
+      cost += movementCellCostFt({
+        difficultTerrain: isDiff,
+        ignoresDifficultTerrain: hasLandsStride,
+        prone: isProne,
+      });
     }
     return {
       costFt: cost,
       difficultCellsCrossed: crossed,
       traversedCells: traversed,
+    };
+  }
+
+  private async getPersistentAreaSaveModifier(
+    participant: EncounterParticipantEntity,
+    ability: SaveAbility,
+    ownerUserId?: string,
+  ): Promise<{
+    modifier: number;
+    advantage: boolean;
+    disadvantage: boolean;
+    autoFail: boolean;
+  }> {
+    let modifier = 0;
+    if (participant.type === "pc" && participant.characterId && ownerUserId) {
+      try {
+        const sheet = await this.sheetService.computeSheet(
+          ownerUserId,
+          participant.characterId,
+        );
+        modifier =
+          sheet.savingThrows.find((savingThrow) => savingThrow.slug === ability)
+            ?.bonus ?? 0;
+      } catch {
+        modifier = 0;
+      }
+    } else if (participant.monster) {
+      modifier = getMonsterSavingThrowBonus(
+        participant.monster as unknown as Record<string, unknown>,
+        ability,
+      );
+    }
+    const conditionModifiers = this.conditionEffects.getSavingThrowModifiers(
+      participant.conditions ?? [],
+      ability,
+    );
+    return {
+      modifier,
+      advantage: conditionModifiers.hasAdvantage,
+      disadvantage: conditionModifiers.hasDisadvantage,
+      autoFail: conditionModifiers.autoFail,
     };
   }
 
@@ -564,6 +970,14 @@ export class MovementService {
       if (enemy.positionX == null || enemy.positionY == null) continue;
 
       if (enemy.reactionsUsed > 0) continue;
+      if (!canTakeReactionFromConditions(enemy.conditions)) continue;
+      if (
+        (enemy.effectInstances ?? []).some(
+          (effect) => effect.kind === "opportunity_attacks_blocked",
+        )
+      ) {
+        continue;
+      }
 
       const wasAdjacent = this.isAdjacent(
         fromX,
@@ -590,6 +1004,61 @@ export class MovementService {
     return results;
   }
 
+  private async checkReadyActions(
+    mover: EncounterParticipantEntity,
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    encounterId: string,
+  ): Promise<
+    Array<{
+      reactorParticipantId: string;
+      reactorName: string;
+      actionName: string;
+    }>
+  > {
+    const participants = await this.participantRepo.find({
+      where: { encounterId, isDefeated: false },
+    });
+    const results: Array<{
+      reactorParticipantId: string;
+      reactorName: string;
+      actionName: string;
+    }> = [];
+
+    for (const reactor of participants) {
+      const prepared = reactor.readiedAction;
+      if (!prepared || prepared.trigger.kind !== "enemy_enters_range") continue;
+      if (reactor.id === mover.id || reactor.faction === mover.faction) continue;
+      if (reactor.positionX == null || reactor.positionY == null) continue;
+      if ((reactor.reactionsUsed ?? 0) > 0) continue;
+      if (!canTakeReactionFromConditions(reactor.conditions)) continue;
+      if (prepared.actionDescriptor.kind !== "attack") continue;
+
+      const rangeFt = prepared.trigger.rangeFt;
+      const beforeFt =
+        Math.max(
+          Math.abs(fromX - reactor.positionX),
+          Math.abs(fromY - reactor.positionY),
+        ) * 5;
+      const afterFt =
+        Math.max(
+          Math.abs(toX - reactor.positionX),
+          Math.abs(toY - reactor.positionY),
+        ) * 5;
+      if (beforeFt <= rangeFt || afterFt > rangeFt) continue;
+
+      results.push({
+        reactorParticipantId: reactor.id,
+        reactorName: reactor.displayName,
+        actionName: prepared.actionDescriptor.actionName,
+      });
+    }
+
+    return results;
+  }
+
 
   private isAdjacent(x1: number, y1: number, x2: number, y2: number): boolean {
     return Math.abs(x1 - x2) <= 1 && Math.abs(y1 - y2) <= 1;
@@ -608,7 +1077,10 @@ export class MovementService {
       "previous.bonus_action_used": participant.bonusActionUsed,
       "previous.movement_remaining": participant.movementRemaining,
     });
-    const speed = await this.getSpeed(participant, ownerUserId);
+    // Preserve the creature's actual movement budget even while a condition
+    // temporarily prevents movement. If the condition ends during this turn,
+    // the unspent budget becomes available again.
+    const speed = await this.getBaseSpeed(participant, ownerUserId);
     participant.movementRemaining = speed;
     participant.actionUsed = false;
     participant.bonusActionUsed = false;
@@ -622,6 +1094,7 @@ export class MovementService {
       participant,
       ownerUserId,
     );
+    participant.bonusUnarmedAttacksRemainingThisTurn = 0;
 
 
     participant.recklessAttackActive = false;

@@ -143,7 +143,14 @@ export class CampaignService {
       npcExpansionBudgetUsed: 0,
       contentBudget:
         dto.dmMode !== "human" && (dto.scope ?? "solo") === "solo"
-          ? { maxScenes: 12, maxNpcs: 45, maxLocations: 6 }
+          ? {
+              maxScenes: 18,
+              targetScenes: 15,
+              minScenes: 10,
+              storyLength: "standard",
+              maxNpcs: 45,
+              maxLocations: 6,
+            }
           : undefined,
     });
 
@@ -454,11 +461,18 @@ export class CampaignService {
     const campaign = await this.getById(campaignId);
     if (dto.contentBudget) {
       campaign.contentBudget = {
+        ...campaign.contentBudget,
         maxScenes:
           dto.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
         maxNpcs: dto.contentBudget.maxNpcs ?? campaign.contentBudget.maxNpcs,
         maxLocations:
           dto.contentBudget.maxLocations ?? campaign.contentBudget.maxLocations,
+        storyLength:
+          dto.contentBudget.storyLength ?? campaign.contentBudget.storyLength,
+        targetScenes:
+          dto.contentBudget.targetScenes ?? campaign.contentBudget.targetScenes,
+        minScenes:
+          dto.contentBudget.minScenes ?? campaign.contentBudget.minScenes,
       };
     }
     if (dto.dmPersonality) campaign.dmPersonality = dto.dmPersonality;
@@ -477,11 +491,18 @@ export class CampaignService {
     const campaign = await this.getById(campaignId);
     if (dto.contentBudget) {
       campaign.contentBudget = {
+        ...campaign.contentBudget,
         maxScenes:
           dto.contentBudget.maxScenes ?? campaign.contentBudget.maxScenes,
         maxNpcs: dto.contentBudget.maxNpcs ?? campaign.contentBudget.maxNpcs,
         maxLocations:
           dto.contentBudget.maxLocations ?? campaign.contentBudget.maxLocations,
+        storyLength:
+          dto.contentBudget.storyLength ?? campaign.contentBudget.storyLength,
+        targetScenes:
+          dto.contentBudget.targetScenes ?? campaign.contentBudget.targetScenes,
+        minScenes:
+          dto.contentBudget.minScenes ?? campaign.contentBudget.minScenes,
       };
     }
     if (dto.dmPersonality) campaign.dmPersonality = dto.dmPersonality;

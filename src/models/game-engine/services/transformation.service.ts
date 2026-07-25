@@ -50,6 +50,13 @@ export class TransformationService {
       monsterSlug: string;
       formDisplayName?: string;
       durationRoundsTotal?: number | null;
+      rulesMode?: TransformationState["rulesMode"];
+      maxChallengeRating?: number;
+      druidLevel?: number;
+      wisdomModifier?: number;
+      isMoonDruid?: boolean;
+      originalMaxHp?: number;
+      originalWalkSpeed?: number;
       retainedAbilities?: TransformationState["retainedAbilities"];
       equipmentHandling?: TransformationState["equipmentHandling"];
       revertTriggers?: Partial<TransformationState["revertTriggers"]>;
@@ -75,6 +82,14 @@ export class TransformationService {
     if (!monster) {
       throw new NotFoundException(`MONSTER_NOT_FOUND: slug=${dto.monsterSlug}`);
     }
+    if (
+      dto.maxChallengeRating != null &&
+      monster.challenge_rating > dto.maxChallengeRating
+    ) {
+      throw new BadRequestException(
+        `CR do form (${monster.challenge_rating}) excede o máximo permitido (${dto.maxChallengeRating}).`,
+      );
+    }
 
 
     const original: TransformationOriginalSnapshot =
@@ -85,15 +100,42 @@ export class TransformationService {
       monster,
       dto.formDisplayName,
     );
+    if (dto.originalWalkSpeed != null) {
+      original.walkSpeed = dto.originalWalkSpeed;
+      participant.movementRemaining = Math.max(
+        0,
+        (participant.movementRemaining ?? dto.originalWalkSpeed) +
+          (form.speed.walk - dto.originalWalkSpeed),
+      );
+    }
+    const isXphbWildShape = dto.rulesMode === "xphb-wild-shape";
+    const grantedTempHp = isXphbWildShape
+      ? Math.max(
+          1,
+          (dto.druidLevel ?? 2) * (dto.isMoonDruid ? 3 : 1),
+        )
+      : 0;
+    if (isXphbWildShape) {
+      const originalMaxHp = dto.originalMaxHp ?? original.currentHp;
+      original.maxHp = originalMaxHp;
+      form.maxHp = originalMaxHp;
+      form.currentHp = original.currentHp;
+      form.tempHp = grantedTempHp;
+      if (dto.isMoonDruid) {
+        form.ac = Math.max(form.ac, 13 + (dto.wisdomModifier ?? 0));
+      }
+    }
 
     const state: TransformationState = {
       source: dto.source,
+      rulesMode: dto.rulesMode ?? "legacy-form-hp",
       enteredAtRound: dto.currentEncounterRound ?? 0,
       sourceCasterParticipantId: dto.sourceCasterParticipantId ?? null,
       durationRoundsTotal: dto.durationRoundsTotal ?? null,
       durationRoundsRemaining: dto.durationRoundsTotal ?? null,
       original,
       form,
+      grantedTempHp,
       retainedAbilities: dto.retainedAbilities ?? ["mental-stats", "speech"],
       equipmentHandling: dto.equipmentHandling ?? "merge",
       revertTriggers: {
@@ -116,6 +158,21 @@ export class TransformationService {
 
     if (dto.source === "wild-shape") {
       participant.bonusActionUsed = true;
+    }
+    if (isXphbWildShape) {
+      if (participant.characterId) {
+        const characterState = await this.stateRepo.findOne({
+          where: { character_id: participant.characterId },
+        });
+        if (characterState) {
+          characterState.temp_hp = Math.max(
+            characterState.temp_hp ?? 0,
+            grantedTempHp,
+          );
+          await this.stateRepo.save(characterState);
+        }
+      }
+      participant.tempHp = Math.max(participant.tempHp ?? 0, grantedTempHp);
     }
 
     await this.participantRepo.save(participant);
@@ -143,6 +200,25 @@ export class TransformationService {
     const state = participant.transformationState;
     participant.displayName = state.original.displayName;
     participant.transformationState = null;
+    if (state.original.walkSpeed != null) {
+      participant.movementRemaining = Math.max(
+        0,
+        (participant.movementRemaining ?? state.form.speed.walk) +
+          (state.original.walkSpeed - state.form.speed.walk),
+      );
+    }
+    if (state.rulesMode === "xphb-wild-shape" && state.grantedTempHp) {
+      if (participant.characterId) {
+        const characterState = await this.stateRepo.findOne({
+          where: { character_id: participant.characterId },
+        });
+        if (characterState) {
+          characterState.temp_hp = 0;
+          await this.stateRepo.save(characterState);
+        }
+      }
+      participant.tempHp = 0;
+    }
 
     await this.participantRepo.save(participant);
     this.logger.log(
@@ -159,6 +235,7 @@ export class TransformationService {
     absorbedByForm: number;
     overflowToOriginal: number;
     reverted: boolean;
+    usesOriginalHp?: boolean;
   }> {
     const participant = await this.participantRepo.findOne({
       where: { id: participantId },
@@ -167,6 +244,14 @@ export class TransformationService {
       return { absorbedByForm: 0, overflowToOriginal: amount, reverted: false };
     }
     const state = participant.transformationState;
+    if (state.rulesMode === "xphb-wild-shape") {
+      return {
+        absorbedByForm: 0,
+        overflowToOriginal: amount,
+        reverted: false,
+        usesOriginalHp: true,
+      };
+    }
     const formHp = state.form.currentHp;
     const absorbed = Math.min(formHp, amount);
     const overflow = Math.max(0, amount - formHp);
@@ -358,6 +443,12 @@ export class TransformationService {
             unknown
           >[])
         : [],
+      multiattack:
+        (
+          monster as unknown as {
+            multiattack?: TransformationForm["multiattack"];
+          }
+        ).multiattack ?? null,
       challengeRating:
         typeof (monster as unknown as { challenge_rating?: unknown })
           .challenge_rating === "number"

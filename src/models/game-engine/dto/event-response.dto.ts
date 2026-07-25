@@ -32,6 +32,14 @@ export function toEventResponseDto(
 ): EventResponseDto {
   const actorId = event.actorParticipantId ?? null;
   const targetId = event.targetParticipantId ?? null;
+  const persistedActorName =
+    typeof event.data?.actorName === "string" ? event.data.actorName : null;
+  const persistedTargetName =
+    typeof event.data?.targetName === "string" ? event.data.targetName : null;
+  const actorName = persistedActorName ??
+    (actorId ? participantsMap.get(actorId) ?? null : null);
+  const targetName = persistedTargetName ??
+    (targetId ? participantsMap.get(targetId) ?? null : null);
 
   return {
     id: event.id,
@@ -39,14 +47,14 @@ export function toEventResponseDto(
     sequence: event.sequence,
     type: snakeToCamelCase(event.eventType),
     actorId,
-    actorName: actorId ? (participantsMap.get(actorId) ?? null) : null,
+    actorName,
     targetId,
-    targetName: targetId ? (participantsMap.get(targetId) ?? null) : null,
+    targetName,
     description: generateEventDescription(
       event.eventType,
       event.data,
-      actorId ? (participantsMap.get(actorId) ?? null) : null,
-      targetId ? (participantsMap.get(targetId) ?? null) : null,
+      actorName,
+      targetName,
     ),
     payload: event.data,
     timestamp:
@@ -82,8 +90,12 @@ function generateEventDescription(
     }
     case "spell_cast": {
       const spell =
-        (data.spellName as string) ?? (data.spellSlug as string) ?? "magia";
-      const slot = data.slotLevel ?? data.slotUsed ?? "";
+        (data.spellName as string) ??
+        (data.spellSlug as string) ??
+        (data.spell as string) ??
+        "magia";
+      const slot =
+        data.slotLevel ?? data.slotUsed ?? data.slot_used ?? data.spell_level ?? "";
       return `${actor} conjura ${spell}${slot ? ` (slot nível ${slot})` : ""}${targetName ? ` em ${target}` : ""}`;
     }
     case "condition_applied": {
@@ -121,9 +133,22 @@ function generateEventDescription(
         : `${actor} perde concentração em ${spell}`;
     }
     case "hp_change": {
+      const healing = Number(data.healing ?? 0);
+      const damage = Number(data.finalDamage ?? data.damage ?? 0);
       const amount = Number(data.amount ?? data.delta ?? 0);
-      const verb = amount > 0 ? "recupera" : "perde";
-      return `${target} ${verb} ${Math.abs(amount)} HP`;
+      if (healing > 0 || amount > 0) {
+        const recovered = healing > 0 ? healing : amount;
+        return `${target} recupera ${recovered} HP`;
+      }
+      const lost = damage > 0 ? damage : Math.abs(Math.min(0, amount));
+      const mitigation = data.immune
+        ? " — imune"
+        : data.resisted
+          ? " — resistência aplicada"
+          : data.vulnerable
+            ? " — vulnerabilidade aplicada"
+            : "";
+      return `${target} perde ${lost} HP${mitigation}`;
     }
     case "death_save": {
       const roll = data.roll ?? "?";
@@ -161,13 +186,15 @@ function generateEventDescription(
       return `${actor} usa ${action}`;
     }
     case "spell_damage": {
-      const amount = data.totalDamage ?? data.damage ?? "?";
-      const spell = (data.spellName as string) ?? "";
-      return `${spell ? `${spell}: ` : ""}${actor} causa ${amount} de dano a ${target}`;
+      const amount = data.totalDamage ?? data.damage ?? data.total ?? "?";
+      const spell = (data.spellName as string) ?? (data.spell as string) ?? "";
+      const damageType = (data.damageType as string) ?? (data.type as string) ?? "";
+      return `${spell ? `${spell}: ` : ""}${actor} rola ${amount}${damageType ? ` de dano ${damageType}` : " de dano"}`;
     }
     case "spell_healing": {
-      const amount = data.totalHealing ?? data.healing ?? "?";
-      return `${actor} cura ${target} em ${amount} HP`;
+      const amount = data.totalHealing ?? data.healing ?? data.total ?? "?";
+      const spell = (data.spellName as string) ?? (data.spell as string) ?? "";
+      return `${spell ? `${spell}: ` : ""}${actor} rola ${amount} de cura`;
     }
     case "control_changed": {
       const newMode = (data.newMode as string) ?? "?";

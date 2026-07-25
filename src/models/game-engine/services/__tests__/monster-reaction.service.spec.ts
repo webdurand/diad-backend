@@ -53,6 +53,17 @@ describe("MonsterReactionService.tryParryAfterAttackRoll", () => {
     expect(res).toBeNull();
   });
 
+  it.each(["incapacitated", "stunned", "paralyzed", "petrified", "unconscious"])(
+    "não permite Parry sob %s",
+    async (condition) => {
+      const svc = makeService();
+      const target = makeTarget({ conditions: [condition] });
+      const res = await svc.tryParryAfterAttackRoll(target, 18, true, 16);
+      expect(res).toBeNull();
+      expect(target.reactionsUsed).toBe(0);
+    },
+  );
+
   it("retorna null se target não tem Parry nas reactions", async () => {
     const svc = makeService();
     const target = makeTarget({

@@ -43,18 +43,47 @@ describe("WorldPulseService", () => {
     const randomEncounter = {
       materialize: jest.fn().mockResolvedValue({ encounterId: "enc-1" }),
     };
+    const characterClassRepo = {
+      find: jest.fn().mockResolvedValue([
+        { character_id: "char-1", class_level: 10 },
+      ]),
+    };
+    const monsterSelector = {
+      selectComposition: jest.fn().mockResolvedValue({
+        monsterSlugs: ["wolf"],
+        reasonChain: ["budget=2300"],
+      }),
+    };
+    const difficultyPolicy = {
+      resolve: jest.fn().mockImplementation((campaignDifficulty, requested) => ({
+        campaignDifficulty: campaignDifficulty ?? "standard",
+        requestedDifficulty: requested,
+        effectiveDifficulty:
+          campaignDifficulty === "gritty" ? "high" : requested,
+        reason: `campaign_difficulty:${campaignDifficulty ?? "standard"}`,
+      })),
+    };
     const eventBus = { publish: jest.fn().mockResolvedValue(undefined) };
     const service = new WorldPulseService(
       overrides.sessionRepo ?? (sessionRepo as any),
       overrides.campaignRepo ?? (campaignRepo as any),
       overrides.sceneRepo ?? (sceneRepo as any),
       overrides.eventRepo ?? (eventRepo as any),
+      overrides.characterClassRepo ?? (characterClassRepo as any),
       overrides.randomEncounter ?? (randomEncounter as any),
+      overrides.monsterSelector ?? (monsterSelector as any),
+      overrides.difficultyPolicy ?? (difficultyPolicy as any),
       overrides.eventBus ?? (eventBus as any),
       new EventEnvelopeFactory(undefined),
       { setContext: jest.fn(), warn: jest.fn() } as any,
     );
-    return { service, randomEncounter, eventBus };
+    return {
+      service,
+      randomEncounter,
+      eventBus,
+      monsterSelector,
+      characterClassRepo,
+    };
   };
 
   it("dispara encounter em POI wild com pull ativo e registra correlationKey", async () => {
@@ -75,6 +104,9 @@ describe("WorldPulseService", () => {
         sessionId: "session-1",
         sceneId: "scene-1",
         monsterSlugs: ["wolf"],
+        partyAvgLevel: 10,
+        partySize: 1,
+        difficulty: "moderate",
       }),
     );
     expect(eventBus.publish).toHaveBeenCalledWith(
@@ -114,5 +146,38 @@ describe("WorldPulseService", () => {
 
     expect(result).toMatchObject({ triggered: false, reason: "poi_not_wild" });
     expect(randomEncounter.materialize).not.toHaveBeenCalled();
+  });
+
+  it("adapta orçamento ao nível real do grupo e ao modo gritty", async () => {
+    const { service, randomEncounter, monsterSelector } = createService({
+      campaignRepo: {
+        findOne: jest.fn().mockResolvedValue({
+          id: "campaign-1",
+          dmUserId: "dm-1",
+          difficulty: "gritty",
+        }),
+      },
+      characterClassRepo: {
+        find: jest.fn().mockResolvedValue([
+          { character_id: "char-1", class_level: 15 },
+        ]),
+      },
+    });
+
+    await service.evaluate({ sessionId: "session-1" });
+
+    expect(monsterSelector.selectComposition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        partyAvgLevel: 15,
+        partySize: 1,
+        targetDifficulty: "high",
+      }),
+    );
+    expect(randomEncounter.materialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        partyAvgLevel: 15,
+        difficulty: "high",
+      }),
+    );
   });
 });

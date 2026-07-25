@@ -26,6 +26,7 @@ function makeParticipant(
 ): EncounterParticipantEntity {
   return {
     id,
+    encounterId: "enc-1",
     displayName: id,
     type: "monster",
     faction: "enemy",
@@ -53,6 +54,15 @@ function makeParticipant(
 function makeService(
   encounter: Partial<EncounterEntity>,
   participants: Record<string, EncounterParticipantEntity>,
+  options?: {
+    inventoryService?: {
+      getInventory: jest.Mock;
+      useItem: jest.Mock;
+    };
+    characterStateService?: {
+      stabilizeAtZero: jest.Mock;
+    };
+  },
 ) {
   const encounterRepo = {
     findOne: jest.fn().mockResolvedValue(encounter),
@@ -70,7 +80,34 @@ function makeService(
   const diceService = new DiceService();
   const conditionEffects = new ConditionEffectsService();
   const sheetService = {
-    computeSheet: jest.fn().mockResolvedValue({ classes: [] }),
+    computeSheet: jest.fn().mockResolvedValue({
+      classes: [],
+      abilityScores: [{ slug: "str", modifier: 2 }],
+    }),
+  };
+  const conditionLifecycle = {
+    removeConditionInstance: jest.fn(
+      async (participant: EncounterParticipantEntity, instanceId: string) => {
+        participant.conditionInstances = (
+          participant.conditionInstances ?? []
+        ).filter((instance) => instance.id !== instanceId);
+        participant.conditions = Array.from(
+          new Set(
+            participant.conditionInstances.map((instance) => instance.slug),
+          ),
+        );
+        return {
+          removed: true,
+          events: [
+            {
+              event_type: "condition_removed",
+              target_participant_id: participant.id,
+              data: { instanceId },
+            },
+          ],
+        };
+      },
+    ),
   };
   const svc = new GenericActionsService(
     encounterRepo as unknown as import("typeorm").Repository<EncounterEntity>,
@@ -78,11 +115,90 @@ function makeService(
     diceService,
     conditionEffects,
     sheetService as never,
+    conditionLifecycle as never,
+    options?.inventoryService as never,
+    options?.characterStateService as never,
   );
-  return { svc, encounterRepo, participantRepo, sheetService };
+  return {
+    svc,
+    encounterRepo,
+    participantRepo,
+    sheetService,
+    conditionLifecycle,
+    inventoryService: options?.inventoryService,
+    characterStateService: options?.characterStateService,
+  };
 }
 
 describe("GenericActionsService", () => {
+  describe("Haste action", () => {
+    function hasteEffect() {
+      return {
+        id: "haste-extra",
+        kind: "extra_action" as const,
+        sourceSpellSlug: "haste",
+        sourceCasterParticipantId: "caster",
+        payload: { amount: 1, usedThisTurn: false },
+        expiresAt: { kind: "concentration" as const },
+        requiresConcentration: true,
+        appliedAt: "2026-01-01T00:00:00.000Z",
+      };
+    }
+
+    it("uses Haste for Dash without reopening the normal action", async () => {
+      const actor = makeParticipant("a", {
+        actionUsed: true,
+        movementRemaining: 60,
+        effectInstances: [
+          hasteEffect(),
+          {
+            ...hasteEffect(),
+            id: "haste-speed",
+            kind: "speed_multiplier",
+            payload: { amount: 2 },
+          },
+        ],
+      });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+
+      const result = await svc.execute("enc-1", {
+        kind: "dash",
+        participantId: "a",
+        useHasteAction: true,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(actor.movementRemaining).toBe(120);
+      expect(
+        actor.effectInstances.find((effect) => effect.kind === "extra_action")
+          ?.payload.usedThisTurn,
+      ).toBe(true);
+
+      const second = await svc.execute("enc-1", {
+        kind: "disengage",
+        participantId: "a",
+        useHasteAction: true,
+      });
+      expect(second.ok).toBe(false);
+      if (!second.ok) expect(second.code).toBe("NO_ACTION_AVAILABLE");
+    });
+
+    it("rejects Dodge because it is not a Haste option", async () => {
+      const actor = makeParticipant("a", {
+        actionUsed: true,
+        effectInstances: [hasteEffect()],
+      });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const result = await svc.execute("enc-1", {
+        kind: "dodge",
+        participantId: "a",
+        useHasteAction: true,
+      });
+      expect(result.ok).toBe(false);
+    });
+  });
+
   describe("dodge", () => {
     it("marca actionUsed + dodgingUntilTurnOfParticipantId=self.id", async () => {
       const actor = makeParticipant("a");
@@ -262,6 +378,66 @@ describe("GenericActionsService", () => {
     });
   });
 
+  describe("dash movement budget", () => {
+    it("adds the creature speed instead of doubling only the remaining movement", async () => {
+      const actor = makeParticipant("a", {
+        monster: { speed: { walk: 40 } } as never,
+        movementRemaining: 25,
+      });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+
+      const result = await svc.execute("enc-1", {
+        kind: "dash",
+        participantId: "a",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(actor.movementRemaining).toBe(65);
+    });
+  });
+
+  describe("fear compulsion", () => {
+    const fearCondition = {
+      id: "fear-1",
+      slug: "frightened",
+      appliedBy: "caster",
+      sourceSpell: "fear",
+      sourceConcentration: true,
+      source: "spell:fear",
+      saveAbility: "wis",
+      saveDc: 19,
+      repeatSaveTiming: "end_of_turn",
+      durationRoundsRemaining: 10,
+      appliedAt: "2026-01-01T00:00:00.000Z",
+    } as const;
+
+    it("blocks other generic actions and requires the Fear flee action", async () => {
+      const actor = makeParticipant("a", {
+        conditions: ["frightened"],
+        conditionInstances: [fearCondition as never],
+        monster: { speed: { walk: 40 } } as never,
+        movementRemaining: 40,
+      });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+
+      const blocked = await svc.execute("enc-1", {
+        kind: "dodge",
+        participantId: "a",
+      });
+      expect(blocked.ok).toBe(false);
+      if (!blocked.ok) expect(blocked.code).toBe("CONDITION_PREVENTS_ACTION");
+
+      const flee = await svc.execute("enc-1", {
+        kind: "flee-fear",
+        participantId: "a",
+      });
+      expect(flee.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(actor.hasDashed).toBe(true);
+      expect(actor.movementRemaining).toBe(80);
+    });
+  });
+
   describe("ready", () => {
     it("persiste readiedAction com trigger enemy_enters_range", async () => {
       const actor = makeParticipant("a");
@@ -291,6 +467,57 @@ describe("GenericActionsService", () => {
     });
   });
 
+  describe("search", () => {
+    it("falha automaticamente em busca auditiva quando Surdo", async () => {
+      const actor = makeParticipant("a", { conditions: ["deafened"] });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+      const diceSpy = jest.spyOn(DiceService.prototype, "rollExpression");
+
+      const r = await svc.execute("enc-1", {
+        kind: "search",
+        participantId: "a",
+        ability: "perception",
+        searchSense: "hearing",
+      });
+
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.value.step.result.summary).toContain("falhou automaticamente");
+        expect(r.events[0].data).toMatchObject({
+          searchSense: "hearing",
+          total: 0,
+          autoFailed: true,
+          autoFailureReason: "deafened",
+        });
+      }
+      expect(actor.actionUsed).toBe(true);
+      expect(diceSpy).not.toHaveBeenCalled();
+      diceSpy.mockRestore();
+    });
+
+    it("falha automaticamente em busca visual quando Cego", async () => {
+      const actor = makeParticipant("a", { conditions: ["blinded"] });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+
+      const r = await svc.execute("enc-1", {
+        kind: "search",
+        participantId: "a",
+        ability: "perception",
+        searchSense: "sight",
+      });
+
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.events[0].data).toMatchObject({
+          searchSense: "sight",
+          total: 0,
+          autoFailed: true,
+          autoFailureReason: "blinded",
+        });
+      }
+    });
+  });
+
   describe("use-object", () => {
     it("aplica poção de cura", async () => {
       const actor = makeParticipant("a", { currentHp: 5, maxHp: 20 });
@@ -314,6 +541,281 @@ describe("GenericActionsService", () => {
       });
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.code).toBe("ITEM_NOT_USABLE");
+    });
+
+    it("não consome Healer's Kit sem alvo elegível", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        faction: "ally",
+        characterId: "char-a",
+        positionX: 1,
+        positionY: 1,
+      });
+      const inventoryService = {
+        getInventory: jest.fn().mockResolvedValue({
+          items: [
+            {
+              id: "item-kit",
+              quantity: 1,
+              equipment: {
+                slug: "healers-kit",
+                name: "Healer's Kit",
+                consumableEffect: { type: "utility", autoApply: false },
+              },
+            },
+          ],
+        }),
+        useItem: jest.fn(),
+      };
+      const { svc } = makeService(
+        makeEncounter(["a"]),
+        { a: actor },
+        { inventoryService },
+      );
+
+      const result = await svc.execute("enc-1", {
+        kind: "use-object",
+        participantId: "a",
+        ownerUserId: "user-a",
+        objectRef: {
+          source: "inventory",
+          slug: "healers-kit",
+          itemId: "item-kit",
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.code).toBe("INVALID_TARGET");
+      expect(inventoryService.useItem).not.toHaveBeenCalled();
+      expect(actor.actionUsed).toBe(false);
+    });
+
+    it("estabiliza alvo adjacente a 0 HP e só então consome Healer's Kit", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        faction: "ally",
+        characterId: "char-a",
+        positionX: 1,
+        positionY: 1,
+      });
+      const target = makeParticipant("b", {
+        type: "pc",
+        faction: "ally",
+        characterId: "char-b",
+        displayName: "Aliado caído",
+        currentHp: 0,
+        maxHp: 20,
+        dyingState: "dying",
+        positionX: 2,
+        positionY: 1,
+      });
+      const inventoryService = {
+        getInventory: jest.fn().mockResolvedValue({
+          items: [
+            {
+              id: "item-kit",
+              quantity: 1,
+              equipment: {
+                slug: "healers-kit",
+                name: "Healer's Kit",
+                consumableEffect: { type: "utility", autoApply: false },
+              },
+            },
+          ],
+        }),
+        useItem: jest.fn().mockResolvedValue({
+          consumed: true,
+          remainingQuantity: 0,
+          effect: { type: "consumed", message: "Healer's Kit usado." },
+        }),
+      };
+      const characterStateService = {
+        stabilizeAtZero: jest.fn().mockResolvedValue(undefined),
+      };
+      const { svc } = makeService(
+        makeEncounter(["a", "b"]),
+        { a: actor, b: target },
+        { inventoryService, characterStateService },
+      );
+
+      const result = await svc.execute("enc-1", {
+        kind: "use-object",
+        participantId: "a",
+        targetParticipantId: "b",
+        ownerUserId: "user-a",
+        objectRef: {
+          source: "inventory",
+          slug: "healers-kit",
+          itemId: "item-kit",
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(target.dyingState).toBe("stable");
+      expect(actor.actionUsed).toBe(true);
+      expect(inventoryService.useItem).toHaveBeenCalledTimes(1);
+      expect(characterStateService.stabilizeAtZero).toHaveBeenCalledWith(
+        "char-b",
+      );
+      if (result.ok) {
+        expect(result.value.step.result.summary).toContain(
+          "estabilizou Aliado caído",
+        );
+        expect(result.events[0].data).toMatchObject({
+          itemName: "Healer's Kit",
+          targetParticipantId: "b",
+          outcome: "stabilized",
+          remainingQuantity: 0,
+        });
+      }
+    });
+  });
+
+  describe("escape-web", () => {
+    const webRestraint = {
+      id: "web-restraint-1",
+      slug: "restrained",
+      appliedBy: "caster",
+      sourceSpell: "web",
+      sourceConcentration: true,
+      source: "spell:web",
+      saveAbility: "dex",
+      saveDc: 19,
+      repeatSaveTiming: "never",
+      durationRoundsRemaining: 600,
+      appliedAt: "2026-01-01T00:00:00.000Z",
+    } as const;
+
+    it("consome a ação e mantém Restrito quando o teste de Força falha", async () => {
+      const actor = makeParticipant("a", {
+        conditions: ["restrained"],
+        conditionInstances: [webRestraint as never],
+        monster: { strength: 10, speed: { walk: 40 } } as never,
+        movementRemaining: 0,
+      });
+      const { svc, conditionLifecycle } = makeService(makeEncounter(["a"]), {
+        a: actor,
+      });
+      jest.spyOn(DiceService.prototype, "roll").mockReturnValueOnce(7);
+
+      const result = await svc.execute("enc-1", {
+        kind: "escape-web",
+        participantId: "a",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(actor.conditions).toContain("restrained");
+      expect(actor.movementRemaining).toBe(0);
+      expect(conditionLifecycle.removeConditionInstance).not.toHaveBeenCalled();
+      jest.restoreAllMocks();
+    });
+
+    it("remove Restrito e preserva o movimento ainda disponível quando o teste de Força passa", async () => {
+      const actor = makeParticipant("a", {
+        conditions: ["restrained"],
+        conditionInstances: [webRestraint as never],
+        monster: { strength: 26, speed: { walk: 40 } } as never,
+        movementRemaining: 25,
+      });
+      const { svc, conditionLifecycle } = makeService(makeEncounter(["a"]), {
+        a: actor,
+      });
+      jest.spyOn(DiceService.prototype, "roll").mockReturnValueOnce(13);
+
+      const result = await svc.execute("enc-1", {
+        kind: "escape-web",
+        participantId: "a",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(actor.conditions).not.toContain("restrained");
+      expect(actor.movementRemaining).toBe(25);
+      expect(conditionLifecycle.removeConditionInstance).toHaveBeenCalledWith(
+        actor,
+        "web-restraint-1",
+        "web_escape",
+      );
+      jest.restoreAllMocks();
+    });
+  });
+
+  describe("wake-hypnotized", () => {
+    const hypnosis = {
+      id: "hypnosis-1",
+      slug: "hypnotized",
+      appliedBy: "caster",
+      sourceSpell: "hypnotic-pattern",
+      sourceConcentration: true,
+      source: "spell:hypnotic-pattern",
+      saveAbility: "wis",
+      saveDc: 19,
+      repeatSaveTiming: "never",
+      durationRoundsRemaining: 10,
+      appliedAt: "2026-01-01T00:00:00.000Z",
+    } as const;
+
+    it("spends the action and wakes an adjacent creature", async () => {
+      const actor = makeParticipant("a", {
+        encounterId: "enc-1",
+        positionX: 9,
+        positionY: 14,
+      });
+      const target = makeParticipant("b", {
+        encounterId: "enc-1",
+        positionX: 10,
+        positionY: 15,
+        conditions: ["hypnotized"],
+        conditionInstances: [hypnosis as never],
+      });
+      const { svc, conditionLifecycle } = makeService(
+        makeEncounter(["a", "b"]),
+        { a: actor, b: target },
+      );
+
+      const result = await svc.execute("enc-1", {
+        kind: "wake-hypnotized",
+        participantId: "a",
+        targetParticipantId: "b",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(target.conditions).not.toContain("hypnotized");
+      expect(conditionLifecycle.removeConditionInstance).toHaveBeenCalledWith(
+        target,
+        "hypnosis-1",
+        "shaken_awake",
+      );
+    });
+
+    it("rejects a target beyond 5 feet without spending the action", async () => {
+      const actor = makeParticipant("a", {
+        encounterId: "enc-1",
+        positionX: 0,
+        positionY: 0,
+      });
+      const target = makeParticipant("b", {
+        encounterId: "enc-1",
+        positionX: 2,
+        positionY: 0,
+        conditions: ["hypnotized"],
+        conditionInstances: [hypnosis as never],
+      });
+      const { svc } = makeService(makeEncounter(["a", "b"]), {
+        a: actor,
+        b: target,
+      });
+
+      const result = await svc.execute("enc-1", {
+        kind: "wake-hypnotized",
+        participantId: "a",
+        targetParticipantId: "b",
+      });
+
+      expect(result.ok).toBe(false);
+      expect(actor.actionUsed).toBe(false);
     });
   });
 });

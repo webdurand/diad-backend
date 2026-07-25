@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { getSecondWindMaxUses } from "src/shared/fighter-rules";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
@@ -77,7 +78,10 @@ export class TacticalFeaturesService {
     }
 
 
-    const maxSw = fighterLv >= 10 ? 3 : fighterLv >= 4 ? 2 : 1;
+    const maxSw = getSecondWindMaxUses(
+      fighterLv,
+      sheet.source?.code !== "PHB",
+    );
     const sheetState = sheet as unknown as {
       featureUsesUsed?: Record<string, number>;
     };

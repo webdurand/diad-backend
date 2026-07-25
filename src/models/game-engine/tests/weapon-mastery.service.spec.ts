@@ -159,6 +159,40 @@ describe("WeaponMasteryService", () => {
       expect(addedEffects[0].input.kind).toBe("self_disadvantage_next_attack");
       expect(addedEffects[0].input.expiresAt.kind).toBe("until_consumed");
     });
+
+    it("renova o Sap anterior sem empilhar dois efeitos visuais", async () => {
+      const target = makeParticipant({
+        id: "p2",
+        effectInstances: [
+          {
+            id: "old-sap",
+            kind: "self_disadvantage_next_attack",
+            sourceFeatureSlug: "weapon-mastery:sap",
+            payload: { masterySlug: "sap" },
+            expiresAt: { kind: "until_consumed" },
+          },
+        ] as EncounterParticipantEntity["effectInstances"],
+      });
+
+      await service.resolveOnHit({
+        masterySlug: "sap",
+        attacker: makeParticipant(),
+        target,
+        abilityMod: 3,
+        profBonus: 2,
+        damageType: "bludgeoning",
+      });
+
+      expect(removedEffects).toHaveLength(1);
+      expect(removedEffects[0].id).toBe("old-sap");
+      expect(
+        target.effectInstances?.filter(
+          (effect) =>
+            effect.kind === "self_disadvantage_next_attack" &&
+            effect.sourceFeatureSlug === "weapon-mastery:sap",
+        ),
+      ).toHaveLength(1);
+    });
   });
 
   describe("Slow (on hit)", () => {

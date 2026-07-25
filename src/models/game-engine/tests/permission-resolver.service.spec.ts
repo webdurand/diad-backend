@@ -172,6 +172,35 @@ describe("PermissionResolver", () => {
     expect(result).toBe("user-dm");
   });
 
+  it("allows the DM to mutate a monster in a solo campaign", async () => {
+    const participant = {
+      id: "m-solo",
+      type: "monster",
+      monsterId: "mon-solo",
+      encounterId: "enc-1",
+    };
+    const {
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    } = mockServices(participant, encounter, session, "user-dm", 1);
+    const resolver = new PermissionResolver(
+      encounterService,
+      sessionService,
+      campaignService,
+      campaignPlayerRepo,
+    );
+
+    const result = await resolver.resolveMutationOwner(
+      "m-solo",
+      "user-dm",
+      "enc-1",
+    );
+
+    expect(result).toBe("user-dm");
+  });
+
   it("rejects a non-DM user trying to mutate a monster", async () => {
     const participant = {
       id: "m-2",

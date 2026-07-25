@@ -20,10 +20,17 @@ const MULTI_TARGET_CATALOG: Record<
 
   "scorching-ray": (slotLevel: number) => 3 + Math.max(0, slotLevel - 2),
 
-  "acid-splash": () => 2,
+  "chromatic-orb": (slotLevel: number) =>
+    Math.max(2, slotLevel + 1),
+
+  "chain-lightning": (slotLevel: number) =>
+    4 + Math.max(0, slotLevel - 6),
 
   bless: () => 3,
+  aid: () => 3,
 };
+
+const LEGACY_ACID_SPLASH_TARGETS = () => 2;
 
 
 export const MULTI_TARGET_NON_AOE_SPELLS: Record<
@@ -31,9 +38,15 @@ export const MULTI_TARGET_NON_AOE_SPELLS: Record<
   (slotLevel: number, casterLevel: number) => number
 > = new Proxy(MULTI_TARGET_CATALOG, {
   has(target, prop: string) {
+    if (prop.toLowerCase().endsWith("-phb") && normalizeSpellSlug(prop) === "acid-splash") {
+      return true;
+    }
     return normalizeSpellSlug(prop) in target;
   },
   get(target, prop: string) {
+    if (prop.toLowerCase().endsWith("-phb") && normalizeSpellSlug(prop) === "acid-splash") {
+      return LEGACY_ACID_SPLASH_TARGETS;
+    }
     const normalized = normalizeSpellSlug(prop);
     return target[normalized];
   },
@@ -50,6 +63,18 @@ export function isMultiTargetNonAoeSpell(
   spell: Pick<SpellEntity, "slug">,
 ): boolean {
   return spell.slug in MULTI_TARGET_NON_AOE_SPELLS;
+}
+
+const REPEATABLE_PROJECTILE_SPELLS = new Set([
+  "magic-missile",
+  "eldritch-blast",
+  "scorching-ray",
+]);
+
+export function repeatsFirstTargetToMaximum(
+  spell: Pick<SpellEntity, "slug">,
+): boolean {
+  return REPEATABLE_PROJECTILE_SPELLS.has(normalizeSpellSlug(spell.slug));
 }
 
 
@@ -85,6 +110,12 @@ export function getPerHitDamage(
     case "eldritch-blast": {
       return { expression: "1d10", type: "force" };
     }
+    case "chromatic-orb": {
+      return {
+        expression: `${Math.max(3, slotLevel + 2)}d8`,
+        type: "acid",
+      };
+    }
     case "acid-splash": {
       const tier =
         casterLevel >= 17
@@ -112,10 +143,20 @@ export interface AoeShape {
   sizeFt: number;
 }
 
+function cubeOffsetRange(sizeCells: number): { start: number; end: number } {
+  const size = Math.max(1, Math.floor(sizeCells));
+  const start = -Math.floor((size - 1) / 2);
+  return { start, end: start + size - 1 };
+}
+
 
 const CANONICAL_AOE: Record<string, { kind: AoeShapeKind; sizeFt: number }> = {
 
+  "acid-splash": { kind: "sphere", sizeFt: 5 },
   fireball: { kind: "sphere", sizeFt: 20 },
+  // Fire Storm is a chain of up to ten contiguous 10-foot cubes. A single
+  // placement is one cube; the multi-cube picker expands this footprint.
+  "fire-storm": { kind: "cube", sizeFt: 10 },
   "delayed-blast-fireball": { kind: "sphere", sizeFt: 20 },
   shatter: { kind: "sphere", sizeFt: 10 },
   "vitriolic-sphere": { kind: "sphere", sizeFt: 20 },
@@ -124,6 +165,9 @@ const CANONICAL_AOE: Record<string, { kind: AoeShapeKind; sizeFt: number }> = {
   "zone-of-truth": { kind: "sphere", sizeFt: 15 },
   "spirit-guardians": { kind: "sphere", sizeFt: 15 },
   "spike-growth": { kind: "sphere", sizeFt: 20 },
+  "fog-cloud": { kind: "sphere", sizeFt: 20 },
+  sleep: { kind: "sphere", sizeFt: 5 },
+  "hypnotic-pattern": { kind: "cube", sizeFt: 30 },
   cloudkill: { kind: "sphere", sizeFt: 20 },
   "hunger-of-hadar": { kind: "sphere", sizeFt: 20 },
   "destructive-wave": { kind: "sphere", sizeFt: 30 },
@@ -131,12 +175,19 @@ const CANONICAL_AOE: Record<string, { kind: AoeShapeKind; sizeFt: number }> = {
 
   thunderwave: { kind: "cube", sizeFt: 15 },
   "black-tentacles": { kind: "cube", sizeFt: 20 },
+  grease: { kind: "cube", sizeFt: 10 },
   web: { kind: "cube", sizeFt: 20 },
+  "cloud-of-daggers": { kind: "cube", sizeFt: 5 },
+
+  "sleet-storm": { kind: "cylinder", sizeFt: 20 },
+  sunburst: { kind: "cylinder", sizeFt: 60 },
+  "storm-of-vengeance": { kind: "cylinder", sizeFt: 360 },
 
   "burning-hands": { kind: "cone", sizeFt: 15 },
   "cone-of-cold": { kind: "cone", sizeFt: 60 },
   "color-spray": { kind: "cone", sizeFt: 15 },
   "ice-knife": { kind: "sphere", sizeFt: 5 },
+  "call-lightning": { kind: "sphere", sizeFt: 5 },
   "dragons-breath": { kind: "cone", sizeFt: 15 },
 
   "lightning-bolt": { kind: "line", sizeFt: 100 },
@@ -146,6 +197,20 @@ const CANONICAL_AOE: Record<string, { kind: AoeShapeKind; sizeFt: number }> = {
 export function getAoeShape(
   spell: Pick<SpellEntity, "slug" | "area_of_effect">,
 ): AoeShape | null {
+  const rawSlug = String((spell as any).slug ?? "").toLowerCase();
+  const normalized = normalizeSpellSlug(rawSlug);
+  if (normalized === "acid-splash" && rawSlug.endsWith("-phb")) {
+    return null;
+  }
+  const canonical = CANONICAL_AOE[normalized];
+  if (canonical) {
+    return {
+      kind: canonical.kind,
+      radiusCells: Math.max(1, Math.ceil(canonical.sizeFt / 5)),
+      sizeFt: canonical.sizeFt,
+    };
+  }
+
   const aoe = spell.area_of_effect as
     | { type?: string; size?: number; tags?: string[] }
     | null
@@ -169,16 +234,6 @@ export function getAoeShape(
   }
 
 
-  const normalized = normalizeSpellSlug((spell as any).slug ?? "");
-  const canonical = CANONICAL_AOE[normalized];
-  if (canonical) {
-    return {
-      kind: canonical.kind,
-      radiusCells: Math.max(1, Math.ceil(canonical.sizeFt / 5)),
-      sizeFt: canonical.sizeFt,
-    };
-  }
-
   return null;
 }
 
@@ -194,10 +249,25 @@ export function cellInAoe(
     return Math.sqrt(dx * dx + dy * dy) <= shape.radiusCells;
   }
   if (shape.kind === "cube") {
-    return (
-      Math.abs(dx) <= shape.radiusCells && Math.abs(dy) <= shape.radiusCells
-    );
+    const { start, end } = cubeOffsetRange(shape.radiusCells);
+    return dx >= start && dx <= end && dy >= start && dy <= end;
   }
 
   return Math.max(Math.abs(dx), Math.abs(dy)) <= shape.radiusCells;
+}
+
+export function cellInSelfOriginAoe(
+  cell: { x: number; y: number },
+  origin: { x: number; y: number },
+  shape: AoeShape,
+): boolean {
+  if (shape.kind === "sphere" || shape.kind === "cylinder") {
+    return (
+      Math.max(
+        Math.abs(cell.x - origin.x),
+        Math.abs(cell.y - origin.y),
+      ) <= shape.radiusCells
+    );
+  }
+  return cellInAoe(cell, origin, shape);
 }

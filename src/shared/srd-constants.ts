@@ -107,6 +107,27 @@ export function getCasterSlotType(
   return CASTER_SLOT_TYPE[normalizeClassSlug(slug)];
 }
 
+export function getStandardCasterLevelContribution(
+  slug: string,
+  classLevel: number,
+  isMulticlass: boolean,
+): number {
+  const slotType = getCasterSlotType(slug);
+  if (slotType === "full") return classLevel;
+  if (slotType !== "half") return 0;
+
+  // The single-class Paladin/Ranger tables advance like ceil(level / 2).
+  // In the 2014 multiclass table half-caster levels round down. The 2024
+  // rules round them up and grant spellcasting at class level 1.
+  if (slug.endsWith("-phb") && isMulticlass) {
+    return Math.floor(classLevel / 2);
+  }
+  if (slug.endsWith("-phb") && classLevel < 2) {
+    return 0;
+  }
+  return Math.ceil(classLevel / 2);
+}
+
 
 
 export const FULL_CASTER_SLOTS: number[][] = [

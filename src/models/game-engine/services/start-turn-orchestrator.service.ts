@@ -11,6 +11,13 @@ import { CapstonesService } from "./capstones.service";
 import { TransformationService } from "./transformation.service";
 import type { GameEventData } from "../interfaces/result.type";
 import type { SaveAbility } from "../interfaces/combat.interfaces";
+import { resetHasteAction } from "./haste-action";
+import {
+  getMonsterRechargeRange,
+  monsterActionDisplayName,
+  rechargeMinimum,
+} from "./monster-recharge";
+import { concentrationMatchesExpiredArea } from "./concentration-area-expiry";
 
 
 @Injectable()
@@ -38,11 +45,29 @@ export class StartTurnOrchestratorService {
         advantage: boolean;
         disadvantage: boolean;
       }>;
+      getSaveModifierForTarget?: (
+        ability: SaveAbility,
+        target: EncounterParticipantEntity,
+      ) => Promise<{
+        modifier: number;
+        advantage?: boolean;
+        disadvantage?: boolean;
+        autoFail?: boolean;
+      }>;
+      currentRound?: number;
       ownerUserId?: string;
     },
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
 
+    if (resetHasteAction(participant)) {
+      await this.participants.save(participant);
+      events.push({
+        event_type: "haste_action_refreshed",
+        actor_participant_id: participant.id,
+        data: { sourceSpell: "haste" },
+      });
+    }
 
 
 
@@ -57,20 +82,34 @@ export class StartTurnOrchestratorService {
     events.push(...r.events);
 
 
-    const padTick = await this.persistentArea.tickDamageFor(
+    const padTick = await this.persistentArea.resolveStartTurnIn(
       participant,
       opts?.getSaveModifier
         ? async (ability) => {
             const m = await opts.getSaveModifier!(ability);
-            return { modifier: m.modifier };
+            return {
+              modifier: m.modifier,
+              advantage: m.advantage,
+              disadvantage: m.disadvantage,
+            };
           }
         : undefined,
     );
     events.push(...padTick.events);
-    if (padTick.totalDamage > 0) {
 
-
-
+    if (opts?.currentRound != null) {
+      const allParticipants =
+        opts.allParticipantsInRound ??
+        (await this.participants.find({
+          where: { encounterId: participant.encounterId },
+        }));
+      const storm = await this.persistentArea.resolveStormOfVengeanceTurn(
+        participant,
+        opts.currentRound,
+        allParticipants,
+        opts.getSaveModifierForTarget,
+      );
+      events.push(...storm.events);
     }
 
 
@@ -101,6 +140,31 @@ export class StartTurnOrchestratorService {
         participant.encounterId,
       );
       events.push(...padExpire.events);
+      const casterIds = Array.from(
+        new Set(
+          padExpire.expired
+            .filter(
+              (area) =>
+                area.sourceConcentration && area.casterParticipantId != null,
+            )
+            .map((area) => area.casterParticipantId as string),
+        ),
+      );
+      for (const casterId of casterIds) {
+        const caster = await this.participants.findOne({
+          where: { id: casterId },
+        });
+        if (!caster) continue;
+        const matchingArea = padExpire.expired.find((area) =>
+          concentrationMatchesExpiredArea(caster, area),
+        );
+        if (!matchingArea) continue;
+        const concentrationExpired = await this.concentration.break(
+          caster,
+          "expired",
+        );
+        events.push(...concentrationExpired.events);
+      }
     }
 
     return { events };
@@ -121,13 +185,13 @@ export class StartTurnOrchestratorService {
     for (const action of allActions) {
       if (!action || typeof action !== "object") continue;
       const a = action as Record<string, unknown>;
-      const recharge = (a.recharge ?? null) as string | null;
-      if (recharge !== "5-6" && recharge !== "6") continue;
-      const name = String(a.name ?? "");
+      const recharge = getMonsterRechargeRange(a);
+      if (!recharge) continue;
+      const name = monsterActionDisplayName(a);
       if (!name) continue;
-      if (state[name] === "used" || state[name] === undefined) {
+      if (state[name] === "used") {
         const roll = this.dice.roll(6);
-        const recharged = recharge === "5-6" ? roll >= 5 : roll === 6;
+        const recharged = roll >= rechargeMinimum(recharge);
         if (recharged) {
           state[name] = "available";
           changed = true;

@@ -8,6 +8,7 @@ import { ExhaustionService } from "../services/exhaustion.service";
 
 
 const mockSheet = {
+  proficiencyBonus: 2,
   abilityScores: [
     { slug: "str", name: "Strength", score: 16, modifier: 3 },
     { slug: "dex", name: "Dexterity", score: 14, modifier: 2 },
@@ -20,6 +21,7 @@ const mockSheet = {
     {
       slug: "athletics",
       name: "Athletics",
+      ability: "str",
       bonus: 5,
       proficient: true,
       expertise: false,
@@ -27,6 +29,7 @@ const mockSheet = {
     {
       slug: "stealth",
       name: "Stealth",
+      ability: "dex",
       bonus: 4,
       proficient: true,
       expertise: false,
@@ -34,6 +37,7 @@ const mockSheet = {
     {
       slug: "perception",
       name: "Perception",
+      ability: "wis",
       bonus: 3,
       proficient: true,
       expertise: false,
@@ -41,6 +45,7 @@ const mockSheet = {
     {
       slug: "persuasion",
       name: "Persuasion",
+      ability: "cha",
       bonus: -1,
       proficient: false,
       expertise: false,
@@ -48,6 +53,7 @@ const mockSheet = {
     {
       slug: "acrobatics",
       name: "Acrobatics",
+      ability: "dex",
       bonus: 6,
       proficient: true,
       expertise: true,
@@ -127,6 +133,32 @@ describe("SkillCheckService", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.modifier).toBe(6);
+    expect(result.value.expertise).toBe(true);
+  });
+
+  it("uses the requested ability with the skill proficiency for variant checks", async () => {
+    const result = await service.rollAbilityCheck({
+      ...baseDto,
+      ability: "wis",
+      skill: "athletics",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.modifier).toBe(3);
+    expect(result.value.proficient).toBe(true);
+    expect(result.value.ability).toBe("wis");
+    expect(result.value.skill).toBe("athletics");
+  });
+
+  it("preserves expertise when a skill uses a non-canonical ability", async () => {
+    const result = await service.rollAbilityCheck({
+      ...baseDto,
+      ability: "cha",
+      skill: "acrobatics",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.modifier).toBe(3);
     expect(result.value.expertise).toBe(true);
   });
 

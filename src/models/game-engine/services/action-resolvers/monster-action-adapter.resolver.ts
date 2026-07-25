@@ -52,14 +52,25 @@ export class MonsterActionAdapterResolver implements ActionResolver {
       if (!economy.isOnTurn) {
         available = false;
         disabledReason = "NOT_YOUR_TURN";
-      } else if (economy.attacksUsedThisTurn >= economy.attacksMaxThisTurn) {
+      } else if (
+        economy.attacksUsedThisTurn >= economy.attacksMaxThisTurn ||
+        (economy.actionUsed && economy.attacksUsedThisTurn === 0)
+      ) {
         available = false;
         disabledReason = "ACTION_ALREADY_USED";
       }
     }
 
 
-    const isAttack = action.attackBonus != null || action.damageDice != null;
+    const rangeMatch = action.desc?.match(
+      /(?:within|range)\s+(\d+)\s*(?:feet|ft\.?)/i,
+    );
+    const isSaveConditionAction =
+      /DC\s+\d+\s+Wisdom\s+saving throw/i.test(action.desc ?? "") &&
+      /\b(charmed|frightened)\b/i.test(action.desc ?? "");
+    const isAttack =
+      !isSaveConditionAction &&
+      (action.attackBonus != null || action.damageDice != null);
 
     return {
       slug: `${ctx.monsterSlug}-${this.slugifyName(action.name)}`,
@@ -68,12 +79,28 @@ export class MonsterActionAdapterResolver implements ActionResolver {
       actionCost: "action",
       available,
       disabledReason,
-      targetShape: isAttack ? "single-creature" : "none",
-      targetRange: isAttack ? 5 : undefined,
+      targetShape:
+        isAttack || isSaveConditionAction ? "single-creature" : "none",
+      targetRange:
+        isSaveConditionAction && rangeMatch
+          ? Number(rangeMatch[1])
+          : isAttack
+            ? 5
+            : undefined,
       metadata: {
         damageDice: action.damageDice,
         damageType: action.damageType,
         sourceMonsterSlug: ctx.monsterSlug,
+        ...(isSaveConditionAction
+          ? {
+              saveAbility: "wis",
+              saveDc: Number(
+                action.desc?.match(
+                  /DC\s+(\d+)\s+Wisdom\s+saving throw/i,
+                )?.[1] ?? 0,
+              ),
+            }
+          : {}),
         ...(isAttack
           ? {
               attacksRemainingThisTurn: economy

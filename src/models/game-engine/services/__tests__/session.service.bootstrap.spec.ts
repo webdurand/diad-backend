@@ -30,6 +30,7 @@ function makeService(overrides: Record<string, any> = {}): SessionService {
     (overrides.poiService ?? {
       ensureDefaultForLocation: jest.fn(),
     }) as any,
+    (overrides.minimalWorldSeedService ?? {}) as any,
     (overrides.logger ?? makeLogger()) as any,
   );
 }

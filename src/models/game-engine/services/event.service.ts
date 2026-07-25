@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, Repository } from "typeorm";
 import { GameEventEntity } from "src/entities/game-event.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { GameEventData } from "../interfaces/result.type";
 
 @Injectable()
@@ -25,6 +26,32 @@ export class EventService {
       ]);
 
       const startSeq = await this.computeNextSequence(manager, sessionId);
+      const participantIds = [
+        ...new Set(
+          events.flatMap((event) =>
+            [event.actor_participant_id, event.target_participant_id].filter(
+              (id): id is string => typeof id === "string",
+            ),
+          ),
+        ),
+      ];
+      const participantNames =
+        participantIds.length > 0
+          ? new Map(
+              (
+                await manager
+                  .createQueryBuilder(EncounterParticipantEntity, "participant")
+                  .select(["participant.id", "participant.displayName"])
+                  .where("participant.id IN (:...participantIds)", {
+                    participantIds,
+                  })
+                  .getMany()
+              ).map((participant) => [
+                participant.id,
+                participant.displayName,
+              ]),
+            )
+          : new Map<string, string>();
       const entities = events.map((e, i) =>
         manager.create(GameEventEntity, {
           sessionId,
@@ -33,7 +60,23 @@ export class EventService {
           eventType: e.event_type,
           actorParticipantId: e.actor_participant_id,
           targetParticipantId: e.target_participant_id,
-          data: e.data,
+          data: {
+            ...e.data,
+            ...(e.actor_participant_id &&
+            participantNames.has(e.actor_participant_id) &&
+            typeof e.data?.actorName !== "string"
+              ? {
+                  actorName: participantNames.get(e.actor_participant_id),
+                }
+              : {}),
+            ...(e.target_participant_id &&
+            participantNames.has(e.target_participant_id) &&
+            typeof e.data?.targetName !== "string"
+              ? {
+                  targetName: participantNames.get(e.target_participant_id),
+                }
+              : {}),
+          },
         }),
       );
 
@@ -69,6 +112,7 @@ export class EventService {
       eventTypes?: string[];
       limit?: number;
       offset?: number;
+      latest?: boolean;
     },
   ): Promise<{ events: GameEventEntity[]; total: number }> {
     const limit = options.limit ?? 50;
@@ -77,7 +121,7 @@ export class EventService {
     const qb = this.eventRepo
       .createQueryBuilder("e")
       .where("e.encounter_id = :encounterId", { encounterId })
-      .orderBy("e.sequence", "ASC");
+      .orderBy("e.sequence", options.latest ? "DESC" : "ASC");
 
     if (options.since) {
       qb.andWhere("e.created_at > :since", { since: new Date(options.since) });
@@ -89,6 +133,7 @@ export class EventService {
 
     const total = await qb.getCount();
     const events = await qb.skip(offset).take(limit).getMany();
+    if (options.latest) events.reverse();
 
     return { events, total };
   }

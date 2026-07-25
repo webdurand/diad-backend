@@ -144,6 +144,37 @@ describe("SavingThrowService", () => {
     );
   });
 
+  it("should grant advantage on DEX saves while Dodge is active", async () => {
+    service = new SavingThrowService(
+      mockSheetService as any,
+      diceService,
+      new ConditionEffectsService(),
+      mockEventService as any,
+      { consumeIfArmed: async () => ({ consumed: false }) } as any,
+      new ExhaustionService(),
+      {
+        findOne: async () => ({
+          id: "participant-1",
+          dodgingUntilTurnOfParticipantId: "participant-1",
+        }),
+        save: async () => undefined,
+      } as any,
+    );
+
+    const result = await service.rollSavingThrow({
+      ...baseDto,
+      ability: "dex",
+      participantId: "participant-1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.advantage).toBeDefined();
+    expect(result.value.advantage!.chosen).toBe(
+      Math.max(result.value.advantage!.roll1, result.value.advantage!.roll2),
+    );
+  });
+
   it("should produce GameEventData", async () => {
     const result = await service.rollSavingThrow(baseDto);
     expect(result.ok).toBe(true);

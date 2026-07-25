@@ -21,11 +21,18 @@ import { CombatService } from "./combat.service";
 import { GenericActionsService } from "./generic-actions.service";
 import { MovementService } from "./movement.service";
 import { SpellCastingService } from "./spell-casting.service";
+import { ReadyActionService } from "./ready-action.service";
 import type { GenericActionDto } from "../dto/generic-action.dto";
+import { EventService } from "./event.service";
 
 
 @Injectable()
 export class AiTurnService {
+  private readonly inFlightTurns = new Map<
+    string,
+    Promise<GameResult<TurnExecutionResult>>
+  >();
+
   constructor(
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
@@ -37,12 +44,37 @@ export class AiTurnService {
     private readonly genericActionsService: GenericActionsService,
     private readonly movementService: MovementService,
     private readonly spellCastingService: SpellCastingService,
+    private readonly readyActionService: ReadyActionService,
+    private readonly eventService: EventService,
     private readonly logger: DiadLogger,
   ) {
     this.logger.setContext(AiTurnService.name);
   }
 
   async executeAiTurn(
+    encounterId: string,
+    participantId: string,
+    authUserId: string,
+  ): Promise<GameResult<TurnExecutionResult>> {
+    const key = `${encounterId}:${participantId}`;
+    const existing = this.inFlightTurns.get(key);
+    if (existing) return existing;
+
+    let operation: Promise<GameResult<TurnExecutionResult>>;
+    operation = this.executeAiTurnInternal(
+      encounterId,
+      participantId,
+      authUserId,
+    ).finally(() => {
+      if (this.inFlightTurns.get(key) === operation) {
+        this.inFlightTurns.delete(key);
+      }
+    });
+    this.inFlightTurns.set(key, operation);
+    return operation;
+  }
+
+  private async executeAiTurnInternal(
     encounterId: string,
     participantId: string,
     authUserId: string,
@@ -139,6 +171,41 @@ export class AiTurnService {
       return failure(GameErrorCode.NOT_YOUR_TURN);
     }
 
+    const automaticSteps: ActionStep[] = [];
+    const isProne =
+      (participant.conditions ?? []).includes("prone") ||
+      (participant.conditionInstances ?? []).some(
+        (condition) => condition.slug === "prone",
+      );
+    if (isProne) {
+      const stoodUp = await this.movementService.standUp(
+        encounter.id,
+        participant.id,
+        authUserId,
+      );
+      if (stoodUp.ok) {
+        if (stoodUp.events?.length) {
+          await this.eventService.emit(
+            encounter.sessionId,
+            encounter.id,
+            stoodUp.events,
+          );
+        }
+        automaticSteps.push({
+          kind: "stand-up",
+          payload: {},
+          result: {
+            ok: true,
+            summary: `Levantou-se (${stoodUp.value.movementSpent}ft de movimento)`,
+            events: (stoodUp.events ?? []).map((event) => ({
+              type: event.event_type,
+            })),
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
 
     const snapRes = await this.snapshotService.build(encounterId, authUserId);
     if (!snapRes.ok) {
@@ -220,7 +287,7 @@ export class AiTurnService {
       "steps.count": planRes.value.steps.length,
       steps: planRes.value.steps,
     });
-    const executedSteps: ActionStep[] = [];
+    const executedSteps: ActionStep[] = [...automaticSteps];
     const totalAttackSteps = planRes.value.steps.filter(
       (s) => s.kind === "attack",
     ).length;
@@ -254,6 +321,15 @@ export class AiTurnService {
         });
         break;
       }
+      if (
+        step.kind === "attack" &&
+        executed.result.ok &&
+        executed.result.events.some(
+          (event) => event.targetDefeated === true,
+        )
+      ) {
+        break;
+      }
     }
 
     if (isMultiattackPlan) {
@@ -263,6 +339,52 @@ export class AiTurnService {
       if (ended && !ended.actionUsed) {
         ended.actionUsed = true;
         await this.participantRepo.save(ended);
+      }
+
+      const lastDamagingAttack = executedSteps
+        .flatMap((executedStep) =>
+          executedStep.kind === "attack" ? executedStep.result.events : [],
+        )
+        .reverse()
+        .find((event) => {
+          const attack = event as {
+            type?: string;
+            hit?: boolean;
+            damageDealt?: number;
+            targetDefeated?: boolean;
+          };
+          return (
+            attack.type === "attack_resolved" &&
+            attack.hit === true &&
+            (attack.damageDealt ?? 0) > 0
+          );
+        }) as
+        | {
+            actionName?: string;
+            targetParticipantId?: string;
+            damageDealt?: number;
+            damageType?: string | null;
+            targetHpBefore?: number | null;
+            targetHpAfter?: number | null;
+            targetDefeated?: boolean;
+          }
+        | undefined;
+      if (
+        lastDamagingAttack?.targetParticipantId &&
+        lastDamagingAttack.targetHpAfter != null
+      ) {
+        await this.combatService.offerPostSequenceReaction(encounter.id, {
+          attackerParticipantId: participantId,
+          targetParticipantId: lastDamagingAttack.targetParticipantId,
+          incomingDamage: lastDamagingAttack.damageDealt ?? 0,
+          damageType: lastDamagingAttack.damageType ?? "",
+          targetHpBefore: lastDamagingAttack.targetHpBefore ?? undefined,
+          targetHpAfter: lastDamagingAttack.targetHpAfter,
+          targetDefeated: lastDamagingAttack.targetDefeated,
+          ownerUserId: authUserId,
+          actionName: lastDamagingAttack.actionName,
+          emitEvents: true,
+        });
       }
     }
 
@@ -325,6 +447,44 @@ export class AiTurnService {
     const ts = new Date().toISOString();
     try {
       switch (step.kind) {
+        case "stand-up": {
+          const res = await this.movementService.standUp(
+            encounter.id,
+            participantId,
+            authUserId,
+          );
+          if (res.ok && res.events?.length) {
+            await this.eventService.emit(
+              encounter.sessionId,
+              encounter.id,
+              res.events,
+            );
+          }
+          return {
+            kind: "stand-up",
+            payload: {},
+            result: {
+              ok: res.ok,
+              summary: res.ok
+                ? `Levantou-se (${res.value.movementSpent}ft de movimento)`
+                : ((res as { error?: string }).error ?? "Não conseguiu levantar"),
+              events: res.ok
+                ? (res.events ?? []).map((event) => ({
+                    type: event.event_type,
+                  }))
+                : [],
+              error: res.ok
+                ? undefined
+                : {
+                    code: res.code,
+                    message:
+                      (res as { error?: string }).error ??
+                      "Não conseguiu levantar",
+                  },
+            },
+            timestamp: ts,
+          };
+        }
         case "move": {
           const res = await this.movementService.moveParticipant(
             encounter.id,
@@ -333,6 +493,33 @@ export class AiTurnService {
             step.to.y,
             authUserId,
           );
+          const movementEvents = res.ok ? [...(res.events ?? [])] : [];
+          if (movementEvents.length > 0) {
+            movementEvents.push(
+              ...(await this.combatService.applyPersistentAreaDamageEvents(
+                encounter.id,
+                movementEvents,
+                authUserId,
+              )),
+            );
+            if (res.ok) {
+              for (const ready of res.value.readyActions ?? []) {
+                const resolved = await this.readyActionService.resolve({
+                  encounterId: encounter.id,
+                  reactorParticipantId: ready.reactorParticipantId,
+                  targetParticipantId: participantId,
+                  ownerUserId: authUserId,
+                  expectedTriggerKind: "enemy_enters_range",
+                });
+                if (resolved.ok) movementEvents.push(...resolved.events);
+              }
+            }
+            await this.eventService.emit(
+              encounter.sessionId,
+              encounter.id,
+              movementEvents,
+            );
+          }
           return {
             kind: "move",
             payload: { to: step.to },
@@ -341,7 +528,13 @@ export class AiTurnService {
               summary: res.ok
                 ? `Movimento para (${step.to.x},${step.to.y})`
                 : ((res as { error?: string }).error ?? "Falhou"),
-              events: [],
+              events: movementEvents.map((event) => ({
+                ...event.data,
+                damageType: event.data?.type,
+                type: event.event_type,
+                actorParticipantId: event.actor_participant_id,
+                targetParticipantId: event.target_participant_id,
+              })),
               error: res.ok
                 ? undefined
                 : {
@@ -373,12 +566,14 @@ export class AiTurnService {
           if (res.ok && res.value) {
             attackEvents.push({
               type: "attack_resolved",
+              actionName: step.actionName,
               attackerParticipantId: participantId,
               targetParticipantId: target,
               hit: res.value.attackRoll.hit,
               critical: res.value.attackRoll.critical,
               damageDealt: res.value.damageRoll?.finalDamage ?? 0,
               damageType: res.value.damageRoll?.type ?? null,
+              targetHpBefore: res.value.targetHpBefore ?? null,
               targetDefeated: res.value.targetDefeated,
               targetHpAfter: res.value.targetHpAfter ?? null,
             });
@@ -391,6 +586,46 @@ export class AiTurnService {
               "target.hp_after": res.value.targetHpAfter ?? null,
               "target.defeated": res.value.targetDefeated,
             });
+            const participants = await this.participantRepo.find({
+              where: { encounterId: encounter.id, isDefeated: false },
+            });
+            const attackedParticipant = participants.find(
+              (candidate) => candidate.id === target,
+            );
+            const readyReactors = attackedParticipant
+              ? participants.filter(
+                  (candidate) =>
+                    candidate.faction === attackedParticipant.faction &&
+                    candidate.id !== attackedParticipant.id &&
+                    candidate.readiedAction?.trigger.kind ===
+                      "enemy_attacks_ally" &&
+                    candidate.readiedAction.trigger.allyParticipantId ===
+                      attackedParticipant.id,
+                )
+              : [];
+            for (const reactor of readyReactors) {
+              const resolved = await this.readyActionService.resolve({
+                encounterId: encounter.id,
+                reactorParticipantId: reactor.id,
+                targetParticipantId: participantId,
+                ownerUserId: authUserId,
+                expectedTriggerKind: "enemy_attacks_ally",
+              });
+              if (!resolved.ok) continue;
+              await this.eventService.emit(
+                encounter.sessionId,
+                encounter.id,
+                resolved.events,
+              );
+              attackEvents.push(
+                ...resolved.events.map((event) => ({
+                  ...event.data,
+                  type: event.event_type,
+                  actorParticipantId: event.actor_participant_id,
+                  targetParticipantId: event.target_participant_id,
+                })),
+              );
+            }
           } else {
             this.logger.warn("ai.attack.failed", {
               "attacker.participant_id": participantId,
@@ -433,6 +668,13 @@ export class AiTurnService {
           } as Parameters<
             typeof this.spellCastingService.castSpellInCombat
           >[0]);
+          if (res.ok && res.events?.length) {
+            await this.eventService.emit(
+              encounter.sessionId,
+              encounter.id,
+              res.events,
+            );
+          }
           return {
             kind: "cast-spell",
             payload: { spellSlug: step.spellSlug },
@@ -459,12 +701,22 @@ export class AiTurnService {
         case "hide":
         case "ready":
         case "search":
-        case "use-object": {
+        case "use-object":
+        case "escape-web":
+        case "flee-fear":
+        case "wake-hypnotized": {
           const dto = toGenericActionDto(participantId, step);
           const res = await this.genericActionsService.execute(
             encounter.id,
             dto,
           );
+          if (res.ok && res.events?.length) {
+            await this.eventService.emit(
+              encounter.sessionId,
+              encounter.id,
+              res.events,
+            );
+          }
           return res.ok
             ? { ...res.value.step, timestamp: ts }
             : {
@@ -524,7 +776,7 @@ export class AiTurnService {
     start: number,
     reason: string,
   ): Promise<GameResult<TurnExecutionResult>> {
-    await this.combatService.endTurn(encounter.id);
+    const endResult = await this.combatService.endTurn(encounter.id);
     const result: TurnExecutionResult = {
       steps: [
         {
@@ -608,12 +860,29 @@ function toGenericActionDto(
         kind: "search",
         participantId,
         ability: step.ability,
+        searchSense: step.searchSense,
       } as GenericActionDto;
     case "use-object":
       return {
         kind: "use-object",
         participantId,
         objectRef: step.objectRef,
+      } as GenericActionDto;
+    case "escape-web":
+      return {
+        kind: "escape-web",
+        participantId,
+      } as GenericActionDto;
+    case "flee-fear":
+      return {
+        kind: "flee-fear",
+        participantId,
+      } as GenericActionDto;
+    case "wake-hypnotized":
+      return {
+        kind: "wake-hypnotized",
+        participantId,
+        targetParticipantId: step.targetParticipantId,
       } as GenericActionDto;
     default:
       throw new Error(`Step inesperado para DTO genérico: ${step.kind}`);

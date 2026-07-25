@@ -149,6 +149,13 @@ function makeEncounterService() {
         type: "monster",
       })),
     ),
+    calculateDifficulty: jest.fn().mockResolvedValue({
+      totalMonsterXp: 5400,
+      adjustedXp: 10800,
+      threshold: "hard",
+      partySize: 1,
+      partyAverageLevel: 20,
+    }),
   } as unknown as EncounterService;
 }
 
@@ -358,6 +365,91 @@ describe("QuickPlayService", () => {
         ENCOUNTER_ID,
         expect.objectContaining({
           mapData: expect.objectContaining({ gridSize: 20 }),
+        }),
+      );
+    });
+
+    it("starts training fully restored, snapshots the real state and persists difficulty", async () => {
+      const campaignRepo = makeCampaignRepo();
+      const sessionRepo = makeSessionRepo();
+      const playerRepo = makePlayerRepo();
+      const encounterRepo = makeEncounterRepo();
+      const participantRepo = makeParticipantRepo();
+      const encounterService = makeEncounterService();
+      const characterState = {
+        character_id: CHARACTER_ID,
+        current_hp: 3,
+        temp_hp: 7,
+        death_saves_success: 1,
+        death_saves_fail: 2,
+        conditions: ["poisoned"],
+        spell_slots_used: { "5": 3 },
+        hit_dice_used: { d8: 4 },
+        ki_points_used: 2,
+        feature_uses_used: { "wild-shape": 1 },
+        exhaustion_level: 1,
+        inspiration: true,
+      };
+      const characterStateRepo = {
+        findOne: jest.fn().mockResolvedValue(characterState),
+        save: jest.fn(async (value) => value),
+      };
+      const characterSheetService = {
+        computeSheet: jest.fn().mockResolvedValue({
+          maxHp: 129,
+          totalLevel: 20,
+        }),
+      };
+      const service = new QuickPlayService(
+        campaignRepo as unknown as Repository<CampaignEntity>,
+        sessionRepo as unknown as Repository<GameSessionEntity>,
+        playerRepo as unknown as Repository<CampaignPlayerEntity>,
+        encounterRepo as unknown as Repository<EncounterEntity>,
+        participantRepo as unknown as Repository<EncounterParticipantEntity>,
+        encounterService,
+        characterStateRepo as any,
+        characterSheetService as any,
+      );
+
+      await service.createEncounter(USER_ID, {
+        characterId: CHARACTER_ID,
+        monsters: [{ monsterId: MONSTER_ID, count: 3 }],
+      });
+
+      expect(characterStateRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          current_hp: 129,
+          temp_hp: 0,
+          conditions: [],
+          spell_slots_used: {},
+          feature_uses_used: {},
+          exhaustion_level: 0,
+        }),
+      );
+      expect(encounterService.calculateDifficulty).toHaveBeenCalledWith(
+        ENCOUNTER_ID,
+        [20],
+      );
+      expect(encounterRepo.update).toHaveBeenCalledWith(
+        ENCOUNTER_ID,
+        expect.objectContaining({
+          difficulty: expect.objectContaining({
+            adjusted_xp: 10800,
+            threshold: "hard",
+            total_monster_xp: 5400,
+          }),
+          mapData: expect.objectContaining({
+            quickPlay: expect.objectContaining({
+              characterId: CHARACTER_ID,
+              restored: false,
+              characterStateSnapshot: expect.objectContaining({
+                current_hp: 3,
+                temp_hp: 7,
+                spell_slots_used: { "5": 3 },
+                conditions: ["poisoned"],
+              }),
+            }),
+          }),
         }),
       );
     });

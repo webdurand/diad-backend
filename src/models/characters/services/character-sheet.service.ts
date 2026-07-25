@@ -14,6 +14,7 @@ import {
   CharacterLevelUpEntity,
   CharacterFeatureEntity,
   CharacterOriginEntity,
+  RaceTraitEntity,
   CampaignPartyMemberEntity,
   LevelEntity,
   ClassSavingThrowEntity,
@@ -29,6 +30,7 @@ import {
   WARLOCK_SLOTS,
   getSpellcastingAbility,
   getCasterSlotType,
+  getStandardCasterLevelContribution,
   normalizeClassSlug,
 } from "src/shared/srd-constants";
 import {
@@ -37,6 +39,21 @@ import {
   DRACONIC_ANCESTRY_MAP,
 } from "src/shared/srd-utils";
 import type { EquipmentArmorClass } from "src/shared/equipment-types";
+import { getSecondWindMaxUses } from "src/shared/fighter-rules";
+import {
+  getAlwaysPreparedPaladinSpells,
+  normalizePreparedSpellSlug,
+} from "src/shared/paladin-spell-rules";
+import {
+  findGiantAncestryChoice,
+  GIANT_ANCESTRY_DESCRIPTIONS,
+  GIANT_ANCESTRY_DISPLAY_NAMES,
+} from "src/shared/goliath-rules";
+import {
+  isElementalFuryFeatureSlug,
+  normalizeElementalFuryChoice,
+  type ElementalFuryChoice,
+} from "src/shared/druid-rules";
 import { classifyFeatureForActions } from "./feature-classification";
 import { ensureCharacterReadAccess } from "src/shared/character-guard";
 import {
@@ -110,12 +127,14 @@ interface FeatureBlock {
   name: string;
   level: number;
   description: Record<string, unknown>;
+  sourceCode?: string;
   sourceClass?: string;
   active: boolean;
   category?: "active" | "passive" | "capstone" | "resource";
   displayText?: string;
   narrativeDescriptor?: string;
   tacticalValue?: number;
+  choices?: Record<string, unknown>;
   resourceCharges?: {
     current?: number;
     max: number | null;
@@ -123,6 +142,40 @@ interface FeatureBlock {
     recharge?: "short" | "long" | "turn" | "none";
   };
   isPassive: boolean;
+}
+
+const SPECIES_TRAIT_MIN_LEVEL: Record<string, number> = {
+  "celestial-revelation": 3,
+  "draconic-flight": 5,
+  "large-form": 5,
+};
+
+const ACTIVE_SPECIES_TRAITS = new Set([
+  "adrenaline-rush",
+  "breath-weapon",
+  "celestial-revelation",
+  "giant-ancestry",
+  "healing-hands",
+  "large-form",
+  "relentless-endurance",
+]);
+
+function canonicalSpeciesTraitSlug(slug: string): string {
+  const canonical = slug
+    .toLowerCase()
+    .replace(/-(?:phb|xphb|srd52)$/i, "")
+    .replace(/-5(?:[.-]?2)?$/i, "");
+  return canonical === "lucky" ? "luck" : canonical;
+}
+
+function isSelectedDraconicAncestryTrait(
+  slug: string,
+  ancestryChoice?: string,
+): boolean {
+  const match = canonicalSpeciesTraitSlug(slug).match(
+    /^draconic-ancestry-(black|blue|brass|bronze|copper|gold|green|red|silver|white)$/,
+  );
+  return !match || match[1] === ancestryChoice;
 }
 
 export interface EquipmentBlock {
@@ -321,6 +374,8 @@ export interface CharacterSheet {
 
   hasAuraOfDevotion?: boolean;
 
+  hasSmiteOfProtection?: boolean;
+
   hasHolyNimbus?: boolean;
 
 
@@ -369,6 +424,8 @@ export interface CharacterSheet {
   hasDragonWings?: boolean;
 
   hasDraconicPresence?: boolean;
+
+  hasDragonCompanion?: boolean;
 
 
   hasWildMagicSurge?: boolean;
@@ -457,7 +514,11 @@ function buildFeatureBlock(
   let resourceCharges: FeatureBlock["resourceCharges"] | undefined;
   if (feature.resource_charges || feature.recharge_rule) {
     const rawCharges = feature.resource_charges ?? { max: null };
-    const used = featureUsesUsed[slug] ?? 0;
+    const resourceKey =
+      classification?.kind === "alias" && classification.canonicalSlug
+        ? classification.canonicalSlug
+        : slug;
+    const used = featureUsesUsed[resourceKey] ?? 0;
     const max = rawCharges.max ?? null;
     resourceCharges = {
       max,
@@ -472,12 +533,14 @@ function buildFeatureBlock(
     name: feature.name,
     level: feature.level,
     description: feature.description,
+    sourceCode: feature.source?.code,
     sourceClass: cf.source_class?.name,
     active: cf.active,
     category,
     displayText,
     narrativeDescriptor,
     tacticalValue: feature.tactical_value,
+    choices: cf.choices ?? {},
     resourceCharges,
     isPassive,
   };
@@ -512,6 +575,8 @@ export class CharacterSheetService {
     private readonly charFeatureRepo: Repository<CharacterFeatureEntity>,
     @InjectRepository(CharacterOriginEntity)
     private readonly charOriginRepo: Repository<CharacterOriginEntity>,
+    @InjectRepository(RaceTraitEntity)
+    private readonly raceTraitRepo: Repository<RaceTraitEntity>,
     @InjectRepository(LevelEntity)
     private readonly levelRepo: Repository<LevelEntity>,
     @InjectRepository(ClassSavingThrowEntity)
@@ -523,6 +588,33 @@ export class CharacterSheetService {
     @InjectRepository(SkillEntity)
     private readonly skillRepo: Repository<SkillEntity>,
   ) {}
+
+  private resolveElementalFuryChoice(
+    characterFeatures: CharacterFeatureEntity[],
+  ): ElementalFuryChoice {
+    const parent = characterFeatures.find((characterFeature) =>
+      (characterFeature.feature?.slug ?? "").startsWith("elemental-fury-"),
+    );
+    const explicit = normalizeElementalFuryChoice(parent?.choices);
+    if (explicit) return explicit;
+
+    const hasPrimalStrike = characterFeatures.some((characterFeature) =>
+      (characterFeature.feature?.slug ?? "").startsWith("primal-strike-"),
+    );
+    const hasPotentSpellcasting = characterFeatures.some((characterFeature) =>
+      (characterFeature.feature?.slug ?? "").startsWith(
+        "potent-spellcasting-",
+      ),
+    );
+    if (hasPotentSpellcasting && !hasPrimalStrike) {
+      return "potent-spellcasting";
+    }
+
+    // Registros anteriores à coleta explícita da escolha continham as duas
+    // opções. Mantemos uma escolha determinística e válida em vez de conceder
+    // ambas; novas progressões exigem seleção no level-up.
+    return "primal-strike";
+  }
 
   async computeSheet(
     userId: string,
@@ -569,7 +661,7 @@ export class CharacterSheetService {
       }),
       this.charFeatureRepo.find({
         where: { character_id: characterId },
-        relations: ["source_class"],
+        relations: ["source_class", "feature.source"],
       }),
       this.charOriginRepo.findOne({ where: { character_id: characterId } }),
     ]);
@@ -579,6 +671,11 @@ export class CharacterSheetService {
         "Dados de origem do personagem nao encontrados.",
       );
     }
+
+    const raceTraits = await this.raceTraitRepo.find({
+      where: { race_id: charOrigin.race_id },
+      relations: ["trait", "trait.source"],
+    });
 
 
     const totalLevel = charClasses.reduce((sum, cc) => sum + cc.class_level, 0);
@@ -633,7 +730,13 @@ export class CharacterSheetService {
     maxHp += charState?.max_hp_bonus ?? 0;
 
 
-    let speed = charOrigin.race?.speed ?? 30;
+    const subraceSpeed = (
+      charOrigin.subrace?.raw as { speed?: unknown } | null | undefined
+    )?.speed;
+    let speed =
+      typeof subraceSpeed === "number"
+        ? subraceSpeed
+        : (charOrigin.race?.speed ?? 30);
     const hasFastMovementFeat = charFeatures.some((cf) =>
       (cf.feature?.slug ?? "").startsWith("fast-movement"),
     );
@@ -651,6 +754,25 @@ export class CharacterSheetService {
           heavyArmorSlugs.has((eq.equipment?.slug ?? "").toLowerCase()),
       );
       if (!heavyArmorEquipped) speed += 10;
+    }
+    const monkLevel =
+      charClasses.find(
+        (cc) => normalizeClassSlug(cc.class.slug) === "monk",
+      )?.class_level ?? 0;
+    const monkIsUnarmored = !charEquip.some(
+      (eq) => eq.equipped && Boolean(eq.equipment?.armor_class),
+    );
+    if (monkLevel >= 2 && monkIsUnarmored) {
+      speed +=
+        monkLevel >= 18
+          ? 30
+          : monkLevel >= 14
+            ? 25
+            : monkLevel >= 10
+              ? 20
+              : monkLevel >= 6
+                ? 15
+                : 10;
     }
 
 
@@ -804,16 +926,20 @@ export class CharacterSheetService {
     });
 
 
-    const perceptionSkill = charSkills.find(
-      (s) => s.skill.slug === "perception",
+    const perceptionSkill = skills.find(
+      (skill) => skill.name.toLowerCase() === "perception",
     );
-    const perceptionProficient = !!perceptionSkill;
-    const perceptionExpertise = perceptionSkill?.expertise ?? false;
-    const passivePerception =
-      10 +
+    const perceptionCharacterSkill = charSkills.find(
+      (skill) =>
+        skill.skill.name?.toLowerCase() === "perception" ||
+        skill.skill.slug.replace(/-phb$/, "") === "perception",
+    );
+    const fallbackPerceptionBonus =
       mod("wis") +
-      (perceptionProficient ? profBonus : 0) +
-      (perceptionExpertise ? profBonus : 0);
+      (perceptionCharacterSkill ? profBonus : 0) +
+      (perceptionCharacterSkill?.expertise ? profBonus : 0);
+    const passivePerception =
+      10 + (perceptionSkill?.bonus ?? fallbackPerceptionBonus);
 
 
     const hitDice = charClasses.map((cc) => ({
@@ -864,6 +990,48 @@ export class CharacterSheetService {
       status: cs.status,
       alwaysPrepared: cs.always_prepared,
     }));
+    const existingSpellSlugs = new Set(
+      spells.map((spell) => normalizePreparedSpellSlug(spell.slug)),
+    );
+    for (const spell of getAlwaysPreparedPaladinSpells(
+      charClasses,
+      character.source?.code !== "PHB",
+    )) {
+      if (existingSpellSlugs.has(spell.slug)) continue;
+      spells.push({
+        slug: spell.slug,
+        name: spell.name,
+        level: spell.level,
+        source: spell.grantedBy,
+        status: "prepared",
+        alwaysPrepared: true,
+      });
+      existingSpellSlugs.add(spell.slug);
+    }
+    const hasFaithfulSteedFeature = charFeatures.some(
+      (characterFeature) =>
+        characterFeature.active !== false &&
+        /^faithful-steed-paladin-\d+$/.test(
+          characterFeature.feature?.slug ?? "",
+        ),
+    );
+    if (
+      hasFaithfulSteedFeature &&
+      !spells.some(
+        (spell) =>
+          spell.slug.toLowerCase().replace(/-(phb|xphb|srd52)$/, "") ===
+          "find-steed",
+      )
+    ) {
+      spells.push({
+        slug: "find-steed",
+        name: "Find Steed",
+        level: 2,
+        source: "feature",
+        status: "prepared",
+        alwaysPrepared: true,
+      });
+    }
 
 
     const spellSlots = this.computeSpellSlots(charClasses, charState);
@@ -903,9 +1071,76 @@ export class CharacterSheetService {
       (charState as unknown as { feature_uses_used?: Record<string, number> })
         ?.feature_uses_used ?? {};
 
-    const features: FeatureBlock[] = charFeatures.map((cf) =>
+    const elementalFuryChoice = this.resolveElementalFuryChoice(charFeatures);
+    const selectedCharFeatures = charFeatures.filter((cf) => {
+      const slug = cf.feature?.slug ?? "";
+      if (
+        !slug.startsWith("primal-strike-") &&
+        !slug.startsWith("potent-spellcasting-")
+      ) {
+        return true;
+      }
+      return isElementalFuryFeatureSlug(slug, elementalFuryChoice);
+    });
+    const features: FeatureBlock[] = selectedCharFeatures.map((cf) =>
       buildFeatureBlock(cf, featureUsesUsed),
     );
+    const fighterLevel =
+      charClasses.find(
+        (cc) => normalizeClassSlug(cc.class.slug) === "fighter",
+      )?.class_level ?? 0;
+    if (fighterLevel > 0) {
+      const maxSecondWindUses = getSecondWindMaxUses(
+        fighterLevel,
+        character.source?.code !== "PHB",
+      );
+      const usedSecondWind = featureUsesUsed["second-wind"] ?? 0;
+      for (const feature of features) {
+        const featureClassification = classifyFeatureForActions(feature.slug);
+        const canonicalFeatureSlug =
+          featureClassification?.kind === "alias"
+            ? featureClassification.canonicalSlug
+            : feature.slug;
+        if (canonicalFeatureSlug !== "second-wind") {
+          continue;
+        }
+        feature.category = "resource";
+        feature.resourceCharges = {
+          current: Math.max(0, maxSecondWindUses - usedSecondWind),
+          max: maxSecondWindUses,
+          formula: "2 usos; +1 nos níveis 4 e 10",
+          recharge: "short",
+        };
+      }
+    }
+    const druidLevel =
+      charClasses.find(
+        (cc) => normalizeClassSlug(cc.class.slug) === "druid",
+      )?.class_level ?? 0;
+    if (druidLevel >= 10) {
+      const moonlightStepMax = Math.max(1, mod("wis"));
+      const moonlightStepUsed = featureUsesUsed["moonlight-step"] ?? 0;
+      for (const feature of features) {
+        const featureClassification = classifyFeatureForActions(feature.slug);
+        const canonicalFeatureSlug =
+          featureClassification?.kind === "alias"
+            ? featureClassification.canonicalSlug
+            : feature.slug;
+        if (canonicalFeatureSlug !== "moonlight-step") continue;
+        feature.name = "Passo ao Luar";
+        feature.displayText =
+          "Como Ação Bônus, teleporte-se magicamente até 30 pés para um espaço desocupado que você possa ver. Você tem Vantagem no próximo ataque que fizer antes do fim deste turno. Você pode recuperar um uso gastando um slot de magia de nível 2 ou maior, sem ação.";
+        feature.narrativeDescriptor =
+          "Teleporte de 30 pés; concede Vantagem no próximo ataque do turno.";
+        feature.category = "resource";
+        feature.resourceCharges = {
+          current: Math.max(0, moonlightStepMax - moonlightStepUsed),
+          max: moonlightStepMax,
+          formula: "Modificador de Sabedoria (mínimo 1)",
+          recharge: "long",
+        };
+      }
+    }
 
 
     const raceTraitChoices = charOrigin.race_trait_choices ?? [];
@@ -919,6 +1154,87 @@ export class CharacterSheetService {
           damageType: DRACONIC_ANCESTRY_MAP[draconicChoice].damageType,
         }
       : undefined;
+
+    const seenSpeciesTraits = new Set<string>();
+    const preferredRaceTraits = [...raceTraits].sort((a, b) => {
+      const aPreferred = a.trait?.source?.code === "XPHB" ? 0 : 1;
+      const bPreferred = b.trait?.source?.code === "XPHB" ? 0 : 1;
+      return aPreferred - bPreferred;
+    });
+    for (const raceTrait of preferredRaceTraits) {
+      const trait = raceTrait.trait;
+      if (!trait) continue;
+      const slug = canonicalSpeciesTraitSlug(trait.slug);
+      if (
+        !isSelectedDraconicAncestryTrait(
+          trait.slug,
+          draconicChoice,
+        )
+      ) {
+        continue;
+      }
+      if (seenSpeciesTraits.has(slug)) continue;
+      seenSpeciesTraits.add(slug);
+
+      const requiredLevel = SPECIES_TRAIT_MIN_LEVEL[slug] ?? 1;
+      const isPassive = !ACTIVE_SPECIES_TRAITS.has(slug);
+      const displayText = (trait.description ?? []).join("\n\n");
+      const featureBlock: FeatureBlock = {
+        slug,
+        name: trait.name,
+        level: requiredLevel,
+        description: { text: trait.description ?? [] },
+        sourceCode: trait.source?.code,
+        sourceClass: charOrigin.race.name,
+        active: totalLevel >= requiredLevel,
+        category: isPassive ? "passive" : "active",
+        displayText,
+        narrativeDescriptor: displayText
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 180),
+        isPassive,
+      };
+
+      if (slug === "giant-ancestry") {
+        const selectedAncestry = findGiantAncestryChoice(raceTraitChoices);
+        const max = profBonus;
+        featureBlock.name = selectedAncestry
+          ? `Ancestralidade Gigante — ${GIANT_ANCESTRY_DISPLAY_NAMES[selectedAncestry]}`
+          : "Ancestralidade Gigante";
+        featureBlock.displayText = selectedAncestry
+          ? `${GIANT_ANCESTRY_DISPLAY_NAMES[selectedAncestry]}\n\n${GIANT_ANCESTRY_DESCRIPTIONS[selectedAncestry]}\n\nVocê pode usar este benefício ${max} vezes e recupera todos os usos ao terminar um Descanso Longo.`
+          : "Escolha um legado gigante para habilitar este traço.";
+        featureBlock.narrativeDescriptor = selectedAncestry
+          ? `Escolha atual: ${GIANT_ANCESTRY_DISPLAY_NAMES[selectedAncestry]}`
+          : "Nenhuma ancestralidade escolhida";
+        featureBlock.category = "resource";
+        featureBlock.resourceCharges = {
+          current: Math.max(
+            0,
+            max - (featureUsesUsed["giant-ancestry"] ?? 0),
+          ),
+          max,
+          formula: "Bônus de Proficiência",
+          recharge: "long",
+        };
+      }
+
+      if (slug === "breath-weapon") {
+        const max = profBonus;
+        featureBlock.category = "resource";
+        featureBlock.resourceCharges = {
+          current: Math.max(
+            0,
+            max - (featureUsesUsed["breath-weapon"] ?? 0),
+          ),
+          max,
+          formula: "Bônus de Proficiência",
+          recharge: "long",
+        };
+      }
+      features.push(featureBlock);
+    }
 
     const originDetails: Record<string, unknown> = {
       raceTraitChoices,
@@ -1158,7 +1474,7 @@ export class CharacterSheetService {
       hasTurnUndead: charFeatures.some(
         (cf) =>
           (cf.feature?.slug ?? "").startsWith("channel-divinity-turn-undead") ||
-          (cf.feature?.slug ?? "") === "turn-undead",
+          (cf.feature?.slug ?? "").startsWith("turn-undead"),
       ),
       hasSearUndead: charFeatures.some((cf) =>
         (cf.feature?.slug ?? "").startsWith("sear-undead"),
@@ -1239,12 +1555,27 @@ export class CharacterSheetService {
       hasAuraExpansion: charFeatures.some((cf) =>
         (cf.feature?.slug ?? "").startsWith("aura-expansion"),
       ),
-      hasSacredWeapon: charFeatures.some((cf) =>
-        (cf.feature?.slug ?? "").startsWith("channel-divinity-sacred-weapon"),
-      ),
+      hasSacredWeapon: charFeatures.some((cf) => {
+        const slug = cf.feature?.slug ?? "";
+        return (
+          slug.startsWith("channel-divinity-sacred-weapon") ||
+          slug.startsWith("sacred-weapon")
+        );
+      }),
       hasAuraOfDevotion: charFeatures.some((cf) =>
         (cf.feature?.slug ?? "").startsWith("aura-of-devotion"),
       ),
+      hasSmiteOfProtection:
+        charFeatures.some((cf) =>
+          (cf.feature?.slug ?? "").startsWith("smite-of-protection"),
+        ) ||
+        classes.some(
+          (classBlock) =>
+            classBlock.slug.replace(/-(phb|xphb|srd52)$/i, "") === "paladin" &&
+            classBlock.level >= 15 &&
+            classBlock.subclass?.slug.toLowerCase().includes("devotion") ===
+              true,
+        ),
       hasHolyNimbus: charFeatures.some((cf) =>
         (cf.feature?.slug ?? "").startsWith("holy-nimbus"),
       ),
@@ -1323,6 +1654,9 @@ export class CharacterSheetService {
       ),
       hasDraconicPresence: charFeatures.some((cf) =>
         (cf.feature?.slug ?? "").startsWith("draconic-presence"),
+      ),
+      hasDragonCompanion: charFeatures.some((cf) =>
+        (cf.feature?.slug ?? "").startsWith("dragon-companion"),
       ),
       hasWildMagicSurge: charFeatures.some((cf) =>
         (cf.feature?.slug ?? "").startsWith("wild-magic-surge"),
@@ -1412,23 +1746,49 @@ export class CharacterSheetService {
       .where("cst.class_id = :classId", { classId: primaryClass.class_id })
       .getMany();
 
-    return new Set(savingThrows.map((st) => st.ability_score.slug));
+    const persisted = new Set(
+      savingThrows.map((st) => st.ability_score.slug),
+    );
+    if (persisted.size > 0) return persisted;
+
+    const canonicalSlug = primaryClass.class.slug.replace(/-phb$/, "");
+    const fallback: Record<string, readonly string[]> = {
+      barbarian: ["str", "con"],
+      bard: ["dex", "cha"],
+      cleric: ["wis", "cha"],
+      druid: ["int", "wis"],
+      fighter: ["str", "con"],
+      monk: ["str", "dex"],
+      paladin: ["wis", "cha"],
+      ranger: ["str", "dex"],
+      rogue: ["dex", "int"],
+      sorcerer: ["con", "cha"],
+      warlock: ["wis", "cha"],
+      wizard: ["int", "wis"],
+    };
+    return new Set(fallback[canonicalSlug] ?? []);
   }
 
   private computeSpellSlots(
     charClasses: CharacterClassEntity[],
     charState: CharacterStateEntity | null,
   ): SpellSlotBlock[] {
-    let fullCasterLevels = 0;
-    let halfCasterLevels = 0;
+    let standardCasterLevel = 0;
     let warlockLevel = 0;
+    const isMulticlass = charClasses.length > 1;
 
     for (const cc of charClasses) {
       const type = getCasterSlotType(cc.class.slug);
       if (!type) continue;
-      if (type === "full") fullCasterLevels += cc.class_level;
-      else if (type === "half") halfCasterLevels += cc.class_level;
-      else if (type === "pact") warlockLevel = cc.class_level;
+      if (type === "full" || type === "half") {
+        standardCasterLevel += getStandardCasterLevelContribution(
+          cc.class.slug,
+          cc.class_level,
+          isMulticlass,
+        );
+      } else if (type === "pact") {
+        warlockLevel = cc.class_level;
+      }
     }
 
     const slotsUsed = charState?.spell_slots_used ?? {};
@@ -1436,8 +1796,7 @@ export class CharacterSheetService {
     const result: SpellSlotBlock[] = [];
 
 
-    const effectiveCasterLevel =
-      fullCasterLevels + Math.floor(halfCasterLevels / 2);
+    const effectiveCasterLevel = standardCasterLevel;
 
     if (effectiveCasterLevel > 0) {
       const slotTable = FULL_CASTER_SLOTS[Math.min(effectiveCasterLevel, 20)];

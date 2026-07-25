@@ -83,7 +83,7 @@ export class EncounterParticipantEntity {
   isConcentrating: boolean;
 
   @Column({ name: "concentrating_on", type: "varchar", nullable: true })
-  concentratingOn?: string;
+  concentratingOn?: string | null;
 
   @Column({ name: "legendary_actions_used", type: "int", default: 0 })
   legendaryActionsUsed: number;
@@ -122,6 +122,13 @@ export class EncounterParticipantEntity {
 
   @Column({ name: "attacks_max_this_turn", type: "int", default: 1 })
   attacksMaxThisTurn: number;
+
+  @Column({
+    name: "bonus_unarmed_attacks_remaining_this_turn",
+    type: "int",
+    default: 0,
+  })
+  bonusUnarmedAttacksRemainingThisTurn: number;
 
 
   @Column({ name: "reckless_attack_active", type: "boolean", default: false })
@@ -182,10 +189,10 @@ export class EncounterParticipantEntity {
 
 
   @Column({ name: "position_x", type: "int", nullable: true })
-  positionX?: number;
+  positionX?: number | null;
 
   @Column({ name: "position_y", type: "int", nullable: true })
-  positionY?: number;
+  positionY?: number | null;
 
   @Column({ name: "is_visible", type: "boolean", default: true })
   isVisible: boolean;

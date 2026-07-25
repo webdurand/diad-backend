@@ -6,6 +6,11 @@ import { EventService } from "./event.service";
 import { InspirationService } from "./inspiration.service";
 import { ExhaustionService } from "./exhaustion.service";
 import {
+  hasHalflingLuck,
+  rollD20TestWithHalflingLuck,
+  type HalflingLuckReroll,
+} from "./halfling-luck";
+import {
   GameResult,
   GameEventData,
   success,
@@ -25,6 +30,7 @@ export interface SkillCheckResult {
   proficient: boolean;
   expertise: boolean;
   advantage?: { roll1: number; roll2: number; used: number };
+  halflingLuckRerolls?: HalflingLuckReroll[];
 }
 
 
@@ -90,9 +96,22 @@ export class SkillCheckService {
           s.name.toLowerCase() === dto.skill!.toLowerCase(),
       );
       if (skillBlock) {
-        modifier = skillBlock.bonus;
         proficient = skillBlock.proficient;
         expertise = skillBlock.expertise;
+        const requestedAbility = abilityScore.slug.toLowerCase();
+        const canonicalAbility = skillBlock.ability.toLowerCase();
+        if (requestedAbility === canonicalAbility) {
+          modifier = skillBlock.bonus;
+        } else {
+          // D&D allows a skill to be paired with a non-canonical ability
+          // (for example, Wisdom (Investigation)). In that case, keep the
+          // skill's proficiency/expertise but use the requested ability mod.
+          const proficiencyMultiplier =
+            (proficient ? 1 : 0) + (expertise ? 1 : 0);
+          modifier =
+            abilityScore.modifier +
+            sheet.proficiencyBonus * proficiencyMultiplier;
+        }
       }
     }
 
@@ -146,22 +165,20 @@ export class SkillCheckService {
     }
 
 
-    let roll: number;
-    let advantageResult:
-      | { roll1: number; roll2: number; used: number }
-      | undefined;
-
-    if (hasAdvantage && !hasDisadvantage) {
-      const r = this.diceService.rollWithAdvantage();
-      roll = r.chosen;
-      advantageResult = { roll1: r.roll1, roll2: r.roll2, used: r.chosen };
-    } else if (hasDisadvantage && !hasAdvantage) {
-      const r = this.diceService.rollWithDisadvantage();
-      roll = r.chosen;
-      advantageResult = { roll1: r.roll1, roll2: r.roll2, used: r.chosen };
-    } else {
-      roll = this.diceService.roll(20);
-    }
+    const d20Test = rollD20TestWithHalflingLuck({
+      enabled: hasHalflingLuck(sheet),
+      advantage: hasAdvantage && !hasDisadvantage,
+      disadvantage: hasDisadvantage && !hasAdvantage,
+      roll: () => this.diceService.roll(20),
+    });
+    const roll = d20Test.chosen;
+    const advantageResult = d20Test.advantage
+      ? {
+          roll1: d20Test.advantage.roll1,
+          roll2: d20Test.advantage.roll2,
+          used: d20Test.advantage.chosen,
+        }
+      : undefined;
 
     const total = roll + modifier + exhaustionD20Penalty;
     const passed = total >= dto.dc;
@@ -177,6 +194,7 @@ export class SkillCheckService {
       proficient,
       expertise,
       advantage: advantageResult,
+      halflingLuckRerolls: d20Test.rerolls,
     };
 
     const events = this.buildEvents(dto, roll, modifier, total, passed);

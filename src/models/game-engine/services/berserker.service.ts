@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { canTakeReactionFromConditions } from "./condition-effects.service";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { EncounterService } from "./encounter.service";
@@ -150,6 +151,12 @@ export class BerserkerService {
       return failure(
         "Sem reactions disponíveis este turno.",
         "NO_REACTIONS_REMAINING",
+      );
+    }
+    if (!canTakeReactionFromConditions(barbarian.conditions)) {
+      return failure(
+        "A condição atual impede reactions.",
+        "CONDITION_PREVENTS_REACTION",
       );
     }
 

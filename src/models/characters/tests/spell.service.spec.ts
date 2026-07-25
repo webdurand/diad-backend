@@ -49,6 +49,8 @@ describe("SpellService", () => {
       } as any,
       { advanceTime: async () => undefined } as any,
     );
+    repos.spell.find!.mockResolvedValue([]);
+    repos.spellClass.find!.mockResolvedValue([]);
   });
 
   const setupCaster = (
@@ -154,6 +156,48 @@ describe("SpellService", () => {
       expect(result.maxPrepared).toBe(8);
     });
 
+    it("should keep requested total_access spells while replacing the rest", async () => {
+      const kept = makeCharacterSpell(
+        "cure-wounds",
+        1,
+        SpellStatusEnum.Prepared,
+      );
+      const removed = makeCharacterSpell(
+        "bless",
+        1,
+        SpellStatusEnum.Prepared,
+      );
+      const added = makeSpell("healing-word", 1);
+      setupCaster({
+        classSlug: "cleric",
+        level: 5,
+        wis: 16,
+        existingSpells: [kept, removed],
+      });
+
+      repos.spell.find!.mockResolvedValue([kept.spell, added]);
+      repos.spellClass.find!.mockResolvedValue([
+        { spell_id: kept.spell_id, class_id: "class-id" },
+        { spell_id: added.id, class_id: "class-id" },
+      ]);
+      repos.charSpell.remove!.mockResolvedValue([]);
+      repos.charSpell.save!.mockResolvedValue({});
+
+      await service.updatePreparedSpells("user-1", "char-1", {
+        spells: ["cure-wounds", "healing-word"],
+      });
+
+      expect(repos.charSpell.remove).toHaveBeenCalledTimes(1);
+      expect(repos.charSpell.remove).toHaveBeenCalledWith(removed);
+      expect(repos.charSpell.save).toHaveBeenCalledTimes(1);
+      expect(repos.charSpell.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spell_id: added.id,
+          status: SpellStatusEnum.Prepared,
+        }),
+      );
+    });
+
     it("should reject spellbook spell not in wizard spellbook", async () => {
       const existingSpellbook = [
         makeCharacterSpell("magic-missile", 1, SpellStatusEnum.Spellbook),
@@ -185,6 +229,49 @@ describe("SpellService", () => {
   });
 
   describe("getAvailableSpells", () => {
+    it("lists the level-15 Devotion table as always prepared and immutable", async () => {
+      const { cc } = setupCaster({
+        classSlug: "paladin",
+        level: 15,
+        cha: 16,
+      });
+      cc.subclass = {
+        slug: "paladin-devotion",
+        name: "Oath of Devotion",
+      } as never;
+      const alwaysPrepared = [
+        makeSpell("divine-smite", 1),
+        makeSpell("find-steed", 2),
+        makeSpell("protection-from-evil-and-good", 1),
+        makeSpell("shield-of-faith", 1),
+        makeSpell("aid", 2),
+        makeSpell("zone-of-truth", 2),
+        makeSpell("beacon-of-hope", 3),
+        makeSpell("dispel-magic", 3),
+        makeSpell("freedom-of-movement", 4),
+        makeSpell("guardian-of-faith", 4),
+      ];
+      repos.spell.find!.mockResolvedValue(alwaysPrepared);
+
+      const available = await service.getAvailableSpells(
+        "user-1",
+        "char-1",
+      );
+      const manageable = await service.getManageableSpells(
+        "user-1",
+        "char-1",
+      );
+
+      expect(available[0].currentPrepared).toHaveLength(10);
+      expect(
+        available[0].currentPrepared.every((spell) => spell.alwaysPrepared),
+      ).toBe(true);
+      expect(manageable[0].currentSpells).toHaveLength(10);
+      expect(
+        manageable[0].currentSpells.every((spell) => !spell.canRemove),
+      ).toBe(true);
+    });
+
     it('cleric/druid prepChangeMode should be "all"', async () => {
       setupCaster({ classSlug: "cleric", level: 5, wis: 16 });
       repos.spellClass.find!.mockResolvedValue([]);
@@ -446,13 +533,13 @@ describe("SpellService", () => {
     });
 
     describe("feature uses reset (Spec 011 Phase 1)", () => {
-      it("short rest resets features with rechargeOn: short", async () => {
+      it("short rest restores one 2024 Second Wind use and resets other short-rest features", async () => {
         const cc = makeCharacterClass("fighter", 5);
         const state = makeCharacterState({
           current_hp: 30,
 
           feature_uses_used: {
-            "second-wind": 1,
+            "second-wind": 3,
             "action-surge": 1,
           },
         });
@@ -466,7 +553,7 @@ describe("SpellService", () => {
         await service.rest("user-1", "char-1", { type: "short" });
 
 
-        expect(state.feature_uses_used["second-wind"] ?? 0).toBe(0);
+        expect(state.feature_uses_used["second-wind"] ?? 0).toBe(2);
         expect(state.feature_uses_used["action-surge"] ?? 0).toBe(0);
       });
 

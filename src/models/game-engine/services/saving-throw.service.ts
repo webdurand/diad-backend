@@ -1,10 +1,14 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { DiceService } from "./dice.service";
-import { ConditionEffectsService } from "./condition-effects.service";
+import {
+  ConditionEffectsService,
+  hasDodgeDexSaveAdvantage,
+} from "./condition-effects.service";
 import { EventService } from "./event.service";
 import { InspirationService } from "./inspiration.service";
 import { ExhaustionService } from "./exhaustion.service";
@@ -16,6 +20,12 @@ import {
 } from "../interfaces/result.type";
 import { SavingThrowResult } from "../interfaces/combat.interfaces";
 import { AdvantageResult } from "../interfaces/dice.interfaces";
+import { hasHasteDexSaveAdvantage } from "./haste-action";
+import {
+  hasHalflingLuck,
+  rollD20TestWithHalflingLuck,
+} from "./halfling-luck";
+import { PaladinAuraService } from "./paladin-aura.service";
 
 
 
@@ -43,6 +53,10 @@ export class SavingThrowService {
     private readonly exhaustionService: ExhaustionService,
     @InjectRepository(EncounterParticipantEntity)
     private readonly participantRepo: Repository<EncounterParticipantEntity>,
+    @InjectRepository(PersistentAreaEffectEntity)
+    private readonly persistentAreaRepo: Repository<PersistentAreaEffectEntity>,
+    @Optional()
+    private readonly paladinAuras?: PaladinAuraService,
   ) {}
 
   async rollSavingThrow(
@@ -93,9 +107,26 @@ export class SavingThrowService {
 
     let hasAdvantage = dto.advantage ?? false;
     let hasDisadvantage = dto.disadvantage ?? false;
+    const subject = dto.participantId
+      ? await this.participantRepo.findOne({
+          where: { id: dto.participantId },
+        })
+      : null;
 
     if (condMods.hasAdvantage) hasAdvantage = true;
     if (condMods.hasDisadvantage) hasDisadvantage = true;
+    if (hasHasteDexSaveAdvantage(subject, dto.ability)) {
+      hasAdvantage = true;
+    }
+    if (hasDodgeDexSaveAdvantage(subject, dto.ability)) {
+      hasAdvantage = true;
+    }
+    const conjureAnimalsStrengthAdvantage =
+      dto.ability.trim().toLowerCase().slice(0, 3) === "str" &&
+      (await this.hasConjureAnimalsStrengthSaveAdvantage(subject));
+    if (conjureAnimalsStrengthAdvantage) {
+      hasAdvantage = true;
+    }
 
 
     let inspirationEvent: GameEventData | null = null;
@@ -111,30 +142,14 @@ export class SavingThrowService {
     }
 
 
-    let roll: number;
-    let advantageResult: AdvantageResult | undefined;
-
-    if (hasAdvantage && !hasDisadvantage) {
-      const r = this.diceService.rollWithAdvantage();
-      roll = r.chosen;
-      advantageResult = {
-        roll1: r.roll1,
-        roll2: r.roll2,
-        chosen: r.chosen,
-        discarded: r.roll1 === r.chosen ? r.roll2 : r.roll1,
-      };
-    } else if (hasDisadvantage && !hasAdvantage) {
-      const r = this.diceService.rollWithDisadvantage();
-      roll = r.chosen;
-      advantageResult = {
-        roll1: r.roll1,
-        roll2: r.roll2,
-        chosen: r.chosen,
-        discarded: r.roll1 === r.chosen ? r.roll2 : r.roll1,
-      };
-    } else {
-      roll = this.diceService.roll(20);
-    }
+    const d20Test = rollD20TestWithHalflingLuck({
+      enabled: hasHalflingLuck(sheet),
+      advantage: hasAdvantage && !hasDisadvantage,
+      disadvantage: hasDisadvantage && !hasAdvantage,
+      roll: () => this.diceService.roll(20),
+    });
+    let roll = d20Test.chosen;
+    const advantageResult: AdvantageResult | undefined = d20Test.advantage;
 
 
 
@@ -149,6 +164,13 @@ export class SavingThrowService {
       auraBonus = auraResult.bonus;
       auraSourceName = auraResult.sourceName;
     }
+    const halfCover =
+      dto.participantId &&
+      dto.ability.trim().toLowerCase().slice(0, 3) === "dex" &&
+      subject
+        ? await this.paladinAuras?.getSmiteOfProtectionHalfCover(subject)
+        : null;
+    const halfCoverBonus = halfCover?.bonus ?? 0;
 
 
 
@@ -159,9 +181,6 @@ export class SavingThrowService {
       rolled: number;
     }> = [];
     if (dto.participantId) {
-      const subject = await this.participantRepo.findOne({
-        where: { id: dto.participantId },
-      });
       for (const e of subject?.effectInstances ?? []) {
         if (e.kind === "save_bonus" && e.payload?.diceExpression) {
           const r = this.diceService.rollExpression(e.payload.diceExpression);
@@ -193,7 +212,12 @@ export class SavingThrowService {
     const exhaustionD20Penalty = exhMods?.d20Penalty ?? 0;
 
     let total =
-      roll + modifier + auraBonus + effectBonusSum + exhaustionD20Penalty;
+      roll +
+      modifier +
+      auraBonus +
+      halfCoverBonus +
+      effectBonusSum +
+      exhaustionD20Penalty;
     let passed = total >= dto.dc;
 
 
@@ -243,10 +267,20 @@ export class SavingThrowService {
       total,
       success: passed,
       advantage: advantageResult,
+      auraBonus,
+      halfCoverBonus,
+      effectBonus: effectBonusSum,
+      exhaustionPenalty: exhaustionD20Penalty,
       indomitableReroll,
+      halflingLuckRerolls: d20Test.rerolls,
     };
 
-    const events = this.buildEvents(dto, roll, modifier, total, passed);
+    const events = this.buildEvents(dto, roll, modifier, total, passed, {
+      auraBonus,
+      halfCoverBonus,
+      effectBonus: effectBonusSum,
+      exhaustionPenalty: exhaustionD20Penalty,
+    });
     if (inspirationEvent) events.unshift(inspirationEvent);
     if (indomitableEvent) events.push(indomitableEvent);
     if (exhaustionD20Penalty !== 0) {
@@ -276,7 +310,70 @@ export class SavingThrowService {
         },
       } as GameEventData);
     }
+    if (halfCover) {
+      events.push({
+        event_type: "smite_of_protection_half_cover_applied",
+        actor_participant_id: halfCover.sourceParticipantId,
+        target_participant_id: dto.participantId,
+        data: {
+          bonus: halfCover.bonus,
+          sourcePaladinName: halfCover.sourceName,
+          ability: dto.ability,
+          dc: dto.dc,
+          finalTotal: total,
+          radiusFeet: halfCover.radiusFeet,
+        },
+      } as GameEventData);
+    }
+    if (conjureAnimalsStrengthAdvantage) {
+      events.push({
+        event_type: "conjure_animals_strength_save_advantage",
+        actor_participant_id: dto.participantId,
+        target_participant_id: dto.participantId,
+        data: {
+          sourceSpell: "conjure-animals",
+          ability: dto.ability,
+          roll1: advantageResult?.roll1,
+          roll2: advantageResult?.roll2,
+          chosen: advantageResult?.chosen,
+          finalTotal: total,
+          success: passed,
+        },
+      } as GameEventData);
+    }
     return success(result, events);
+  }
+
+  private async hasConjureAnimalsStrengthSaveAdvantage(
+    subject: EncounterParticipantEntity | null,
+  ): Promise<boolean> {
+    if (
+      !subject ||
+      subject.positionX == null ||
+      subject.positionY == null ||
+      subject.isDefeated ||
+      !subject.isConcentrating ||
+      subject.concentratingOn
+        ?.trim()
+        .toLowerCase()
+        .replace(/-(phb|xphb|srd52)$/, "") !== "conjure-animals"
+    ) {
+      return false;
+    }
+    const area = await this.persistentAreaRepo.findOne({
+      where: {
+        encounterId: subject.encounterId,
+        casterParticipantId: subject.id,
+        effectKind: "conjure-animals",
+      },
+    });
+    if (!area) return false;
+
+    // The Large pack occupies the central 2×2 cells. This 4×4 region is the
+    // pack plus the 5-foot ring in which its caster gains the STR-save benefit.
+    const dx = subject.positionX - area.originCell.x;
+    const dy = subject.positionY - area.originCell.y;
+    return dx >= -1 && dx <= 2 && dy >= -1 && dy <= 2;
   }
 
 
@@ -372,6 +469,12 @@ export class SavingThrowService {
     modifier: number,
     total: number,
     passed: boolean,
+    bonuses: {
+      auraBonus?: number;
+      halfCoverBonus?: number;
+      effectBonus?: number;
+      exhaustionPenalty?: number;
+    } = {},
   ): GameEventData[] {
     return [
       {
@@ -384,6 +487,7 @@ export class SavingThrowService {
           modifier,
           total,
           success: passed,
+          ...bonuses,
         },
       },
     ];

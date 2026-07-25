@@ -227,8 +227,13 @@ export class MonsterSelectorService {
       result = this.composePack(anchor, budget);
     }
 
+    let compositionRelaxed = false;
     if (!result) {
-      result = this.composePack(anchor, budget);
+      result =
+        this.composeSolo(pool, budget) ??
+        this.composePack(anchor, budget) ??
+        this.composeBestEffort(pool, budget);
+      compositionRelaxed = !!result;
       if (!result) return null;
     }
 
@@ -256,6 +261,7 @@ export class MonsterSelectorService {
       `mode=${result.mode}`,
       `count=${slugs.length}`,
       `adjusted_xp=${result.adjustedXp}`,
+      ...(compositionRelaxed ? ["composition_relaxed=true"] : []),
     ];
 
     return {
@@ -356,6 +362,38 @@ export class MonsterSelectorService {
       slugs: [pick.slug],
       mode: "solo",
       adjustedXp: pick.xp,
+    };
+  }
+
+  private composeBestEffort(
+    pool: MonsterEntity[],
+    budget: number,
+  ): { slugs: string[]; mode: CompositionMode; adjustedXp: number } | null {
+    let best:
+      | {
+          monster: MonsterEntity;
+          count: number;
+          adjustedXp: number;
+          difference: number;
+        }
+      | undefined;
+    for (const monster of pool) {
+      if (monster.xp <= 0) continue;
+      for (let count = 1; count <= MAX_MONSTERS; count++) {
+        const adjustedXp = Math.floor(
+          monster.xp * count * multiplier(count),
+        );
+        const difference = Math.abs(adjustedXp - budget);
+        if (!best || difference < best.difference) {
+          best = { monster, count, adjustedXp, difference };
+        }
+      }
+    }
+    if (!best) return null;
+    return {
+      slugs: Array(best.count).fill(best.monster.slug),
+      mode: best.count === 1 ? "solo" : "pack",
+      adjustedXp: best.adjustedXp,
     };
   }
 }

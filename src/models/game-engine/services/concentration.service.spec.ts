@@ -104,4 +104,150 @@ describe("ConcentrationService summon lifecycle", () => {
       }),
     );
   });
+
+  it("inicia uma nova concentração e expõe o evento correspondente", async () => {
+    const { service, caster, participants } = setup({});
+    caster.isConcentrating = false;
+    caster.concentratingOn = null;
+    caster.appliedEffects = [];
+
+    const result = await service.startNew(caster, "fog-cloud", 100, 15);
+
+    expect(caster.isConcentrating).toBe(true);
+    expect(caster.concentratingOn).toBe("fog-cloud");
+    expect(participants.save).toHaveBeenCalledWith(caster);
+    expect(result.events).toContainEqual({
+      event_type: "concentration_started",
+      actor_participant_id: "caster-1",
+      data: {
+        spellName: "fog-cloud",
+        durationRounds: 100,
+        saveDc: 15,
+      },
+    });
+  });
+
+  it("aplica letargia quando Haste termina", async () => {
+    const { service, caster, participants } = setup({});
+    caster.concentratingOn = "haste";
+    caster.effectInstances = [
+      {
+        id: "haste-extra",
+        kind: "extra_action",
+        sourceSpellSlug: "haste",
+        sourceCasterParticipantId: caster.id,
+        payload: { amount: 1 },
+        expiresAt: { kind: "concentration" },
+        requiresConcentration: true,
+        appliedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    participants.find.mockResolvedValue([
+      {
+        ...caster,
+        effectInstances: caster.effectInstances.map((effect: any) => ({
+          ...effect,
+          payload: { ...effect.payload },
+        })),
+        conditions: [],
+        conditionInstances: [],
+      },
+    ]);
+
+    const result = await service.break(caster, "manual");
+
+    expect(caster.conditions).toContain("haste_lethargy");
+    expect(caster.conditionInstances).toContainEqual(
+      expect.objectContaining({
+        slug: "haste_lethargy",
+        sourceSpell: "haste",
+        durationRoundsRemaining: 1,
+      }),
+    );
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "condition_applied",
+        data: expect.objectContaining({ slug: "haste_lethargy" }),
+      }),
+    );
+  });
+
+  it("preserva o motivo real ao remover uma área por concentração", async () => {
+    const { caster, participants, encounters } = setup({});
+    caster.appliedEffects = [
+      {
+        kind: "persistent-area",
+        refId: "area-1",
+        description: "Fog Cloud",
+      },
+    ];
+    const area = {
+      id: "area-1",
+      effectKind: "fog",
+      sourceSpell: "fog-cloud",
+      casterParticipantId: caster.id,
+      sourceConcentration: true,
+    };
+    const areas: any = {
+      findOne: jest.fn().mockResolvedValue(area),
+      delete: jest.fn().mockResolvedValue(undefined),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const service = new ConcentrationService(participants, areas, encounters);
+
+    const result = await service.break(caster, "replaced");
+
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "tile_effect_concentration_broken",
+        data: expect.objectContaining({
+          sourceSpell: "fog-cloud",
+          reason: "replaced",
+        }),
+      }),
+    );
+  });
+
+  it("remove do próprio conjurador uma condição incapacitante concentrada", async () => {
+    const { caster, participants, encounters } = setup({});
+    const instance = {
+      id: "self-hold",
+      slug: "paralyzed",
+      source: "spell:hold-person",
+      sourceSpell: "hold-person",
+      sourceConcentration: true,
+    };
+    caster.concentratingOn = "hold-person";
+    caster.conditions = ["paralyzed"];
+    caster.conditionInstances = [instance];
+    caster.appliedEffects = [
+      {
+        kind: "condition",
+        refId: instance.id,
+        targetParticipantId: caster.id,
+        description: "hold-person: paralyzed",
+      },
+    ];
+    participants.findByIds.mockResolvedValue([{ ...caster }]);
+    participants.find.mockResolvedValue([caster]);
+    const areas: any = {
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn().mockResolvedValue(undefined),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const service = new ConcentrationService(participants, areas, encounters);
+
+    const result = await service.break(caster, "incapacitated");
+
+    expect(caster.conditions).toEqual([]);
+    expect(caster.conditionInstances).toEqual([]);
+    expect(caster.isConcentrating).toBe(false);
+    expect(caster.concentratingOn).toBeNull();
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "condition_removed",
+        target_participant_id: caster.id,
+      }),
+    );
+  });
 });
