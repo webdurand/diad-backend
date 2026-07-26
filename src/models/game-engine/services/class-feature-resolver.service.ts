@@ -24,6 +24,7 @@ import {
   applyEffectSpeedModifiers,
   reconcileRemainingMovement,
 } from "./movement.service";
+import { PersistentAreaService } from "./persistent-area.service";
 
 
 export interface ClassFeatureInvokedPayload {
@@ -70,6 +71,8 @@ export class ClassFeatureResolverService {
     private readonly bard: BardFeaturesService,
     @Inject(SummoningService)
     private readonly summoning: SummoningService,
+    @Inject(PersistentAreaService)
+    private readonly persistentArea?: PersistentAreaService,
   ) {}
 
   async resolveInvocation(
@@ -3047,7 +3050,7 @@ export class ClassFeatureResolverService {
         }
       | undefined;
     if (technique === "push" && !saved) {
-      forcedMovement = await this.pushTargetAway(source, target, 15);
+      forcedMovement = await this.pushTargetAway(source, target, 15, events);
       if (forcedMovement) {
         events.push({
           event_type: "movement_forced",
@@ -3093,6 +3096,7 @@ export class ClassFeatureResolverService {
     source: EncounterParticipantEntity,
     target: EncounterParticipantEntity,
     maximumDistanceFt: number,
+    events: GameEventData[],
   ): Promise<
     | {
         from: { x: number; y: number };
@@ -3155,6 +3159,14 @@ export class ClassFeatureResolverService {
     target.positionX = to.x;
     target.positionY = to.y;
     await this.participants.save(target);
+    if (this.persistentArea) {
+      events.push(
+        ...(await this.persistentArea.removeLocationBoundConditionsOutsideAreas(
+          target,
+          to,
+        )),
+      );
+    }
     return {
       from,
       to,

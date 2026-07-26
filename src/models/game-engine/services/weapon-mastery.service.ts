@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
@@ -7,6 +7,7 @@ import { EffectInstanceService } from "./effect-instance.service";
 import { ConditionLifecycleService } from "./condition-lifecycle.service";
 import { GameEventData } from "../interfaces/result.type";
 import { getMonsterSavingThrowBonus } from "./monster-saving-throw";
+import { PersistentAreaService } from "./persistent-area.service";
 
 
 
@@ -75,6 +76,8 @@ export class WeaponMasteryService {
     private readonly dice: DiceService,
     private readonly effectInstances: EffectInstanceService,
     private readonly conditionLifecycle: ConditionLifecycleService,
+    @Inject(PersistentAreaService)
+    private readonly persistentArea?: PersistentAreaService,
   ) {}
 
 
@@ -375,6 +378,14 @@ export class WeaponMasteryService {
     ctx.target.positionX = newX;
     ctx.target.positionY = newY;
     await this.participantRepo.save(ctx.target);
+    if (this.persistentArea) {
+      result.events.push(
+        ...(await this.persistentArea.removeLocationBoundConditionsOutsideAreas(
+          ctx.target,
+          { x: newX, y: newY },
+        )),
+      );
+    }
     result.applied.push("push");
     result.pushedTo = { x: newX, y: newY };
     result.events.push({

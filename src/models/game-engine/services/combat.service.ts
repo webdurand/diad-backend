@@ -1422,6 +1422,7 @@ export class CombatService {
           encounter,
           target,
           20,
+          events,
         );
         if (forcedMovement) {
           events.push({
@@ -7547,6 +7548,7 @@ export class CombatService {
     encounter: EncounterEntity,
     target: EncounterParticipantEntity,
     maximumDistanceFt: number,
+    events: GameEventData[],
   ): Promise<
     | {
         from: { x: number; y: number };
@@ -7622,6 +7624,19 @@ export class CombatService {
       positionX: to.x,
       positionY: to.y,
     });
+    const persistedTarget =
+      (await this.participantRepo.findOne({ where: { id: target.id } })) ??
+      target;
+    persistedTarget.positionX = to.x;
+    persistedTarget.positionY = to.y;
+    const locationBoundConditionEvents =
+      await this.persistentArea.removeLocationBoundConditionsOutsideAreas(
+        persistedTarget,
+        to,
+      );
+    target.conditions = persistedTarget.conditions;
+    target.conditionInstances = persistedTarget.conditionInstances;
+    events.push(...locationBoundConditionEvents);
     await this.persistentArea.relocateAurasByCaster(target.id, to);
     return {
       from,

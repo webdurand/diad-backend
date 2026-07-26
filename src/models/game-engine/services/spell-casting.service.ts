@@ -3417,6 +3417,7 @@ export class SpellCastingService {
           participant,
           target,
           10,
+          events,
         );
         if (forcedMovement) {
           targetResult.forcedMovement = forcedMovement;
@@ -4252,6 +4253,7 @@ export class SpellCastingService {
     caster: EncounterParticipantEntity,
     target: EncounterParticipantEntity,
     distanceFt: number,
+    events: GameEventData[],
   ): Promise<{
     from: { x: number; y: number };
     to: { x: number; y: number };
@@ -4309,6 +4311,19 @@ export class SpellCastingService {
       positionX: destination.x,
       positionY: destination.y,
     });
+    const persistedTarget =
+      (await this.participantRepo.findOne({ where: { id: target.id } })) ??
+      target;
+    persistedTarget.positionX = destination.x;
+    persistedTarget.positionY = destination.y;
+    const locationBoundConditionEvents =
+      await this.persistentArea.removeLocationBoundConditionsOutsideAreas(
+        persistedTarget,
+        destination,
+      );
+    target.conditions = persistedTarget.conditions;
+    target.conditionInstances = persistedTarget.conditionInstances;
+    events.push(...locationBoundConditionEvents);
     await this.persistentArea.relocateAurasByCaster(target.id, destination);
     return {
       from,

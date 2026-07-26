@@ -54,6 +54,15 @@ describe("ClassFeatureResolverService — Open Hand Technique", () => {
     }),
   };
   const dice = { roll: jest.fn() };
+  const persistentArea = {
+    removeLocationBoundConditionsOutsideAreas: jest.fn(async () => [
+      {
+        event_type: "condition_removed",
+        target_participant_id: target.id,
+        data: { slug: "truth_bound", removalReason: "left_area" },
+      },
+    ]),
+  };
 
   const makeService = () =>
     new ClassFeatureResolverService(
@@ -65,6 +74,7 @@ describe("ClassFeatureResolverService — Open Hand Technique", () => {
       {} as never,
       {} as never,
       {} as never,
+      persistentArea as never,
     );
 
   const arm = () => {
@@ -126,6 +136,14 @@ describe("ClassFeatureResolverService — Open Hand Technique", () => {
     expect(
       result.events.find((event) => event.event_type === "save_rolled")?.data,
     ).toMatchObject({ modifier: 4, total: 8, success: false });
+    expect(
+      persistentArea.removeLocationBoundConditionsOutsideAreas,
+    ).toHaveBeenCalledWith(target, { x: 10, y: 6 });
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ event_type: "condition_removed" }),
+      ]),
+    );
   });
 
   it("uses the monster's Dexterity modifier and applies Prone on a failure", async () => {
@@ -148,5 +166,8 @@ describe("ClassFeatureResolverService — Open Hand Technique", () => {
       target,
       expect.objectContaining({ slug: "prone" }),
     );
+    expect(
+      persistentArea.removeLocationBoundConditionsOutsideAreas,
+    ).not.toHaveBeenCalled();
   });
 });

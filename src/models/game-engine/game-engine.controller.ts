@@ -2214,6 +2214,12 @@ export class GameEngineController {
 
       }
     }
+    events.push(
+      ...(await this.persistentArea.removeLocationBoundConditionsOutsideAreas(
+        updated,
+        { x: body.x, y: body.y },
+      )),
+    );
     if (events.length > 0) {
       try {
         const enc = await this.encounterRepo.findOne({

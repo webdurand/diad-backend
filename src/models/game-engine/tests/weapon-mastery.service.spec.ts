@@ -1,6 +1,8 @@
 import { WeaponMasteryService } from "../services/weapon-mastery.service";
 import { DiceService } from "../services/dice.service";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { ConditionLifecycleService } from "../services/condition-lifecycle.service";
+import { PersistentAreaService } from "../services/persistent-area.service";
 
 
 
@@ -344,6 +346,114 @@ describe("WeaponMasteryService", () => {
       });
       expect(res.pushedTo).toBeUndefined();
       expect(target.positionX).toBe(5);
+    });
+
+    it("remove e persiste Zone of Truth quando o Push leva o alvo para fora", async () => {
+      const persistedSnapshots: Array<{
+        positionX: number | null;
+        positionY: number | null;
+        conditions: string[];
+        conditionInstanceIds: string[];
+      }> = [];
+      const participantRepo = {
+        save: jest.fn(async (participant: EncounterParticipantEntity) => {
+          persistedSnapshots.push({
+            positionX: participant.positionX,
+            positionY: participant.positionY,
+            conditions: [...(participant.conditions ?? [])],
+            conditionInstanceIds: (participant.conditionInstances ?? []).map(
+              (condition) => condition.id,
+            ),
+          });
+          return participant;
+        }),
+      };
+      const cleanupDice = new DiceService();
+      const conditionLifecycle = new ConditionLifecycleService(
+        participantRepo as never,
+        {} as never,
+        {} as never,
+        cleanupDice,
+      );
+      const persistentArea = new PersistentAreaService(
+        {
+          find: jest.fn().mockResolvedValue([
+            {
+              id: "zone-1",
+              encounterId: "enc-1",
+              casterParticipantId: "caster-1",
+              sourceSpell: "zone-of-truth",
+              effectKind: "zone-of-truth",
+              shapeKind: "sphere",
+              originCell: { x: 5, y: 5 },
+              radiusCells: 3,
+            },
+          ]),
+        } as never,
+        cleanupDice,
+        conditionLifecycle,
+      );
+      const pushService = new WeaponMasteryService(
+        participantRepo as never,
+        cleanupDice,
+        {} as never,
+        conditionLifecycle,
+        persistentArea,
+      );
+      const attacker = makeParticipant({
+        id: "attacker-1",
+        encounterId: "enc-1",
+        positionX: 6,
+        positionY: 5,
+      });
+      const target = makeParticipant({
+        id: "target-1",
+        encounterId: "enc-1",
+        positionX: 7,
+        positionY: 5,
+        conditions: ["truth_bound"],
+        conditionInstances: [
+          {
+            id: "truth-1",
+            slug: "truth_bound",
+            appliedBy: "caster-1",
+            sourceSpell: "zone-of-truth",
+          },
+        ] as EncounterParticipantEntity["conditionInstances"],
+      });
+
+      const result = await pushService.resolveOnHit({
+        masterySlug: "push",
+        attacker,
+        target,
+        abilityMod: 3,
+        profBonus: 2,
+        damageType: "bludgeoning",
+      });
+
+      expect({ x: target.positionX, y: target.positionY }).toEqual({
+        x: 9,
+        y: 5,
+      });
+      expect(target.conditions).toEqual([]);
+      expect(target.conditionInstances).toEqual([]);
+      expect(persistedSnapshots.at(-1)).toEqual({
+        positionX: 9,
+        positionY: 5,
+        conditions: [],
+        conditionInstanceIds: [],
+      });
+      expect(result.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event_type: "condition_removed",
+            data: expect.objectContaining({
+              slug: "truth_bound",
+              removalReason: "left_area",
+            }),
+          }),
+        ]),
+      );
     });
   });
 
