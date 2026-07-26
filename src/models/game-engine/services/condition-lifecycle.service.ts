@@ -27,6 +27,10 @@ import {
   participantCreatureType,
   protectionBlocksCondition,
 } from "./protection-from-evil-good";
+import {
+  hasFreedomOfMovement,
+  isMagicalMobilityCondition,
+} from "./freedom-of-movement";
 
 export interface ApplyConditionInput {
   slug: ConditionSlug;
@@ -169,15 +173,29 @@ export class ConditionLifecycleService {
       !immunitySource &&
       !blockedByWard &&
       (await this.isBlockedByProtectionFromEvilGood(target, input));
+    const blockedByFreedom =
+      !immunitySource &&
+      !blockedByWard &&
+      !blockedByProtection &&
+      hasFreedomOfMovement(target) &&
+      isMagicalMobilityCondition({
+        slug: input.slug,
+        source: resolveSource(input),
+        sourceSpell: input.sourceSpell ?? null,
+      });
     const auraImmunity =
-      !immunitySource && !blockedByWard && !blockedByProtection
+      !immunitySource &&
+      !blockedByWard &&
+      !blockedByProtection &&
+      !blockedByFreedom
         ? await this.paladinAuras?.getConditionImmunity(target, input.slug)
         : null;
     if (
       immunitySource ||
       blockedByWard ||
       auraImmunity ||
-      blockedByProtection
+      blockedByProtection ||
+      blockedByFreedom
     ) {
       const stubInstance: ConditionInstance = {
         id: randomUUID(),
@@ -206,12 +224,16 @@ export class ConditionLifecycleService {
                 immunitySource ??
                 (blockedByWard
                   ? "natures-ward"
+                  : blockedByFreedom
+                    ? "freedom-of-movement"
                   : auraImmunity?.featureSlug ??
                     "protection-from-evil-and-good"),
               feature: immunitySource
                 ? target.displayName
                 : blockedByWard
                   ? "Land Druid L10"
+                  : blockedByFreedom
+                    ? "Freedom of Movement"
                   : blockedByProtection
                     ? "Protection from Evil and Good"
                     : auraImmunity?.featureSlug === "aura-of-courage"

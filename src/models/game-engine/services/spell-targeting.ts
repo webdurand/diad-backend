@@ -29,6 +29,8 @@ const MULTI_TARGET_CATALOG: Record<
   bless: () => 3,
   aid: () => 3,
   "beacon-of-hope": () => Number.POSITIVE_INFINITY,
+  "freedom-of-movement": (slotLevel: number) =>
+    1 + Math.max(0, slotLevel - 4),
 };
 
 const LEGACY_ACID_SPLASH_TARGETS = () => 2;

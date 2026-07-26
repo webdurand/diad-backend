@@ -36,6 +36,11 @@ import {
   abjureFoesChoiceError,
   chooseAbjureFoesTurnOption,
 } from "./abjure-foes";
+import {
+  hasFreedomOfMovement,
+  isFreedomOfMovementEffect,
+  isMagicalSpeedReduction,
+} from "./freedom-of-movement";
 
 export interface MovementResult {
   participantId: string;
@@ -59,6 +64,7 @@ export interface MovementResult {
 
 export interface MovementState {
   speed: number;
+  swimSpeed?: number;
   remainingMovement: number;
   hasDashed: boolean;
   hasDisengaged: boolean;
@@ -71,6 +77,7 @@ export function applyEffectSpeedModifiers(
   effects: EncounterParticipantEntity["effectInstances"],
 ): number {
   const activeEffects = effects ?? [];
+  const protectedByFreedom = activeEffects.some(isFreedomOfMovementEffect);
   const flightSpeed = activeEffects
     .filter((effect) => effect.kind === "flight_speed")
     .reduce(
@@ -90,7 +97,11 @@ export function applyEffectSpeedModifiers(
       1,
     );
   const reduction = activeEffects
-    .filter((effect) => effect.kind === "speed_reduction")
+    .filter(
+      (effect) =>
+        effect.kind === "speed_reduction" &&
+        !(protectedByFreedom && isMagicalSpeedReduction(effect)),
+    )
     .reduce(
       (sum, effect) =>
         sum +
@@ -121,6 +132,20 @@ export function reconcileRemainingMovement(
     0,
     (currentRemaining ?? previousSpeed) + (newSpeed - previousSpeed),
   );
+}
+
+export function canIgnoreDifficultTerrain(
+  participant: Pick<EncounterParticipantEntity, "effectInstances">,
+  hasLandsStride: boolean,
+): boolean {
+  return hasLandsStride || hasFreedomOfMovement(participant);
+}
+
+export function getFreedomSwimSpeed(
+  speed: number,
+  participant: Pick<EncounterParticipantEntity, "effectInstances">,
+): number | null {
+  return hasFreedomOfMovement(participant) ? speed : null;
 }
 
 @Injectable()
@@ -242,8 +267,10 @@ export class MovementService {
     const speed = await this.getSpeed(participant, ownerUserId);
     const canMove = canMoveFromConditions(participant.conditions);
 
+    const swimSpeed = getFreedomSwimSpeed(speed, participant);
     return success({
       speed,
+      ...(swimSpeed != null ? { swimSpeed } : {}),
       remainingMovement: canMove
         ? (participant.movementRemaining ?? speed)
         : 0,
@@ -386,6 +413,11 @@ export class MovementService {
 
       }
     }
+    const protectedByFreedom = hasFreedomOfMovement(participant);
+    const ignoresDifficultTerrain = canIgnoreDifficultTerrain(
+      participant,
+      hasLandsStride,
+    );
 
 
 
@@ -406,7 +438,7 @@ export class MovementService {
       targetX,
       targetY,
       difficultCells,
-      hasLandsStride,
+      ignoresDifficultTerrain,
       isProne,
     );
 
@@ -510,7 +542,7 @@ export class MovementService {
           finalX,
           finalY,
           difficultCells,
-          hasLandsStride,
+          ignoresDifficultTerrain,
           isProne,
         ).costFt
       : distanceFt;
@@ -569,6 +601,7 @@ export class MovementService {
           distanceFt: finalCostFt,
           difficultCellsCrossed,
           hasLandsStride,
+          bypassedByFreedomOfMovement: protectedByFreedom,
           remainingMovement: participant.movementRemaining,
           stoppedByTileEffect: stopAtCell != null,
         },
@@ -583,8 +616,11 @@ export class MovementService {
         actor_participant_id: participantId,
         data: {
           cellsCrossed: difficultCellsCrossed,
-          extraCostFt: hasLandsStride ? 0 : difficultCellsCrossed * 5,
+          extraCostFt: ignoresDifficultTerrain
+            ? 0
+            : difficultCellsCrossed * 5,
           bypassedByLandsStride: hasLandsStride,
+          bypassedByFreedomOfMovement: protectedByFreedom,
         },
       });
     }
@@ -763,7 +799,7 @@ export class MovementService {
     toX: number,
     toY: number,
     difficultCells: Set<string>,
-    hasLandsStride: boolean,
+    ignoresDifficultTerrain: boolean,
     isProne: boolean,
   ): {
     costFt: number;
@@ -793,7 +829,7 @@ export class MovementService {
       if (isDiff) crossed++;
       cost += movementCellCostFt({
         difficultTerrain: isDiff,
-        ignoresDifficultTerrain: hasLandsStride,
+        ignoresDifficultTerrain,
         prone: isProne,
       });
     }
@@ -804,7 +840,7 @@ export class MovementService {
       if (isDiff) crossed++;
       cost += movementCellCostFt({
         difficultTerrain: isDiff,
-        ignoresDifficultTerrain: hasLandsStride,
+        ignoresDifficultTerrain,
         prone: isProne,
       });
     }
@@ -815,7 +851,7 @@ export class MovementService {
       if (isDiff) crossed++;
       cost += movementCellCostFt({
         difficultTerrain: isDiff,
-        ignoresDifficultTerrain: hasLandsStride,
+        ignoresDifficultTerrain,
         prone: isProne,
       });
     }

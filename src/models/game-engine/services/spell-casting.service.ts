@@ -122,6 +122,10 @@ import {
   type DispelMagicTarget,
   type PreparedDispelMagicTarget,
 } from "./dispel-magic.service";
+import {
+  isMagicalMobilityCondition,
+  isMagicalSpeedReduction,
+} from "./freedom-of-movement";
 
 export function concentrationSupportsSpell(
   caster: Pick<
@@ -2303,7 +2307,8 @@ export class SpellCastingService {
       isChainLightning ||
       normalizedSpellSlug === "aid" ||
       normalizedSpellSlug === "bless" ||
-      normalizedSpellSlug === "beacon-of-hope";
+      normalizedSpellSlug === "beacon-of-hope" ||
+      normalizedSpellSlug === "freedom-of-movement";
     if (
       requiresDistinctTargets &&
       new Set(effectiveTargetIds).size !== effectiveTargetIds.length
@@ -2713,6 +2718,29 @@ export class SpellCastingService {
     const precondFail = checkSpellPreconditions(dto.spellSlug, targetMeta);
     if (precondFail) {
       return failure(precondFail.message, precondFail.code as any);
+    }
+    if (normalizedSpellSlug === "freedom-of-movement") {
+      if (
+        effectiveTargetIds.length === 0 ||
+        targetMeta.length !== effectiveTargetIds.length
+      ) {
+        return failure(
+          "Freedom of Movement exige ao menos uma criatura disposta.",
+          GameErrorCode.INVALID_TARGET,
+        );
+      }
+      const unwillingTarget = targetMeta.find(
+        ({ participant: target }) =>
+          !target ||
+          (target.id !== participant.id &&
+            target.faction !== participant.faction),
+      );
+      if (unwillingTarget) {
+        return failure(
+          "Freedom of Movement só pode afetar uma criatura disposta.",
+          GameErrorCode.INVALID_TARGET,
+        );
+      }
     }
 
 
@@ -3711,7 +3739,7 @@ export class SpellCastingService {
         }
         cleanedSpellEffectTargets.add(cleanupKey);
       }
-      const { effect, events: effectEvents } =
+      const { effect, events: effectEvents, applied } =
         await this.effectInstanceService.addEffect(targetP, {
           ...m.input,
           payload: {
@@ -3719,11 +3747,52 @@ export class SpellCastingService {
             slotLevel: m.input.payload.slotLevel ?? dto.slotLevel,
           },
         });
-      appliedEffectIds.push(effect.id);
+      if (applied) appliedEffectIds.push(effect.id);
       events.push(...effectEvents);
+      if (m.input.kind === "freedom_of_movement") {
+        let releasedConditionCount = 0;
+        for (const condition of (targetP.conditionInstances ?? []).filter(
+          isMagicalMobilityCondition,
+        )) {
+          const removed =
+            await this.conditionLifecycle.removeConditionInstance(
+              targetP,
+              condition.id,
+              "freedom_of_movement",
+            );
+          if (removed.removed) releasedConditionCount += 1;
+          events.push(...removed.events);
+        }
+        let blockedSpeedReductionCount = 0;
+        for (const reduction of (targetP.effectInstances ?? []).filter(
+          isMagicalSpeedReduction,
+        )) {
+          const removed = await this.effectInstanceService.removeEffect(
+            targetP,
+            reduction.id,
+            "manual",
+          );
+          if (removed.removed) blockedSpeedReductionCount += 1;
+          events.push(...removed.events);
+        }
+        events.push({
+          event_type: "freedom_of_movement_applied",
+          actor_participant_id: participant.id,
+          target_participant_id: targetP.id,
+          data: {
+            spellSlug: "freedom-of-movement",
+            slotLevel: dto.slotLevel,
+            durationRounds: 600,
+            swimSpeedEqualsSpeed: true,
+            releasedConditionCount,
+            blockedSpeedReductionCount,
+          },
+        });
+      }
       if (
         m.input.kind === "flight_speed" ||
-        m.input.kind === "speed_multiplier"
+        m.input.kind === "speed_multiplier" ||
+        m.input.kind === "freedom_of_movement"
       ) {
         const movementSpeedAfter = await this.movementService.getBaseSpeed(
           targetP,

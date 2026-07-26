@@ -36,6 +36,11 @@ import {
 } from "./abjure-foes";
 import { InventoryService } from "src/models/characters/services/inventory.service";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import {
+  FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT,
+  hasFreedomOfMovement,
+  isNonmagicalFreedomRestraint,
+} from "./freedom-of-movement";
 
 
 @Injectable()
@@ -95,6 +100,9 @@ export class GenericActionsService {
         "Fear obriga esta criatura a usar Disparada e fugir do conjurador.",
         "CONDITION_PREVENTS_ACTION",
       );
+    }
+    if (dto.kind === "freedom-escape") {
+      return this.handleFreedomEscape(participant, dto.ownerUserId);
     }
 
     const useHasteAction = dto.useHasteAction === true;
@@ -996,6 +1004,87 @@ export class GenericActionsService {
             modifier,
             total,
             success: escaped,
+          },
+        ],
+      },
+      timestamp: new Date().toISOString(),
+    };
+    return success({ step, finalState: this.snapshotState(p) }, events);
+  }
+
+  private async handleFreedomEscape(
+    p: EncounterParticipantEntity,
+    ownerUserId?: string,
+  ): Promise<GameResult<ExecuteResult>> {
+    if (!hasFreedomOfMovement(p)) {
+      return failure(GameErrorCode.INVALID_ACTION);
+    }
+    const restraintInstances = (p.conditionInstances ?? []).filter(
+      isNonmagicalFreedomRestraint,
+    );
+    const legacyRestraints = (p.conditions ?? []).filter(
+      (slug) =>
+        (slug === "grappled" || slug === "restrained") &&
+        !restraintInstances.some((condition) => condition.slug === slug),
+    );
+    if (restraintInstances.length === 0 && legacyRestraints.length === 0) {
+      return failure(GameErrorCode.INVALID_ACTION);
+    }
+
+    const speed = await this.getBaseSpeed(p, ownerUserId);
+    const remainingMovement = p.movementRemaining ?? speed;
+    if (remainingMovement < FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT) {
+      return failure(
+        `Freedom of Movement exige ${FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT}ft de movimento; restam ${remainingMovement}ft.`,
+        "INSUFFICIENT_MOVEMENT",
+      );
+    }
+
+    const released = new Set<string>(legacyRestraints);
+    const events: GameEventData[] = [];
+    for (const condition of restraintInstances) {
+      const removed = await this.conditionLifecycle.removeConditionInstance(
+        p,
+        condition.id,
+        "freedom_of_movement",
+      );
+      if (removed.removed) released.add(condition.slug);
+      events.push(...removed.events);
+    }
+    if (legacyRestraints.length > 0) {
+      p.conditions = (p.conditions ?? []).filter(
+        (slug) => !legacyRestraints.includes(slug),
+      );
+    }
+    if (!(p.conditions ?? []).includes("grappled")) {
+      p.grappledByParticipantId = null;
+    }
+    p.movementRemaining =
+      remainingMovement - FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT;
+    await this.participantRepo.save(p);
+
+    const releasedSlugs = Array.from(released);
+    events.push(
+      this.toGameEvent("freedom_of_movement_escape", p.id, {
+        releasedConditions: releasedSlugs,
+        movementSpent: FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT,
+        movementRemaining: p.movementRemaining,
+      }),
+    );
+    const summary = `${p.displayName} gastou ${FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT}ft com Freedom of Movement e escapou de ${releasedSlugs.join(", ")}.`;
+    const step: ActionStep = {
+      kind: "freedom-escape",
+      payload: { participantId: p.id },
+      result: {
+        ok: true,
+        summary,
+        events: [
+          {
+            type: "freedom_of_movement_escape",
+            participantId: p.id,
+            releasedConditions: releasedSlugs,
+            movementSpent: FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT,
+            movementRemaining: p.movementRemaining,
           },
         ],
       },

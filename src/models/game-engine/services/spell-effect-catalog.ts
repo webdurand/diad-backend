@@ -340,6 +340,25 @@ export function materializeSpellEffects(
         }),
       );
     }
+    case "freedom-of-movement": {
+      const maximumTargets = 1 + Math.max(0, ctx.slotLevel - 4);
+      return Array.from(new Set(ctx.targetParticipantIds))
+        .slice(0, maximumTargets)
+        .map((targetParticipantId) => ({
+          targetParticipantId,
+          input: {
+            kind: "freedom_of_movement",
+            sourceSpellSlug: "freedom-of-movement",
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: {
+              slotLevel: ctx.slotLevel,
+              equalsWalkingSpeed: true,
+            },
+            expiresAt: { kind: "rounds", value: 600 },
+            requiresConcentration: false,
+          },
+        }));
+    }
 
 
     case "blur": {

@@ -703,6 +703,7 @@ export class AiTurnService {
         case "search":
         case "use-object":
         case "escape-web":
+        case "freedom-escape":
         case "flee-fear":
         case "wake-hypnotized": {
           const dto = toGenericActionDto(participantId, step);
@@ -871,6 +872,11 @@ function toGenericActionDto(
     case "escape-web":
       return {
         kind: "escape-web",
+        participantId,
+      } as GenericActionDto;
+    case "freedom-escape":
+      return {
+        kind: "freedom-escape",
         participantId,
       } as GenericActionDto;
     case "flee-fear":

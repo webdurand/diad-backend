@@ -113,6 +113,11 @@ import {
   hasBeaconOfHope,
   hasBeaconWisdomSaveAdvantage,
 } from "./beacon-of-hope";
+import {
+  FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT,
+  hasFreedomOfMovement,
+  isNonmagicalFreedomRestraint,
+} from "./freedom-of-movement";
 
 
 
@@ -2698,6 +2703,19 @@ export class CombatService {
     const webRestraint = (participant.conditionInstances ?? []).find(
       isWebRestraint,
     );
+    const freedomRestraints = (participant.conditionInstances ?? []).filter(
+      isNonmagicalFreedomRestraint,
+    );
+    const hasLegacyFreedomRestraint = (participant.conditions ?? []).some(
+      (slug) =>
+        (slug === "grappled" || slug === "restrained") &&
+        !(participant.conditionInstances ?? []).some(
+          (condition) => condition.slug === slug,
+        ),
+    );
+    const canUseFreedomEscape =
+      hasFreedomOfMovement(participant) &&
+      (freedomRestraints.length > 0 || hasLegacyFreedomRestraint);
     const hasConjureWoodlandBeings =
       participant.isConcentrating &&
       participant.concentratingOn
@@ -2745,6 +2763,21 @@ export class CombatService {
           } as TurnActionBlock,
         ]
       : [
+          ...(canUseFreedomEscape
+            ? [
+                {
+                  id: "generic-freedom-escape",
+                  name: "Escapar com Freedom of Movement",
+                  kind: "condition-escape",
+                  timing: "movement",
+                  source: "generic",
+                  sourceLabel: "Freedom of Movement",
+                  description:
+                    "Gasta 5 pés de movimento e escapa automaticamente de Agarrado ou Restringido não mágico.",
+                  movementCostFt: FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT,
+                } as TurnActionBlock,
+              ]
+            : []),
           ...(webRestraint
             ? [
                 {

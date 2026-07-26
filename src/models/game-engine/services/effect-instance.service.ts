@@ -12,6 +12,10 @@ import type {
 } from "../interfaces/combat.interfaces";
 import type { GameEventData } from "../interfaces/result.type";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
+import {
+  hasFreedomOfMovement,
+  isMagicalSpeedReduction,
+} from "./freedom-of-movement";
 
 export interface AddEffectInput {
   kind: EffectInstanceKind;
@@ -72,7 +76,11 @@ export class EffectInstanceService {
   async addEffect(
     target: EncounterParticipantEntity,
     input: AddEffectInput,
-  ): Promise<{ effect: EffectInstance; events: GameEventData[] }> {
+  ): Promise<{
+    effect: EffectInstance;
+    events: GameEventData[];
+    applied: boolean;
+  }> {
     const payload = { ...input.payload };
     if (
       input.kind === "hit_point_maximum_bonus" &&
@@ -95,6 +103,28 @@ export class EffectInstanceService {
       requiresConcentration: input.requiresConcentration,
       appliedAt: new Date().toISOString(),
     };
+    if (
+      hasFreedomOfMovement(target) &&
+      isMagicalSpeedReduction(effect)
+    ) {
+      return {
+        effect,
+        applied: false,
+        events: [
+          {
+            event_type: "effect_blocked_by_freedom_of_movement",
+            actor_participant_id: input.sourceCasterParticipantId,
+            target_participant_id: target.id,
+            data: {
+              kind: input.kind,
+              sourceSpellSlug: input.sourceSpellSlug,
+              sourceFeatureSlug: input.sourceFeatureSlug,
+              freedomSourceSpellSlug: "freedom-of-movement",
+            },
+          },
+        ],
+      };
+    }
 
     target.effectInstances = [...(target.effectInstances ?? []), effect];
     await this.participants.save(target);
@@ -133,7 +163,7 @@ export class EffectInstanceService {
       }
     }
 
-    return { effect, events };
+    return { effect, events, applied: true };
   }
 
 

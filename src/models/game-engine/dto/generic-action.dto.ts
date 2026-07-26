@@ -25,6 +25,7 @@ export type GenericActionKind =
   | "search"
   | "use-object"
   | "escape-web"
+  | "freedom-escape"
   | "flee-fear"
   | "wake-hypnotized";
 
@@ -87,6 +88,7 @@ export class GenericActionDto {
     search: "search",
     "use-object": "use-object",
     "escape-web": "escape-web",
+    "freedom-escape": "freedom-escape",
     "flee-fear": "flee-fear",
     "wake-hypnotized": "wake-hypnotized",
   } as const)

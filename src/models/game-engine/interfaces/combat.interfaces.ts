@@ -345,6 +345,7 @@ export type PlannedActionStep =
       };
     }
   | { kind: "escape-web" }
+  | { kind: "freedom-escape" }
   | { kind: "flee-fear" }
   | { kind: "wake-hypnotized"; targetParticipantId: string }
   | { kind: "end-turn" };
@@ -496,7 +497,9 @@ export type EffectInstanceKind =
   | "statblock_swap"
   | "inspiration_die"
   | "flight_speed"
+  | "swim_speed"
   | "speed_multiplier"
+  | "freedom_of_movement"
   | "extra_action"
   | "true_sight"
   | "damage_immunity_threshold"
@@ -626,6 +629,8 @@ export interface EffectInstancePayload {
   radiusFeet?: number;
   armorClassBonus?: number;
   dexteritySaveBonus?: number;
+  magical?: boolean;
+  equalsWalkingSpeed?: boolean;
 }
 
 

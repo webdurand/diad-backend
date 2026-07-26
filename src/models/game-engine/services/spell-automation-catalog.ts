@@ -484,6 +484,18 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
     ],
   },
   {
+    slug: "freedom-of-movement",
+    status: "ready",
+    behaviorKind: "buff",
+    automationTags: [
+      "buff",
+      "touch",
+      "multi_target",
+      "mobility",
+      "no_concentration",
+    ],
+  },
+  {
     slug: "summon-elemental",
     status: "ready",
     behaviorKind: "summon",
