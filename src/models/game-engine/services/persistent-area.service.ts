@@ -1078,6 +1078,7 @@ export class PersistentAreaService {
     const events: GameEventData[] = [];
     let damage = 0;
     let conditionApplied: ConditionSlug | null = null;
+    let pendingCondition: ConditionSlug | null = null;
     let savePassed = true;
 
     if (area.auraFollowsCaster && target.id === area.casterParticipantId) {
@@ -1132,18 +1133,7 @@ export class PersistentAreaService {
       });
 
       if (!passed && save.onFailCondition) {
-        conditionApplied = save.onFailCondition;
-        events.push({
-          event_type: "tile_effect_condition_applied",
-          target_participant_id: target.id,
-          data: {
-            areaId: area.id,
-            effectKind: area.effectKind,
-            conditionSlug: save.onFailCondition,
-            narrativeDescriptor: area.narrativeDescriptor,
-            tactical: area.tacticalMetadata,
-          },
-        });
+        pendingCondition = save.onFailCondition;
       }
     }
 
@@ -1203,10 +1193,10 @@ export class PersistentAreaService {
       .toLowerCase()
       .replace(/-(phb|xphb|srd52)$/, "");
     if (
-      conditionApplied &&
+      pendingCondition &&
       !(target.conditionInstances ?? []).some(
         (instance) =>
-          instance.slug === conditionApplied &&
+          instance.slug === pendingCondition &&
           instance.appliedBy === area.casterParticipantId &&
           instance.sourceSpell
             ?.toLowerCase()
@@ -1214,23 +1204,40 @@ export class PersistentAreaService {
       )
     ) {
       const applied = await this.conditionLifecycle.applyCondition(target, {
-        slug: conditionApplied,
+        slug: pendingCondition,
         appliedBy: area.casterParticipantId,
         sourceSpell: area.sourceSpell,
         // Falling prone is an instantaneous result of the failed save. It
         // remains until the creature stands even if the originating area ends.
         sourceConcentration:
-          area.sourceConcentration && conditionApplied !== "prone",
+          area.sourceConcentration && pendingCondition !== "prone",
         saveAbility: save?.ability ?? null,
         saveDc: area.saveDc,
         repeatSaveTiming: "never",
         durationRoundsRemaining:
-          conditionApplied === "prone"
+          pendingCondition === "prone"
             ? null
             : area.durationRoundsRemaining,
       });
+      const wasApplied = applied.events.some(
+        (event) => event.event_type === "condition_applied",
+      );
+      if (wasApplied) {
+        conditionApplied = pendingCondition;
+        events.push({
+          event_type: "tile_effect_condition_applied",
+          target_participant_id: target.id,
+          data: {
+            areaId: area.id,
+            effectKind: area.effectKind,
+            conditionSlug: pendingCondition,
+            narrativeDescriptor: area.narrativeDescriptor,
+            tactical: area.tacticalMetadata,
+          },
+        });
+      }
       events.push(...applied.events);
-      if (area.effectKind === "conjure-elemental") {
+      if (area.effectKind === "conjure-elemental" && wasApplied) {
         area.tacticalMetadata = {
           ...(area.tacticalMetadata ?? {
             tags: ["damage", "control", "restrained"],

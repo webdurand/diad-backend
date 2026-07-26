@@ -532,6 +532,203 @@ describe("PersistentAreaService runtime triggers", () => {
     );
   });
 
+  it("does not announce a persistent-area condition when immunity blocks it", async () => {
+    const persistedArea = {
+      id: "web-1",
+      encounterId: "enc-1",
+      casterParticipantId: "caster-1",
+      sourceSpell: "web",
+      effectKind: "web",
+      shapeKind: "cube",
+      originCell: { x: 10, y: 10 },
+      radiusCells: 4,
+      slotLevel: 2,
+      saveDc: 15,
+      durationRoundsRemaining: 600,
+      sourceConcentration: true,
+    } as unknown as PersistentAreaEffectEntity;
+    const areaRepo = {
+      find: jest.fn().mockResolvedValue([persistedArea]),
+    } as unknown as Repository<PersistentAreaEffectEntity>;
+    const dice = {
+      roll: jest.fn().mockReturnValue(1),
+    } as unknown as DiceService;
+    const conditionLifecycle = {
+      applyCondition: jest.fn().mockResolvedValue({
+        events: [
+          {
+            event_type: "condition_blocked_by_immunity",
+            target_participant_id: "target-1",
+            data: {
+              slug: "restrained",
+              source: "freedom-of-movement",
+              feature: "Freedom of Movement",
+            },
+          },
+        ],
+        instance: {
+          id: "blocked-restrained",
+          slug: "restrained",
+          durationRoundsRemaining: 0,
+        },
+        concentrationBroken: false,
+      }),
+    } as unknown as ConditionLifecycleService;
+    const service = new PersistentAreaService(
+      areaRepo,
+      dice,
+      conditionLifecycle,
+    );
+    const target = {
+      id: "target-1",
+      encounterId: "enc-1",
+      displayName: "Freedom target",
+      positionX: 10,
+      positionY: 10,
+      isDefeated: false,
+      conditions: [],
+      conditionInstances: [],
+      effectInstances: [
+        {
+          slug: "freedom-of-movement",
+          isMagical: true,
+          durationRoundsRemaining: 600,
+        },
+      ],
+    } as unknown as EncounterParticipantEntity;
+
+    const result = await service.resolveStartTurnIn(
+      target,
+      async () => ({ modifier: 1 }),
+      "7:0",
+    );
+
+    expect(conditionLifecycle.applyCondition).toHaveBeenCalledWith(
+      target,
+      expect.objectContaining({
+        slug: "restrained",
+        sourceSpell: "web",
+      }),
+    );
+    expect(result.conditionsApplied).toEqual([]);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "condition_blocked_by_immunity",
+      }),
+    );
+    expect(result.events).not.toContainEqual(
+      expect.objectContaining({
+        event_type: "tile_effect_condition_applied",
+      }),
+    );
+  });
+
+  it("does not stop entry when immunity blocks a magical restraint", async () => {
+    const area = {
+      id: "elemental-freedom-1",
+      encounterId: "enc-1",
+      casterParticipantId: "caster-1",
+      sourceSpell: "conjure-elemental",
+      effectKind: "conjure-elemental",
+      shapeKind: "cube",
+      originCell: { x: 5, y: 5 },
+      radiusCells: 4,
+      slotLevel: 5,
+      saveDc: 17,
+      damageType: "force",
+      durationRoundsRemaining: 100,
+      sourceConcentration: true,
+      speedMultiplier: 0,
+      tacticalMetadata: {
+        tags: ["damage", "control", "restrained"],
+        tacticalValue: 9,
+        beneficiaryFaction: "caster",
+        targeting: "hostile_only",
+        casterFaction: "enemy",
+        restrainedTargetId: null,
+      },
+    } as unknown as PersistentAreaEffectEntity;
+    const areaRepo = {
+      find: jest.fn().mockResolvedValue([area]),
+      save: jest.fn(async (value) => value),
+    } as unknown as Repository<PersistentAreaEffectEntity>;
+    const dice = {
+      roll: jest.fn().mockReturnValue(1),
+      rollExpression: jest.fn().mockReturnValue({ total: 12 }),
+    } as unknown as DiceService;
+    const conditionLifecycle = {
+      applyCondition: jest.fn().mockResolvedValue({
+        events: [
+          {
+            event_type: "condition_blocked_by_immunity",
+            target_participant_id: "target-1",
+            data: {
+              slug: "restrained",
+              source: "freedom-of-movement",
+              feature: "Freedom of Movement",
+            },
+          },
+        ],
+        instance: {
+          id: "blocked-restrained",
+          slug: "restrained",
+          durationRoundsRemaining: 0,
+        },
+        concentrationBroken: false,
+      }),
+    } as unknown as ConditionLifecycleService;
+    const service = new PersistentAreaService(
+      areaRepo,
+      dice,
+      conditionLifecycle,
+    );
+    const target = {
+      id: "target-1",
+      encounterId: "enc-1",
+      displayName: "Freedom target",
+      faction: "ally",
+      positionX: 4,
+      positionY: 6,
+      isDefeated: false,
+      conditions: [],
+      conditionInstances: [],
+      effectInstances: [],
+    } as unknown as EncounterParticipantEntity;
+
+    const result = await service.resolveEntry(
+      target,
+      { x: 6, y: 6 },
+      "enc-1",
+      async () => ({ modifier: 1 }),
+      "8:0",
+      { x: 4, y: 6 },
+    );
+
+    expect(result.conditionsApplied).toEqual([]);
+    expect(result.stopMovement).toBe(false);
+    expect(area.tacticalMetadata?.restrainedTargetId).toBeNull();
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "tile_effect_save_rolled",
+      }),
+    );
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "condition_blocked_by_immunity",
+      }),
+    );
+    expect(result.events).not.toContainEqual(
+      expect.objectContaining({
+        event_type: "tile_effect_condition_applied",
+      }),
+    );
+    expect(result.events).not.toContainEqual(
+      expect.objectContaining({
+        event_type: "tile_effect_movement_stopped",
+      }),
+    );
+  });
+
   it("applies Conjure Animals when the moving pack newly reaches a creature", async () => {
     const area = {
       id: "animals-1",

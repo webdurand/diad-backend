@@ -2716,6 +2716,7 @@ export class CombatService {
     const canUseFreedomEscape =
       hasFreedomOfMovement(participant) &&
       (freedomRestraints.length > 0 || hasLegacyFreedomRestraint);
+    const movementBudget = participant.movementRemaining ?? speed;
     const hasConjureWoodlandBeings =
       participant.isConcentrating &&
       participant.concentratingOn
@@ -2846,6 +2847,10 @@ export class CombatService {
     const canTakeAction =
       !dyingStateBlocksAction &&
       this.conditionEffects.canTakeAction(participant.conditions ?? []);
+    const canSpendFreedomEscapeMovement =
+      canUseFreedomEscape &&
+      canTakeAction &&
+      movementBudget >= FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT;
     const actionBlockedBy = canTakeAction
       ? undefined
       : dyingStateBlocksAction
@@ -2887,9 +2892,10 @@ export class CombatService {
       canMove:
         canMove &&
         !dyingStateBlocksAction &&
-        (participant.movementRemaining ?? speed) > 0,
-      remainingMovement: canMove && !dyingStateBlocksAction
-        ? (participant.movementRemaining ?? speed)
+        movementBudget > 0,
+      remainingMovement:
+        (canMove && !dyingStateBlocksAction) || canSpendFreedomEscapeMovement
+        ? movementBudget
         : 0,
       speed,
       canTakeAction,

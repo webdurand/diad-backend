@@ -314,5 +314,7 @@ describe("Freedom of Movement — SRD 5.2", () => {
       "freedom_of_movement_escape",
     );
     expect(result.value.step.result.summary).toContain("gastou 5ft");
+    expect(result.value.step.result.summary).toContain("Agarrado");
+    expect(result.value.step.result.summary).not.toContain("grappled");
   });
 });

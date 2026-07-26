@@ -790,4 +790,56 @@ describe("CombatService.getTurnActions — US13 bucketing (Spec 005)", () => {
     expect(res.value.canMove).toBe(false);
     expect(res.value.remainingMovement).toBe(0);
   });
+
+  it("expõe o orçamento reservado para escapar com Freedom of Movement", async () => {
+    const h = createHarness();
+    const restrainedPc = makeParticipant({
+      id: "restrained-with-freedom",
+      type: "pc",
+      characterId: "char-restrained",
+      conditions: ["restrained"],
+      conditionInstances: [
+        {
+          id: "web-restraint",
+          slug: "restrained",
+          source: "ability:giant-spider-web",
+          sourceSpell: null,
+          sourceConcentration: false,
+          repeatSaveTiming: "never",
+        },
+      ],
+      effectInstances: [
+        {
+          id: "freedom",
+          kind: "freedom_of_movement",
+          sourceSpellSlug: "freedom-of-movement",
+          expiresAt: { kind: "rounds", value: 600 },
+          requiresConcentration: false,
+        },
+      ],
+      movementRemaining: 30,
+    });
+    h.participants.set(restrainedPc.id, restrainedPc);
+    h.encounter.turnOrder = [restrainedPc.id];
+
+    const res = await h.combat.getTurnActions(
+      h.encounter.id,
+      restrainedPc.id,
+      "dm-1",
+    );
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.canMove).toBe(false);
+    expect(res.value.remainingMovement).toBe(30);
+    expect(res.value.genericActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "generic-freedom-escape",
+          timing: "movement",
+          movementCostFt: 5,
+        }),
+      ]),
+    );
+  });
 });

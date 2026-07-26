@@ -1064,6 +1064,9 @@ export class GenericActionsService {
     await this.participantRepo.save(p);
 
     const releasedSlugs = Array.from(released);
+    const releasedLabels = releasedSlugs.map((slug) =>
+      slug === "grappled" ? "Agarrado" : "Restrito",
+    );
     events.push(
       this.toGameEvent("freedom_of_movement_escape", p.id, {
         releasedConditions: releasedSlugs,
@@ -1071,7 +1074,7 @@ export class GenericActionsService {
         movementRemaining: p.movementRemaining,
       }),
     );
-    const summary = `${p.displayName} gastou ${FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT}ft com Freedom of Movement e escapou de ${releasedSlugs.join(", ")}.`;
+    const summary = `${p.displayName} gastou ${FREEDOM_OF_MOVEMENT_ESCAPE_COST_FT}ft com Freedom of Movement e encerrou ${releasedLabels.join(" e ")}.`;
     const step: ActionStep = {
       kind: "freedom-escape",
       payload: { participantId: p.id },
