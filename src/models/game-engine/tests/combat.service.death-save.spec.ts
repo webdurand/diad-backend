@@ -15,6 +15,7 @@ type MockParticipant = {
   maxHp?: number;
   tempHp: number;
   conditions: string[];
+  effectInstances?: any[];
   isConcentrating: boolean;
   concentratingOn?: string;
   legendaryActionsUsed: number;
@@ -572,6 +573,50 @@ describe("CombatService — US1 death-save flow", () => {
         }),
       );
     });
+
+    it("maximiza a cura recebida sob Beacon of Hope", async () => {
+      const h = createHarness();
+      const monster = makeParticipant({
+        id: "monster-beacon-heal",
+        type: "monster",
+        currentHp: 2,
+        maxHp: 20,
+        monster: { slug: "guard", name: "Guard" },
+        effectInstances: [
+          {
+            kind: "beacon_of_hope",
+            requiresConcentration: true,
+          },
+        ],
+      });
+      h.participants.set(monster.id, monster);
+
+      const res = await h.combat.applyHealing(h.encounter.id, {
+        targetParticipantId: monster.id,
+        amount: 4,
+        maximumAmount: 11,
+        sourceSpellSlug: "cure-wounds",
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value).toMatchObject({
+        hpAfter: 13,
+        healingApplied: 11,
+        healingMaximized: true,
+      });
+      expect(res.events).toContainEqual(
+        expect.objectContaining({
+          event_type: "healing_maximized_by_beacon_of_hope",
+          data: expect.objectContaining({
+            sourceSpell: "cure-wounds",
+            rolledHealing: 4,
+            maximumHealing: 11,
+          }),
+        }),
+      );
+    });
   });
 
   describe("resolveDeathSave", () => {
@@ -692,6 +737,62 @@ describe("CombatService — US1 death-save flow", () => {
       expect(res.value.dyingState).toBe("dead");
       expect(pc.dyingState).toBe("dead");
       expect(pc.isDefeated).toBe(true);
+    });
+
+    it("rolls both d20s and keeps the higher result under Beacon of Hope", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "pc-beacon-death-save",
+        characterId: "char-beacon-death-save",
+        dyingState: "dying",
+        effectInstances: [
+          {
+            kind: "beacon_of_hope",
+            requiresConcentration: true,
+          },
+        ],
+      });
+      h.participants.set(pc.id, pc);
+      h.deathSavesByChar[pc.characterId!] = {
+        successes: 0,
+        failures: 0,
+      };
+      jest.spyOn(h.diceService, "rollWithAdvantage").mockReturnValueOnce({
+        roll1: 4,
+        roll2: 17,
+        chosen: 17,
+        discarded: 4,
+      });
+
+      const res = await h.combat.resolveDeathSave(
+        h.encounter.id,
+        pc.id,
+        "u1",
+      );
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value).toMatchObject({
+        roll: 17,
+        hasAdvantage: true,
+        advantage: {
+          roll1: 4,
+          roll2: 17,
+          chosen: 17,
+          discarded: 4,
+        },
+      });
+      expect(res.events[0]).toMatchObject({
+        event_type: "death_save",
+        data: {
+          sourceSpell: "beacon-of-hope",
+          advantage: {
+            roll1: 4,
+            roll2: 17,
+            chosen: 17,
+          },
+        },
+      });
     });
   });
 

@@ -150,6 +150,19 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
     automationTags: ["buff", "multi_target", "hit_points"],
   },
   {
+    slug: "beacon-of-hope",
+    status: "ready",
+    behaviorKind: "buff",
+    automationTags: [
+      "concentration",
+      "buff",
+      "multi_target",
+      "wisdom_save_advantage",
+      "death_save_advantage",
+      "maximum_healing",
+    ],
+  },
+  {
     slug: "poison-spray",
     status: "ready",
     behaviorKind: "save_damage",

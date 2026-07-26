@@ -325,6 +325,21 @@ export function materializeSpellEffects(
           },
         }));
     }
+    case "beacon-of-hope": {
+      return Array.from(new Set(ctx.targetParticipantIds)).map(
+        (targetParticipantId) => ({
+          targetParticipantId,
+          input: {
+            kind: "beacon_of_hope",
+            sourceSpellSlug: "beacon-of-hope",
+            sourceCasterParticipantId: ctx.casterParticipantId,
+            payload: {},
+            expiresAt: { kind: "concentration" },
+            requiresConcentration: true,
+          },
+        }),
+      );
+    }
 
 
     case "blur": {

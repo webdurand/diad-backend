@@ -90,6 +90,8 @@ export interface ConcentrationCheckResult {
 
 export interface DeathSaveResult {
   roll: number;
+  advantage?: AdvantageResult;
+  hasAdvantage?: boolean;
   naturalOne: boolean;
   naturalTwenty: boolean;
   successes: number;
@@ -524,6 +526,7 @@ export type EffectInstanceKind =
   | "divine_smite_pending"
   | "aura_half_cover"
   | "protection_from_evil_good"
+  | "beacon_of_hope"
   | "hit_point_maximum_bonus"
   | "giant_ancestry_hit_pending"
   | "giant_ancestry_reaction_pending"

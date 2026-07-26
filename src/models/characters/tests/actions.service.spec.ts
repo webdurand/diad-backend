@@ -409,6 +409,62 @@ describe("ActionsService", () => {
       expect(firebolt!.behaviorKind).toBe("attack_damage");
     });
 
+    it("exposes Beacon of Hope as a ready concentrated action", async () => {
+      const spell = {
+        id: "spell-beacon",
+        slug: "beacon-of-hope",
+        name: "Beacon of Hope",
+        level: 3,
+        description: ["Hope and vitality protect any number of creatures."],
+        casting_time: "1 action",
+        range: "30 feet",
+        concentration: true,
+        ritual: false,
+        attack_type: null,
+        damage: null,
+        dc: null,
+        school: null,
+        components: { V: true, S: true },
+        duration: "Up to 1 minute",
+      };
+
+      setupActions({
+        classSlug: "paladin",
+        level: 9,
+        cha: 18,
+        spells: [
+          {
+            id: "cs-beacon",
+            character_id: "char-1",
+            spell_id: spell.id,
+            source: "subclass",
+            status: SpellStatusEnum.Known,
+            always_prepared: true,
+            spell,
+          },
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const beacon = result.actions.find(
+        (action) => action.id === "spell-beacon-of-hope",
+      );
+
+      expect(beacon).toMatchObject({
+        name: "Beacon of Hope",
+        source: "spell",
+        range: "30 feet",
+        spellLevel: 3,
+        requiresConcentration: true,
+        automationStatus: "ready",
+        behaviorKind: "buff",
+        automationTags: expect.arrayContaining([
+          "multi_target",
+          "maximum_healing",
+        ]),
+      });
+    });
+
     it("should hide spells outside the finite automation catalog", async () => {
       const spell = {
         id: "spell-unmodeled",

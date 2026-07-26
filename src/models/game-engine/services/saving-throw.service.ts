@@ -26,6 +26,7 @@ import {
   rollD20TestWithHalflingLuck,
 } from "./halfling-luck";
 import { PaladinAuraService } from "./paladin-aura.service";
+import { hasBeaconWisdomSaveAdvantage } from "./beacon-of-hope";
 
 
 
@@ -125,6 +126,11 @@ export class SavingThrowService {
       dto.ability.trim().toLowerCase().slice(0, 3) === "str" &&
       (await this.hasConjureAnimalsStrengthSaveAdvantage(subject));
     if (conjureAnimalsStrengthAdvantage) {
+      hasAdvantage = true;
+    }
+    const beaconOfHopeWisdomAdvantage =
+      hasBeaconWisdomSaveAdvantage(subject, dto.ability);
+    if (beaconOfHopeWisdomAdvantage) {
       hasAdvantage = true;
     }
 
@@ -280,6 +286,10 @@ export class SavingThrowService {
       halfCoverBonus,
       effectBonus: effectBonusSum,
       exhaustionPenalty: exhaustionD20Penalty,
+      advantage: advantageResult,
+      hasAdvantage: hasAdvantage && !hasDisadvantage,
+      hasDisadvantage: hasDisadvantage && !hasAdvantage,
+      advantageCancelled: hasAdvantage && hasDisadvantage,
     });
     if (inspirationEvent) events.unshift(inspirationEvent);
     if (indomitableEvent) events.push(indomitableEvent);
@@ -338,6 +348,23 @@ export class SavingThrowService {
           chosen: advantageResult?.chosen,
           finalTotal: total,
           success: passed,
+        },
+      } as GameEventData);
+    }
+    if (beaconOfHopeWisdomAdvantage) {
+      events.push({
+        event_type: "beacon_of_hope_wisdom_save_advantage",
+        actor_participant_id: dto.participantId,
+        target_participant_id: dto.participantId,
+        data: {
+          sourceSpell: "beacon-of-hope",
+          ability: dto.ability,
+          roll1: advantageResult?.roll1,
+          roll2: advantageResult?.roll2,
+          chosen: advantageResult?.chosen,
+          finalTotal: total,
+          success: passed,
+          advantageCancelled: hasAdvantage && hasDisadvantage,
         },
       } as GameEventData);
     }
@@ -474,6 +501,10 @@ export class SavingThrowService {
       halfCoverBonus?: number;
       effectBonus?: number;
       exhaustionPenalty?: number;
+      advantage?: AdvantageResult;
+      hasAdvantage?: boolean;
+      hasDisadvantage?: boolean;
+      advantageCancelled?: boolean;
     } = {},
   ): GameEventData[] {
     return [

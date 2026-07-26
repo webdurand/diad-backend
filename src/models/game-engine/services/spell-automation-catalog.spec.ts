@@ -118,6 +118,18 @@ describe("spell automation catalog", () => {
         ]),
       }),
     );
+    expect(getSpellAutomationEntry("beacon-of-hope")).toEqual(
+      expect.objectContaining({
+        behaviorKind: "buff",
+        automationTags: expect.arrayContaining([
+          "concentration",
+          "multi_target",
+          "wisdom_save_advantage",
+          "death_save_advantage",
+          "maximum_healing",
+        ]),
+      }),
+    );
     expect(getSpellAutomationEntry("fire-storm")).toEqual(
       expect.objectContaining({
         behaviorKind: "save_damage",

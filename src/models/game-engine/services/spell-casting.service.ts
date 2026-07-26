@@ -115,6 +115,7 @@ import { getSpellAutomationEntry } from "./spell-automation-catalog";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
 import { shouldDisintegrateTarget } from "./disintegrate-rules";
 import { validateFireStormLayout } from "./fire-storm";
+import { hasBeaconWisdomSaveAdvantage } from "./beacon-of-hope";
 
 export function concentrationSupportsSpell(
   caster: Pick<
@@ -247,6 +248,7 @@ export interface CombatSpellResult extends SpellCastResult {
     triggeredLeap?: boolean;
     healingApplied?: number;
     healingPrevented?: boolean;
+    healingMaximized?: boolean;
     savedSuccessfully?: boolean;
     conditionApplied?: {
       instanceId: string;
@@ -2214,11 +2216,58 @@ export class SpellCastingService {
 
 
     const targetCount = effectiveTargetIds.length;
+    if (normalizedSpellSlug === "beacon-of-hope" && targetCount === 0) {
+      return failure(
+        "Beacon of Hope exige ao menos uma criatura no alcance.",
+        GameErrorCode.INVALID_TARGET,
+      );
+    }
+    if (normalizedSpellSlug === "beacon-of-hope") {
+      if (participant.positionX == null || participant.positionY == null) {
+        return failure(
+          "O conjurador precisa estar posicionado no mapa.",
+          GameErrorCode.INVALID_PARTICIPANT,
+        );
+      }
+      for (const targetId of effectiveTargetIds) {
+        const target = await this.encounterService
+          .getParticipant(targetId)
+          .catch(() => null);
+        if (
+          !target ||
+          target.encounterId !== dto.encounterId ||
+          target.isDefeated ||
+          (target.conditions ?? []).includes("banished")
+        ) {
+          return failure(
+            "Beacon of Hope exige criaturas válidas no encontro.",
+            GameErrorCode.INVALID_TARGET,
+          );
+        }
+        if (target.positionX == null || target.positionY == null) {
+          return failure(
+            `${target.displayName} precisa estar posicionado no mapa.`,
+            GameErrorCode.INVALID_TARGET,
+          );
+        }
+        const distanceFt = chebyshevDistanceFt(
+          { x: participant.positionX, y: participant.positionY },
+          { x: target.positionX, y: target.positionY },
+        );
+        if (distanceFt > 30) {
+          return failure(
+            `${target.displayName} está fora do alcance (${distanceFt}ft > 30ft).`,
+            GameErrorCode.SPELL_OUT_OF_RANGE,
+          );
+        }
+      }
+    }
     const requiresDistinctTargets =
       isChromaticOrb ||
       isChainLightning ||
       normalizedSpellSlug === "aid" ||
-      normalizedSpellSlug === "bless";
+      normalizedSpellSlug === "bless" ||
+      normalizedSpellSlug === "beacon-of-hope";
     if (
       requiresDistinctTargets &&
       new Set(effectiveTargetIds).size !== effectiveTargetIds.length
@@ -3324,12 +3373,16 @@ export class SpellCastingService {
         const healingResult = await this.combatService.applyHealing(dto.encounterId, {
           targetParticipantId: targetId,
           amount: spellResult.healing.total,
+          maximumAmount: maximumDiceExpression(spellResult.healing.expression),
+          sourceSpellSlug: normalizedSpellSlug,
           ownerUserId: dto.ownerUserId,
         });
         if (healingResult.ok) {
           targetResult.healingApplied = healingResult.value.healingApplied;
           targetResult.healingPrevented =
             healingResult.value.healingPrevented;
+          targetResult.healingMaximized =
+            healingResult.value.healingMaximized;
 
           await this.combatService.resolveFaithfulSteedLifeBond(
             dto.encounterId,
@@ -4413,7 +4466,8 @@ export class SpellCastingService {
   }> {
     const withAdvantage =
       hasHasteDexSaveAdvantage(target, ability) ||
-      hasDodgeDexSaveAdvantage(target, ability);
+      hasDodgeDexSaveAdvantage(target, ability) ||
+      hasBeaconWisdomSaveAdvantage(target, ability);
     if (target.type === "pc" && target.characterId) {
       const saveResult = await this.savingThrowService.rollSavingThrow({
         characterId: target.characterId,

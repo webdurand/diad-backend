@@ -188,6 +188,17 @@ describe("getAoeShape", () => {
       expect(repeatsFirstTargetToMaximum(spell)).toBe(false);
     });
 
+    it("Beacon of Hope accepts any number of distinct non-AoE targets", () => {
+      const spell = {
+        slug: "beacon-of-hope",
+        area_of_effect: null,
+      } as any;
+      expect(isAoeSpell(spell)).toBe(false);
+      expect(isMultiTargetNonAoeSpell(spell)).toBe(true);
+      expect(maxTargetsFor(spell, 3, 9)).toBe(Number.POSITIVE_INFINITY);
+      expect(repeatsFirstTargetToMaximum(spell)).toBe(false);
+    });
+
     it("Chain Lightning allows one primary plus three jumps and scales by slot", () => {
       const spell = { slug: "chain-lightning", area_of_effect: null } as any;
       expect(isMultiTargetNonAoeSpell(spell)).toBe(true);

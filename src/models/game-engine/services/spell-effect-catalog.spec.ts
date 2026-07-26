@@ -98,6 +98,29 @@ describe("spell effect catalog", () => {
     });
   });
 
+  it("materializes one concentrated Beacon of Hope effect per distinct target", () => {
+    const effects = materializeSpellEffects("beacon-of-hope", {
+      casterParticipantId: "caster",
+      targetParticipantIds: ["caster", "ally", "ally", "third", "fourth"],
+      slotLevel: 3,
+    });
+
+    expect(effects).toHaveLength(4);
+    expect(effects.map((effect) => effect.targetParticipantId)).toEqual([
+      "caster",
+      "ally",
+      "third",
+      "fourth",
+    ]);
+    expect(effects[0]?.input).toMatchObject({
+      kind: "beacon_of_hope",
+      sourceSpellSlug: "beacon-of-hope",
+      sourceCasterParticipantId: "caster",
+      expiresAt: { kind: "concentration" },
+      requiresConcentration: true,
+    });
+  });
+
   it.each(["construct", "undead"])(
     "Heal rejeita criaturas do tipo %s",
     (type) => {

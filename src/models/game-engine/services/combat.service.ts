@@ -108,6 +108,11 @@ import {
   abjureFoesChoiceError,
   chooseAbjureFoesTurnOption,
 } from "./abjure-foes";
+import {
+  beaconHealingAmount,
+  hasBeaconOfHope,
+  hasBeaconWisdomSaveAdvantage,
+} from "./beacon-of-hope";
 
 
 
@@ -173,6 +178,8 @@ export interface SpellAttackRollResolution {
 export interface HealDto {
   targetParticipantId: string;
   amount: number;
+  maximumAmount?: number;
+  sourceSpellSlug?: string;
   ownerUserId: string;
 }
 
@@ -6425,7 +6432,8 @@ export class CombatService {
       );
       const hasAdvantage =
         saveModifiers.hasAdvantage ||
-        hasDodgeDexSaveAdvantage(target, effect.saveAbility);
+        hasDodgeDexSaveAdvantage(target, effect.saveAbility) ||
+        hasBeaconWisdomSaveAdvantage(target, effect.saveAbility);
       const hasDisadvantage = saveModifiers.hasDisadvantage;
       let roll = 0;
       let advantage:
@@ -6557,7 +6565,8 @@ export class CombatService {
       );
       const hasAdvantage =
         saveModifiers.hasAdvantage ||
-        hasDodgeDexSaveAdvantage(target, effect.saveAbility);
+        hasDodgeDexSaveAdvantage(target, effect.saveAbility) ||
+        hasBeaconWisdomSaveAdvantage(target, effect.saveAbility);
       const hasDisadvantage = saveModifiers.hasDisadvantage;
       let roll = 0;
       let advantage:
@@ -7768,7 +7777,8 @@ export class CombatService {
       modifier,
       advantage:
         conditionModifiers.hasAdvantage ||
-        hasHasteDexSaveAdvantage(participant, ability),
+        hasHasteDexSaveAdvantage(participant, ability) ||
+        hasBeaconWisdomSaveAdvantage(participant, ability),
       disadvantage: conditionModifiers.hasDisadvantage,
     };
   }
@@ -7781,6 +7791,7 @@ export class CombatService {
       hpAfter: number;
       healingApplied: number;
       healingPrevented: boolean;
+      healingMaximized: boolean;
       defeated: boolean;
       dyingState?: "none" | "dying" | "stable" | "dead";
       deathSavesReset?: boolean;
@@ -7795,6 +7806,12 @@ export class CombatService {
     const target = await this.encounterService.getParticipant(
       dto.targetParticipantId,
     );
+    const healingResolution = beaconHealingAmount(
+      target,
+      dto.amount,
+      dto.maximumAmount,
+    );
+    const healingAmount = healingResolution.amount;
 
     let hpAfter: number;
     let deathSavesReset = false;
@@ -7822,6 +7839,7 @@ export class CombatService {
           target_participant_id: target.id,
           data: {
             attemptedHealing: dto.amount,
+            maximumHealing: dto.maximumAmount,
             hpAfter: prevHp,
             sourceSpell: "chill-touch",
           },
@@ -7833,6 +7851,7 @@ export class CombatService {
           hpAfter: prevHp,
           healingApplied: 0,
           healingPrevented: true,
+          healingMaximized: false,
           defeated: target.isDefeated,
           dyingState: target.dyingState,
         },
@@ -7852,7 +7871,7 @@ export class CombatService {
       const result = await this.stateService.updateHp(
         dto.ownerUserId,
         target.characterId,
-        { healing: dto.amount },
+        { healing: healingAmount },
       );
       hpAfter = result.currentHp;
 
@@ -7867,7 +7886,7 @@ export class CombatService {
       }
     } else {
       target.currentHp = Math.min(
-        (target.currentHp ?? 0) + dto.amount,
+        (target.currentHp ?? 0) + healingAmount,
         target.maxHp ?? 0,
       );
       if (target.currentHp > 0 && target.isDefeated) {
@@ -7880,12 +7899,29 @@ export class CombatService {
 
     const healingApplied = Math.max(0, hpAfter - prevHp);
     const events: GameEventData[] = [
+      ...(healingResolution.maximized
+        ? [
+            {
+              event_type: "healing_maximized_by_beacon_of_hope",
+              target_participant_id: target.id,
+              data: {
+                sourceSpell: dto.sourceSpellSlug,
+                rolledHealing: dto.amount,
+                maximumHealing: healingAmount,
+                healingApplied,
+              },
+            } as GameEventData,
+          ]
+        : []),
       {
         event_type: "hp_change",
         target_participant_id: target.id,
         data: {
           healing: healingApplied,
-          healingRequested: dto.amount,
+          healingRequested: healingAmount,
+          healingRolled: dto.amount,
+          healingMaximized: healingResolution.maximized,
+          sourceSpell: dto.sourceSpellSlug,
           hpAfter,
           dyingState,
           deathSavesReset,
@@ -7913,6 +7949,7 @@ export class CombatService {
         hpAfter,
         healingApplied,
         healingPrevented: false,
+        healingMaximized: healingResolution.maximized,
         defeated,
         dyingState,
         deathSavesReset,
@@ -8014,7 +8051,11 @@ export class CombatService {
       return failure("NOT_DYING");
     }
 
-    const roll = this.diceService.roll(20);
+    const beaconAdvantage = hasBeaconOfHope(participant);
+    const advantage = beaconAdvantage
+      ? this.diceService.rollWithAdvantage()
+      : undefined;
+    const roll = advantage?.chosen ?? this.diceService.roll(20);
     const naturalOne = roll === 1;
     const naturalTwenty = roll === 20;
 
@@ -8042,6 +8083,8 @@ export class CombatService {
 
     const result: DeathSaveResult = {
       roll,
+      advantage,
+      hasAdvantage: beaconAdvantage,
       naturalOne,
       naturalTwenty,
       successes: dsResult.successes,
@@ -8056,7 +8099,10 @@ export class CombatService {
       {
         event_type: "death_save",
         actor_participant_id: participantId,
-        data: result,
+        data: {
+          ...result,
+          sourceSpell: beaconAdvantage ? "beacon-of-hope" : undefined,
+        },
       },
     ];
 
