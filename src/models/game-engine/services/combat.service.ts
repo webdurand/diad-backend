@@ -3707,6 +3707,7 @@ export class CombatService {
             allParticipantsInRound,
             ownerUserId: ownerId || undefined,
             currentRound: newRound,
+            currentTurnIndex: nextIndex,
             getSaveModifier: (ability) =>
               this.getEndOfTurnSaveModifier(nextParticipant, ability),
             getSaveModifierForTarget: (ability, target) =>
@@ -7696,6 +7697,18 @@ export class CombatService {
         positionY: target?.positionY,
       });
       appliedEvents.push(...damageResult.events);
+      if (
+        event.data?.effectKind === "guardian-of-faith" &&
+        typeof event.data?.areaId === "string"
+      ) {
+        appliedEvents.push(
+          ...(await this.persistentArea.recordGuardianOfFaithDamage(
+            event.data.areaId,
+            damageResult.value.damageApplied,
+            targetParticipantId,
+          )),
+        );
+      }
     }
     return appliedEvents;
   }

@@ -55,6 +55,7 @@ export class StartTurnOrchestratorService {
         autoFail?: boolean;
       }>;
       currentRound?: number;
+      currentTurnIndex?: number;
       ownerUserId?: string;
     },
   ): Promise<{ events: GameEventData[] }> {
@@ -94,8 +95,22 @@ export class StartTurnOrchestratorService {
             };
           }
         : undefined,
+      opts?.currentRound != null && opts?.currentTurnIndex != null
+        ? `${opts.currentRound}:${opts.currentTurnIndex}`
+        : undefined,
     );
     events.push(...padTick.events);
+    if (
+      padTick.events.some(
+        (event) =>
+          event.event_type === "tile_effect_damage_applied" &&
+          event.data?.effectKind === "guardian-of-faith",
+      )
+    ) {
+      await this.participants.update(participant.id, {
+        effectInstances: participant.effectInstances,
+      });
+    }
 
     if (opts?.currentRound != null) {
       const allParticipants =

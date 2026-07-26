@@ -165,6 +165,10 @@ function generateEventDescription(
       const kind = (data.kind as string) ?? (data.effectKind as string) ?? "?";
       return `Efeito ${kind} expira em ${target}`;
     }
+    case "guardian_of_faith_damage_budget":
+      return `Guardian of Faith causa ${data.damageApplied ?? "?"} de dano em ${target} — ${data.damageRemaining ?? "?"} restantes`;
+    case "guardian_of_faith_vanished":
+      return `Guardian of Faith desaparece após causar ${data.damageDealtTotal ?? 60} de dano`;
     case "encounter_start":
       return "Combate iniciado!";
     case "encounter_end":

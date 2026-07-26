@@ -18,6 +18,7 @@ describe("tile-effect-catalog", () => {
     "spiritual-weapon",
     "conjure-animals",
     "conjure-elemental",
+    "guardian-of-faith",
     "conjure-woodland-beings",
   ];
 
@@ -452,6 +453,39 @@ describe("tile-effect-catalog", () => {
       expect(repeat?.damage?.expressionPerSlot(7)).toBe("6d8");
       expect(initial?.damage?.expressionPerSlot(9)).toBe("12d8");
       expect(repeat?.damage?.expressionPerSlot(9)).toBe("8d8");
+    });
+  });
+
+  describe("Guardian of Faith (SRD 5.2)", () => {
+    const def = TILE_EFFECT_CATALOG["guardian-of-faith"];
+
+    it("uses a stationary Large core and a 10ft hostile envelope", () => {
+      expect(def.shapeKind).toBe("cube");
+      expect(def.defaultRadiusCells(4)).toBe(6);
+      expect(def.auraFollowsCaster).not.toBe(true);
+      expect(def.isDifficultTerrain).toBe(false);
+      expect(def.sourceConcentration).toBe(false);
+      expect(def.durationRoundsAtSlot(4)).toBe(4800);
+      expect(def.tactical).toEqual(
+        expect.objectContaining({
+          targeting: "hostile_only",
+          damageBudgetTotal: 60,
+          damageDealtTotal: 0,
+        }),
+      );
+    });
+
+    it("deals 20 radiant with a DEX save for half on entry or turn start", () => {
+      for (const kind of ["on-enter", "on-start-turn-in"] as const) {
+        const trigger = def.triggers.find(
+          (candidate) => candidate.kind === kind,
+        );
+        expect(trigger?.save?.ability).toBe("dex");
+        expect(trigger?.save?.halfOnSave).toBe(true);
+        expect(trigger?.damage?.expressionPerSlot(4)).toBe("20");
+        expect(trigger?.damage?.type).toBe("radiant");
+        expect(trigger?.oncePerTurn).toBe(true);
+      }
     });
   });
 

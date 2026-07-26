@@ -446,6 +446,20 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
     ],
   },
   {
+    slug: "guardian-of-faith",
+    status: "ready",
+    behaviorKind: "persistent_area",
+    automationTags: [
+      "area",
+      "damage",
+      "dexterity_save",
+      "stationary",
+      "large",
+      "no_concentration",
+      "damage_budget",
+    ],
+  },
+  {
     slug: "summon-elemental",
     status: "ready",
     behaviorKind: "summon",

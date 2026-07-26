@@ -153,6 +153,7 @@ export interface EnrichedTileEffectResponse {
   sourceConcentration: boolean;
   auraFollowsCaster: boolean;
   narrativeDescriptor: string | null;
+  tactical: unknown | null;
 }
 
 

@@ -101,6 +101,8 @@ export const VALID_EVENT_TYPES = [
   "tileEffectMovementStopped",
   "tileEffectExpired",
   "tileEffectConcentrationBroken",
+  "guardianOfFaithDamageBudget",
+  "guardianOfFaithVanished",
   "difficultTerrainTraversed",
   "shieldRetroactiveReview",
   "shieldDamageReverted",

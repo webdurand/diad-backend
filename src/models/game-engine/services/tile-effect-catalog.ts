@@ -16,6 +16,7 @@ export type TileEffectKind =
   | "storm-of-vengeance"
   | "conjure-animals"
   | "conjure-elemental"
+  | "guardian-of-faith"
   | "conjure-woodland-beings";
 
 export type TileEffectDirection =
@@ -83,7 +84,12 @@ export type TileEffectTrigger =
       damage: DamageSpec;
     }
   | { kind: "on-move-through"; damagePerCell: DamageSpec }
-  | { kind: "on-start-turn-in"; save?: SaveSpec; damage?: DamageSpec }
+  | {
+      kind: "on-start-turn-in";
+      save?: SaveSpec;
+      damage?: DamageSpec;
+      oncePerTurn?: boolean;
+    }
   | {
       kind: "on-end-turn-in";
       save?: SaveSpec;
@@ -110,6 +116,8 @@ export interface TileEffectTactical {
   elementalDamageType?: "cold" | "fire" | "lightning" | "thunder";
   createdRound?: number;
   lastResolvedRound?: number;
+  damageBudgetTotal?: number;
+  damageDealtTotal?: number;
 }
 
 export interface TileEffectDefinition {
@@ -562,6 +570,54 @@ export const TILE_EFFECT_CATALOG: Record<TileEffectKind, TileEffectDefinition> =
       },
       narrativeDescriptor:
         "Um espírito elemental Large e intangível ocupa o centro e pode restringir uma criatura.",
+    },
+
+    "guardian-of-faith": {
+      spellSlug: "guardian-of-faith",
+      shapeKind: "cube",
+      // A Large (10-foot) guardian plus 10 feet around it occupies a 30-foot
+      // influence envelope. The origin is the top-left cell of its 2x2 core.
+      defaultRadiusCells: () => 6,
+      isDifficultTerrain: false,
+      durationRoundsAtSlot: () => 4800,
+      sourceConcentration: false,
+      triggers: [
+        {
+          kind: "on-enter",
+          save: { ability: "dex", halfOnSave: true },
+          damage: {
+            expressionPerSlot: () => "20",
+            type: "radiant",
+          },
+          oncePerTurn: true,
+        },
+        {
+          kind: "on-start-turn-in",
+          save: { ability: "dex", halfOnSave: true },
+          damage: {
+            expressionPerSlot: () => "20",
+            type: "radiant",
+          },
+          oncePerTurn: true,
+        },
+      ],
+      tactical: {
+        tags: [
+          "damage",
+          "guardian",
+          "stationary",
+          "large",
+          "radiant",
+          "no-concentration",
+        ],
+        tacticalValue: 9,
+        beneficiaryFaction: "caster",
+        targeting: "hostile_only",
+        damageBudgetTotal: 60,
+        damageDealtTotal: 0,
+      },
+      narrativeDescriptor:
+        "Um guardião espectral Large protege a área e pune inimigos próximos com dano radiante.",
     },
 
     "conjure-woodland-beings": {

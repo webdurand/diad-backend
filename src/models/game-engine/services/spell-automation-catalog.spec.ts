@@ -63,6 +63,20 @@ describe("spell automation catalog", () => {
         ]),
       }),
     );
+    expect(getSpellAutomationEntry("guardian-of-faith")).toEqual(
+      expect.objectContaining({
+        status: "ready",
+        behaviorKind: "persistent_area",
+        automationTags: expect.arrayContaining([
+          "damage",
+          "dexterity_save",
+          "stationary",
+          "large",
+          "no_concentration",
+          "damage_budget",
+        ]),
+      }),
+    );
     expect(getSpellAutomationEntry("heal")).toEqual(
       expect.objectContaining({
         behaviorKind: "healing",

@@ -678,6 +678,7 @@ export class PersistentAreaService {
   async resolveStartTurnIn(
     participant: EncounterParticipantEntity,
     getSaveModifier?: SaveModifierFn,
+    turnKey?: string,
   ): Promise<ResolveResult> {
     const result: ResolveResult = {
       events: [],
@@ -756,6 +757,12 @@ export class PersistentAreaService {
           (t) => t.kind === "on-start-turn-in",
         );
         if (trig) {
+          if (
+            trig.oncePerTurn &&
+            this.alreadyTriggeredThisTurn(area, participant, turnKey)
+          ) {
+            continue;
+          }
           const slot = area.slotLevel ?? 1;
           const partial = await this.dispatchTrigger(
             area,
@@ -764,6 +771,9 @@ export class PersistentAreaService {
             slot,
             getSaveModifier,
           );
+          if (trig.oncePerTurn) {
+            this.markTriggeredThisTurn(area, participant, turnKey);
+          }
           result.events.push(...partial.events);
           result.totalDamage += partial.damage;
           if (partial.conditionApplied) {
@@ -1429,6 +1439,79 @@ export class PersistentAreaService {
       await this.areas.delete(expired.map((e) => e.id));
     }
     return { events, expired };
+  }
+
+  async recordGuardianOfFaithDamage(
+    areaId: string,
+    damageApplied: number,
+    targetParticipantId?: string,
+  ): Promise<GameEventData[]> {
+    if (!Number.isFinite(damageApplied) || damageApplied <= 0) return [];
+    const area = await this.areas.findOne({ where: { id: areaId } });
+    if (!area || area.effectKind !== "guardian-of-faith") return [];
+
+    const tactical = area.tacticalMetadata ?? {
+      tags: ["damage", "guardian", "stationary", "large", "radiant"],
+      tacticalValue: 9,
+      beneficiaryFaction: "caster" as const,
+      targeting: "hostile_only" as const,
+      damageBudgetTotal: 60,
+      damageDealtTotal: 0,
+    };
+    const damageBudgetTotal = Math.max(
+      1,
+      Number(tactical.damageBudgetTotal ?? 60),
+    );
+    const damageDealtTotal =
+      Math.max(0, Number(tactical.damageDealtTotal ?? 0)) + damageApplied;
+    const damageRemaining = Math.max(
+      0,
+      damageBudgetTotal - damageDealtTotal,
+    );
+
+    if (damageDealtTotal >= damageBudgetTotal) {
+      await this.areas.delete(area.id);
+      return [
+        {
+          event_type: "guardian_of_faith_vanished",
+          actor_participant_id: area.casterParticipantId ?? undefined,
+          target_participant_id: targetParticipantId,
+          data: {
+            areaId: area.id,
+            sourceSpell: area.sourceSpell,
+            effectKind: area.effectKind,
+            damageApplied,
+            damageDealtTotal,
+            damageBudgetTotal,
+            damageRemaining,
+            reason: "damage_budget",
+          },
+        },
+      ];
+    }
+
+    area.tacticalMetadata = {
+      ...tactical,
+      damageBudgetTotal,
+      damageDealtTotal,
+    };
+    await this.areas.save(area);
+    return [
+      {
+        event_type: "guardian_of_faith_damage_budget",
+        actor_participant_id: area.casterParticipantId ?? undefined,
+        target_participant_id: targetParticipantId,
+        data: {
+          areaId: area.id,
+          sourceSpell: area.sourceSpell,
+          effectKind: area.effectKind,
+          damageApplied,
+          damageDealtTotal,
+          damageBudgetTotal,
+          damageRemaining,
+        },
+      },
+    ];
   }
 
 

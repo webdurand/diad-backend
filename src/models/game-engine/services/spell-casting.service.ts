@@ -2026,6 +2026,53 @@ export class SpellCastingService {
         );
       }
     }
+    if (normalizedSpellSlug === "guardian-of-faith") {
+      if (!effectiveOriginCell) {
+        return failure(
+          "Escolha um espaço desocupado para o Guardian of Faith.",
+          "INVALID_ACTION",
+        );
+      }
+      const x = Math.trunc(effectiveOriginCell.x);
+      const y = Math.trunc(effectiveOriginCell.y);
+      effectiveOriginCell = { x, y };
+      const columns =
+        encounter.mapData?.gridColumns ?? encounter.mapData?.gridSize ?? 20;
+      const rows =
+        encounter.mapData?.gridRows ?? encounter.mapData?.gridSize ?? 20;
+      if (x < 0 || y < 0 || x + 1 >= columns || y + 1 >= rows) {
+        return failure(
+          "O guardião Large precisa caber em um espaço do mapa.",
+          "POSITION_OUT_OF_BOUNDS",
+        );
+      }
+      const largeFootprint = new Set([
+        `${x},${y}`,
+        `${x + 1},${y}`,
+        `${x},${y + 1}`,
+        `${x + 1},${y + 1}`,
+      ]);
+      const occupants = await this.participantRepo.find({
+        where: { encounterId: dto.encounterId, isDefeated: false },
+      });
+      if (
+        occupants.some(
+          (occupant) =>
+            occupant.positionX != null &&
+            occupant.positionY != null &&
+            largeFootprint.has(
+              `${occupant.positionX},${occupant.positionY}`,
+            ),
+        )
+      ) {
+        return failure(
+          "Guardian of Faith exige um espaço desocupado para o guardião Large.",
+          "POSITION_OCCUPIED",
+        );
+      }
+      // The spell creates a persistent guardian. It deals no damage when cast.
+      effectiveTargetIds = [];
+    }
     if (normalizedSpellSlug === "spiritual-weapon") {
       if (!effectiveOriginCell) {
         return failure(
@@ -2112,6 +2159,7 @@ export class SpellCastingService {
         )
         .map((target) => target.id);
     } else if (
+      normalizedSpellSlug !== "guardian-of-faith" &&
       aoeShape &&
       effectiveOriginCell &&
       effectiveTargetIds.length === 0
@@ -3610,7 +3658,7 @@ export class SpellCastingService {
 
       const originCell = tileDef.auraFollowsCaster
         ? { x: participant.positionX, y: participant.positionY }
-        : (dto.aoeOriginCell ?? {
+        : (effectiveOriginCell ?? dto.aoeOriginCell ?? {
             x: participant.positionX,
             y: participant.positionY,
           });

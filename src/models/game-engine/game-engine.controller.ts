@@ -639,6 +639,7 @@ export class GameEngineController {
           sourceConcentration: area.sourceConcentration,
           auraFollowsCaster: area.auraFollowsCaster ?? false,
           narrativeDescriptor: area.narrativeDescriptor,
+          tactical: area.tacticalMetadata,
         })),
       }),
       events: [],
