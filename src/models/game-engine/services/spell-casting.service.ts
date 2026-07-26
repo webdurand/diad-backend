@@ -71,6 +71,7 @@ import {
   type SummonBeastForm,
   type SummonElementalForm,
 } from "./summon-stat-block";
+import { concentrationDurationRounds } from "./spell-duration";
 import type {
   SummonConcentrationBreakBehavior,
   SummonControlMode,
@@ -2740,7 +2741,10 @@ export class SpellCastingService {
       const startResult = await this.concentration.startNew(
         participant,
         dto.spellSlug,
-        null,
+        concentrationDurationRounds(
+          spellData.duration,
+          metamagicAppliedType === "extended",
+        ),
         null,
       );
       concentrationEvents.push(...startResult.events);
