@@ -94,4 +94,5 @@ export type TransformationRevertReason =
   | "hp-zero"
   | "duration-end"
   | "concentration-broken"
-  | "caster-death";
+  | "caster-death"
+  | "dispel-magic";

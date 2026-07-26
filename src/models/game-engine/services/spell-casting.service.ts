@@ -116,6 +116,12 @@ import { CharacterStateService } from "src/models/characters/services/character-
 import { shouldDisintegrateTarget } from "./disintegrate-rules";
 import { validateFireStormLayout } from "./fire-storm";
 import { hasBeaconWisdomSaveAdvantage } from "./beacon-of-hope";
+import {
+  DispelMagicService,
+  type DispelMagicResolution,
+  type DispelMagicTarget,
+  type PreparedDispelMagicTarget,
+} from "./dispel-magic.service";
 
 export function concentrationSupportsSpell(
   caster: Pick<
@@ -231,6 +237,8 @@ export interface CastSpellInCombatDto {
   summonFamiliarCreatureType?: FamiliarCreatureType;
 
   deliverThroughFamiliar?: boolean;
+
+  dispelTarget?: DispelMagicTarget;
 }
 
 export interface CombatSpellResult extends SpellCastResult {
@@ -262,6 +270,7 @@ export interface CombatSpellResult extends SpellCastResult {
       distanceFt: number;
     };
   }>;
+  dispelMagic?: DispelMagicResolution;
 }
 
 export function hasVerbalSpellComponent(components: unknown): boolean {
@@ -359,6 +368,7 @@ export class SpellCastingService {
     private readonly transformation: TransformationService,
     private readonly movementService: MovementService,
     private readonly characterStateService: CharacterStateService,
+    private readonly dispelMagic: DispelMagicService,
   ) {}
 
   async sustainWitchBolt(
@@ -1795,6 +1805,32 @@ export class SpellCastingService {
     const normalizedSpellSlug = dto.spellSlug
       .toLowerCase()
       .replace(/-(phb|xphb|srd52)$/, "");
+    let preparedDispelTarget: PreparedDispelMagicTarget | null = null;
+    if (normalizedSpellSlug === "dispel-magic") {
+      const explicitParticipantTarget =
+        dto.dispelTarget?.kind === "participant"
+          ? dto.dispelTarget.participantId
+          : null;
+      const hasAmbiguousParticipantTargets =
+        explicitParticipantTarget != null
+          ? requestedTargetIds.length !== 1 ||
+            requestedTargetIds[0] !== explicitParticipantTarget
+          : requestedTargetIds.length !== 0;
+      if (hasAmbiguousParticipantTargets) {
+        return failure(
+          "Dispel Magic exige um único alvo explícito.",
+          "INVALID_TARGET",
+        );
+      }
+      const prepared = await this.dispelMagic.prepareTarget({
+        encounterId: dto.encounterId,
+        caster: participant,
+        target: dto.dispelTarget,
+        rangeFt: 120,
+      });
+      if (!prepared.ok) return prepared;
+      preparedDispelTarget = prepared.value;
+    }
     const tileEffectDefinition = getTileEffectDefinition(normalizedSpellSlug);
     const delegatesInitialDamageToTileEffect =
       tileEffectDefinition?.triggers.some(
@@ -3064,6 +3100,30 @@ export class SpellCastingService {
       });
     }
 
+    if (preparedDispelTarget) {
+      const casterSheet = await this.sheetService.computeSheet(
+        dto.ownerUserId,
+        participant.characterId,
+      );
+      const dispel = await this.dispelMagic.resolve({
+        encounterId: dto.encounterId,
+        prepared: preparedDispelTarget,
+        castAtSlotLevel: dto.slotLevel,
+        spellcastingModifier: getSpellcastingModifier(casterSheet),
+        casterParticipantId: participant.id,
+      });
+      events.push(...dispel.events);
+      return success(
+        {
+          ...spellResult,
+          targetsHit: [],
+          appliedEffectIds: [],
+          dispelMagic: dispel.resolution,
+        },
+        events,
+      );
+    }
+
 
 
 
@@ -3498,6 +3558,7 @@ export class SpellCastingService {
               saveDc: spellSaveDc,
               repeatSaveTiming: condEntry.repeatSaveTiming,
               durationRoundsRemaining: condEntry.durationRounds,
+              level: dto.slotLevel,
             },
           );
           events.push(...condResult.events);
@@ -3651,7 +3712,13 @@ export class SpellCastingService {
         cleanedSpellEffectTargets.add(cleanupKey);
       }
       const { effect, events: effectEvents } =
-        await this.effectInstanceService.addEffect(targetP, m.input);
+        await this.effectInstanceService.addEffect(targetP, {
+          ...m.input,
+          payload: {
+            ...m.input.payload,
+            slotLevel: m.input.payload.slotLevel ?? dto.slotLevel,
+          },
+        });
       appliedEffectIds.push(effect.id);
       events.push(...effectEvents);
       if (

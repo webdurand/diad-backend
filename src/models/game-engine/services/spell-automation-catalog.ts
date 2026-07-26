@@ -331,6 +331,17 @@ const SPELL_AUTOMATION_ENTRIES: SpellAutomationEntry[] = [
     automationTags: ["healing", "condition_removal"],
   },
   {
+    slug: "dispel-magic",
+    status: "ready",
+    behaviorKind: "buff",
+    automationTags: [
+      "utility",
+      "condition_removal",
+      "spell_effect_target",
+      "tile_effect_target",
+    ],
+  },
+  {
     slug: "fire-storm",
     status: "ready",
     behaviorKind: "save_damage",

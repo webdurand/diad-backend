@@ -41,6 +41,7 @@ import { SkillCheckService } from "./services/skill-check.service";
 import { SavingThrowService } from "./services/saving-throw.service";
 import { InspirationService } from "./services/inspiration.service";
 import { SpellCastingService } from "./services/spell-casting.service";
+import { DispelMagicService } from "./services/dispel-magic.service";
 import { MovementService } from "./services/movement.service";
 import { LootService } from "./services/loot.service";
 import { MonsterActionResolver } from "./services/monster-action-resolver.service";
@@ -233,6 +234,7 @@ import { PaladinAuraService } from "./services/paladin-aura.service";
     SavingThrowService,
     InspirationService,
     SpellCastingService,
+    DispelMagicService,
     MovementService,
     LootService,
     MonsterActionResolver,
@@ -342,6 +344,7 @@ import { PaladinAuraService } from "./services/paladin-aura.service";
     SkillCheckService,
     SavingThrowService,
     SpellCastingService,
+    DispelMagicService,
     LootService,
     MonsterActionResolver,
     PermissionResolver,

@@ -146,6 +146,7 @@ export interface EnrichedTileEffectResponse {
   damageDice: string;
   damageType: string;
   durationRoundsRemaining: number | null;
+  slotLevel: number | null;
   saveDc: number | null;
   saveAbility: string | null;
   isDifficultTerrain: boolean;

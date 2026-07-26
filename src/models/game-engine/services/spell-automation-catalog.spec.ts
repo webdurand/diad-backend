@@ -86,6 +86,16 @@ describe("spell automation catalog", () => {
         ]),
       }),
     );
+    expect(getSpellAutomationEntry("dispel-magic-xphb")).toEqual(
+      expect.objectContaining({
+        behaviorKind: "buff",
+        automationTags: expect.arrayContaining([
+          "condition_removal",
+          "spell_effect_target",
+          "tile_effect_target",
+        ]),
+      }),
+    );
     expect(getSpellAutomationEntry("shield-of-faith-xphb")).toEqual(
       expect.objectContaining({
         behaviorKind: "buff",

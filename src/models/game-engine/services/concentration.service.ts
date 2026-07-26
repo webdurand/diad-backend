@@ -20,6 +20,7 @@ export type ConcentrationBreakReason =
   | "expired"
   | "death"
   | "sleet_storm_failed_save"
+  | "dispel_magic"
   | "manual";
 
 const INCAPACITATING: ConditionSlug[] = [

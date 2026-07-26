@@ -632,6 +632,7 @@ export class GameEngineController {
           damageDice: area.damageDice,
           damageType: area.damageType,
           durationRoundsRemaining: area.durationRoundsRemaining,
+          slotLevel: area.slotLevel,
           saveDc: area.saveDc,
           saveAbility: area.saveAbility,
           isDifficultTerrain: area.isDifficultTerrain,
@@ -1535,6 +1536,10 @@ export class GameEngineController {
       summonFamiliarCreatureType?: "celestial" | "fey" | "fiend";
 
       deliverThroughFamiliar?: boolean;
+
+      dispelTarget?:
+        | { kind: "participant"; participantId: string }
+        | { kind: "tile-effect"; areaId: string };
     },
   ) {
     const result = await this.spellCastingService.castSpellInCombat({
@@ -1562,6 +1567,7 @@ export class GameEngineController {
       summonFamiliarForm: body.summonFamiliarForm,
       summonFamiliarCreatureType: body.summonFamiliarCreatureType,
       deliverThroughFamiliar: body.deliverThroughFamiliar,
+      dispelTarget: body.dispelTarget,
     });
 
 
