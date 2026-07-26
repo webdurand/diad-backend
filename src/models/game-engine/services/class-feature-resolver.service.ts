@@ -25,6 +25,7 @@ import {
   reconcileRemainingMovement,
 } from "./movement.service";
 import { PersistentAreaService } from "./persistent-area.service";
+import { hasBeaconWisdomSaveAdvantage } from "./beacon-of-hope";
 
 
 export interface ClassFeatureInvokedPayload {
@@ -4049,9 +4050,19 @@ export class ClassFeatureResolverService {
       total: number;
       success: boolean;
       conditionInstanceId?: string;
+      advantage?: {
+        roll1: number;
+        roll2: number;
+        chosen: number;
+        discarded: number;
+      };
     }> = [];
     for (const target of validTargets) {
-      const rolled = this.dice.roll(20);
+      const beaconAdvantage = hasBeaconWisdomSaveAdvantage(target, "wis");
+      const advantage = beaconAdvantage
+        ? this.dice.rollWithAdvantage()
+        : undefined;
+      const rolled = advantage?.chosen ?? this.dice.roll(20);
       const modifier = this.getAbilityMod(target, "wis");
       const total = rolled + modifier;
       const success = total >= saveDc;
@@ -4067,8 +4078,26 @@ export class ClassFeatureResolverService {
           total,
           success,
           source: "abjure-foes",
+          hasAdvantage: beaconAdvantage,
+          advantage,
         },
       });
+      if (beaconAdvantage && advantage) {
+        events.push({
+          event_type: "beacon_of_hope_wisdom_save_advantage",
+          actor_participant_id: target.id,
+          target_participant_id: target.id,
+          data: {
+            sourceSpell: "beacon-of-hope",
+            ability: "wis",
+            roll1: advantage.roll1,
+            roll2: advantage.roll2,
+            chosen: advantage.chosen,
+            finalTotal: total,
+            success,
+          },
+        });
+      }
       let conditionInstanceId: string | undefined;
       if (!success) {
         const applied = await this.conditionLifecycle.applyCondition(target, {
@@ -4091,6 +4120,7 @@ export class ClassFeatureResolverService {
         total,
         success,
         conditionInstanceId,
+        advantage,
       });
     }
 

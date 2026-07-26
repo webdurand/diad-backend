@@ -35,6 +35,7 @@ describe("blight-rules", () => {
   it("computes maximum damage for supported dice expressions", () => {
     expect(maximumDiceExpression("8d8")).toBe(64);
     expect(maximumDiceExpression("9d8 + 2")).toBe(74);
+    expect(maximumDiceExpression("2d8 - 1")).toBe(15);
     expect(maximumDiceExpression("invalid")).toBe(0);
   });
 });

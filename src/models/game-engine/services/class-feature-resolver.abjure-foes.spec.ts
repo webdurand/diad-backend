@@ -57,7 +57,21 @@ describe("ClassFeatureResolverService — Abjure Foes", () => {
         concentrationBroken: false,
       })),
     };
-    const dice = { roll: jest.fn().mockReturnValue(5) };
+    const roll = jest.fn().mockReturnValue(5);
+    const dice = {
+      roll,
+      rollWithAdvantage: jest.fn(() => {
+        const roll1 = roll(20);
+        const roll2 = roll(20);
+        const chosen = Math.max(roll1, roll2);
+        return {
+          roll1,
+          roll2,
+          chosen,
+          discarded: Math.min(roll1, roll2),
+        };
+      }),
+    };
     const service = new ClassFeatureResolverService(
       participants as any,
       {} as any,
@@ -151,6 +165,87 @@ describe("ClassFeatureResolverService — Abjure Foes", () => {
 
     expect(result.resolved).toBe(false);
     expect(conditionLifecycle.applyCondition).not.toHaveBeenCalled();
+  });
+
+  it("usa dois d20s e mantém o maior no teste de SAB sob Beacon of Hope", async () => {
+    const { service, source, nearEnemy, dice, caster } = setup();
+    (nearEnemy as typeof nearEnemy & { effectInstances: object[] })
+      .effectInstances = [
+      {
+        kind: "beacon_of_hope",
+        requiresConcentration: true,
+      },
+    ];
+    dice.roll
+      .mockReset()
+      .mockReturnValueOnce(4)
+      .mockReturnValueOnce(17);
+
+    const result = await service.resolveInvocation(source.id, {
+      featureSlug: "abjure-foes",
+      targets: [nearEnemy.id],
+      saveDc: 15,
+      caster,
+    });
+
+    expect(result.resolved).toBe(true);
+    expect(dice.rollWithAdvantage).toHaveBeenCalledTimes(1);
+    expect(dice.roll).toHaveBeenCalledTimes(2);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "save_rolled",
+        target_participant_id: nearEnemy.id,
+        data: expect.objectContaining({
+          ability: "wis",
+          rolled: 17,
+          modifier: -2,
+          total: 15,
+          success: true,
+          source: "abjure-foes",
+          hasAdvantage: true,
+          advantage: {
+            roll1: 4,
+            roll2: 17,
+            chosen: 17,
+            discarded: 4,
+          },
+        }),
+      }),
+    );
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        event_type: "beacon_of_hope_wisdom_save_advantage",
+        actor_participant_id: nearEnemy.id,
+        target_participant_id: nearEnemy.id,
+        data: expect.objectContaining({
+          sourceSpell: "beacon-of-hope",
+          ability: "wis",
+          roll1: 4,
+          roll2: 17,
+          chosen: 17,
+          finalTotal: 15,
+          success: true,
+        }),
+      }),
+    );
+    expect(result.resolutionPayload).toEqual(
+      expect.objectContaining({
+        results: [
+          expect.objectContaining({
+            targetId: nearEnemy.id,
+            rolled: 17,
+            total: 15,
+            success: true,
+            advantage: {
+              roll1: 4,
+              roll2: 17,
+              chosen: 17,
+              discarded: 4,
+            },
+          }),
+        ],
+      }),
+    );
   });
 
   it("rejeita alvo além de 60 pés sem gastar a resolução", async () => {

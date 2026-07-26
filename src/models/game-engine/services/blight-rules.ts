@@ -29,7 +29,13 @@ export function getBlightCreatureRules(
 
 export function maximumDiceExpression(expression: string | undefined): number {
   if (!expression) return 0;
-  const match = expression.trim().match(/^(\d+)d(\d+)(?:\s*\+\s*(\d+))?$/i);
+  const match = expression
+    .trim()
+    .match(/^(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?$/i);
   if (!match) return 0;
-  return Number(match[1]) * Number(match[2]) + Number(match[3] ?? 0);
+  const modifier = Number(match[4] ?? 0);
+  return (
+    Number(match[1]) * Number(match[2]) +
+    (match[3] === "-" ? -modifier : modifier)
+  );
 }
