@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import {
   CharacterEntity,
   CharacterStateEntity,
@@ -233,20 +233,87 @@ export class CharacterStateService {
   }
 
 
+  // UPDATE atômico direto no jsonb: o read-modify-write via save() perdia
+  // incrementos sob requests concorrentes (2 usos debitavam 1).
   async incrementFeatureUses(
     characterId: string,
     featureSlug: string,
     delta = 1,
   ): Promise<number> {
-    const state = await this.getState(characterId);
-    const current = state.feature_uses_used?.[featureSlug] ?? 0;
-    const next = current + delta;
-    state.feature_uses_used = {
-      ...(state.feature_uses_used ?? {}),
-      [featureSlug]: next,
-    };
-    await this.stateRepo.save(state);
-    return next;
+    const raw: unknown = await this.stateRepo.query(
+      `UPDATE character_state
+          SET feature_uses_used = jsonb_set(
+            COALESCE(feature_uses_used, '{}'::jsonb),
+            ARRAY[$2],
+            to_jsonb(COALESCE((feature_uses_used ->> $2)::int, 0) + $3)
+          )
+        WHERE character_id = $1
+        RETURNING (feature_uses_used ->> $2)::int AS next`,
+      [characterId, featureSlug, delta],
+    );
+    const rows = (
+      Array.isArray(raw) && Array.isArray(raw[0]) ? raw[0] : raw
+    ) as Array<{ next: number | string }>;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new NotFoundException("Estado do personagem nao encontrado.");
+    }
+    return Number(rows[0].next);
+  }
+
+  // Espelho em lote do computeMaxHp + leitura de current/temp HP, para o
+  // snapshot de encounter resolver HP de todos os PCs em 4 queries fixas.
+  // character_state é a fonte da verdade de HP de PC (participant.currentHp
+  // não é mantido pelos caminhos de dano/cura de PC).
+  async getHpOverviewByCharacterIds(
+    characterIds: string[],
+  ): Promise<
+    Map<string, { currentHp: number; maxHp: number; tempHp: number }>
+  > {
+    const overview = new Map<
+      string,
+      { currentHp: number; maxHp: number; tempHp: number }
+    >();
+    const ids = Array.from(new Set(characterIds)).filter(Boolean);
+    if (ids.length === 0) return overview;
+
+    const [states, classes, abilities, levelUps] = await Promise.all([
+      this.stateRepo.find({ where: { character_id: In(ids) } }),
+      this.charClassRepo.find({
+        where: { character_id: In(ids) },
+        order: { order: "ASC" },
+      }),
+      this.charAbilityRepo.find({ where: { character_id: In(ids) } }),
+      this.charLevelUpRepo.find({ where: { character_id: In(ids) } }),
+    ]);
+    const stateById = new Map(states.map((s) => [s.character_id, s]));
+
+    for (const characterId of ids) {
+      const state = stateById.get(characterId);
+      const primaryClass = classes.find(
+        (c) => c.character_id === characterId,
+      );
+      let maxHp = 10;
+      if (primaryClass) {
+        const conAbility = abilities.find(
+          (a) =>
+            a.character_id === characterId && a.ability_score.slug === "con",
+        );
+        const conMod = conAbility
+          ? getAbilityModifier(conAbility.base_score + conAbility.bonus)
+          : 0;
+        maxHp = primaryClass.class.hit_die + conMod;
+        for (const lu of levelUps) {
+          if (lu.character_id === characterId) maxHp += lu.hp_gained;
+        }
+        maxHp += state?.max_hp_bonus ?? 0;
+      }
+      overview.set(characterId, {
+        currentHp: state?.current_hp ?? maxHp,
+        maxHp,
+        tempHp: state?.temp_hp ?? 0,
+      });
+    }
+    return overview;
   }
 
   // Contexto mínimo para curas de descanso fora do fluxo updateHp (spec 049:

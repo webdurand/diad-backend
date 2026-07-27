@@ -6,6 +6,7 @@ import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.
 import { CharacterEntity } from "src/entities/character.entity";
 import type { CombatService } from "../combat.service";
 import type { PersistentAreaService } from "../persistent-area.service";
+import type { CharacterStateService } from "src/models/characters/services/character-state.service";
 
 const ENCOUNTER_ID = "11111111-1111-4111-8111-111111111111";
 const MONSTER_PART_ID = "22222222-2222-4222-8222-222222222222";
@@ -13,6 +14,10 @@ const MONSTER_PART_ID = "22222222-2222-4222-8222-222222222222";
 function makeService(
   encounter: Partial<EncounterEntity>,
   participants: Array<Partial<EncounterParticipantEntity>>,
+  pcHpByCharacterId = new Map<
+    string,
+    { currentHp: number; maxHp: number; tempHp: number }
+  >(),
 ) {
   const encounterRepo = {
     findOne: jest.fn(async () => encounter as EncounterEntity),
@@ -37,6 +42,9 @@ function makeService(
   const persistentArea = {
     cellInArea: jest.fn(() => false),
   } as unknown as PersistentAreaService;
+  const stateService = {
+    getHpOverviewByCharacterIds: jest.fn(async () => pcHpByCharacterId),
+  } as unknown as CharacterStateService;
   return new EncounterSnapshotService(
     encounterRepo as unknown as Repository<EncounterEntity>,
     participantRepo as unknown as Repository<EncounterParticipantEntity>,
@@ -44,6 +52,7 @@ function makeService(
     characterRepo as unknown as Repository<CharacterEntity>,
     combatService,
     persistentArea,
+    stateService,
   );
 }
 
@@ -270,7 +279,7 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
     );
   });
 
-  it("usa o HP persistido do combate sem recalcular a ficha do PC", async () => {
+  it("usa o character_state como fonte da verdade de HP do PC (participant.currentHp fica stale)", async () => {
     const pc = {
       ...baseMonsterParticipant(),
       id: "44444444-4444-4444-8444-444444444444",
@@ -280,7 +289,37 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
       currentHp: 23,
       maxHp: 31,
       tempHp: 4,
-    } as Partial<EncounterParticipantEntity>;
+    } as unknown as Partial<EncounterParticipantEntity>;
+    const pcHp = new Map([
+      [
+        "55555555-5555-4555-8555-555555555555",
+        { currentHp: 17, maxHp: 31, tempHp: 2 },
+      ],
+    ]);
+    const svc = makeService(baseEncounter, [pc], pcHp);
+
+    const result = await svc.build(ENCOUNTER_ID, "user-1", null);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.participants[0]?.hp).toEqual({
+      current: 17,
+      max: 31,
+      tempHp: 2,
+    });
+  });
+
+  it("cai no HP do participante quando o PC não tem overlay de estado", async () => {
+    const pc = {
+      ...baseMonsterParticipant(),
+      id: "44444444-4444-4444-8444-444444444444",
+      type: "pc",
+      characterId: "55555555-5555-4555-8555-555555555555",
+      monster: null,
+      currentHp: 23,
+      maxHp: 31,
+      tempHp: 4,
+    } as unknown as Partial<EncounterParticipantEntity>;
     const svc = makeService(baseEncounter, [pc]);
 
     const result = await svc.build(ENCOUNTER_ID, "user-1", null);

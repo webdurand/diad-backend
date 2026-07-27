@@ -731,7 +731,7 @@ describe("ClassFeatureExecutorService", () => {
       expect(orcState.feature_uses_used).toEqual({});
     });
 
-    it("serializes two answers to the same Relentless Endurance trigger", async () => {
+    it("deduplicates two identical answers to the same Relentless Endurance trigger", async () => {
       const {
         svc,
         orc,
@@ -759,19 +759,15 @@ describe("ClassFeatureExecutorService", () => {
         ),
       ]);
 
-      expect([first, second].filter((result) => result.ok)).toHaveLength(
-        1,
-      );
-      expect([first, second].filter((result) => !result.ok)).toHaveLength(
-        1,
-      );
+      expect(first.ok).toBe(true);
+      expect(second).toBe(first);
       expect(orc.currentHp).toBe(1);
       expect(orc.effectInstances).toEqual([]);
       expect(orcState.feature_uses_used).toEqual({
         "relentless-endurance": 1,
       });
       expect(eventService.emit).toHaveBeenCalledTimes(1);
-      expect(transaction).toHaveBeenCalledTimes(2);
+      expect(transaction).toHaveBeenCalledTimes(1);
       expect(participantRepo.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: "orc", encounterId: "enc-1" },
@@ -784,6 +780,73 @@ describe("ClassFeatureExecutorService", () => {
           lock: { mode: "pessimistic_write" },
         }),
       );
+    });
+  });
+
+  describe("guard anti duplo-submit", () => {
+    function makeOrcOnTurn() {
+      const ctx = makeService();
+      ctx.encounter.turnOrder = ["orc"];
+      ctx.encounter.currentTurnIndex = 0;
+      ctx.orc.currentHp = 10;
+      ctx.orc.dyingState = "none";
+      ctx.orc.effectInstances = [];
+      return ctx;
+    }
+
+    it("dois requests concorrentes da mesma feature compartilham uma única execução", async () => {
+      const { svc, stateService, classFeatureResolver } = makeOrcOnTurn();
+
+      const [first, second] = await Promise.all([
+        svc.execute("enc-1", "orc", "adrenaline-rush", {}, "owner-1"),
+        svc.execute("enc-1", "orc", "adrenaline-rush", {}, "owner-1"),
+      ]);
+
+      expect(first.ok).toBe(true);
+      expect(second).toBe(first);
+      expect(classFeatureResolver.resolveInvocation).toHaveBeenCalledTimes(1);
+      expect(stateService.incrementFeatureUses).toHaveBeenCalledTimes(1);
+    });
+
+    it("request concorrente de outra feature falha com ACTION_IN_PROGRESS", async () => {
+      const { svc } = makeOrcOnTurn();
+
+      const first = svc.execute("enc-1", "orc", "adrenaline-rush", {}, "owner-1");
+      const second = await svc.execute(
+        "enc-1",
+        "orc",
+        "second-wind",
+        {},
+        "owner-1",
+      );
+
+      expect(second).toMatchObject({ ok: false, code: "ACTION_IN_PROGRESS" });
+      await expect(first).resolves.toMatchObject({ ok: true });
+    });
+
+    it("libera o guard após a execução terminar", async () => {
+      const { svc } = makeOrcOnTurn();
+
+      const first = await svc.execute(
+        "enc-1",
+        "orc",
+        "adrenaline-rush",
+        {},
+        "owner-1",
+      );
+      const second = await svc.execute(
+        "enc-1",
+        "orc",
+        "adrenaline-rush",
+        {},
+        "owner-1",
+      );
+
+      expect(first.ok).toBe(true);
+      expect(second).toMatchObject({
+        ok: false,
+        code: "BONUS_ACTION_ALREADY_USED",
+      });
     });
   });
 });
