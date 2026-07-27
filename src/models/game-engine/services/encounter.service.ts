@@ -242,6 +242,18 @@ export class EncounterService {
     return fallbackUserId;
   }
 
+  // Caminho quente de permissão/validação: só o sessionId, sem carregar
+  // participants nem enriquecer fichas de PC (getById custa ~70 queries
+  // com party cheia — computeSheet por PC via enrichPcParticipants).
+  async getSessionIdFor(encounterId: string): Promise<string> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+      select: ["id", "sessionId"],
+    });
+    if (!encounter) throw new NotFoundException("Encontro nao encontrado.");
+    return encounter.sessionId;
+  }
+
   async getById(
     encounterId: string,
     options?: { withMonsters?: boolean },

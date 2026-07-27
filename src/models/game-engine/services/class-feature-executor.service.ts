@@ -6,7 +6,10 @@ import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { CharacterStateEntity } from "src/entities/character-state.entity";
 import { canTakeReactionFromConditions } from "./condition-effects.service";
-import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
+import {
+  CharacterSheetService,
+  type CharacterSheet,
+} from "src/models/characters/services/character-sheet.service";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
 import { EncounterService } from "./encounter.service";
 import { EventService } from "./event.service";
@@ -622,6 +625,7 @@ export class ClassFeatureExecutorService {
           classLevel,
           encounter,
           pcOwnerId,
+          sheet,
         );
       case "action-surge":
         return this.handleActionSurge(participant, encounter);
@@ -637,6 +641,8 @@ export class ClassFeatureExecutorService {
           encounter,
           pcOwnerId,
           spec.actionCost,
+          sheet,
+          featureUses,
         );
       case "cunning-action":
         return this.handleCunningAction(
@@ -715,14 +721,11 @@ export class ClassFeatureExecutorService {
     fighterLevel: number,
     encounter: EncounterEntity,
     pcOwnerId: string,
+    sheet: CharacterSheet,
   ): Promise<GameResult<unknown>> {
 
     const roll = this.diceService.rollExpression("1d10");
     const healAmount = roll.total + fighterLevel;
-    const sheet = await this.sheetService.computeSheet(
-      pcOwnerId,
-      participant.characterId!,
-    );
     const prevHp = sheet.currentHp ?? participant.currentHp ?? 0;
 
 
@@ -897,6 +900,8 @@ export class ClassFeatureExecutorService {
     encounter: EncounterEntity,
     ownerUserId: string,
     actionCost: FeatureSpec["actionCost"],
+    sheet: CharacterSheet,
+    featureUses: Record<string, number>,
   ): Promise<GameResult<unknown>> {
     const targetId = body.targetParticipantId as string | undefined;
     const hpAmount = Number(body.hpAmount ?? 0);
@@ -927,10 +932,6 @@ export class ClassFeatureExecutorService {
       "paralyzed",
       "stunned",
     ]);
-    const sheet = await this.sheetService.computeSheet(
-      ownerUserId,
-      paladin.characterId!,
-    );
     const hasRestoringTouch =
       (sheet as unknown as { hasRestoringTouch?: boolean })
         .hasRestoringTouch === true;
@@ -946,9 +947,6 @@ export class ClassFeatureExecutorService {
       );
     }
     const poolMax = paladinLevel * 5;
-    const featureUses = await this.stateService.getFeatureUsesUsed(
-      paladin.characterId!,
-    );
     const used = featureUses["lay-on-hands"] ?? 0;
 
     const target = await this.encounterService

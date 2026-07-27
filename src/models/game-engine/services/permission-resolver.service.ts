@@ -34,9 +34,9 @@ export class PermissionResolver {
       );
     }
 
-    const encounter = await this.encounterService.getById(encounterId);
-    const session = await this.sessionService.getById(encounter.sessionId);
-    const campaignId = session.campaignId ?? undefined;
+    const sessionId = await this.encounterService.getSessionIdFor(encounterId);
+    const campaignId =
+      (await this.sessionService.getCampaignIdOf(sessionId)) ?? undefined;
 
     const isDm = await this.isCampaignDm(campaignId, authUserId);
 

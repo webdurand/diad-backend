@@ -493,6 +493,17 @@ export class SessionService {
     return ranked[0].id;
   }
 
+  // Leitura enxuta para o caminho de permissão: sem o saneamento de
+  // activeEncounterId do getById (que pode até escrever na sessão).
+  async getCampaignIdOf(sessionId: string): Promise<string | null> {
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+      select: ["id", "campaignId"],
+    });
+    if (!session) throw new NotFoundException("Sessao nao encontrada.");
+    return session.campaignId ?? null;
+  }
+
   async getById(sessionId: string): Promise<GameSessionEntity> {
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },

@@ -19,7 +19,7 @@ function mockServices(
   }
   const encounterService: any = {
     getParticipant: jest.fn(async (id: string) => participantById.get(id)),
-    getById: jest.fn(async () => encounter),
+    getSessionIdFor: jest.fn(async () => encounter.sessionId),
     resolveCharacterOwner: jest.fn(
       async (_cid: string, fallback: string) =>
         participant.__ownerByCharacterId?.[_cid] ??
@@ -28,7 +28,7 @@ function mockServices(
     ),
   };
   const sessionService: any = {
-    getById: jest.fn(async () => session),
+    getCampaignIdOf: jest.fn(async () => session.campaignId ?? null),
   };
   const campaignService: any = {
     getById: jest.fn(async () =>
