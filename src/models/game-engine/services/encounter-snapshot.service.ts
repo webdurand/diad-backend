@@ -18,7 +18,10 @@ import type {
 } from "../interfaces/encounter-snapshot.interface";
 import { CombatService } from "./combat.service";
 import { PersistentAreaService } from "./persistent-area.service";
+import { CharacterStateService } from "src/models/characters/services/character-state.service";
 import type { TurnActionBlock } from "../interfaces/combat.interfaces";
+
+type PcHpOverlay = { currentHp: number; maxHp: number; tempHp: number };
 
 @Injectable()
 export class EncounterSnapshotService {
@@ -34,6 +37,7 @@ export class EncounterSnapshotService {
     @Inject(forwardRef(() => CombatService))
     private readonly combatService: CombatService,
     private readonly persistentArea: PersistentAreaService,
+    private readonly stateService: CharacterStateService,
   ) {}
 
   async build(
@@ -62,13 +66,23 @@ export class EncounterSnapshotService {
       actionParticipantId === undefined
         ? currentTurnParticipantId
         : actionParticipantId;
-    const [companionMeta, actorActions] = await Promise.all([
+    const [companionMeta, actorActions, pcHpOverlay] = await Promise.all([
       this.buildPcCompanionMeta(participants),
       this.loadAvailableActions(encounter.id, actionsOwnerId, authUserId),
+      this.stateService.getHpOverviewByCharacterIds(
+        participants
+          .filter((p) => p.type === "pc" && p.characterId)
+          .map((p) => p.characterId!),
+      ),
     ]);
 
     const snapParticipants: SnapshotParticipant[] = participants.map((p) => {
-      const hp = resolveSnapshotHp(p);
+      const hp = resolveSnapshotHp(
+        p,
+        p.type === "pc" && p.characterId
+          ? pcHpOverlay.get(p.characterId)
+          : undefined,
+      );
       return {
         id: p.id,
         type: p.type,
@@ -264,7 +278,10 @@ export class EncounterSnapshotService {
   }
 }
 
-function resolveSnapshotHp(participant: EncounterParticipantEntity): {
+function resolveSnapshotHp(
+  participant: EncounterParticipantEntity,
+  pcHp?: PcHpOverlay,
+): {
   current: number;
   max: number;
   tempHp: number;
@@ -276,7 +293,14 @@ function resolveSnapshotHp(participant: EncounterParticipantEntity): {
     return {
       current: transformation.form.currentHp,
       max: transformation.form.maxHp,
-      tempHp: transformation.form.tempHp ?? participant.tempHp ?? 0,
+      tempHp: transformation.form.tempHp ?? pcHp?.tempHp ?? participant.tempHp ?? 0,
+    };
+  }
+  if (pcHp) {
+    return {
+      current: pcHp.currentHp,
+      max: pcHp.maxHp,
+      tempHp: pcHp.tempHp,
     };
   }
   return {

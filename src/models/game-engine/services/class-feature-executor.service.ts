@@ -66,8 +66,48 @@ export class ClassFeatureExecutorService {
     private readonly concentration: ConcentrationService,
   ) {}
 
+  // Chave: participantId. Sem o guard, dois requests concorrentes leem os
+  // flags de ação antes de qualquer um persistir e a feature executa 2x.
+  // Requests idênticos (mesmo slug + body) compartilham a mesma execução;
+  // requests distintos falham graciosamente com ACTION_IN_PROGRESS.
+  private readonly inFlightByParticipant = new Map<
+    string,
+    { requestKey: string; promise: Promise<GameResult<unknown>> }
+  >();
 
   async execute(
+    encounterId: string,
+    participantId: string,
+    featureSlug: string,
+    body: Record<string, unknown>,
+    ownerUserId: string,
+  ): Promise<GameResult<unknown>> {
+    const requestKey = `${featureSlug}\u0000${JSON.stringify(body ?? {})}`;
+    const inFlight = this.inFlightByParticipant.get(participantId);
+    if (inFlight) {
+      if (inFlight.requestKey === requestKey) return inFlight.promise;
+      return failure(
+        "Ja existe uma acao deste participante em andamento.",
+        "ACTION_IN_PROGRESS",
+      );
+    }
+    let promise: Promise<GameResult<unknown>>;
+    promise = this.executeFeature(
+      encounterId,
+      participantId,
+      featureSlug,
+      body,
+      ownerUserId,
+    ).finally(() => {
+      if (this.inFlightByParticipant.get(participantId)?.promise === promise) {
+        this.inFlightByParticipant.delete(participantId);
+      }
+    });
+    this.inFlightByParticipant.set(participantId, { requestKey, promise });
+    return promise;
+  }
+
+  private async executeFeature(
     encounterId: string,
     participantId: string,
     featureSlug: string,
