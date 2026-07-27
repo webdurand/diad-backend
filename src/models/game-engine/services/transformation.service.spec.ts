@@ -1,6 +1,5 @@
 import { TransformationService } from "./transformation.service";
 
-
 describe("TransformationService (spec 012)", () => {
   function makeWolfMonster() {
     return {
@@ -29,6 +28,7 @@ describe("TransformationService (spec 012)", () => {
         displayName: string;
         type: "pc" | "monster";
         movementRemaining: number;
+        tempHp: number;
       }>;
       characterState?: Partial<{ current_hp: number; temp_hp: number }> | null;
       monsterExists?: boolean;
@@ -45,7 +45,7 @@ describe("TransformationService (spec 012)", () => {
       transformationState: opts.participantState?.transformationState ?? null,
       currentHp: 20,
       maxHp: 20,
-      tempHp: 0,
+      tempHp: opts.participantState?.tempHp ?? 0,
       movementRemaining: opts.participantState?.movementRemaining ?? 30,
     };
     const participantFindOne = jest.fn().mockResolvedValue({ ...participant });
@@ -156,6 +156,31 @@ describe("TransformationService (spec 012)", () => {
       expect(result.movementRemaining).toBe(30);
       expect(result.transformationState?.original.walkSpeed).toBe(30);
     });
+
+    it("preserva PV temporários preexistentes maiores que os concedidos pela forma XPHB", async () => {
+      const { svc, mocks } = setup({
+        characterState: { current_hp: 143, temp_hp: 80 },
+      });
+
+      const result = await svc.enterForm("p1", {
+        source: "wild-shape",
+        monsterSlug: "wolf",
+        rulesMode: "xphb-wild-shape",
+        druidLevel: 20,
+        isMoonDruid: true,
+        originalMaxHp: 143,
+      });
+
+      expect(result.tempHp).toBe(80);
+      expect(result.transformationState).toMatchObject({
+        grantedTempHp: 60,
+        original: { tempHp: 80 },
+        form: { tempHp: 80 },
+      });
+      expect(mocks.stateSave).toHaveBeenCalledWith(
+        expect.objectContaining({ temp_hp: 80 }),
+      );
+    });
   });
 
   describe("revertForm", () => {
@@ -207,6 +232,95 @@ describe("TransformationService (spec 012)", () => {
       const result = await svc.revertForm("p1", "player-dismiss");
 
       expect(result.movementRemaining).toBe(15);
+    });
+
+    it("preserva 80 PV temporários preexistentes ao remover os 60 oferecidos pela forma XPHB", async () => {
+      const state = {
+        source: "wild-shape",
+        rulesMode: "xphb-wild-shape",
+        grantedTempHp: 60,
+        form: { formName: "Wolf" },
+        original: {
+          currentHp: 143,
+          displayName: "Araxis",
+          maxHp: 143,
+          tempHp: 80,
+        },
+      };
+      const { svc, mocks } = setup({
+        participantState: {
+          transformationState: state,
+          displayName: "Wolf",
+          tempHp: 60,
+        },
+        characterState: { current_hp: 143, temp_hp: 80 },
+      });
+
+      const result = await svc.revertForm("p1", "player-dismiss");
+
+      expect(result.tempHp).toBe(80);
+      expect(mocks.stateSave).not.toHaveBeenCalled();
+      expect(mocks.participantSave).toHaveBeenCalledWith(
+        expect.objectContaining({ tempHp: 80, transformationState: null }),
+      );
+    });
+
+    it("remove o saldo de PV temporários quando a forma XPHB substituiu o pool original", async () => {
+      const state = {
+        source: "wild-shape",
+        rulesMode: "xphb-wild-shape",
+        grantedTempHp: 60,
+        form: { formName: "Wolf" },
+        original: {
+          currentHp: 143,
+          displayName: "Araxis",
+          maxHp: 143,
+          tempHp: 20,
+        },
+      };
+      const { svc, mocks } = setup({
+        participantState: {
+          transformationState: state,
+          displayName: "Wolf",
+          tempHp: 37,
+        },
+        characterState: { current_hp: 143, temp_hp: 37 },
+      });
+
+      const result = await svc.revertForm("p1", "player-dismiss");
+
+      expect(result.tempHp).toBe(0);
+      expect(mocks.stateSave).toHaveBeenCalledWith(
+        expect.objectContaining({ temp_hp: 0 }),
+      );
+    });
+
+    it("preserva um novo pool maior que a concessão da forma XPHB", async () => {
+      const state = {
+        source: "wild-shape",
+        rulesMode: "xphb-wild-shape",
+        grantedTempHp: 60,
+        form: { formName: "Wolf" },
+        original: {
+          currentHp: 143,
+          displayName: "Araxis",
+          maxHp: 143,
+          tempHp: 0,
+        },
+      };
+      const { svc, mocks } = setup({
+        participantState: {
+          transformationState: state,
+          displayName: "Wolf",
+          tempHp: 75,
+        },
+        characterState: { current_hp: 143, temp_hp: 75 },
+      });
+
+      const result = await svc.revertForm("p1", "player-dismiss");
+
+      expect(result.tempHp).toBe(75);
+      expect(mocks.stateSave).not.toHaveBeenCalled();
     });
   });
 
@@ -398,6 +512,72 @@ describe("TransformationService (spec 012)", () => {
       const saved = mocks.participantSave.mock.calls[0][0];
       expect(saved.displayName).toBe("Araxis");
       expect(saved.transformationState).toBeNull();
+    });
+
+    it("preserva PV temporários preexistentes maiores ao expirar Wild Shape XPHB", async () => {
+      const state = mkState({
+        rulesMode: "xphb-wild-shape",
+        grantedTempHp: 60,
+        durationRoundsRemaining: 1,
+        original: {
+          maxHp: 143,
+          currentHp: 143,
+          tempHp: 80,
+          displayName: "Araxis",
+        },
+      });
+      const { svc, mocks } = setup({
+        participantState: {
+          transformationState: state,
+          displayName: "Wolf",
+          tempHp: 60,
+        },
+        characterState: { current_hp: 143, temp_hp: 80 },
+      });
+
+      await svc.tickDurationOnTurnStart("p1");
+
+      const saved = mocks.participantSave.mock.calls[0][0] as {
+        tempHp: number;
+        transformationState: unknown;
+      };
+      expect(saved.tempHp).toBe(80);
+      expect(saved.transformationState).toBeNull();
+      expect(mocks.stateSave).not.toHaveBeenCalled();
+    });
+
+    it("remove o saldo da concessão XPHB quando a forma expira", async () => {
+      const state = mkState({
+        rulesMode: "xphb-wild-shape",
+        grantedTempHp: 60,
+        durationRoundsRemaining: 1,
+        original: {
+          maxHp: 143,
+          currentHp: 143,
+          tempHp: 0,
+          displayName: "Araxis",
+        },
+      });
+      const { svc, mocks } = setup({
+        participantState: {
+          transformationState: state,
+          displayName: "Wolf",
+          tempHp: 24,
+        },
+        characterState: { current_hp: 143, temp_hp: 24 },
+      });
+
+      await svc.tickDurationOnTurnStart("p1");
+
+      const saved = mocks.participantSave.mock.calls[0][0] as {
+        tempHp: number;
+        transformationState: unknown;
+      };
+      expect(saved.tempHp).toBe(0);
+      expect(saved.transformationState).toBeNull();
+      expect(mocks.stateSave).toHaveBeenCalledWith(
+        expect.objectContaining({ temp_hp: 0 }),
+      );
     });
 
     it("reverte Polymorph quando duração expira", async () => {

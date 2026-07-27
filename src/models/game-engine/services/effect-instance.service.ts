@@ -24,6 +24,7 @@ export interface AddEffectInput {
   sourceCasterParticipantId: string;
   payload: EffectInstancePayload;
   expiresAt: { kind: EffectExpirationKind; value?: number };
+  expiresAtTurnEndParticipantId?: string | null;
   requiresConcentration: boolean;
 }
 
@@ -100,6 +101,8 @@ export class EffectInstanceService {
       kind: input.kind,
       payload,
       expiresAt: input.expiresAt,
+      expiresAtTurnEndParticipantId:
+        input.expiresAtTurnEndParticipantId ?? null,
       requiresConcentration: input.requiresConcentration,
       appliedAt: new Date().toISOString(),
     };
@@ -141,6 +144,8 @@ export class EffectInstanceService {
           sourceFeatureSlug: effect.sourceFeatureSlug,
           payload: effect.payload,
           expiresAt: effect.expiresAt,
+          expiresAtTurnEndParticipantId:
+            effect.expiresAtTurnEndParticipantId,
           requiresConcentration: effect.requiresConcentration,
         },
       },
@@ -175,6 +180,7 @@ export class EffectInstanceService {
       | "save_succeeded"
       | "consumed"
       | "concentration_broken"
+      | "trigger_invalidated"
       | "manual",
   ): Promise<{ removed: boolean; events: GameEventData[] }> {
     const before = target.effectInstances ?? [];
@@ -423,6 +429,38 @@ export class EffectInstanceService {
               : current,
         );
         await this.participants.save(participant);
+      }
+    }
+
+    return { events, expired };
+  }
+
+  async expireAtParticipantTurnEnd(
+    encounterId: string,
+    participantId: string,
+  ): Promise<{ events: GameEventData[]; expired: string[] }> {
+    const participants = await this.participants.find({
+      where: { encounterId },
+    });
+    const events: GameEventData[] = [];
+    const expired: string[] = [];
+
+    for (const participant of participants) {
+      const matching = (participant.effectInstances ?? []).filter(
+        (effect) =>
+          effect.expiresAt.kind === "participant_turn_ends" &&
+          effect.expiresAtTurnEndParticipantId === participantId,
+      );
+      for (const effect of matching) {
+        const result = await this.removeEffect(
+          participant,
+          effect.id,
+          "duration",
+        );
+        if (result.removed) {
+          expired.push(effect.id);
+          events.push(...result.events);
+        }
       }
     }
 

@@ -164,6 +164,7 @@ import { OpenModeActionGeneratorService } from "./services/open-mode-action-gene
 import { ScenePoiObservationService } from "./services/scene-poi-observation.service";
 import { EncounterDifficultyPolicyService } from "./services/encounter-difficulty-policy.service";
 import { PaladinAuraService } from "./services/paladin-aura.service";
+import { AshPuffService } from "./services/ash-puff.service";
 
 @Module({
   imports: [
@@ -286,6 +287,7 @@ import { PaladinAuraService } from "./services/paladin-aura.service";
     ClericFeaturesService,
     PaladinFeaturesService,
     PaladinAuraService,
+    AshPuffService,
     SorcererFeaturesService,
     TransformationService,
     SummoningService,
@@ -380,6 +382,7 @@ import { PaladinAuraService } from "./services/paladin-aura.service";
     BerserkerService,
     ClericFeaturesService,
     PaladinFeaturesService,
+    AshPuffService,
     SorcererFeaturesService,
     TransformationService,
     SummoningService,

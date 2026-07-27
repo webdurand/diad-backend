@@ -71,11 +71,22 @@ describe("ActionsService", () => {
       raceSlug?: string;
       raceTraitChoices?: string[];
       featureUsesUsed?: Record<string, number>;
+      sourceCode?: "PHB" | "XPHB";
+      subclassSlug?: string;
+      linkFeaturesToClass?: boolean;
     } = {},
   ) => {
     const classSlug = opts.classSlug ?? "fighter";
     const level = opts.level ?? 1;
     const cc = makeCharacterClass(classSlug, level);
+    if (opts.subclassSlug) {
+      cc.subclass_id = `subclass-${opts.subclassSlug}`;
+      cc.subclass = {
+        id: cc.subclass_id,
+        slug: opts.subclassSlug,
+        name: opts.subclassSlug,
+      } as any;
+    }
     const abilities = makeCharacterAbilityScores({
       str: opts.str ?? 16,
       dex: opts.dex ?? 14,
@@ -89,7 +100,12 @@ describe("ActionsService", () => {
     if (opts.raceSlug) origin.race.slug = opts.raceSlug;
     origin.race_trait_choices = opts.raceTraitChoices ?? [];
     state.feature_uses_used = opts.featureUsesUsed ?? {};
-    const character = makeCharacter({ character_origin: origin });
+    const character = makeCharacter({
+      character_origin: origin,
+      ...(opts.sourceCode
+        ? { source: { code: opts.sourceCode } }
+        : {}),
+    });
 
     repos.character.findOne!.mockResolvedValue(character);
     repos.charClass.find!.mockResolvedValue([cc]);
@@ -98,7 +114,13 @@ describe("ActionsService", () => {
     repos.charSpell.find!.mockResolvedValue(opts.spells ?? []);
     const equip = opts.equip ?? [];
     repos.charEquip.find!.mockResolvedValue(equip);
-    repos.charFeature.find!.mockResolvedValue(opts.features ?? []);
+    repos.charFeature.find!.mockResolvedValue(
+      (opts.features ?? []).map((feature) =>
+        opts.linkFeaturesToClass
+          ? { ...feature, source_class_id: cc.class_id }
+          : feature,
+      ),
+    );
     repos.charState.findOne!.mockResolvedValue(state);
 
     const catItems = equip
@@ -407,6 +429,56 @@ describe("ActionsService", () => {
       expect(firebolt!.source).toBe("spell");
       expect(firebolt!.automationStatus).toBe("ready");
       expect(firebolt!.behaviorKind).toBe("attack_damage");
+    });
+
+    it("exposes a leveled spell known by a known-spells caster", async () => {
+      const spell = {
+        id: "spell-hunters-mark",
+        slug: "hunters-mark-phb",
+        name: "Hunter's Mark",
+        level: 1,
+        description: ["You choose a creature you can see within range."],
+        casting_time: "1 bonus action",
+        range: "90 feet",
+        concentration: true,
+        ritual: false,
+        attack_type: null,
+        damage: null,
+        dc: null,
+        school: null,
+        components: { V: true },
+        duration: "Up to 1 hour",
+      };
+
+      setupActions({
+        classSlug: "ranger-phb",
+        level: 5,
+        wis: 16,
+        spells: [
+          {
+            id: "cs-hunters-mark",
+            character_id: "char-1",
+            spell_id: spell.id,
+            source: "class",
+            status: SpellStatusEnum.Known,
+            always_prepared: false,
+            spell,
+          },
+        ],
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const huntersMark = result.bonusActions.find(
+        (action) => action.id === "spell-hunters-mark-phb",
+      );
+
+      expect(huntersMark).toMatchObject({
+        name: "Hunter's Mark",
+        source: "spell",
+        timing: "bonus_action",
+        spellLevel: 1,
+        requiresConcentration: true,
+      });
     });
 
     it("exposes Beacon of Hope as a ready concentrated action", async () => {
@@ -720,6 +792,306 @@ describe("ActionsService", () => {
       expect(breaths.every((action) => action.saveSuccess === "half")).toBe(
         true,
       );
+    });
+
+    it("exposes Orc Adrenaline Rush with PB uses and short-rest recharge", async () => {
+      setupActions({
+        classSlug: "fighter",
+        level: 10,
+        raceSlug: "orc-xphb",
+        featureUsesUsed: { "adrenaline-rush": 1 },
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const adrenalineRush = result.bonusActions.find(
+        (action) => action.featureSlug === "adrenaline-rush",
+      );
+
+      expect(adrenalineRush).toMatchObject({
+        timing: "bonus_action",
+        uses: 3,
+        usesMax: 4,
+        usesRecharge: "short_rest",
+      });
+      expect(adrenalineRush?.description).toContain("4 PV temporários");
+      expect(adrenalineRush?.description).toContain("Disparada");
+    });
+  });
+
+  describe("Ranger Hunter — Volley (PHB 2014)", () => {
+    const shortbow = () =>
+      makeCharacterEquipment("shortbow", {
+        equipped: true,
+        equipmentOverrides: {
+          name: "Shortbow",
+          damage: {
+            damage_dice: "1d6",
+            damage_type: { name: "Piercing" },
+          },
+          properties: [{ index: "ammunition", name: "Ammunition" }],
+          range: { normal: 80, long: 320 },
+          weight: "2",
+        },
+      });
+
+    it("publica uma Saraivada por arma à distância equipada somente com o feature escolhido", async () => {
+      setupActions({
+        classSlug: "ranger-phb",
+        level: 11,
+        sourceCode: "PHB",
+        subclassSlug: "ranger-hunter-phb",
+        linkFeaturesToClass: true,
+        dex: 18,
+        equip: [shortbow()],
+        proficiencies: [
+          makeCharacterProficiency(
+            "shortbows",
+            ProficiencyTypeEnum.Weapon,
+          ),
+        ],
+        features: [
+          makeCharacterFeature("volley-ranger-hunter-11-phb", "ranger-phb"),
+        ],
+        equipmentCategorySlugs: {
+          shortbow: "simple-ranged-weapons",
+        },
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const volley = result.actions.find(
+        (action) =>
+          action.featureSlug === "volley-ranger-hunter-11-phb",
+      );
+      const weapon = result.actions.find(
+        (action) => action.source === "weapon" && action.name === "Shortbow",
+      );
+
+      expect(volley).toMatchObject({
+        name: "Saraivada (Volley) — Shortbow",
+        timing: "action",
+        source: "feature",
+        weaponActionSlug: weapon?.id,
+        weaponCategory: "ranged",
+        attackBonus: 8,
+        damage: { dice: "1d6", type: "Piercing", bonus: 4 },
+        range: "80/320 ft",
+        aoe: {
+          originType: "point",
+          shape: "sphere",
+          sizeFt: 10,
+          rangeFt: 320,
+        },
+      });
+      expect(volley?.description).toContain(
+        "munição e linha de visão não são rastreadas",
+      );
+    });
+
+    it("aceita a escolha persistida no feature-pai de Multiattack", async () => {
+      setupActions({
+        classSlug: "ranger-phb",
+        level: 11,
+        sourceCode: "PHB",
+        subclassSlug: "ranger-hunter-phb",
+        linkFeaturesToClass: true,
+        equip: [shortbow()],
+        features: [
+          makeCharacterFeature(
+            "multiattack-ranger-hunter-11-phb",
+            "ranger-phb",
+            { choices: { option: "multiattack-volley" } },
+          ),
+        ],
+        equipmentCategorySlugs: {
+          shortbow: "simple-ranged-weapons",
+        },
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+
+      expect(
+        result.actions.filter(
+          (action) =>
+            action.featureSlug === "volley-ranger-hunter-11-phb",
+        ),
+      ).toHaveLength(1);
+    });
+
+    it.each([
+      {
+        label: "PHB sem a escolha",
+        sourceCode: "PHB" as const,
+        features: [
+          makeCharacterFeature(
+            "multiattack-ranger-hunter-11-phb",
+            "ranger-phb",
+            { choices: { option: "multiattack-whirlwind-attack" } },
+          ),
+        ],
+      },
+      {
+        label: "XPHB mesmo com slug legado injetado",
+        sourceCode: "XPHB" as const,
+        features: [
+          makeCharacterFeature("volley-ranger-hunter-11-phb", "ranger-xphb"),
+        ],
+      },
+    ])("não publica para $label", async ({ sourceCode, features }) => {
+      setupActions({
+        classSlug: sourceCode === "PHB" ? "ranger-phb" : "ranger-xphb",
+        level: 11,
+        sourceCode,
+        subclassSlug:
+          sourceCode === "PHB"
+            ? "ranger-hunter-phb"
+            : "ranger-hunter-xphb",
+        linkFeaturesToClass: true,
+        equip: [shortbow()],
+        features,
+        equipmentCategorySlugs: {
+          shortbow: "simple-ranged-weapons",
+        },
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+
+      expect(
+        result.actions.some(
+          (action) =>
+            action.featureSlug === "volley-ranger-hunter-11-phb",
+        ),
+      ).toBe(false);
+    });
+
+    it.each([
+      {
+        label: "feature vinculada a outra classe",
+        subclassSlug: "ranger-hunter-phb",
+        linkFeaturesToClass: false,
+      },
+      {
+        label: "Ranger que não é da subclasse Hunter",
+        subclassSlug: "ranger-beast-master-phb",
+        linkFeaturesToClass: true,
+      },
+    ])(
+      "não publica para $label",
+      async ({ subclassSlug, linkFeaturesToClass }) => {
+        setupActions({
+          classSlug: "ranger-phb",
+          level: 11,
+          sourceCode: "PHB",
+          subclassSlug,
+          linkFeaturesToClass,
+          equip: [shortbow()],
+          features: [
+            makeCharacterFeature(
+              "volley-ranger-hunter-11-phb",
+              "ranger-phb",
+            ),
+          ],
+          equipmentCategorySlugs: {
+            shortbow: "simple-ranged-weapons",
+          },
+        });
+
+        const result = await service.getActions("user-1", "char-1");
+
+        expect(
+          result.actions.some(
+            (action) =>
+              action.featureSlug === "volley-ranger-hunter-11-phb",
+          ),
+        ).toBe(false);
+      },
+    );
+
+    it("ignora valor Volley aninhado fora da chave option canônica", async () => {
+      setupActions({
+        classSlug: "ranger-phb",
+        level: 11,
+        sourceCode: "PHB",
+        subclassSlug: "ranger-hunter-phb",
+        linkFeaturesToClass: true,
+        equip: [shortbow()],
+        features: [
+          makeCharacterFeature(
+            "multiattack-ranger-hunter-11-phb",
+            "ranger-phb",
+            {
+              choices: {
+                option: "multiattack-whirlwind-attack",
+                injected: { arbitrary: "multiattack-volley" },
+              },
+            },
+          ),
+        ],
+        equipmentCategorySlugs: {
+          shortbow: "simple-ranged-weapons",
+        },
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+
+      expect(
+        result.actions.some(
+          (action) =>
+            action.featureSlug === "volley-ranger-hunter-11-phb",
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe("Ranger — Feral Senses (PHB 2014)", () => {
+    it("marca ações com rolagem de ataque para a prévia ignorar invisibilidade", async () => {
+      setupActions({
+        classSlug: "ranger-phb",
+        level: 20,
+        sourceCode: "PHB",
+        dex: 20,
+        equip: [
+          makeCharacterEquipment("longbow", {
+            equipped: true,
+            equipmentOverrides: {
+              name: "Longbow",
+              damage: {
+                damage_dice: "1d8",
+                damage_type: { name: "Piercing" },
+              },
+              properties: [{ index: "ammunition", name: "Ammunition" }],
+              range: { normal: 150, long: 600 },
+              weight: "2",
+            },
+          }),
+        ],
+        features: [
+          makeCharacterFeature(
+            "feral-senses-ranger-18-phb",
+            "ranger-phb",
+          ),
+        ],
+        equipmentCategorySlugs: {
+          longbow: "martial-ranged-weapons",
+        },
+      });
+
+      const result = await service.getActions("user-1", "char-1");
+      const longbow = result.actions.find(
+        (action) => action.name === "Longbow",
+      );
+
+      expect(longbow).toMatchObject({
+        attackBonus: expect.any(Number),
+        ignoresInvisibleTargetDisadvantage: true,
+      });
+      expect(
+        result.actions
+          .filter((action) => typeof action.attackBonus !== "number")
+          .every(
+            (action) =>
+              action.ignoresInvisibleTargetDisadvantage === undefined,
+          ),
+      ).toBe(true);
     });
   });
 

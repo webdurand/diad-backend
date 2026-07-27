@@ -87,7 +87,14 @@ export class SavingThrowService {
     const modifier = saveBlock.bonus;
 
 
-    const conditions = sheet.conditions ?? [];
+    const subject = dto.participantId
+      ? await this.participantRepo.findOne({
+          where: { id: dto.participantId },
+        })
+      : null;
+    const conditions = Array.from(
+      new Set([...(sheet.conditions ?? []), ...(subject?.conditions ?? [])]),
+    );
     const condMods = this.conditionEffects.getSavingThrowModifiers(
       conditions,
       dto.ability,
@@ -108,11 +115,6 @@ export class SavingThrowService {
 
     let hasAdvantage = dto.advantage ?? false;
     let hasDisadvantage = dto.disadvantage ?? false;
-    const subject = dto.participantId
-      ? await this.participantRepo.findOne({
-          where: { id: dto.participantId },
-        })
-      : null;
 
     if (condMods.hasAdvantage) hasAdvantage = true;
     if (condMods.hasDisadvantage) hasDisadvantage = true;

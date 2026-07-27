@@ -580,6 +580,51 @@ describe("SpellService", () => {
         expect(state.feature_uses_used["divine-sense"]).toBe(2);
       });
 
+      it("resets Adrenaline Rush on a short rest but preserves Relentless Endurance", async () => {
+        const cc = makeCharacterClass("fighter", 10);
+        const state = makeCharacterState({
+          current_hp: 30,
+          feature_uses_used: {
+            "adrenaline-rush": 2,
+            "relentless-endurance": 1,
+          },
+        });
+
+        repos.character.findOne!.mockResolvedValue(makeCharacter());
+        repos.charClass.find!.mockResolvedValue([cc]);
+        repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+        repos.state.findOne!.mockResolvedValue(state);
+        repos.state.save!.mockResolvedValue(state);
+
+        await service.rest("user-1", "char-1", { type: "short" });
+
+        expect(state.feature_uses_used["adrenaline-rush"]).toBe(0);
+        expect(state.feature_uses_used["relentless-endurance"]).toBe(1);
+      });
+
+      it("resets both Orc resources on a long rest", async () => {
+        const cc = makeCharacterClass("fighter", 10);
+        const state = makeCharacterState({
+          current_hp: 30,
+          feature_uses_used: {
+            "adrenaline-rush": 2,
+            "relentless-endurance": 1,
+          },
+        });
+
+        repos.character.findOne!.mockResolvedValue(makeCharacter());
+        repos.charClass.find!.mockResolvedValue([cc]);
+        repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+        repos.state.findOne!.mockResolvedValue(state);
+        repos.charLevelUp.find!.mockResolvedValue([]);
+        repos.state.save!.mockResolvedValue(state);
+
+        await service.rest("user-1", "char-1", { type: "long" });
+
+        expect(state.feature_uses_used["adrenaline-rush"]).toBe(0);
+        expect(state.feature_uses_used["relentless-endurance"]).toBe(0);
+      });
+
       it("long rest resets all feature uses regardless of recharge", async () => {
         const cc = makeCharacterClass("paladin", 5);
         const state = makeCharacterState({

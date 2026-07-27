@@ -702,11 +702,13 @@ export class AiTurnService {
         case "ready":
         case "search":
         case "use-object":
+        case "fast-hands-sleight-of-hand":
         case "escape-web":
         case "freedom-escape":
         case "flee-fear":
         case "wake-hypnotized": {
           const dto = toGenericActionDto(participantId, step);
+          dto.ownerUserId = authUserId;
           const res = await this.genericActionsService.execute(
             encounter.id,
             dto,
@@ -868,6 +870,14 @@ function toGenericActionDto(
         kind: "use-object",
         participantId,
         objectRef: step.objectRef,
+      } as GenericActionDto;
+    case "fast-hands-sleight-of-hand":
+      return {
+        kind: "fast-hands-sleight-of-hand",
+        participantId,
+        fastHandsTask: step.fastHandsTask,
+        targetDc: step.targetDc,
+        targetLabel: step.targetLabel,
       } as GenericActionDto;
     case "escape-web":
       return {

@@ -1,4 +1,7 @@
 import { ConcentrationService } from "./concentration.service";
+import { EncounterEntity } from "src/entities/encounter.entity";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
 
 describe("ConcentrationService summon lifecycle", () => {
   function setup(effectMetadata: Record<string, unknown>) {
@@ -62,10 +65,44 @@ describe("ConcentrationService summon lifecycle", () => {
       summon,
       encounter,
       participants,
+      areas,
       encounters,
       service: new ConcentrationService(participants, areas, encounters),
     };
   }
+
+  it("uses transaction-scoped repositories when a manager is provided", async () => {
+    const {
+      service,
+      caster,
+      participants,
+      areas,
+      encounters,
+    } = setup({
+      concentrationBreakBehavior: "dismiss",
+    });
+    const manager = {
+      getRepository: jest.fn((entity: unknown) => {
+        if (entity === EncounterParticipantEntity) return participants;
+        if (entity === PersistentAreaEffectEntity) return areas;
+        if (entity === EncounterEntity) return encounters;
+        throw new Error("unexpected repository");
+      }),
+    };
+
+    await service.break(caster, "incapacitated", manager as never);
+
+    expect(manager.getRepository).toHaveBeenCalledWith(
+      EncounterParticipantEntity,
+    );
+    expect(manager.getRepository).toHaveBeenCalledWith(
+      PersistentAreaEffectEntity,
+    );
+    expect(manager.getRepository).toHaveBeenCalledWith(EncounterEntity);
+    expect(participants.remove).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "summon-1" }),
+    );
+  });
 
   it("remove summon concentrado quando o efeito manda dispensar", async () => {
     const { service, caster, participants, encounter } = setup({

@@ -31,4 +31,45 @@ describe("class feature catalog — species sources", () => {
       ).matches,
     ).toBe(false);
   });
+
+  it("cataloga os recursos do Orc com economia e recargas corretas", () => {
+    const adrenalineRush = CLASS_FEATURE_CATALOG.find(
+      (feature) => feature.slug === "adrenaline-rush",
+    )!;
+    const relentlessEndurance = CLASS_FEATURE_CATALOG.find(
+      (feature) => feature.slug === "relentless-endurance",
+    )!;
+
+    expect(
+      matchesClass(
+        adrenalineRush,
+        [{ slug: "fighter", level: 10 }],
+        undefined,
+        "orc",
+        10,
+      ),
+    ).toEqual({ matches: true, classLevel: 10 });
+    expect(adrenalineRush.actionCost).toBe("bonus");
+    expect(adrenalineRush.maxUsesByLevel?.(10)).toBe(4);
+    expect(adrenalineRush.rechargeOn).toBe("short");
+
+    expect(relentlessEndurance.actionCost).toBe("free");
+    expect(relentlessEndurance.maxUsesByLevel?.(20)).toBe(1);
+    expect(relentlessEndurance.rechargeOn).toBe("long");
+  });
+
+  it("não oferece recursos Ranger XPHB a uma classe Ranger PHB", () => {
+    for (const slug of ["favored-enemy", "tireless", "natures-veil"]) {
+      const feature = CLASS_FEATURE_CATALOG.find(
+        (candidate) => candidate.slug === slug,
+      )!;
+
+      expect(
+        matchesClass(feature, [{ slug: "ranger-phb", level: 20 }]).matches,
+      ).toBe(false);
+      expect(
+        matchesClass(feature, [{ slug: "ranger", level: 20 }]).matches,
+      ).toBe(true);
+    }
+  });
 });

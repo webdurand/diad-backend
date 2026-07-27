@@ -14,10 +14,15 @@ import {
 } from "../interfaces/result.type";
 import { ConcentrationService } from "./concentration.service";
 import { SummoningService } from "./summoning.service";
+import {
+  AARAKOCRA_RITUAL_ACTION_ID,
+  AARAKOCRA_RITUAL_SIZE,
+  AARAKOCRA_RITUAL_SUMMON_SOURCE,
+} from "../interfaces/summoning.interfaces";
 
-const RITUAL_ACTION_ID = "aarakocra-mm-summon-air-elemental";
+const RITUAL_ACTION_ID = AARAKOCRA_RITUAL_ACTION_ID;
 const RITUAL_EFFECT_KIND = "summoning_ritual" as const;
-const RITUAL_SIZE = 5;
+const RITUAL_SIZE = AARAKOCRA_RITUAL_SIZE;
 const RITUAL_RANGE_FT = 30;
 const RITUAL_TURNS = 3;
 
@@ -85,6 +90,14 @@ export class AarakocraRitualService {
         GameErrorCode.NO_ACTION_AVAILABLE,
       );
     }
+    if (
+      (actor.rechargeState ?? {})[AARAKOCRA_RITUAL_ACTION_ID] === "used"
+    ) {
+      return failure(
+        "Este Aarakocra já participou desta invocação e permanece indisponível no estado atual.",
+        GameErrorCode.NO_USES_REMAINING,
+      );
+    }
 
     const aarakocra = (
       await this.participants.find({
@@ -95,7 +108,12 @@ export class AarakocraRitualService {
       },
       relations: ["monster"],
       })
-    ).filter((participant) => encounter.turnOrder.includes(participant.id));
+    ).filter(
+      (participant) =>
+        encounter.turnOrder.includes(participant.id) &&
+        (participant.rechargeState ?? {})[AARAKOCRA_RITUAL_ACTION_ID] !==
+          "used",
+    );
     const group =
       this.findActiveGroup(aarakocra, actor.id) ??
       this.findValidGroup(aarakocra, actor.id);
@@ -190,6 +208,12 @@ export class AarakocraRitualService {
 
     if (allComplete) {
       const position = await this.findUnoccupiedPosition(encounterId, actor);
+      const namesById = new Map(
+        freshGroup.map((member) => [member.id, member.displayName]),
+      );
+      const ritualParticipantNames = groupIds.map(
+        (id) => namesById.get(id) ?? id,
+      );
       const summon = await this.summoning.spawnSummon(encounterId, {
         casterParticipantId: actor.id,
         monsterSlug: "air-elemental",
@@ -200,7 +224,11 @@ export class AarakocraRitualService {
           actor.controlledBy === "ai" ? "ai-controlled" : "own-initiative",
         durationRoundsTotal: 600,
         concentrationLinked: false,
-        source: "aarakocra-air-elemental-ritual",
+        source: AARAKOCRA_RITUAL_SUMMON_SOURCE,
+        metadata: {
+          ritualParticipantIds: groupIds,
+          ritualParticipantNames,
+        },
       });
       summonId = summon.id;
       for (const member of freshGroup) {
@@ -217,6 +245,10 @@ export class AarakocraRitualService {
           member.concentrationRoundsRemaining = null;
           member.concentrationSaveDc = null;
         }
+        member.rechargeState = {
+          ...(member.rechargeState ?? {}),
+          [AARAKOCRA_RITUAL_ACTION_ID]: "used",
+        };
       }
       await this.participants.save(freshGroup);
       events.push({
@@ -230,6 +262,7 @@ export class AarakocraRitualService {
           source: RITUAL_ACTION_ID,
           durationRoundsTotal: 600,
           ritualParticipantIds: groupIds,
+          ritualParticipantNames,
         },
       });
     }

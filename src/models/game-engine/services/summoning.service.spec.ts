@@ -291,6 +291,37 @@ describe("SummoningService (spec 012)", () => {
       );
     });
 
+    it("persiste duração e o grupo exato do ritual Aarakocra", async () => {
+      const { svc } = setup();
+      const participantIds = ["a1", "a2", "a3", "a4", "a5"];
+      const participantNames = ["Aarakocra 1", "Aarakocra 2", "Aarakocra 3", "Aarakocra 4", "Aarakocra 5"];
+
+      const summon = await svc.spawnSummon("enc-1", {
+        casterParticipantId: "caster-1",
+        monsterSlug: "wolf",
+        source: "aarakocra-air-elemental-ritual",
+        durationRoundsTotal: 600,
+        metadata: {
+          ritualParticipantIds: participantIds,
+          ritualParticipantNames: participantNames,
+        },
+      });
+
+      expect(summon.appliedEffects).toContainEqual(
+        expect.objectContaining({
+          kind: "summon",
+          metadata: expect.objectContaining({
+            source: "aarakocra-air-elemental-ritual",
+            durationRoundsTotal: 600,
+            durationRoundsRemaining: 600,
+            durationCycleStarted: false,
+            ritualParticipantIds: participantIds,
+            ritualParticipantNames: participantNames,
+          }),
+        }),
+      );
+    });
+
     it("rejeita quando caster n\u00e3o existe", async () => {
       const { svc } = setup({ casterExists: false });
       await expect(
@@ -573,6 +604,447 @@ describe("SummoningService (spec 012)", () => {
         familiar.id,
         "enemy-1",
       ]);
+    });
+  });
+
+  describe("ciclo de vida do ritual Aarakocra", () => {
+    const ritualIds = ["a1", "a2", "a3", "a4", "a5"];
+    const ritualNames = ritualIds.map((id) => `Ritualista ${id}`);
+
+    function makeRitualSummon(
+      durationRoundsRemaining = 600,
+      durationCycleStarted = false,
+    ) {
+      return {
+        id: "air-1",
+        encounterId: "enc-1",
+        linkedCasterParticipantId: "a1",
+        displayName: "Air Elemental Invocado",
+        currentHp: 90,
+        isDefeated: false,
+        appliedEffects: [
+          {
+            kind: "summon",
+            refId: "aarakocra-air-elemental-ritual",
+            targetParticipantId: "air-1",
+            description: "aarakocra-air-elemental-ritual",
+            metadata: {
+              source: "aarakocra-air-elemental-ritual",
+              durationRoundsTotal: 600,
+              durationRoundsRemaining,
+              durationCycleStarted,
+              ritualParticipantIds: ritualIds,
+              ritualParticipantNames: ritualNames,
+            },
+          },
+        ],
+      } as any;
+    }
+
+    function setupLifecycle(
+      summon = makeRitualSummon(),
+      ritualistOverrides: Record<string, Partial<any>> = {},
+    ) {
+      const ritualists = ritualIds.map((id, index) => ({
+        id,
+        encounterId: "enc-1",
+        displayName: ritualNames[index],
+        type: "monster",
+        currentHp: 10,
+        isDefeated: false,
+        dyingState: "none",
+        actionUsed: false,
+        bonusActionUsed: false,
+        conditions: [],
+        positionX: index * 20,
+        positionY: index * 20,
+        ...ritualistOverrides[id],
+      }));
+      const participants = new Map<string, any>([
+        ...ritualists.map((participant) => [participant.id, participant] as const),
+        [summon.id, summon],
+      ]);
+      const encounter: any = {
+        id: "enc-1",
+        sessionId: "session-1",
+        status: "active",
+        turnOrder: ["a3", summon.id, "enemy-1"],
+        currentTurnIndex: 0,
+        currentRound: 10,
+      };
+      const participantSave = jest
+        .fn()
+        .mockImplementation(async (value: any) => {
+          const values = Array.isArray(value) ? value : [value];
+          values.forEach((participant) =>
+            participants.set(participant.id, participant),
+          );
+          return value;
+        });
+      const participantRemove = jest
+        .fn()
+        .mockImplementation(async (participant: any) => {
+          participants.delete(participant.id);
+        });
+      const participantRepo = {
+        findOne: jest.fn().mockImplementation(async ({ where }: any) => {
+          const participant = participants.get(where.id) ?? null;
+          return participant?.encounterId ===
+            (where.encounterId ?? participant.encounterId)
+            ? participant
+            : null;
+        }),
+        find: jest
+          .fn()
+          .mockImplementation(async ({ where }: any) =>
+            [...participants.values()].filter(
+              (participant) => participant.encounterId === where.encounterId,
+            ),
+          ),
+        save: participantSave,
+        remove: participantRemove,
+      };
+      const encounterRepo = {
+        findOne: jest
+          .fn()
+          .mockImplementation(async ({ where }: any) =>
+            where.id === encounter.id ? encounter : null,
+          ),
+        save: jest.fn().mockImplementation(async (value: any) => value),
+      };
+      let previousTransaction = Promise.resolve();
+      const transaction = jest.fn().mockImplementation(async (callback: any) => {
+        const waitFor = previousTransaction;
+        let releaseTransaction!: () => void;
+        previousTransaction = new Promise<void>((resolve) => {
+          releaseTransaction = resolve;
+        });
+        await waitFor;
+        const participantSnapshot = [...participants.entries()].map(
+          ([id, participant]) => [
+            id,
+            participant,
+            JSON.parse(JSON.stringify(participant)),
+          ] as const,
+        );
+        const encounterSnapshot = JSON.parse(JSON.stringify(encounter));
+        try {
+          return await callback({
+            getRepository: (entity: { name?: string }) =>
+              entity.name === "EncounterEntity"
+                ? encounterRepo
+                : participantRepo,
+          });
+        } catch (error) {
+          participants.clear();
+          for (const [id, participant, snapshot] of participantSnapshot) {
+            Object.assign(participant, snapshot);
+            participants.set(id, participant);
+          }
+          Object.assign(encounter, encounterSnapshot);
+          throw error;
+        } finally {
+          releaseTransaction();
+        }
+      });
+      const svc = new SummoningService(
+        participantRepo as any,
+        { findOne: jest.fn() } as any,
+        {
+          ...encounterRepo,
+          manager: { transaction },
+        } as any,
+      );
+      return {
+        svc,
+        summon,
+        encounter,
+        participants,
+        ritualists,
+        participantSave,
+        participantRemove,
+        transaction,
+      };
+    }
+
+    it("reduz exatamente uma rodada já no primeiro fim de turno do elemental", async () => {
+      const { svc, summon } = setupLifecycle();
+
+      const first = await svc.tickSummonDurationAfterTurn(summon.id);
+      const second = await svc.tickSummonDurationAfterTurn(summon.id);
+
+      expect(first).toMatchObject({
+        tracked: true,
+        removed: false,
+        remaining: 599,
+      });
+      expect(second).toMatchObject({
+        tracked: true,
+        removed: false,
+        remaining: 598,
+      });
+      expect(summon.appliedEffects[0].metadata).toMatchObject({
+        durationRoundsTotal: 600,
+        durationRoundsRemaining: 598,
+        durationCycleStarted: true,
+      });
+    });
+
+    it("ignora duração de summons que não vieram do ritual Aarakocra", async () => {
+      const summon = makeRitualSummon();
+      summon.appliedEffects[0].metadata.source = "summon-elemental-spell";
+      summon.appliedEffects[0].refId = "summon-elemental-spell";
+      const { svc, participantSave, participants } = setupLifecycle(summon);
+
+      const result = await svc.tickSummonDurationAfterTurn(summon.id);
+
+      expect(result).toEqual({
+        tracked: false,
+        removed: false,
+        remaining: null,
+        events: [],
+      });
+      expect(participantSave).not.toHaveBeenCalled();
+      expect(participants.has(summon.id)).toBe(true);
+      expect(summon.appliedEffects[0].metadata.durationRoundsRemaining).toBe(
+        600,
+      );
+    });
+
+    it("remove token e iniciativa quando a duração chega naturalmente a zero", async () => {
+      const summon = makeRitualSummon(1, true);
+      const { svc, encounter, participants } = setupLifecycle(summon);
+      encounter.turnOrder = ["a1", summon.id, "enemy-1"];
+      encounter.currentTurnIndex = 2;
+
+      const result = await svc.tickSummonDurationAfterTurn(summon.id);
+
+      expect(result).toMatchObject({
+        tracked: true,
+        removed: true,
+        remaining: 0,
+      });
+      expect(result.events).toContainEqual(
+        expect.objectContaining({
+          event_type: "summon_dismissed",
+          data: expect.objectContaining({
+            reason: "duration-end",
+            durationRoundsRemaining: 0,
+          }),
+        }),
+      );
+      expect(participants.has(summon.id)).toBe(false);
+      expect(encounter.turnOrder).toEqual(["a1", "enemy-1"]);
+      expect(encounter.currentTurnIndex).toBe(1);
+    });
+
+    it("sobrevive à morte de quatro ritualistas e desaparece somente com os cinco mortos", async () => {
+      const overrides = Object.fromEntries(
+        ritualIds.slice(0, 4).map((id) => [
+          id,
+          { currentHp: 0, isDefeated: true, dyingState: "dead" },
+        ]),
+      );
+      const { svc, participants, ritualists, summon } = setupLifecycle(
+        makeRitualSummon(),
+        overrides,
+      );
+
+      expect(await svc.reconcileAarakocraRitualSummons("enc-1")).toEqual([]);
+      expect(participants.has(summon.id)).toBe(true);
+
+      ritualists[4].currentHp = 0;
+      ritualists[4].isDefeated = true;
+      ritualists[4].dyingState = "dead";
+      const events = await svc.reconcileAarakocraRitualSummons("enc-1");
+
+      expect(participants.has(summon.id)).toBe(false);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event_type: "summon_dismissed",
+          data: expect.objectContaining({
+            reason: "caster-death",
+            livingRitualistCount: 0,
+            ritualParticipantIds: ritualIds,
+          }),
+        }),
+      );
+    });
+
+    it("mantém o summon quando todos os ritualistas PC estão a 0 PV, dying ou stable", async () => {
+      const overrides = Object.fromEntries(
+        ritualIds.map((id, index) => [
+          id,
+          {
+            type: "pc",
+            characterId: `char-${id}`,
+            currentHp: 0,
+            isDefeated: false,
+            dyingState: index % 2 === 0 ? "dying" : "stable",
+          },
+        ]),
+      );
+      const { svc, participants, summon } = setupLifecycle(
+        makeRitualSummon(),
+        overrides,
+      );
+
+      const events = await svc.reconcileAarakocraRitualSummons("enc-1");
+
+      expect(events).toEqual([]);
+      expect(participants.has(summon.id)).toBe(true);
+    });
+
+    it("considera morto um ritualista monstro derrotado a 0 PV", async () => {
+      const overrides = Object.fromEntries(
+        ritualIds.map((id) => [
+          id,
+          {
+            type: "monster",
+            currentHp: 0,
+            isDefeated: true,
+            dyingState: "none",
+          },
+        ]),
+      );
+      const { svc, participants, summon } = setupLifecycle(
+        makeRitualSummon(),
+        overrides,
+      );
+
+      const events = await svc.reconcileAarakocraRitualSummons("enc-1");
+
+      expect(participants.has(summon.id)).toBe(false);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event_type: "summon_dismissed",
+          data: expect.objectContaining({ reason: "caster-death" }),
+        }),
+      );
+    });
+
+    it("permite a qualquer membro vivo dispensar à distância gastando só a ação bônus", async () => {
+      const { svc, encounter, participants, ritualists, summon } =
+        setupLifecycle();
+      const actor = ritualists[2];
+      encounter.currentTurnIndex = encounter.turnOrder.indexOf(actor.id);
+      actor.positionX = 100;
+      actor.positionY = 100;
+      summon.positionX = 0;
+      summon.positionY = 0;
+
+      const result = await svc.dismissAarakocraAirElemental(
+        "enc-1",
+        summon.id,
+        actor.id,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(actor.actionUsed).toBe(false);
+      expect(actor.bonusActionUsed).toBe(true);
+      expect(participants.has(summon.id)).toBe(false);
+      if (result.ok) {
+        expect(result.value).toMatchObject({
+          actorParticipantId: actor.id,
+          actionConsumed: false,
+          bonusActionConsumed: true,
+          dismissed: true,
+        });
+        expect(result.events[0]).toMatchObject({
+          actor_participant_id: actor.id,
+          data: {
+            reason: "player-dismiss",
+            actionConsumed: false,
+            bonusActionConsumed: true,
+          },
+        });
+      }
+    });
+
+    it("serializa dispensas concorrentes sem cobrar ou emitir duas vezes", async () => {
+      const {
+        svc,
+        encounter,
+        participants,
+        ritualists,
+        participantRemove,
+        summon,
+      } = setupLifecycle();
+      const actor = ritualists[2];
+      encounter.currentTurnIndex = encounter.turnOrder.indexOf(actor.id);
+
+      const results = await Promise.all([
+        svc.dismissAarakocraAirElemental("enc-1", summon.id, actor.id),
+        svc.dismissAarakocraAirElemental("enc-1", summon.id, actor.id),
+      ]);
+
+      expect(results.filter((result) => result.ok)).toHaveLength(1);
+      expect(results.filter((result) => !result.ok)).toEqual([
+        expect.objectContaining({ code: "INVALID_ACTION" }),
+      ]);
+      expect(participantRemove).toHaveBeenCalledTimes(1);
+      expect(actor.bonusActionUsed).toBe(true);
+      expect(participants.has(summon.id)).toBe(false);
+      expect(
+        results.flatMap((result) => (result.ok ? result.events : [])),
+      ).toHaveLength(1);
+    });
+
+    it("reverte ação bônus e iniciativa se a remoção falhar", async () => {
+      const {
+        svc,
+        encounter,
+        participants,
+        ritualists,
+        participantRemove,
+        summon,
+      } = setupLifecycle();
+      const actor = ritualists[2];
+      encounter.currentTurnIndex = encounter.turnOrder.indexOf(actor.id);
+      participantRemove.mockRejectedValueOnce(new Error("delete failed"));
+
+      await expect(
+        svc.dismissAarakocraAirElemental("enc-1", summon.id, actor.id),
+      ).rejects.toThrow("delete failed");
+
+      expect(actor.bonusActionUsed).toBe(false);
+      expect(participants.has(summon.id)).toBe(true);
+      expect(encounter.turnOrder).toContain(summon.id);
+
+      const retry = await svc.dismissAarakocraAirElemental(
+        "enc-1",
+        summon.id,
+        actor.id,
+      );
+      expect(retry.ok).toBe(true);
+      expect(actor.bonusActionUsed).toBe(true);
+      expect(participants.has(summon.id)).toBe(false);
+    });
+
+    it("rejeita participante fora do grupo e não consome recurso", async () => {
+      const { svc, encounter, participants, summon } = setupLifecycle();
+      const outsider = {
+        id: "outsider",
+        encounterId: "enc-1",
+        currentHp: 10,
+        isDefeated: false,
+        dyingState: "none",
+        bonusActionUsed: false,
+        conditions: [],
+      };
+      participants.set(outsider.id, outsider);
+      encounter.turnOrder.unshift(outsider.id);
+      encounter.currentTurnIndex = 0;
+
+      const result = await svc.dismissAarakocraAirElemental(
+        "enc-1",
+        summon.id,
+        outsider.id,
+      );
+
+      expect(result).toMatchObject({ ok: false, code: "FORBIDDEN" });
+      expect(outsider.bonusActionUsed).toBe(false);
+      expect(participants.has(summon.id)).toBe(true);
     });
   });
 });

@@ -820,7 +820,12 @@ export class SeedCharacterService {
 
 
 
-    const spellDefaults = CLASS_SPELL_DEFAULTS[params.classSlug];
+    const hasLevelOneSpellcasting =
+      params.edition !== "PHB" ||
+      (params.classSlug !== "paladin" && params.classSlug !== "ranger");
+    const spellDefaults = hasLevelOneSpellcasting
+      ? CLASS_SPELL_DEFAULTS[params.classSlug]
+      : {};
     const qualifySpellSlugs = (slugs: string[] | undefined) =>
       params.edition === "PHB"
         ? slugs?.map((slug) => `${slug}-phb`)

@@ -90,6 +90,12 @@ export interface ReactiveAttackModifiers {
   helpingAllyParticipantId?: string;
 }
 
+export interface AbilityCheckModifiers {
+  hasAdvantage: boolean;
+  hasDisadvantage: boolean;
+  autoFail: boolean;
+}
+
 
 @Injectable()
 export class ConditionEffectsService {
@@ -102,7 +108,8 @@ export class ConditionEffectsService {
         set.has("frightened") ||
         set.has("poisoned") ||
         set.has("prone") ||
-        set.has("restrained"),
+        set.has("restrained") ||
+        set.has("ash_puff"),
       autoFail:
         set.has("incapacitated") ||
         set.has("stunned") ||
@@ -140,13 +147,32 @@ export class ConditionEffectsService {
     const isStrOrDex = ability === "str" || ability === "dex";
     return {
       hasAdvantage: false,
-      hasDisadvantage: ability === "dex" && set.has("restrained"),
+      hasDisadvantage:
+        (ability === "dex" && set.has("restrained")) ||
+        set.has("ash_puff"),
       autoFail:
         isStrOrDex &&
         (set.has("paralyzed") ||
           set.has("petrified") ||
           set.has("stunned") ||
           set.has("unconscious")),
+    };
+  }
+
+  getAbilityCheckModifiers(conditions: string[]): AbilityCheckModifiers {
+    const set = new Set(conditions);
+    return {
+      hasAdvantage: false,
+      hasDisadvantage:
+        set.has("poisoned") ||
+        set.has("frightened") ||
+        set.has("ash_puff"),
+      autoFail:
+        set.has("incapacitated") ||
+        set.has("stunned") ||
+        set.has("paralyzed") ||
+        set.has("petrified") ||
+        set.has("unconscious"),
     };
   }
 
@@ -356,6 +382,10 @@ export class ConditionEffectsService {
     if (set.has("unconscious"))
       summaries.push(
         "Unconscious: Incapacitated, drops prone. Auto-fail STR/DEX saves. Attacks have advantage. Melee auto-crits.",
+      );
+    if (set.has("ash_puff"))
+      summaries.push(
+        "Ash Puff: Disadvantage on attack rolls, saving throws, and ability checks.",
       );
 
     return summaries;

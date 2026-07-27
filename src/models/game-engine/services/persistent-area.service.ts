@@ -868,6 +868,8 @@ export class PersistentAreaService {
             type: a.damageType,
             amount: damage,
             saveResult,
+            saveAbility: a.saveAbility,
+            halfOnSave: a.halfOnSave,
             narrativeDescriptor: a.narrativeDescriptor,
             tactical: a.tacticalMetadata,
           },
@@ -1177,6 +1179,8 @@ export class PersistentAreaService {
           type: resolvedDamageType,
           amount,
           saveResult: saveData,
+          saveAbility: save?.ability,
+          halfOnSave: save?.halfOnSave ?? false,
           narrativeDescriptor: this.buildDamageNarrative(
             area,
             target,

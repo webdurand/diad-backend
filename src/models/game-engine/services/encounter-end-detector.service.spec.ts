@@ -123,11 +123,13 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
     xp: number;
     cr: number;
     defeated?: boolean;
+    controlledBy?: "ai" | "dm" | "pc";
+    faction?: "ally" | "enemy" | "neutral";
   }) {
     return {
       type: "monster",
-      controlledBy: "ai",
-      faction: "enemy",
+      controlledBy: opts.controlledBy ?? "ai",
+      faction: opts.faction ?? "enemy",
       currentHp: opts.defeated ? 0 : 10,
       isDefeated: opts.defeated ?? false,
       monster: {
@@ -173,6 +175,103 @@ describe("EncounterEndDetectorService — auto-end + rewards (spec 027)", () => 
       },
       "system",
     );
+  });
+
+  it("inclui inimigo controlado pelo DM na vitória e nas recompensas", async () => {
+    const { svc, encounterService, lootRollService } = setup({
+      participants: [
+        pcParticipant(),
+        monsterParticipant({
+          xp: 1800,
+          cr: 5,
+          defeated: true,
+          controlledBy: "dm",
+        }),
+      ],
+    });
+
+    const outcome = await svc.tryAutoEnd(ENCOUNTER_ID);
+
+    expect(outcome).toBe("victory");
+    expect(lootRollService.roll).toHaveBeenCalledWith(
+      expect.objectContaining({ crBand: "cr_5_10" }),
+    );
+    expect(encounterService.resolveEncounter).toHaveBeenCalledWith(
+      ENCOUNTER_ID,
+      expect.objectContaining({
+        outcome: "victory",
+        xpRewards: { mode: "equal-split", value: 1800 },
+      }),
+      "system",
+    );
+  });
+
+  it("ignora aliado e PC inimigo ao detectar vitória e calcular recompensas", async () => {
+    const hostilePc = {
+      ...pcParticipant({ characterId: "char-enemy" }),
+      faction: "enemy",
+      currentHp: 0,
+      isDefeated: true,
+      monster: {
+        xp: 5000,
+        challenge_rating: 15,
+        slug: "hostile-pc",
+      },
+    };
+    const { svc, encounterService, lootRollService } = setup({
+      participants: [
+        pcParticipant(),
+        monsterParticipant({
+          xp: 50,
+          cr: 1,
+          defeated: true,
+          controlledBy: "dm",
+        }),
+        monsterParticipant({
+          xp: 900,
+          cr: 4,
+          defeated: false,
+          faction: "ally",
+        }),
+        hostilePc,
+      ],
+    });
+
+    const outcome = await svc.tryAutoEnd(ENCOUNTER_ID);
+
+    expect(outcome).toBe("victory");
+    expect(lootRollService.roll).toHaveBeenCalledWith(
+      expect.objectContaining({ crBand: "cr_0_4" }),
+    );
+    expect(encounterService.resolveEncounter).toHaveBeenCalledWith(
+      ENCOUNTER_ID,
+      expect.objectContaining({
+        outcome: "victory",
+        xpRewards: { mode: "equal-split", value: 50 },
+      }),
+      "system",
+    );
+  });
+
+  it("não trata um PC inimigo isolado como hostil derrotável", async () => {
+    const { svc, encounterService, lootRollService } = setup({
+      participants: [
+        pcParticipant(),
+        {
+          ...pcParticipant({ characterId: "char-enemy" }),
+          faction: "enemy",
+          dyingState: "dead",
+          currentHp: 0,
+          isDefeated: true,
+        },
+      ],
+    });
+
+    const outcome = await svc.tryAutoEnd(ENCOUNTER_ID);
+
+    expect(outcome).toBeNull();
+    expect(lootRollService.roll).not.toHaveBeenCalled();
+    expect(encounterService.resolveEncounter).not.toHaveBeenCalled();
   });
 
   it("vitória com CR alto pega banda correta (cr_5_10)", async () => {

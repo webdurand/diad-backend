@@ -175,6 +175,38 @@ describe("SavingThrowService", () => {
     );
   });
 
+  it("reads persisted encounter conditions and applies Ash Puff disadvantage", async () => {
+    service = new SavingThrowService(
+      mockSheetService as any,
+      diceService,
+      new ConditionEffectsService(),
+      mockEventService as any,
+      { consumeIfArmed: async () => ({ consumed: false }) } as any,
+      new ExhaustionService(),
+      {
+        findOne: async () => ({
+          id: "participant-1",
+          conditions: ["ash_puff"],
+          effectInstances: [],
+        }),
+        save: async () => undefined,
+      } as any,
+    );
+
+    const result = await service.rollSavingThrow({
+      ...baseDto,
+      ability: "con",
+      participantId: "participant-1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.advantage).toBeDefined();
+    expect(result.value.advantage!.chosen).toBe(
+      Math.min(result.value.advantage!.roll1, result.value.advantage!.roll2),
+    );
+  });
+
   it("should produce GameEventData", async () => {
     const result = await service.rollSavingThrow(baseDto);
     expect(result.ok).toBe(true);

@@ -60,6 +60,11 @@ import {
   renderFeatureDescription,
   extractNarrativeDescriptor,
 } from "./feature-text-renderer";
+import {
+  extractTraitsFromRace,
+  extractTraitsFromSubrace,
+  type TransformedTrait,
+} from "src/data/transformers/transform-traits";
 
 
 
@@ -165,7 +170,96 @@ function canonicalSpeciesTraitSlug(slug: string): string {
     .toLowerCase()
     .replace(/-(?:phb|xphb|srd52)$/i, "")
     .replace(/-5(?:[.-]?2)?$/i, "");
+  if (/^darkvision(?:-[a-z0-9-]+)?$/.test(canonical)) {
+    return "darkvision";
+  }
   return canonical === "lucky" ? "luck" : canonical;
+}
+
+interface SpeciesTraitLink {
+  trait?: {
+    slug: string;
+    name: string;
+    description: string[];
+    source?: { code?: string };
+    raw?: Record<string, unknown>;
+  };
+}
+
+function speciesTraitIdentitySlug(
+  trait: NonNullable<SpeciesTraitLink["trait"]>,
+): string {
+  const canonicalSlug = trait.raw?.canonicalSlug;
+  return typeof canonicalSlug === "string"
+    ? canonicalSlug
+    : trait.slug;
+}
+
+function canonicalSpeciesTraitSlugFor(
+  trait: NonNullable<SpeciesTraitLink["trait"]>,
+): string {
+  return canonicalSpeciesTraitSlug(speciesTraitIdentitySlug(trait));
+}
+
+function sourceCodeFromRaw(
+  raw: Record<string, unknown>,
+  fallback?: string,
+): string {
+  return typeof raw.source === "string"
+    ? raw.source
+    : (fallback ?? "UNKNOWN");
+}
+
+function toSpeciesTraitLink(trait: TransformedTrait): SpeciesTraitLink {
+  return {
+    trait: {
+      slug: trait.slug,
+      name: trait.name,
+      description: trait.description,
+      source: { code: trait.source_code },
+      raw: trait.raw,
+    },
+  };
+}
+
+function extractSelectedOriginTraitLinks(
+  origin: CharacterOriginEntity,
+): SpeciesTraitLink[] | null {
+  const raceRaw = origin.race?.raw;
+  if (!raceRaw || !Array.isArray(raceRaw.entries)) return null;
+
+  const raceSourceCode = sourceCodeFromRaw(
+    raceRaw,
+    origin.race.source?.code,
+  );
+  const raceTraits = extractTraitsFromRace({
+    raceSlug: origin.race.slug,
+    sourceCode: raceSourceCode,
+    srd52: raceRaw.srd52 === true,
+    entries: raceRaw.entries,
+    raw: raceRaw,
+  });
+
+  if (!origin.subrace) {
+    return raceTraits.map(toSpeciesTraitLink);
+  }
+  const subraceRaw = origin.subrace.raw;
+  if (!subraceRaw || !Array.isArray(subraceRaw.entries)) {
+    return null;
+  }
+  const subraceTraits = extractTraitsFromSubrace({
+    subraceSlug: origin.subrace.slug,
+    raceSlug: origin.race.slug,
+    sourceCode: sourceCodeFromRaw(
+      subraceRaw,
+      origin.subrace.source?.code,
+    ),
+    srd52: subraceRaw.srd52 === true,
+    entries: subraceRaw.entries,
+    raw: subraceRaw,
+  });
+
+  return [...raceTraits, ...subraceTraits].map(toSpeciesTraitLink);
 }
 
 function isSelectedDraconicAncestryTrait(
@@ -672,10 +766,13 @@ export class CharacterSheetService {
       );
     }
 
-    const raceTraits = await this.raceTraitRepo.find({
+    const catalogRaceTraits = await this.raceTraitRepo.find({
       where: { race_id: charOrigin.race_id },
       relations: ["trait", "trait.source"],
     });
+    const raceTraits: SpeciesTraitLink[] =
+      extractSelectedOriginTraitLinks(charOrigin) ??
+      catalogRaceTraits;
 
 
     const totalLevel = charClasses.reduce((sum, cc) => sum + cc.class_level, 0);
@@ -1156,7 +1253,21 @@ export class CharacterSheetService {
       : undefined;
 
     const seenSpeciesTraits = new Set<string>();
+    const selectedRaceSlug = (charOrigin.race.slug ?? "")
+      .toLowerCase()
+      .replace(/-(?:phb|xphb|srd52)$/i, "");
     const preferredRaceTraits = [...raceTraits].sort((a, b) => {
+      const aSpeciesSpecificDarkvision =
+        a.trait?.slug?.toLowerCase() === `darkvision-${selectedRaceSlug}`
+          ? 0
+          : 1;
+      const bSpeciesSpecificDarkvision =
+        b.trait?.slug?.toLowerCase() === `darkvision-${selectedRaceSlug}`
+          ? 0
+          : 1;
+      if (aSpeciesSpecificDarkvision !== bSpeciesSpecificDarkvision) {
+        return aSpeciesSpecificDarkvision - bSpeciesSpecificDarkvision;
+      }
       const aPreferred = a.trait?.source?.code === "XPHB" ? 0 : 1;
       const bPreferred = b.trait?.source?.code === "XPHB" ? 0 : 1;
       return aPreferred - bPreferred;
@@ -1164,10 +1275,10 @@ export class CharacterSheetService {
     for (const raceTrait of preferredRaceTraits) {
       const trait = raceTrait.trait;
       if (!trait) continue;
-      const slug = canonicalSpeciesTraitSlug(trait.slug);
+      const slug = canonicalSpeciesTraitSlugFor(trait);
       if (
         !isSelectedDraconicAncestryTrait(
-          trait.slug,
+          speciesTraitIdentitySlug(trait),
           draconicChoice,
         )
       ) {
@@ -1230,6 +1341,32 @@ export class CharacterSheetService {
           ),
           max,
           formula: "Bônus de Proficiência",
+          recharge: "long",
+        };
+      }
+      if (slug === "adrenaline-rush") {
+        const max = profBonus;
+        featureBlock.category = "resource";
+        featureBlock.resourceCharges = {
+          current: Math.max(
+            0,
+            max - (featureUsesUsed["adrenaline-rush"] ?? 0),
+          ),
+          max,
+          formula: "Bônus de Proficiência",
+          recharge: "short",
+        };
+      }
+      if (slug === "relentless-endurance") {
+        const max = 1;
+        featureBlock.category = "resource";
+        featureBlock.resourceCharges = {
+          current: Math.max(
+            0,
+            max - (featureUsesUsed["relentless-endurance"] ?? 0),
+          ),
+          max,
+          formula: "1 uso",
           recharge: "long",
         };
       }

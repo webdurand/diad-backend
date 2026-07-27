@@ -553,10 +553,20 @@ export class ConditionLifecycleService {
         }
         const mod = await getSaveModifier(ci.saveAbility);
         let rolled: number;
+        let advantage:
+          | {
+              roll1: number;
+              roll2: number;
+              chosen: number;
+              discarded: number;
+            }
+          | undefined;
         if (mod.advantage && !mod.disadvantage) {
-          rolled = this.dice.rollWithAdvantage().chosen;
+          advantage = this.dice.rollWithAdvantage();
+          rolled = advantage.chosen;
         } else if (mod.disadvantage && !mod.advantage) {
-          rolled = this.dice.rollWithDisadvantage().chosen;
+          advantage = this.dice.rollWithDisadvantage();
+          rolled = advantage.chosen;
         } else {
           rolled = this.dice.roll(20);
         }
@@ -574,6 +584,10 @@ export class ConditionLifecycleService {
             modifier: mod.modifier,
             total,
             passed,
+            advantage,
+            hasAdvantage: mod.advantage && !mod.disadvantage,
+            hasDisadvantage: mod.disadvantage && !mod.advantage,
+            advantageCancelled: mod.advantage && mod.disadvantage,
           },
         });
         if (passed) {

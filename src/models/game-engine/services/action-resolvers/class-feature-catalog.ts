@@ -35,6 +35,14 @@ function normalizeClassSlug(slug: string): string {
   return slug.replace(/-phb$|-xphb$/, "");
 }
 
+function inferEditionFromClassSlug(
+  slug: string,
+): "XPHB" | "PHB" | undefined {
+  if (slug.endsWith("-phb")) return "PHB";
+  if (slug.endsWith("-xphb")) return "XPHB";
+  return undefined;
+}
+
 export function matchesClass(
   spec: FeatureSpec,
   classes: Array<{ slug: string; level: number }>,
@@ -58,7 +66,8 @@ export function matchesClass(
     const normalized = normalizeClassSlug(c.slug);
     if (normalized !== spec.classSlug) continue;
     if (spec.sourceEdition) {
-      const edition = sourceEditionBySlug?.[c.slug];
+      const edition =
+        sourceEditionBySlug?.[c.slug] ?? inferEditionFromClassSlug(c.slug);
       if (edition && edition !== spec.sourceEdition) continue;
     }
     return { matches: true, classLevel: c.level };
@@ -68,6 +77,30 @@ export function matchesClass(
 
 export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
 
+  {
+    slug: "adrenaline-rush",
+    displayName: "Adrenaline Rush",
+    raceSlug: "orc",
+    requiredLevel: 1,
+    actionCost: "bonus",
+    targetShape: "self",
+    resolution: "stub",
+    maxUsesByLevel: proficiencyBonusForLevel,
+    rechargeOn: "short",
+    trigger: "action-bar",
+  },
+  {
+    slug: "relentless-endurance",
+    displayName: "Relentless Endurance",
+    raceSlug: "orc",
+    requiredLevel: 1,
+    actionCost: "free",
+    targetShape: "self",
+    resolution: "stub",
+    maxUsesByLevel: () => 1,
+    rechargeOn: "long",
+    trigger: "internal",
+  },
   {
     slug: "giant-ancestry",
     displayName: "Ancestralidade Gigante",
@@ -663,6 +696,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     slug: "favored-enemy",
     displayName: "Inimigo Favorito",
     classSlug: "ranger",
+    sourceEdition: "XPHB",
     requiredLevel: 1,
     actionCost: "free",
     targetShape: "self",
@@ -675,6 +709,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     slug: "tireless",
     displayName: "Incansável",
     classSlug: "ranger",
+    sourceEdition: "XPHB",
     requiredLevel: 10,
     actionCost: "bonus",
     targetShape: "self",
@@ -686,6 +721,7 @@ export const CLASS_FEATURE_CATALOG: FeatureSpec[] = [
     slug: "natures-veil",
     displayName: "Véu da Natureza",
     classSlug: "ranger",
+    sourceEdition: "XPHB",
     requiredLevel: 13,
     actionCost: "bonus",
     targetShape: "self",

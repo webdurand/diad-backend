@@ -1,4 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { DiceService } from "./dice.service";
 import { ConditionEffectsService } from "./condition-effects.service";
@@ -58,6 +61,9 @@ export class SkillCheckService {
     private readonly eventService: EventService,
     private readonly inspirationService: InspirationService,
     private readonly exhaustionService: ExhaustionService,
+    @Optional()
+    @InjectRepository(EncounterParticipantEntity)
+    private readonly participantRepo?: Repository<EncounterParticipantEntity>,
   ) {}
 
   async rollAbilityCheck(
@@ -116,8 +122,17 @@ export class SkillCheckService {
     }
 
 
-    const conditions = sheet.conditions ?? [];
-    const condMods = this.getAbilityCheckModifiers(conditions);
+    const subject =
+      dto.participantId && this.participantRepo
+        ? await this.participantRepo.findOne({
+            where: { id: dto.participantId },
+          })
+        : null;
+    const conditions = Array.from(
+      new Set([...(sheet.conditions ?? []), ...(subject?.conditions ?? [])]),
+    );
+    const condMods =
+      this.conditionEffects.getAbilityCheckModifiers(conditions);
 
 
 
@@ -213,21 +228,6 @@ export class SkillCheckService {
       });
     }
     return success(result, events);
-  }
-
-  private getAbilityCheckModifiers(conditions: string[]) {
-    const set = new Set(conditions);
-    return {
-
-
-      hasDisadvantage: set.has("poisoned") || set.has("frightened"),
-      autoFail:
-        set.has("incapacitated") ||
-        set.has("stunned") ||
-        set.has("paralyzed") ||
-        set.has("petrified") ||
-        set.has("unconscious"),
-    };
   }
 
   private buildEvents(

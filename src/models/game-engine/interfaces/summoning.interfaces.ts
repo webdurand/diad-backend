@@ -1,4 +1,10 @@
 
+export const AARAKOCRA_RITUAL_ACTION_ID =
+  "aarakocra-mm-summon-air-elemental";
+export const AARAKOCRA_RITUAL_SUMMON_SOURCE =
+  "aarakocra-air-elemental-ritual";
+export const AARAKOCRA_RITUAL_SIZE = 5;
+
 
 export type SummonSource =
   | "summon-beast-spell"
@@ -19,7 +25,7 @@ export type SummonSource =
   | "animate-dead-spell"
   | "beast-master-companion"
   | "echo-knight-echo"
-  | "aarakocra-air-elemental-ritual";
+  | typeof AARAKOCRA_RITUAL_SUMMON_SOURCE;
 
 export type SummonControlMode =
 

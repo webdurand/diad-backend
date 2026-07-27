@@ -118,6 +118,15 @@ import {
   hasFreedomOfMovement,
   isNonmagicalFreedomRestraint,
 } from "./freedom-of-movement";
+import { AshPuffService } from "./ash-puff.service";
+import { SummoningService } from "./summoning.service";
+import { AARAKOCRA_RITUAL_ACTION_ID } from "../interfaces/summoning.interfaces";
+import {
+  hasEvasionFeature,
+  resolveEvasionDamage,
+} from "./evasion";
+import { hasFastHandsFeature } from "./rogue-fast-hands";
+import { hasPhbFeralSenses } from "./ranger-phb-rules";
 
 
 
@@ -142,6 +151,12 @@ export interface AttackDto {
   _isSubAttack?: boolean;
 
   _bypassRangeCheck?: boolean;
+
+  /** Internal: run a complete attack while the enclosing action owns economy. */
+  _skipActionConsumption?: boolean;
+
+  /** Internal: the enclosing sequence performs the final encounter-end check. */
+  _deferAutoEnd?: boolean;
 }
 
 export interface SubAttackResult {
@@ -162,7 +177,32 @@ export interface MultiattackResult {
   subAttacks: SubAttackResult[];
   interruptedAt: {
     index: number;
-    reason: "target_defeated" | "action_cancelled";
+    reason:
+      | "target_defeated"
+      | "action_cancelled"
+      | "relentless_endurance_pending";
+  } | null;
+}
+
+export interface VolleyDto {
+  attackerParticipantId: string;
+  actionSlug: string;
+  originCell: { x: number; y: number };
+  targetParticipantIds: string[];
+  ownerUserId: string;
+}
+
+export interface VolleyResult {
+  kind: "volley";
+  actionConsumed: true;
+  originCell: { x: number; y: number };
+  weaponActionSlug: string;
+  attacks: SubAttackResult[];
+  interruptedAt: {
+    targetParticipantId: string;
+    reason: "action_cancelled";
+    code: string;
+    error: string;
   } | null;
 }
 
@@ -173,6 +213,13 @@ export interface DamageDto {
   ownerUserId: string;
 
   fromCriticalHit?: boolean;
+  savingThrow?: SavingThrowDamageContext;
+}
+
+export interface SavingThrowDamageContext {
+  ability: string;
+  success: boolean;
+  halfDamageOnSuccess: boolean;
 }
 
 export interface SpellAttackRollResolution {
@@ -286,7 +333,69 @@ export class CombatService {
     private readonly persistentArea: PersistentAreaService,
     @Optional()
     private readonly paladinAuras?: PaladinAuraService,
+    @Optional()
+    private readonly ashPuff?: AshPuffService,
+    @Optional()
+    private readonly summoning?: SummoningService,
   ) {}
+
+  private async resolveEvasionForDamage(
+    target: EncounterParticipantEntity,
+    ownerUserId: string,
+    damageAfterSave: number,
+    savingThrow?: SavingThrowDamageContext,
+  ): Promise<{
+    damageAfterEvasion: number;
+    event?: GameEventData;
+  }> {
+    if (
+      !savingThrow ||
+      target.type !== "pc" ||
+      !target.characterId ||
+      (target.transformationState &&
+        !target.transformationState.retainedAbilities.includes(
+          "class-features",
+        ))
+    ) {
+      return { damageAfterEvasion: damageAfterSave };
+    }
+
+    const sheet = await this.sheetService
+      .computeSheet(ownerUserId, target.characterId)
+      .catch(() => null);
+    if (!sheet) return { damageAfterEvasion: damageAfterSave };
+
+    const resolution = resolveEvasionDamage({
+      damageAfterSave,
+      saveAbility: savingThrow.ability,
+      saveSucceeded: savingThrow.success,
+      halfDamageOnSuccess: savingThrow.halfDamageOnSuccess,
+      hasEvasion: hasEvasionFeature(
+        sheet.classes ?? [],
+        target.conditions ?? [],
+        sheet.features ?? [],
+      ),
+    });
+    if (!resolution.applied) {
+      return { damageAfterEvasion: damageAfterSave };
+    }
+
+    return {
+      damageAfterEvasion: resolution.damageAfterEvasion,
+      event: {
+        event_type: "class_feature_triggered",
+        actor_participant_id: target.id,
+        target_participant_id: target.id,
+        data: {
+          featureSlug: "evasion",
+          saveAbility: savingThrow.ability,
+          saveSucceeded: savingThrow.success,
+          damageBeforeEvasion: damageAfterSave,
+          damageAfterEvasion: resolution.damageAfterEvasion,
+        },
+      },
+    };
+  }
 
 
   private async applyDamageToPcFormAware(
@@ -360,6 +469,118 @@ export class CombatService {
       isDown: st.isDown,
       instantDeath: st.instantDeath ?? false,
     };
+  }
+
+  private async maybeOfferRelentlessEndurance(
+    target: EncounterParticipantEntity,
+    ownerUserId: string,
+    input: {
+      hpBefore: number;
+      hpAfter: number;
+      incomingDamage: number;
+      damageType: string;
+      attackerParticipantId?: string;
+      instantDeath?: boolean;
+    },
+    events: GameEventData[],
+  ): Promise<boolean> {
+    if (
+      target.type !== "pc" ||
+      !target.characterId ||
+      input.hpBefore <= 0 ||
+      input.hpAfter !== 0 ||
+      input.incomingDamage <= 0 ||
+      input.instantDeath === true ||
+      target.dyingState === "dead" ||
+      (target.effectInstances ?? []).some(
+        (effect) => effect.kind === "relentless_endurance_pending",
+      )
+    ) {
+      return false;
+    }
+
+    const resolvedOwnerId = await this.resolveParticipantOwner(
+      target,
+      ownerUserId,
+    );
+    const sheet = await this.sheetService
+      .computeSheet(resolvedOwnerId, target.characterId)
+      .catch(() => null);
+    const raceSlug = (sheet?.race?.slug ?? "")
+      .toLowerCase()
+      .replace(/-(?:phb|xphb|srd52)$/i, "");
+    if (raceSlug !== "orc") return false;
+
+    const featureUses = await this.stateService.getFeatureUsesUsed(
+      target.characterId,
+    );
+    if ((featureUses["relentless-endurance"] ?? 0) >= 1) return false;
+
+    const triggerEventId = randomUUID();
+    const timeoutSeconds = 20;
+    const decisionDeadlineAt = new Date(
+      Date.now() + timeoutSeconds * 1_000,
+    ).toISOString();
+    target.currentHp = 0;
+    target.dyingState = "dying";
+    target.isDefeated = false;
+    await this.participantRepo.save(target);
+    const pending = await this.effectInstances.addEffect(target, {
+      kind: "relentless_endurance_pending",
+      sourceFeatureSlug: "relentless-endurance",
+      sourceCasterParticipantId: target.id,
+      payload: {
+        triggerEventId,
+        attackerParticipantId: input.attackerParticipantId,
+        incomingDamage: input.incomingDamage,
+        damageType: input.damageType,
+        hpBefore: input.hpBefore,
+        hpAfter: 0,
+        usesRemaining: 1,
+        usesMax: 1,
+        timeoutSeconds,
+        decisionDeadlineAt,
+      },
+      expiresAt: { kind: "until_consumed" },
+      requiresConcentration: false,
+    });
+    events.push(...pending.events, {
+      event_type: "relentless_endurance_opportunity",
+      actor_participant_id: input.attackerParticipantId,
+      target_participant_id: target.id,
+      data: {
+        featureSlug: "relentless-endurance",
+        triggerEventId,
+        attackerParticipantId: input.attackerParticipantId,
+        reactorName: target.displayName,
+        incomingDamage: input.incomingDamage,
+        damageType: input.damageType,
+        hpBefore: input.hpBefore,
+        hpAfter: 0,
+        usesRemaining: 1,
+        usesMax: 1,
+        timeoutSeconds,
+        decisionDeadlineAt,
+      },
+    });
+    return true;
+  }
+
+  private async clearRelentlessEndurancePending(
+    target: EncounterParticipantEntity,
+    events: GameEventData[],
+  ): Promise<void> {
+    const pendingEffects = (target.effectInstances ?? []).filter(
+      (effect) => effect.kind === "relentless_endurance_pending",
+    );
+    for (const pending of pendingEffects) {
+      const removed = await this.effectInstances.removeEffect(
+        target,
+        pending.id,
+        "manual",
+      );
+      events.push(...removed.events);
+    }
   }
 
 
@@ -964,6 +1185,81 @@ export class CombatService {
     );
   }
 
+  private turnContext(
+    encounter: Pick<
+      EncounterEntity,
+      "currentRound" | "currentTurnIndex" | "turnOrder"
+    >,
+    fallbackParticipantId: string,
+  ): { participantId: string; key: string } {
+    const participantId =
+      encounter.turnOrder?.[encounter.currentTurnIndex] ??
+      fallbackParticipantId;
+    return {
+      participantId,
+      key: `${encounter.currentRound}:${participantId}`,
+    };
+  }
+
+  private async turnContextForEncounter(
+    encounterId: string,
+    fallbackParticipantId: string,
+  ): Promise<{ participantId: string; key: string }> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    return encounter
+      ? this.turnContext(encounter, fallbackParticipantId)
+      : {
+          participantId: fallbackParticipantId,
+          key: `unknown:${fallbackParticipantId}`,
+        };
+  }
+
+  private isMultiattackDefenseEffectFor(
+    effect: EffectInstance,
+    attackerParticipantId: string,
+    turnKey?: string,
+  ): boolean {
+    return (
+      effect.kind === "ac_bonus" &&
+      effect.sourceFeatureSlug === "multiattack-defense" &&
+      effect.sourceCasterParticipantId === attackerParticipantId &&
+      effect.payload?.attackerParticipantId === attackerParticipantId &&
+      (!turnKey ||
+        !effect.payload?.turnKey ||
+        effect.payload.turnKey === turnKey)
+    );
+  }
+
+  private hasMaterializedPhbHunterFeature(
+    sheet: unknown,
+    featurePrefix: "colossus-slayer" | "multiattack-defense",
+  ): boolean {
+    const features =
+      (
+        sheet as {
+          features?: Array<{
+            slug?: string;
+            active?: boolean;
+            sourceCode?: string;
+          }>;
+        }
+      )?.features ?? [];
+    const slugPattern = new RegExp(
+      `^${featurePrefix}-ranger-hunter-\\d+-phb$`,
+      "i",
+    );
+    return features.some(
+      (feature) =>
+        feature.active !== false &&
+        typeof feature.slug === "string" &&
+        slugPattern.test(feature.slug) &&
+        (!feature.sourceCode ||
+          feature.sourceCode.toUpperCase() === "PHB"),
+    );
+  }
+
   private canUseStandardOrBonusAttack(
     attacker: EncounterParticipantEntity,
     isUnarmedAttack: boolean,
@@ -1335,6 +1631,25 @@ export class CombatService {
       } else if (saved && !actionBlock.save?.halfOnSuccess) {
         totalDamage = 0;
       }
+      const targetOwnerId = await this.resolveParticipantOwner(
+        target,
+        dto.ownerUserId,
+      );
+      const evasion = await this.resolveEvasionForDamage(
+        target,
+        targetOwnerId,
+        totalDamage,
+        actionBlock.save
+          ? {
+              ability: actionBlock.save.ability,
+              success: saved,
+              halfDamageOnSuccess:
+                actionBlock.save.halfOnSuccess === true,
+            }
+          : undefined,
+      );
+      totalDamage = evasion.damageAfterEvasion;
+      if (evasion.event) events.push(evasion.event);
 
       let finalDamage = totalDamage;
       let resisted = false;
@@ -1361,6 +1676,10 @@ export class CombatService {
             dto.ownerUserId,
           );
           const wasDying = target.dyingState === "dying";
+          const hpBeforeDamage =
+            (await this.stateService.getCurrentHp(target.characterId)) ??
+            target.currentHp ??
+            0;
           const hpResult = await this.stateService.updateHp(
             targetOwnerId,
             target.characterId,
@@ -1376,6 +1695,20 @@ export class CombatService {
             target.dyingState = "dying";
             target.isDefeated = false;
             await this.participantRepo.save(target);
+            const relentlessOffered =
+              await this.maybeOfferRelentlessEndurance(
+              target,
+              targetOwnerId,
+              {
+                hpBefore: hpBeforeDamage,
+                hpAfter: hpResult.currentHp,
+                incomingDamage: finalDamage,
+                damageType: actionBlock.damage.type,
+                attackerParticipantId: caster.id,
+              },
+              events,
+            );
+            if (relentlessOffered) targetDefeated = false;
           } else if (wasDying) {
             const ds = await this.stateService.updateDeathSaves(
               targetOwnerId,
@@ -1386,10 +1719,18 @@ export class CombatService {
               target.dyingState = "dead";
               target.isDefeated = true;
               await this.participantRepo.save(target);
+              await this.clearRelentlessEndurancePending(target, events);
             }
           }
         } else {
-          const r = this.applyDamageToMonster(target, finalDamage);
+          const r = await this.applyDamageToMonster(
+            encounter,
+            target,
+            finalDamage,
+            dto.ownerUserId,
+            [caster],
+          );
+          events.push(...r.events);
           targetHpAfter = r.hpAfter;
           targetDefeated = r.defeated;
           await this.participantRepo.save(target);
@@ -1401,6 +1742,25 @@ export class CombatService {
               "hp-zero",
             );
           }
+        }
+      }
+      if (finalDamage <= 0) {
+        if (target.type === "pc" && target.characterId) {
+          const usesTransformationHitPoints =
+            target.transformationState != null &&
+            target.transformationState.rulesMode !== "xphb-wild-shape";
+          targetHpAfter = usesTransformationHitPoints
+            ? target.transformationState!.form.currentHp
+            : ((await this.stateService.getCurrentHp(target.characterId)) ??
+              target.currentHp);
+        } else {
+          targetHpAfter =
+            target.currentHp ??
+            target.maxHp ??
+            Number(
+              (target.monster as { hit_points?: number } | undefined)
+                ?.hit_points ?? 0,
+            );
         }
       }
 
@@ -1713,6 +2073,7 @@ export class CombatService {
     target: EncounterParticipantEntity,
     isMelee: boolean,
     actionSlug?: string,
+    turnKey?: string,
   ): {
     advantage: boolean;
     disadvantage: boolean;
@@ -1774,7 +2135,21 @@ export class CombatService {
     let targetAcBonus = 0;
     let targetAcBaseOverride: number | null = null;
     for (const e of targetFx) {
-      if (e.kind === "ac_bonus") targetAcBonus += e.payload?.amount ?? 0;
+      if (e.kind === "ac_bonus") {
+        if (
+          e.sourceFeatureSlug === "multiattack-defense" &&
+          !this.isMultiattackDefenseEffectFor(e, attacker.id, turnKey)
+        ) {
+          continue;
+        }
+        const restrictedAttackerId = e.payload?.attackerParticipantId;
+        if (
+          !restrictedAttackerId ||
+          restrictedAttackerId === attacker.id
+        ) {
+          targetAcBonus += e.payload?.amount ?? 0;
+        }
+      }
       if (e.kind === "ac_base_override") {
         const override = e.payload?.amount;
         if (typeof override === "number") {
@@ -1827,6 +2202,36 @@ export class CombatService {
     const defenderMods = this.conditionEffects.getDefenseModifiers(
       target.conditions,
     );
+    const targetIsInvisible = (target.conditions ?? []).some(
+      (condition) => condition.toLowerCase() === "invisible",
+    );
+    let feralSensesApplied = false;
+    if (
+      targetIsInvisible &&
+      attacker.type === "pc" &&
+      attacker.characterId
+    ) {
+      try {
+        const attackerOwnerId = await this.resolveParticipantOwner(
+          attacker,
+          input.ownerUserId,
+        );
+        const attackerSheet = await this.sheetService.computeSheet(
+          attackerOwnerId,
+          attacker.characterId,
+        );
+        feralSensesApplied = hasPhbFeralSenses(attackerSheet);
+      } catch {
+        feralSensesApplied = false;
+      }
+    }
+    const defenderDisadvantageWithoutInvisibility = feralSensesApplied
+      ? this.conditionEffects.getDefenseModifiers(
+          (target.conditions ?? []).filter(
+            (condition) => condition.toLowerCase() !== "invisible",
+          ),
+        ).attacksHaveDisadvantage
+      : defenderMods.attacksHaveDisadvantage;
     const activeHelper = await this.participantRepo.findOne({
       where: {
         encounterId: attacker.encounterId,
@@ -1857,11 +2262,24 @@ export class CombatService {
       },
       helpingState ? { helpingAgainst: helpingState } : undefined,
     );
+    const activeTurn = await this.turnContextForEncounter(
+      attacker.encounterId,
+      attacker.id,
+    );
     const effectDec = this.resolveEffectInstanceDecisions(
       attacker,
       target,
       input.isMelee,
       undefined,
+      activeTurn.key,
+    );
+    const multiattackDefenseAcEffect = (target.effectInstances ?? []).find(
+      (effect) =>
+        this.isMultiattackDefenseEffectFor(
+          effect,
+          attacker.id,
+          activeTurn.key,
+        ),
     );
     const consumeInspiration = attacker.inspirationArmed === true;
 
@@ -1873,7 +2291,7 @@ export class CombatService {
       consumeInspiration;
     let hasDisadvantage =
       attackerMods.hasDisadvantage ||
-      defenderMods.attacksHaveDisadvantage ||
+      defenderDisadvantageWithoutInvisibility ||
       reactive.disadvantage ||
       effectDec.disadvantage;
     let advantageCancelled = false;
@@ -1900,6 +2318,7 @@ export class CombatService {
     }
 
     let targetAc = 10;
+    let targetHasMultiattackDefense = false;
     if (target.type === "pc" && target.characterId) {
       const targetOwnerId = await this.resolveParticipantOwner(
         target,
@@ -1911,6 +2330,15 @@ export class CombatService {
       );
       targetAc =
         target.transformationState?.form.ac ?? targetSheet.armorClass;
+      targetHasMultiattackDefense =
+        (!target.transformationState ||
+          target.transformationState.retainedAbilities?.includes(
+            "class-features",
+          ) === true) &&
+        this.hasMaterializedPhbHunterFeature(
+          targetSheet,
+          "multiattack-defense",
+        );
     } else if (target.type === "monster" && target.monster) {
       const summonAc = getSummonStatBlock(target)?.armorClass;
       const ac = target.monster.armor_class as any;
@@ -2007,6 +2435,25 @@ export class CombatService {
     };
     const events: GameEventData[] = [
       ...bardicEvents,
+      ...(multiattackDefenseAcEffect
+        ? [
+            {
+              event_type: "multiattack_defense_ac_applied",
+              actor_participant_id: target.id,
+              target_participant_id: attacker.id,
+              data: {
+                featureSlug: "multiattack-defense",
+                bonus: multiattackDefenseAcEffect.payload?.amount ?? 4,
+                attackerParticipantId: attacker.id,
+                attackerName: attacker.displayName,
+                defenderName: target.displayName,
+                finalArmorClass: targetAc,
+                expiresAt: "end_of_current_turn",
+                turnParticipantIdAtTrigger: activeTurn.participantId,
+              },
+            } satisfies GameEventData,
+          ]
+        : []),
       ...(halfCover
         ? [
             {
@@ -2030,10 +2477,50 @@ export class CombatService {
         data: {
           actionName: input.actionName,
           attackKind: "spell",
+          feralSensesApplied,
           ...attackRollResult,
         },
       },
     ];
+
+    if (
+      hit &&
+      targetHasMultiattackDefense &&
+      !multiattackDefenseAcEffect
+    ) {
+      const defense = await this.effectInstances.addEffect(target, {
+        kind: "ac_bonus",
+        sourceFeatureSlug: "multiattack-defense",
+        sourceCasterParticipantId: attacker.id,
+        payload: {
+          amount: 4,
+          attackerParticipantId: attacker.id,
+          turnParticipantIdAtTrigger: activeTurn.participantId,
+          turnKey: activeTurn.key,
+          reason: "subsequent-attacks-by-same-attacker",
+        },
+        expiresAt: { kind: "participant_turn_ends", value: 1 },
+        expiresAtTurnEndParticipantId: activeTurn.participantId,
+        requiresConcentration: false,
+      });
+      events.push(...defense.events, {
+        event_type: "multiattack_defense_triggered",
+        actor_participant_id: target.id,
+        target_participant_id: attacker.id,
+        data: {
+          featureSlug: "multiattack-defense",
+          attackKind: "spell",
+          bonus: 4,
+          attackerParticipantId: attacker.id,
+          attackerName: attacker.displayName,
+          defenderName: target.displayName,
+          firstHitArmorClass: targetAc,
+          appliesToSubsequentAttacks: true,
+          expiresAt: "end_of_current_turn",
+          turnParticipantIdAtTrigger: activeTurn.participantId,
+        },
+      });
+    }
 
     if (exhaustionPenalty !== 0) {
       events.push({
@@ -2400,6 +2887,84 @@ export class CombatService {
           return { ...block, timing: "reaction" };
         });
       }
+      if (
+        (participant.rechargeState ?? {})[AARAKOCRA_RITUAL_ACTION_ID] ===
+        "used"
+      ) {
+        actions = actions.filter(
+          (action) => action.id !== AARAKOCRA_RITUAL_ACTION_ID,
+        );
+      }
+    }
+
+    const aarakocraRitualSummon =
+      await this.summoning?.findAarakocraRitualSummonForMember(
+        encounterId,
+        participant.id,
+      );
+    if (aarakocraRitualSummon) {
+      bonusActions.unshift({
+        id: `dismiss-aarakocra-air-elemental-${aarakocraRitualSummon.id}`,
+        name: `Dispensar ${aarakocraRitualSummon.displayName}`,
+        kind: "summon-dismiss",
+        timing: "bonus_action",
+        source: "feature",
+        sourceLabel: "Ritual Aarakocra",
+        description:
+          "Como Ação Bônus, dispensa o Air Elemental invocado pelo grupo em qualquer distância. A ação normal permanece disponível.",
+        targetParticipantId: aarakocraRitualSummon.id,
+      });
+    }
+
+    const normalizedConcentration = participant.concentratingOn
+      ?.trim()
+      .toLowerCase()
+      .replace(/-(phb|xphb|srd52)$/, "");
+    if (
+      participant.isConcentrating &&
+      encounter.turnOrder[encounter.currentTurnIndex] === participant.id &&
+      (normalizedConcentration === "hunters-mark" ||
+        normalizedConcentration === "hex")
+    ) {
+      const expectedMarkKind =
+        normalizedConcentration === "hunters-mark"
+          ? "hunter_mark"
+          : "hex_mark";
+      const markTarget = (
+        await this.participantRepo.find({ where: { encounterId } })
+      ).find(
+        (candidate) =>
+          (candidate.isDefeated ||
+            candidate.dyingState === "dead" ||
+            (candidate.currentHp ?? 1) <= 0) &&
+          (candidate.effectInstances ?? []).some(
+            (effect) =>
+              effect.kind === expectedMarkKind &&
+              effect.sourceCasterParticipantId === participant.id &&
+              effect.sourceSpellSlug === normalizedConcentration &&
+              effect.payload?.transferReadyTurnKey !==
+                `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+          ),
+      );
+      if (markTarget) {
+        const isHuntersMark = normalizedConcentration === "hunters-mark";
+        bonusActions.unshift({
+          id: `transfer-mark-${normalizedConcentration}-${markTarget.id}`,
+          name: isHuntersMark
+            ? "Transferir Marca do Caçador"
+            : "Transferir Hex",
+          kind: "mark-transfer",
+          timing: "bonus_action",
+          source: "spell-effect",
+          sourceLabel: isHuntersMark ? "Marca do Caçador" : "Hex",
+          description:
+            "Em um turno posterior após o alvo anterior cair a 0 PV, marque uma criatura visível a até 90 pés. Consome Ação Bônus, não gasta slot e mantém a concentração.",
+          range: "90 feet",
+          requiresConcentration: true,
+          spellSlug: normalizedConcentration,
+          targetParticipantId: markTarget.id,
+        });
+      }
     }
 
     const witchBoltTether = findWitchBoltTether(participant);
@@ -2724,6 +3289,18 @@ export class CombatService {
         .toLowerCase()
         .replace(/-(phb|xphb|srd52)$/, "") ===
         "conjure-woodland-beings";
+    const fastHandsAvailable =
+      participant.type === "pc" &&
+      participant.characterId &&
+      (!participant.transformationState ||
+        participant.transformationState.retainedAbilities.includes(
+          "class-features",
+        ))
+        ? await this.sheetService
+            .computeSheet(resolvedOwnerId, participant.characterId)
+            .then((sheet) => hasFastHandsFeature(sheet.classes ?? []))
+            .catch(() => false)
+        : false;
     const nearbyHypnotized =
       participant.positionX == null || participant.positionY == null
         ? []
@@ -2836,6 +3413,30 @@ export class CombatService {
           this.makeGenericAction("hide", "Esconder"),
           this.makeGenericAction("ready", "Preparar"),
           this.makeGenericAction("search", "Procurar"),
+          ...(fastHandsAvailable
+            ? [
+                {
+                  id: "generic-fast-hands-sleight-of-hand",
+                  name: "Mãos Rápidas — Prestidigitação",
+                  kind: "fast-hands-sleight-of-hand",
+                  timing: "bonus_action",
+                  source: "generic",
+                  sourceLabel: "Rogue Thief",
+                  description:
+                    "Ação Bônus: faça um teste de Destreza (Sleight of Hand) para abrir uma fechadura, desarmar uma armadilha com Thieves' Tools ou bater uma carteira.",
+                } as TurnActionBlock,
+                {
+                  id: "generic-fast-hands-use-object",
+                  name: "Mãos Rápidas — Usar Objeto",
+                  kind: "use-object",
+                  timing: "bonus_action",
+                  source: "generic",
+                  sourceLabel: "Rogue Thief",
+                  description:
+                    "Ação Bônus: use a ação Utilize com um objeto do inventário.",
+                } as TurnActionBlock,
+              ]
+            : []),
           this.makeGenericAction("use-object", "Usar Objeto"),
         ];
 
@@ -2964,6 +3565,8 @@ export class CombatService {
       description: a.description,
       kind: a.kind,
       attackBonus: a.attackBonus,
+      ignoresInvisibleTargetDisadvantage:
+        a.ignoresInvisibleTargetDisadvantage,
       damage: a.damage,
       range: a.range,
       spellLevel: a.spellLevel,
@@ -2979,6 +3582,8 @@ export class CombatService {
       featureSlug: a.featureSlug,
 
       weaponSlug: a.weaponSlug,
+      weaponActionSlug: a.weaponActionSlug,
+      weaponCategory: a.weaponCategory,
       itemSlug: a.itemSlug,
       masterySlug: a.masterySlug,
 
@@ -3543,6 +4148,12 @@ export class CombatService {
           currentParticipantId,
         );
       events.push(...casterTick.events);
+      const participantTurnExpiry =
+        await this.effectInstances.expireAtParticipantTurnEnd(
+          encounterId,
+          currentParticipantId,
+        );
+      events.push(...participantTurnExpiry.events);
     }
 
 
@@ -3675,6 +4286,24 @@ export class CombatService {
     encounter.currentTurnIndex = nextIndex;
     encounter.currentRound = newRound;
     await this.encounterRepo.save(encounter);
+
+    const summonDurationTick =
+      await this.summoning?.tickSummonDurationAfterTurn(currentParticipantId);
+    if (summonDurationTick) {
+      events.push(...summonDurationTick.events);
+      if (summonDurationTick.removed) {
+        const refreshedEncounter = await this.encounterRepo.findOne({
+          where: { id: encounterId },
+        });
+        if (refreshedEncounter) {
+          encounter.turnOrder = refreshedEncounter.turnOrder;
+          encounter.currentTurnIndex = refreshedEncounter.currentTurnIndex;
+          encounter.currentRound = refreshedEncounter.currentRound;
+          nextIndex = refreshedEncounter.currentTurnIndex;
+          newRound = refreshedEncounter.currentRound;
+        }
+      }
+    }
 
     const nextParticipantId = encounter.turnOrder[nextIndex];
 
@@ -3878,6 +4507,10 @@ export class CombatService {
     });
     if (!encounter || encounter.status !== "active")
       return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    const activeTurn = this.turnContext(
+      encounter,
+      dto.attackerParticipantId,
+    );
 
     const attacker = await this.encounterService.getParticipant(
       dto.attackerParticipantId,
@@ -3988,17 +4621,22 @@ export class CombatService {
 
 
 
-      if (useHasteAction && !hasAvailableHasteAction(attacker)) {
-        return failure(
-          "A ação extra de Haste já foi usada neste turno.",
-          "NO_ACTION_AVAILABLE",
-        );
+      if (!dto._skipActionConsumption) {
+        if (useHasteAction && !hasAvailableHasteAction(attacker)) {
+          return failure(
+            "A ação extra de Haste já foi usada neste turno.",
+            "NO_ACTION_AVAILABLE",
+          );
+        }
+        if (
+          !useHasteAction &&
+          !this.canUseStandardOrBonusAttack(attacker, isUnarmedAttack)
+        )
+          return failure(
+            "Acao ja utilizada neste turno.",
+            "NO_ACTION_AVAILABLE",
+          );
       }
-      if (
-        !useHasteAction &&
-        !this.canUseStandardOrBonusAttack(attacker, isUnarmedAttack)
-      )
-        return failure("Acao ja utilizada neste turno.", "NO_ACTION_AVAILABLE");
     }
 
 
@@ -4124,6 +4762,7 @@ export class CombatService {
 
 
     let isWeaponOrUnarmedAttack = false;
+    let isWeaponAttack = false;
     let hasOpenHandTechnique = false;
 
 
@@ -4175,7 +4814,7 @@ export class CombatService {
       if (mode === "grapple" || mode === "shove") {
 
         const saveDc = 8 + profBonus + strMod;
-        if (!dto._isSubAttack) {
+        if (!dto._isSubAttack && !dto._skipActionConsumption) {
           this.consumeStandardOrBonusAttack(attacker, isUnarmedAttack);
           await this.participantRepo.save(attacker);
         }
@@ -4319,6 +4958,11 @@ export class CombatService {
           "INVALID_ACTION",
         );
       }
+      isWeaponAttack =
+        resolved.hasAttack === true &&
+        attacker.transformationState.retainedAbilities?.includes(
+          "class-features",
+        ) === true;
       attackBonus = resolved.attackBonus;
       if (resolved.damageDice) damageDice = resolved.damageDice;
       if (resolved.damageType) damageType = resolved.damageType;
@@ -4355,7 +4999,10 @@ export class CombatService {
           `Acao "${dto.actionName}" nao encontrada.`,
           "INVALID_ACTION",
         );
-      if (action.source === "weapon") isWeaponOrUnarmedAttack = true;
+      if (action.source === "weapon") {
+        isWeaponOrUnarmedAttack = true;
+        isWeaponAttack = true;
+      }
       attackBonus = action.attackBonus ?? 0;
       if (action.damage) {
         damageDice = action.damage.dice;
@@ -4621,6 +5268,36 @@ export class CombatService {
     const defenderMods = this.conditionEffects.getDefenseModifiers(
       target.conditions,
     );
+    const targetIsInvisible = (target.conditions ?? []).some(
+      (condition) => condition.toLowerCase() === "invisible",
+    );
+    let feralSensesApplied = false;
+    if (
+      targetIsInvisible &&
+      attacker.type === "pc" &&
+      attacker.characterId
+    ) {
+      try {
+        const attackerOwnerId = await this.resolveParticipantOwner(
+          attacker,
+          dto.ownerUserId,
+        );
+        const attackerSheet = await this.sheetService.computeSheet(
+          attackerOwnerId,
+          attacker.characterId,
+        );
+        feralSensesApplied = hasPhbFeralSenses(attackerSheet);
+      } catch {
+        feralSensesApplied = false;
+      }
+    }
+    const defenderDisadvantageWithoutInvisibility = feralSensesApplied
+      ? this.conditionEffects.getDefenseModifiers(
+          (target.conditions ?? []).filter(
+            (condition) => condition.toLowerCase() !== "invisible",
+          ),
+        ).attacksHaveDisadvantage
+      : defenderMods.attacksHaveDisadvantage;
 
 
 
@@ -4664,6 +5341,15 @@ export class CombatService {
       target,
       isMeleeAttack,
       dto.actionSlug,
+      activeTurn.key,
+    );
+    const multiattackDefenseAcEffect = (target.effectInstances ?? []).find(
+      (effect) =>
+        this.isMultiattackDefenseEffectFor(
+          effect,
+          attacker.id,
+          activeTurn.key,
+        ),
     );
 
 
@@ -4686,7 +5372,7 @@ export class CombatService {
       (dto.forceAdvantage ?? false);
     let hasDisadvantage =
       attackerMods.hasDisadvantage ||
-      defenderMods.attacksHaveDisadvantage ||
+      defenderDisadvantageWithoutInvisibility ||
       reactive.disadvantage ||
       effectDec.disadvantage ||
       rangeCheck.disadvantage ||
@@ -4772,7 +5458,10 @@ export class CombatService {
 
     let targetAc = 10;
     let targetHpBeforeAttack = target.currentHp ?? 0;
+    let targetMaxHpBeforeAttack =
+      target.maxHp ?? target.currentHp ?? 0;
     let targetTempHpBeforeAttack = target.tempHp ?? 0;
+    let targetHasMultiattackDefense = false;
     if (target.type === "pc" && target.characterId) {
       const targetOwnerId = await this.resolveParticipantOwner(
         target,
@@ -4783,13 +5472,33 @@ export class CombatService {
         target.characterId,
       );
       targetAc = target.transformationState?.form.ac ?? sheet.armorClass;
-      targetHpBeforeAttack = sheet.currentHp ?? targetHpBeforeAttack;
+      const usesTransformationHitPoints =
+        target.transformationState != null &&
+        target.transformationState.rulesMode !== "xphb-wild-shape";
+      targetHpBeforeAttack = usesTransformationHitPoints
+        ? target.transformationState!.form.currentHp
+        : (sheet.currentHp ?? targetHpBeforeAttack);
+      targetMaxHpBeforeAttack = usesTransformationHitPoints
+        ? target.transformationState!.form.maxHp
+        : (sheet.maxHp ?? targetMaxHpBeforeAttack);
       targetTempHpBeforeAttack = sheet.tempHp ?? targetTempHpBeforeAttack;
+      targetHasMultiattackDefense =
+        (!target.transformationState ||
+          target.transformationState.retainedAbilities?.includes(
+            "class-features",
+          ) === true) &&
+        this.hasMaterializedPhbHunterFeature(
+          sheet,
+          "multiattack-defense",
+        );
     } else if (target.type === "monster" && target.monster) {
       const summonAc = getSummonStatBlock(target)?.armorClass;
       const ac = target.monster.armor_class as any;
       targetAc =
         summonAc ?? (Array.isArray(ac) ? ac[0]?.value : ac?.value) ?? 10;
+      targetMaxHpBeforeAttack =
+        target.maxHp ??
+        Number((target.monster as { hit_points?: number }).hit_points ?? 0);
     }
 
     targetAc = Math.max(targetAc, effectDec.targetAcBaseOverride ?? targetAc);
@@ -4897,7 +5606,29 @@ export class CombatService {
       }
     }
 
+    const attackBoundEffectRefs: Array<{
+      participantId: string;
+      effectId: string;
+      sourceFeatureSlug: "multiattack-defense" | "colossus-slayer";
+    }> = [];
     const events: GameEventData[] = [...biEvents, ...naturesSanctuaryEvents];
+    if (multiattackDefenseAcEffect) {
+      events.push({
+        event_type: "multiattack_defense_ac_applied",
+        actor_participant_id: target.id,
+        target_participant_id: attacker.id,
+        data: {
+          featureSlug: "multiattack-defense",
+          bonus: multiattackDefenseAcEffect.payload?.amount ?? 4,
+          attackerParticipantId: attacker.id,
+          attackerName: attacker.displayName,
+          defenderName: target.displayName,
+          finalArmorClass: targetAc,
+          expiresAt: "end_of_current_turn",
+          turnParticipantIdAtTrigger: activeTurn.participantId,
+        },
+      });
+    }
     if (smiteOfProtectionHalfCover) {
       events.push({
         event_type: "smite_of_protection_half_cover_applied",
@@ -4972,6 +5703,8 @@ export class CombatService {
         actionName: dto.actionName,
         actorName: attacker.displayName,
         targetName: target.displayName,
+        attackBoundEffectRefs,
+        feralSensesApplied,
         ...attackRollResult,
       },
     });
@@ -4999,6 +5732,58 @@ export class CombatService {
       }
     }
 
+    if (
+      hit &&
+      targetHasMultiattackDefense &&
+      !(target.effectInstances ?? []).some(
+        (effect) =>
+          this.isMultiattackDefenseEffectFor(
+            effect,
+            attacker.id,
+            activeTurn.key,
+          ),
+      )
+    ) {
+      const defense = await this.effectInstances.addEffect(target, {
+        kind: "ac_bonus",
+        sourceFeatureSlug: "multiattack-defense",
+        sourceCasterParticipantId: attacker.id,
+        payload: {
+          amount: 4,
+          attackerParticipantId: attacker.id,
+          turnParticipantIdAtTrigger: activeTurn.participantId,
+          turnKey: activeTurn.key,
+          reason: "subsequent-attacks-by-same-attacker",
+        },
+        expiresAt: { kind: "participant_turn_ends", value: 1 },
+        expiresAtTurnEndParticipantId: activeTurn.participantId,
+        requiresConcentration: false,
+      });
+      if (defense.applied !== false) {
+        attackBoundEffectRefs.push({
+          participantId: target.id,
+          effectId: defense.effect.id,
+          sourceFeatureSlug: "multiattack-defense",
+        });
+      }
+      events.push(...defense.events, {
+        event_type: "multiattack_defense_triggered",
+        actor_participant_id: target.id,
+        target_participant_id: attacker.id,
+        data: {
+          featureSlug: "multiattack-defense",
+          bonus: 4,
+          attackerParticipantId: attacker.id,
+          attackerName: attacker.displayName,
+          defenderName: target.displayName,
+          firstHitArmorClass: targetAc,
+          appliesToSubsequentAttacks: true,
+          expiresAt: "end_of_current_turn",
+          turnParticipantIdAtTrigger: activeTurn.participantId,
+        },
+      });
+    }
+
     let damageRollResult;
     let targetHpAfter: number | undefined;
     let targetDefeated = false;
@@ -5018,6 +5803,7 @@ export class CombatService {
 
     let collateralDefeated = false;
     let concentrationBroken: boolean | undefined;
+    let relentlessEndurancePending = false;
 
     if (hit && damageDice !== "0") {
 
@@ -5141,64 +5927,6 @@ export class CombatService {
 
       }
 
-
-
-
-      let foeSlayerBonus = 0;
-      let foeSlayerConsumed = false;
-      try {
-        const alreadyUsed = (attacker.effectInstances ?? []).some(
-          (e) => e.kind === "foe_slayer_used_this_turn",
-        );
-        if (!alreadyUsed && attacker.type === "pc" && attacker.characterId) {
-          const ownerIdForFs = await this.resolveParticipantOwner(
-            attacker,
-            dto.ownerUserId,
-          );
-          const fsSheet = await this.sheetService.computeSheet(
-            ownerIdForFs,
-            attacker.characterId,
-          );
-          const hasFoeSlayer =
-            (fsSheet as { hasFoeSlayer?: boolean }).hasFoeSlayer === true;
-          if (hasFoeSlayer) {
-            const wisAbility = fsSheet.abilityScores.find(
-              (a) => a.slug === "wis",
-            );
-            const wisMod = wisAbility?.modifier ?? 0;
-
-
-            if (hasFoeSlayer) {
-              foeSlayerBonus = Math.max(0, wisMod);
-              foeSlayerConsumed = true;
-              totalDamage += foeSlayerBonus;
-              attacker.effectInstances = [
-                ...(attacker.effectInstances ?? []),
-                {
-                  id: randomUUID(),
-                  kind: "foe_slayer_used_this_turn",
-                  sourceFeatureSlug: "foe-slayer",
-                  sourceCasterParticipantId: attacker.id,
-                  payload:
-                    {} as unknown as import("../interfaces/combat.interfaces").EffectInstancePayload,
-                  expiresAt: { kind: "turns", value: 1 },
-                  requiresConcentration: false,
-                  appliedAt: new Date().toISOString(),
-                },
-              ];
-              await this.participantRepo.save(attacker);
-            }
-          }
-        }
-      } catch {
-
-      }
-
-
-
-
-
-
       const damageBonusEffects = (attacker.effectInstances ?? []).filter(
         (e) => e.kind === "damage_bonus",
       );
@@ -5209,19 +5937,85 @@ export class CombatService {
         damageType?: string;
         finalAmount?: number;
       }> = [];
-      if (foeSlayerConsumed) {
-        if (foeSlayerBonus > 0) {
-          extraDamageBonuses.push({
-            source: "foe-slayer",
-            amount: foeSlayerBonus,
+      const colossusSlayerAlreadyUsed = (
+        attacker.effectInstances ?? []
+      ).some(
+        (effect) =>
+          effect.kind === "colossus_slayer_used_this_turn" &&
+          (!effect.payload?.turnKey ||
+            effect.payload.turnKey === activeTurn.key),
+      );
+      if (
+        isWeaponAttack &&
+        attacker.type === "pc" &&
+        attacker.characterId &&
+        targetMaxHpBeforeAttack > 0 &&
+        targetHpBeforeAttack < targetMaxHpBeforeAttack &&
+        !colossusSlayerAlreadyUsed
+      ) {
+        const attackerOwnerId = await this.resolveParticipantOwner(
+          attacker,
+          dto.ownerUserId,
+        );
+        const rangerSheet = await this.sheetService
+          .computeSheet(attackerOwnerId, attacker.characterId)
+          .catch(() => null);
+        if (
+          rangerSheet &&
+          this.hasMaterializedPhbHunterFeature(
+            rangerSheet,
+            "colossus-slayer",
+          )
+        ) {
+          const criticalHit =
+            isCritical || defenderMods.autoCritIfMelee;
+          const dice = criticalHit ? "2d8" : "1d8";
+          const roll = this.diceService.rollExpression(dice);
+          const marker = await this.effectInstances.addEffect(attacker, {
+            kind: "colossus_slayer_used_this_turn",
+            sourceFeatureSlug: "colossus-slayer",
+            sourceCasterParticipantId: attacker.id,
+            payload: {
+              targetParticipantId: target.id,
+              turnParticipantIdAtTrigger: activeTurn.participantId,
+              turnKey: activeTurn.key,
+            },
+            expiresAt: { kind: "participant_turn_ends", value: 1 },
+            expiresAtTurnEndParticipantId: activeTurn.participantId,
+            requiresConcentration: false,
           });
+          if (marker.applied !== false) {
+            attackBoundEffectRefs.push({
+              participantId: attacker.id,
+              effectId: marker.effect.id,
+              sourceFeatureSlug: "colossus-slayer",
+            });
+            totalDamage += roll.total;
+            extraDamageBonuses.push({
+              source: "colossus-slayer",
+              amount: roll.total,
+              dice,
+              damageType,
+            });
+            events.push(...marker.events, {
+              event_type: "colossus_slayer_damage",
+              actor_participant_id: attacker.id,
+              target_participant_id: target.id,
+              data: {
+                featureSlug: "colossus-slayer",
+                dice,
+                rolls: roll.rolls,
+                damage: roll.total,
+                damageType,
+                critical: criticalHit,
+                targetHpBefore: targetHpBeforeAttack,
+                targetMaxHp: targetMaxHpBeforeAttack,
+                oncePerTurn: true,
+                turnParticipantIdAtTrigger: activeTurn.participantId,
+              },
+            });
+          }
         }
-        events.push({
-          event_type: "foe_slayer_applied",
-          actor_participant_id: attacker.id,
-          target_participant_id: target.id,
-          data: { wisBonus: foeSlayerBonus, oneshot: true },
-        });
       }
       if (sneakAttackDice) {
         extraDamageBonuses.push({
@@ -5477,6 +6271,43 @@ export class CombatService {
         damageType,
         dto.ownerUserId,
       );
+      const colossusComponent = extraDamageBonuses.find(
+        (component) => component.source === "colossus-slayer",
+      );
+      if (colossusComponent) {
+        const adjustedWithoutColossus =
+          await this.resolveDamageAdjustments(
+            target,
+            Math.max(0, totalDamage - colossusComponent.amount),
+            damageType,
+            dto.ownerUserId,
+          );
+        colossusComponent.finalAmount = Math.max(
+          0,
+          adjustedDamage.finalDamage -
+            adjustedWithoutColossus.finalDamage,
+        );
+        const colossusEvent = events.find(
+          (event) =>
+            event.event_type === "colossus_slayer_damage" &&
+            event.actor_participant_id === attacker.id &&
+            event.target_participant_id === target.id,
+        );
+        if (colossusEvent) {
+          colossusEvent.data = {
+            ...colossusEvent.data,
+            finalAmount: colossusComponent.finalAmount,
+            resisted:
+              colossusComponent.finalAmount < colossusComponent.amount &&
+              colossusComponent.finalAmount > 0,
+            immune:
+              colossusComponent.amount > 0 &&
+              colossusComponent.finalAmount === 0,
+            vulnerable:
+              colossusComponent.finalAmount > colossusComponent.amount,
+          };
+        }
+      }
       finalDamage =
         adjustedDamage.finalDamage +
         radiantStrikesAdjusted.finalDamage +
@@ -5551,6 +6382,7 @@ export class CombatService {
             target.isDefeated = true;
             targetDefeated = true;
             await this.participantRepo.save(target);
+            await this.clearRelentlessEndurancePending(target, events);
           }
           events.push({
             event_type: "death_save_failed_from_damage",
@@ -5583,16 +6415,40 @@ export class CombatService {
             target.dyingState = "dying";
             target.isDefeated = false;
             await this.participantRepo.save(target);
-            events.push({
-              event_type: "fell_unconscious",
-              target_participant_id: target.id,
-              data: { dyingState: "dying" },
-            });
+            relentlessEndurancePending =
+              await this.maybeOfferRelentlessEndurance(
+              target,
+              targetOwnerId,
+              {
+                hpBefore: targetHpBeforeAttack,
+                hpAfter: hpResult.currentHp,
+                incomingDamage: finalDamage,
+                damageType,
+                attackerParticipantId: attacker.id,
+              },
+              events,
+            );
+            if (relentlessEndurancePending) {
+              targetDefeated = false;
+            } else {
+              events.push({
+                event_type: "fell_unconscious",
+                target_participant_id: target.id,
+                data: { dyingState: "dying" },
+              });
+            }
           }
         }
       } else {
 
-        const result = this.applyDamageToMonster(target, finalDamage);
+        const result = await this.applyDamageToMonster(
+          encounter,
+          target,
+          finalDamage,
+          dto.ownerUserId,
+          [attacker],
+        );
+        events.push(...result.events);
         const survivalEvent = this.applyUndeadFortitude(
           target,
           finalDamage,
@@ -5649,6 +6505,18 @@ export class CombatService {
             e.kind === "hex_mark" &&
             e.sourceCasterParticipantId === attacker.id,
         );
+        const markTransferReadyTurnKey = `${encounter.currentRound}:${encounter.currentTurnIndex}`;
+        for (const mark of [...hunterMarks, ...hexMarks]) {
+          mark.payload = {
+            ...(mark.payload ?? {}),
+            transferReadyTurnKey: markTransferReadyTurnKey,
+            transferReadyRound: encounter.currentRound,
+            transferReadyTurnIndex: encounter.currentTurnIndex,
+          };
+        }
+        if (hunterMarks.length > 0 || hexMarks.length > 0) {
+          await this.participantRepo.save(target);
+        }
         for (const mk of hunterMarks) {
           events.push({
             event_type: "mark_ready_to_transfer",
@@ -5659,6 +6527,8 @@ export class CombatService {
               previousTargetId: target.id,
               effectId: mk.id,
               bonusActionRecast: true,
+              availableFromNextTurn: true,
+              transferReadyTurnKey: markTransferReadyTurnKey,
             },
           });
         }
@@ -5672,6 +6542,8 @@ export class CombatService {
               previousTargetId: target.id,
               effectId: mk.id,
               bonusActionRecast: true,
+              availableFromNextTurn: true,
+              transferReadyTurnKey: markTransferReadyTurnKey,
             },
           });
         }
@@ -5814,6 +6686,12 @@ export class CombatService {
                 secondTarget,
                 dto.ownerUserId,
               );
+              const hpBeforeCleave =
+                (await this.stateService.getCurrentHp(
+                  secondTarget.characterId,
+                )) ??
+                secondTarget.currentHp ??
+                0;
               const hpRes = await this.stateService.updateHp(
                 targetOwnerId,
                 secondTarget.characterId,
@@ -5826,13 +6704,30 @@ export class CombatService {
                 await this.participantRepo.save(secondTarget);
               } else if (hpRes.isDown) {
                 secondTarget.dyingState = "dying";
+                secondTarget.isDefeated = false;
                 await this.participantRepo.save(secondTarget);
+                await this.maybeOfferRelentlessEndurance(
+                  secondTarget,
+                  targetOwnerId,
+                  {
+                    hpBefore: hpBeforeCleave,
+                    hpAfter: hpRes.currentHp,
+                    incomingDamage: cleaveDmg,
+                    damageType: mRes.cleaveSecondTarget.damageType,
+                    attackerParticipantId: attacker.id,
+                  },
+                  events,
+                );
               }
             } else {
-              const cleaveResult = this.applyDamageToMonster(
+              const cleaveResult = await this.applyDamageToMonster(
+                encounter,
                 secondTarget,
                 cleaveDmg,
+                dto.ownerUserId,
+                [attacker, target],
               );
+              events.push(...cleaveResult.events);
               await this.participantRepo.save(secondTarget);
               if (cleaveResult.defeated) {
                 collateralDefeated = true;
@@ -5909,9 +6804,30 @@ export class CombatService {
               target.dyingState = "dying";
               target.isDefeated = false;
               await this.participantRepo.save(target);
+              const relentlessOffered =
+                await this.maybeOfferRelentlessEndurance(
+                target,
+                targetOwnerId,
+                {
+                  hpBefore: targetHpBeforeAttack,
+                  hpAfter: hpResult.currentHp,
+                  incomingDamage: dmg,
+                  damageType: mRes.grazeDamage.damageType,
+                  attackerParticipantId: attacker.id,
+                },
+                events,
+              );
+              if (relentlessOffered) targetDefeated = false;
             }
           } else {
-            const result = this.applyDamageToMonster(target, dmg);
+            const result = await this.applyDamageToMonster(
+              encounter,
+              target,
+              dmg,
+              dto.ownerUserId,
+              [attacker],
+            );
+            events.push(...result.events);
             targetHpAfter = result.hpAfter;
             targetDefeated = result.defeated;
             await this.participantRepo.save(target);
@@ -6051,55 +6967,57 @@ export class CombatService {
     let openHandTechniqueAvailable = false;
     if (!dto._isSubAttack) {
 
-      if (useHasteAction) {
-        consumeHasteAction(attacker);
-        events.push({
-          event_type: "haste_action_used",
-          actor_participant_id: attacker.id,
-          target_participant_id: target.id,
-          data: { kind: "weapon_attack", actionName: dto.actionName },
-        });
-      } else {
-        this.consumeStandardOrBonusAttack(attacker, isUnarmedAttack);
-      }
-
-      if (isFlurryGrantedUnarmedAttack && openHandFlurryMarker) {
-        const remaining = Math.max(
-          0,
-          (openHandFlurryMarker.payload?.amount ?? 1) - 1,
-        );
-        attacker.effectInstances = (attacker.effectInstances ?? [])
-          .map((effect) =>
-            effect.id === openHandFlurryMarker.id
-              ? {
-                  ...effect,
-                  payload: { ...effect.payload, amount: remaining },
-                }
-              : effect,
-          )
-          .filter(
-            (effect) =>
-              effect.id !== openHandFlurryMarker.id || remaining > 0,
-          );
-        if (hit && !targetDefeated && hasOpenHandTechnique) {
-          const pending = await this.effectInstances.addEffect(attacker, {
-            kind: "open_hand_technique_pending",
-            sourceFeatureSlug: "open-hand-technique",
-            sourceCasterParticipantId: attacker.id,
-            payload: { requiredTargetId: target.id },
-            expiresAt: { kind: "caster_turn_ends", value: 1 },
-            requiresConcentration: false,
-          });
+      if (!dto._skipActionConsumption) {
+        if (useHasteAction) {
+          consumeHasteAction(attacker);
           events.push({
-            event_type: "open_hand_technique_available",
+            event_type: "haste_action_used",
             actor_participant_id: attacker.id,
             target_participant_id: target.id,
-            data: {
-              targetParticipantId: target.id,
-              targetName: target.displayName,
-            },
+            data: { kind: "weapon_attack", actionName: dto.actionName },
           });
-          openHandTechniqueAvailable = true;
+        } else {
+          this.consumeStandardOrBonusAttack(attacker, isUnarmedAttack);
+        }
+
+        if (isFlurryGrantedUnarmedAttack && openHandFlurryMarker) {
+          const remaining = Math.max(
+            0,
+            (openHandFlurryMarker.payload?.amount ?? 1) - 1,
+          );
+          attacker.effectInstances = (attacker.effectInstances ?? [])
+            .map((effect) =>
+              effect.id === openHandFlurryMarker.id
+                ? {
+                    ...effect,
+                    payload: { ...effect.payload, amount: remaining },
+                  }
+                : effect,
+            )
+            .filter(
+              (effect) =>
+                effect.id !== openHandFlurryMarker.id || remaining > 0,
+            );
+          if (hit && !targetDefeated && hasOpenHandTechnique) {
+            const pending = await this.effectInstances.addEffect(attacker, {
+              kind: "open_hand_technique_pending",
+              sourceFeatureSlug: "open-hand-technique",
+              sourceCasterParticipantId: attacker.id,
+              payload: { requiredTargetId: target.id },
+              expiresAt: { kind: "caster_turn_ends", value: 1 },
+              requiresConcentration: false,
+            });
+            events.push({
+              event_type: "open_hand_technique_available",
+              actor_participant_id: attacker.id,
+              target_participant_id: target.id,
+              data: {
+                targetParticipantId: target.id,
+                targetName: target.displayName,
+              },
+            });
+            openHandTechniqueAvailable = true;
+          }
         }
       }
 
@@ -6347,7 +7265,7 @@ export class CombatService {
     }
 
     // Sub-attacks (multiattack) deixam a checagem para o fim da sequência.
-    if (!dto._isSubAttack) {
+    if (!dto._isSubAttack && !dto._deferAutoEnd) {
       await this.maybeAutoEndAfterDefeat(
         encounterId,
         targetDefeated || collateralDefeated,
@@ -6666,10 +7584,26 @@ export class CombatService {
     });
 
     const damageRoll = this.diceService.rollExpression(effect.damageDice);
-    const rawDamage =
+    let rawDamage =
       save.success && effect.halfOnSuccess
         ? Math.floor(damageRoll.total / 2)
         : damageRoll.total;
+    const targetOwnerId = await this.resolveParticipantOwner(
+      target,
+      ownerUserId,
+    );
+    const evasion = await this.resolveEvasionForDamage(
+      target,
+      targetOwnerId,
+      rawDamage,
+      {
+        ability: effect.saveAbility,
+        success: save.success,
+        halfDamageOnSuccess: effect.halfOnSuccess,
+      },
+    );
+    rawDamage = evasion.damageAfterEvasion;
+    if (evasion.event) events.push(evasion.event);
     const adjusted = await this.resolveDamageAdjustments(
       target,
       rawDamage,
@@ -6696,7 +7630,11 @@ export class CombatService {
       },
     });
 
-    let hpAfter = input.hpBefore ?? target.currentHp ?? 0;
+    const hpBeforeDamage = Math.max(
+      0,
+      input.hpBefore ?? target.currentHp ?? 0,
+    );
+    let hpAfter = hpBeforeDamage;
     let defeated = false;
     let reducedToZeroByThisDamage = false;
 
@@ -6720,6 +7658,9 @@ export class CombatService {
         target.dyingState = deathSaves.dead ? "dead" : "dying";
         target.isDefeated = deathSaves.dead;
         await this.participantRepo.save(target);
+        if (deathSaves.dead) {
+          await this.clearRelentlessEndurancePending(target, events);
+        }
         events.push({
           event_type: "death_save_failed_from_damage",
           target_participant_id: target.id,
@@ -6757,18 +7698,41 @@ export class CombatService {
           target.dyingState = "dying";
           target.isDefeated = false;
           await this.participantRepo.save(target);
-          events.push({
-            event_type: "fell_unconscious",
-            target_participant_id: target.id,
-            data: {
-              dyingState: "dying",
-              source: `monster-action:${actionName}`,
+          const relentlessOffered = await this.maybeOfferRelentlessEndurance(
+            target,
+            targetOwnerId,
+            {
+              hpBefore: hpBeforeDamage,
+              hpAfter: hpResult.currentHp,
+              incomingDamage: finalDamage,
+              damageType: effect.damageType,
+              attackerParticipantId: attacker.id,
             },
-          });
+            events,
+          );
+          if (relentlessOffered) {
+            defeated = false;
+          } else {
+            events.push({
+              event_type: "fell_unconscious",
+              target_participant_id: target.id,
+              data: {
+                dyingState: "dying",
+                source: `monster-action:${actionName}`,
+              },
+            });
+          }
         }
       }
     } else {
-      const result = this.applyDamageToMonster(target, finalDamage);
+      const result = await this.applyDamageToMonster(
+        encounter,
+        target,
+        finalDamage,
+        ownerUserId,
+        [attacker],
+      );
+      events.push(...result.events);
       hpAfter = result.hpAfter;
       defeated = result.defeated;
       reducedToZeroByThisDamage = finalDamage > 0 && result.defeated;
@@ -6883,6 +7847,321 @@ export class CombatService {
       defeated,
       concentrationBroken,
     };
+  }
+
+
+
+  async resolveVolley(
+    encounterId: string,
+    dto: VolleyDto,
+  ): Promise<GameResult<VolleyResult>> {
+    const encounter = await this.encounterRepo.findOne({
+      where: { id: encounterId },
+    });
+    if (!encounter || encounter.status !== "active") {
+      return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
+    }
+
+    const attacker = await this.encounterService
+      .getParticipant(dto.attackerParticipantId)
+      .catch(() => null);
+    if (
+      !attacker ||
+      attacker.encounterId !== encounterId ||
+      attacker.type !== "pc" ||
+      !attacker.characterId
+    ) {
+      return failure(
+        "Saraivada exige um personagem participante deste encontro.",
+        "INVALID_PARTICIPANT",
+      );
+    }
+    if (
+      attacker.isDefeated ||
+      attacker.dyingState !== "none" ||
+      !this.conditionEffects.canTakeAction(attacker.conditions ?? [])
+    ) {
+      return failure(
+        "O Patrulheiro não pode usar Saraivada devido ao seu estado atual.",
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+    if (findFearCompulsion(attacker)) {
+      return failure(
+        "Fear obriga o atacante a usar Disparada e fugir.",
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+    if (
+      encounter.turnOrder[encounter.currentTurnIndex] !== attacker.id
+    ) {
+      return failure(
+        "Nao e o turno deste participante.",
+        "NOT_YOUR_TURN",
+      );
+    }
+    if (attacker.actionUsed) {
+      return failure(
+        "Acao ja utilizada neste turno.",
+        "NO_ACTION_AVAILABLE",
+      );
+    }
+    const abjureChoice = chooseAbjureFoesTurnOption(
+      attacker,
+      "action",
+      `${encounter.currentRound}:${encounter.currentTurnIndex}`,
+    );
+    if (!abjureChoice.allowed) {
+      return failure(
+        abjureFoesChoiceError(abjureChoice.currentChoice),
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
+
+    const ownerId = await this.resolveParticipantOwner(
+      attacker,
+      dto.ownerUserId,
+    );
+    const available = await this.actionsService.getActions(
+      ownerId,
+      attacker.characterId,
+    );
+    const volley = available.actions.find(
+      (action) =>
+        action.id === dto.actionSlug &&
+        action.featureSlug === "volley-ranger-hunter-11-phb" &&
+        action.weaponActionSlug &&
+        action.aoe?.originType === "point" &&
+        action.aoe.shape === "sphere" &&
+        action.aoe.sizeFt === 10,
+    );
+    if (!volley?.weaponActionSlug || !volley.aoe) {
+      return failure(
+        "Saraivada não está disponível para esta ficha e arma.",
+        "FEATURE_NOT_AVAILABLE",
+      );
+    }
+    const weapon = available.actions.find(
+      (action) =>
+        action.id === volley.weaponActionSlug &&
+        action.source === "weapon" &&
+        action.weaponCategory === "ranged" &&
+        typeof action.attackBonus === "number" &&
+        action.damage != null,
+    );
+    if (!weapon) {
+      return failure(
+        "A arma à distância usada por Saraivada não está mais equipada.",
+        "NOT_EQUIPPED",
+      );
+    }
+
+    const { x, y } = dto.originCell ?? {};
+    if (
+      !Number.isInteger(x) ||
+      !Number.isInteger(y) ||
+      attacker.positionX == null ||
+      attacker.positionY == null
+    ) {
+      return failure(
+        "Escolha um ponto válido no mapa para Saraivada.",
+        "INVALID_PAYLOAD",
+      );
+    }
+    const pointDistanceFt =
+      Math.max(
+        Math.abs(x - attacker.positionX),
+        Math.abs(y - attacker.positionY),
+      ) * 5;
+    if (pointDistanceFt > volley.aoe.rangeFt) {
+      return failure(
+        `O ponto de Saraivada está a ${pointDistanceFt} pés; ${weapon.name} alcança ${volley.aoe.rangeFt} pés.`,
+        "OUT_OF_RANGE",
+      );
+    }
+
+    const targetIds = Array.isArray(dto.targetParticipantIds)
+      ? dto.targetParticipantIds
+      : [];
+    if (
+      targetIds.length === 0 ||
+      new Set(targetIds).size !== targetIds.length
+    ) {
+      return failure(
+        "Escolha ao menos uma criatura, sem repetir alvos.",
+        "INVALID_PAYLOAD",
+      );
+    }
+
+    const targets: EncounterParticipantEntity[] = [];
+    const weaponRange = parseRangeString(weapon.range ?? null);
+    for (const targetId of targetIds) {
+      const target = await this.encounterService
+        .getParticipant(targetId)
+        .catch(() => null);
+      if (
+        !target ||
+        target.encounterId !== encounterId ||
+        target.id === attacker.id ||
+        target.isDefeated ||
+        (target.conditions ?? []).includes("banished") ||
+        target.positionX == null ||
+        target.positionY == null
+      ) {
+        return failure(
+          "Saraivada recebeu uma criatura inválida ou fora do mapa.",
+          "INVALID_TARGET",
+        );
+      }
+      const distanceFromPointFt =
+        Math.hypot(target.positionX - x, target.positionY - y) * 5;
+      if (distanceFromPointFt > 10) {
+        return failure(
+          `${target.displayName} está a ${Math.round(distanceFromPointFt * 100) / 100} pés do ponto de Saraivada; o raio é 10 pés.`,
+          "TARGET_OUTSIDE_AREA",
+        );
+      }
+      const attackRange = checkAttackRange(
+        this.positionOf(attacker),
+        this.positionOf(target),
+        weaponRange,
+      );
+      if (!attackRange.ok) {
+        return failure(
+          `${target.displayName} está a ${attackRange.distanceFt} pés; ${weapon.name} alcança ${attackRange.maxFt} pés.`,
+          "OUT_OF_RANGE",
+        );
+      }
+      if (isTargetingCharmer(attacker.conditionInstances, target.id)) {
+        return failure(
+          `Enfeitiçado: não pode atacar ${target.displayName}, que aplicou a condição.`,
+          "CONDITION_PREVENTS_ACTION",
+        );
+      }
+      targets.push(target);
+    }
+
+    // Reserve the full Action before the first independently persisted attack.
+    // A later interruption therefore cannot leave damage applied and allow replay.
+    attacker.actionUsed = true;
+    attacker.attacksUsedThisTurn = Math.max(
+      attacker.attacksUsedThisTurn ?? 0,
+      attacker.attacksMaxThisTurn ?? 1,
+    );
+    await this.participantRepo.update(attacker.id, {
+      actionUsed: true,
+      attacksUsedThisTurn: attacker.attacksUsedThisTurn,
+    });
+
+    const startedEvent: GameEventData = {
+      event_type: "volley_started",
+      actor_participant_id: attacker.id,
+      data: {
+        featureSlug: "volley-ranger-hunter-11-phb",
+        actionName: "Saraivada",
+        actionCost: "action",
+        weaponName: weapon.name,
+        weaponActionSlug: weapon.id,
+        originCell: { x, y },
+        targetParticipantIds: targetIds,
+        summary: `${attacker.displayName} usa Saraivada com ${weapon.name} contra ${targets.length} criatura(s).`,
+      },
+    };
+    await this.eventService.emit(encounter.sessionId, encounterId, [
+      startedEvent,
+    ]);
+
+    const events: GameEventData[] = [startedEvent];
+    const attacks: SubAttackResult[] = [];
+    let interruptedAt: VolleyResult["interruptedAt"] = null;
+    for (const target of targets) {
+      const resolved = await this.resolveAttack(encounterId, {
+        attackerParticipantId: attacker.id,
+        targetParticipantId: target.id,
+        actionName: weapon.name,
+        actionSlug: weapon.id,
+        ownerUserId: dto.ownerUserId,
+        _skipActionConsumption: true,
+        _deferAutoEnd: true,
+      });
+      if (!resolved.ok) {
+        interruptedAt = {
+          targetParticipantId: target.id,
+          reason: "action_cancelled",
+          code: resolved.code,
+          error: resolved.error,
+        };
+        break;
+      }
+      const updatedTarget = await this.encounterService.getParticipant(
+        target.id,
+      );
+      attacks.push({
+        subActionName: weapon.name,
+        targetParticipantId: target.id,
+        attackRoll: resolved.value.attackRoll,
+        damageRoll: resolved.value.damageRoll,
+        targetHpBefore: resolved.value.targetHpBefore,
+        targetHpAfter: resolved.value.targetHpAfter,
+        targetDefeated: resolved.value.targetDefeated,
+        targetDyingState: updatedTarget.dyingState,
+        concentrationBroken: resolved.value.concentrationBroken,
+      });
+      events.push(...resolved.events);
+    }
+
+    const resolvedEvent: GameEventData = {
+      event_type: "volley_resolved",
+      actor_participant_id: attacker.id,
+      data: {
+        featureSlug: "volley-ranger-hunter-11-phb",
+        actionName: "Saraivada",
+        actionCost: "action",
+        weaponName: weapon.name,
+        originCell: { x, y },
+        attackCount: attacks.length,
+        requestedAttackCount: targets.length,
+        hits: attacks.filter((attack) => attack.attackRoll.hit).length,
+        criticalHits: attacks.filter((attack) => attack.attackRoll.critical)
+          .length,
+        totalDamage: attacks.reduce(
+          (total, attack) =>
+            total + (attack.damageRoll?.finalDamage ?? 0),
+          0,
+        ),
+        attacks: attacks.map((attack) => ({
+          targetParticipantId: attack.targetParticipantId,
+          attackRoll: attack.attackRoll,
+          damageRoll: attack.damageRoll,
+        })),
+        interruptedAt,
+        status: interruptedAt ? "interrupted" : "resolved",
+        summary: interruptedAt
+          ? `Saraivada interrompida após ${attacks.length} de ${targets.length} ataque(s): ${interruptedAt.error}`
+          : `Saraivada resolvida: ${attacks.length} ataque(s) separado(s), ` +
+            `${attacks.filter((attack) => attack.attackRoll.hit).length} acerto(s).`,
+      },
+    };
+    events.push(resolvedEvent);
+    await this.eventService.emit(encounter.sessionId, encounterId, [
+      resolvedEvent,
+    ]);
+    await this.maybeAutoEndAfterDefeat(
+      encounterId,
+      attacks.some((attack) => attack.targetDefeated),
+    );
+
+    return success(
+      {
+        kind: "volley",
+        actionConsumed: true,
+        originCell: { x, y },
+        weaponActionSlug: weapon.id,
+        attacks,
+        interruptedAt,
+      },
+      events,
+    );
   }
 
 
@@ -7037,6 +8316,16 @@ export class CombatService {
         });
         allEvents.push(...res.events);
 
+        const awaitingRelentlessDecision = (
+          updatedTarget.effectInstances ?? []
+        ).some((effect) => effect.kind === "relentless_endurance_pending");
+        if (awaitingRelentlessDecision && targetIdx < expectedTargets) {
+          interruptedAt = {
+            index: targetIdx - 1,
+            reason: "relentless_endurance_pending",
+          };
+          break outer;
+        }
         if (res.value.targetDefeated && targetIdx < expectedTargets) {
           interruptedAt = { index: targetIdx - 1, reason: "target_defeated" };
           break outer;
@@ -7290,6 +8579,12 @@ export class CombatService {
       target,
       dto.ownerUserId,
     );
+    const evasion = await this.resolveEvasionForDamage(
+      target,
+      resolvedOwnerUserId,
+      dto.amount,
+      dto.savingThrow,
+    );
 
     let hpAfter: number;
     let defeated: boolean;
@@ -7298,7 +8593,7 @@ export class CombatService {
     const events: GameEventData[] = [];
     const adjustedDamage = await this.resolveDamageAdjustments(
       target,
-      dto.amount,
+      evasion.damageAfterEvasion,
       dto.damageType,
       resolvedOwnerUserId,
     );
@@ -7306,6 +8601,10 @@ export class CombatService {
 
     if (target.type === "pc" && target.characterId) {
       const wasDying = target.dyingState === "dying";
+      const hpBeforeDamage =
+        (await this.stateService.getCurrentHp(target.characterId)) ??
+        target.currentHp ??
+        0;
 
 
 
@@ -7322,6 +8621,7 @@ export class CombatService {
           target.isDefeated = true;
           dyingState = "dead";
           defeated = true;
+          await this.clearRelentlessEndurancePending(target, events);
           events.push({
             event_type: "death_save_failed_from_damage",
             target_participant_id: target.id,
@@ -7447,19 +8747,38 @@ export class CombatService {
           target.isDefeated = false;
           dyingState = "dying";
           defeated = false;
-          events.push({
-            event_type: "fell_unconscious",
-            target_participant_id: target.id,
-            data: { dyingState: "dying" },
-          });
           await this.participantRepo.save(target);
+          const relentlessOffered = await this.maybeOfferRelentlessEndurance(
+            target,
+            resolvedOwnerUserId,
+            {
+              hpBefore: hpBeforeDamage,
+              hpAfter,
+              incomingDamage: finalDamage,
+              damageType: dto.damageType,
+            },
+            events,
+          );
+          if (!relentlessOffered) {
+            events.push({
+              event_type: "fell_unconscious",
+              target_participant_id: target.id,
+              data: { dyingState: "dying" },
+            });
+          }
         } else {
           dyingState = target.dyingState;
           defeated = false;
         }
       }
     } else {
-      const result = this.applyDamageToMonster(target, finalDamage);
+      const result = await this.applyDamageToMonster(
+        encounter,
+        target,
+        finalDamage,
+        resolvedOwnerUserId,
+      );
+      events.push(...result.events);
       const survivalEvent = this.applyUndeadFortitude(
         target,
         finalDamage,
@@ -7477,6 +8796,7 @@ export class CombatService {
       target_participant_id: target.id,
       data: {
         damage: dto.amount,
+        damageAfterEvasion: evasion.damageAfterEvasion,
         type: dto.damageType,
         finalDamage,
         resisted: adjustedDamage.resisted,
@@ -7487,6 +8807,7 @@ export class CombatService {
         dyingState,
       },
     });
+    if (evasion.event) events.unshift(evasion.event);
 
     if (finalDamage > 0) {
       events.push(
@@ -7713,6 +9034,24 @@ export class CombatService {
         event.data?.type ?? event.data?.damageType ?? "",
       );
       if (!targetParticipantId || rolledAmount <= 0 || !damageType) continue;
+      const saveResult = event.data?.saveResult as
+        | { passed?: unknown }
+        | null
+        | undefined;
+      const saveAbility =
+        typeof event.data?.saveAbility === "string"
+          ? event.data.saveAbility
+          : null;
+      const savingThrow =
+        saveAbility &&
+        typeof saveResult?.passed === "boolean" &&
+        event.data?.halfOnSave === true
+          ? {
+              ability: saveAbility,
+              success: saveResult.passed,
+              halfDamageOnSuccess: true,
+            }
+          : undefined;
 
       const damageResult = await this.applyDamage(
         encounterId,
@@ -7721,6 +9060,7 @@ export class CombatService {
           amount: rolledAmount,
           damageType,
           ownerUserId: requesterUserId,
+          savingThrow,
         },
         { emitEvents: false },
       );
@@ -7856,6 +9196,7 @@ export class CombatService {
     let deathSavesReset = false;
     let dyingState: "none" | "dying" | "stable" | "dead" | undefined;
     let defeated = false;
+    const relentlessCleanupEvents: GameEventData[] = [];
 
 
 
@@ -7913,6 +9254,7 @@ export class CombatService {
         { healing: healingAmount },
       );
       hpAfter = result.currentHp;
+      target.currentHp = hpAfter;
 
       if (wasDyingOrStable && result.currentHp > 0) {
         target.dyingState = "none";
@@ -7936,8 +9278,23 @@ export class CombatService {
       await this.participantRepo.save(target);
     }
 
+    if (hpAfter > 0) {
+      const pendingRelentless = (target.effectInstances ?? []).filter(
+        (effect) => effect.kind === "relentless_endurance_pending",
+      );
+      for (const pending of pendingRelentless) {
+        const removed = await this.effectInstances.removeEffect(
+          target,
+          pending.id,
+          "manual",
+        );
+        relentlessCleanupEvents.push(...removed.events);
+      }
+    }
+
     const healingApplied = Math.max(0, hpAfter - prevHp);
     const events: GameEventData[] = [
+      ...relentlessCleanupEvents,
       ...(healingResolution.maximized
         ? [
             {
@@ -8090,6 +9447,52 @@ export class CombatService {
       return failure("NOT_DYING");
     }
 
+    const pendingRelentless = (participant.effectInstances ?? []).filter(
+      (effect) => effect.kind === "relentless_endurance_pending",
+    );
+    const pendingResolutionEvents: GameEventData[] = [];
+    for (const pending of pendingRelentless) {
+      const removed = await this.effectInstances.removeEffect(
+        participant,
+        pending.id,
+        "manual",
+      );
+      pendingResolutionEvents.push(...removed.events);
+    }
+    if (pendingRelentless.length > 0) {
+      pendingResolutionEvents.push(
+        {
+          event_type: "relentless_endurance_declined",
+          actor_participant_id: participant.id,
+          target_participant_id: participant.id,
+          data: {
+            featureSlug: "relentless-endurance",
+            triggerEventId:
+              pendingRelentless[0]?.payload?.triggerEventId,
+            resourceConsumed: false,
+            hpAfter: 0,
+            dyingState: "dying",
+            reason: "death-save-started",
+          },
+        },
+        {
+          event_type: "fell_unconscious",
+          target_participant_id: participant.id,
+          data: {
+            dyingState: "dying",
+            sourceFeatureSlug: "relentless-endurance",
+          },
+        },
+      );
+      if (participant.isConcentrating) {
+        const broken = await this.concentration.break(
+          participant,
+          "incapacitated",
+        );
+        pendingResolutionEvents.push(...broken.events);
+      }
+    }
+
     const beaconAdvantage = hasBeaconOfHope(participant);
     const advantage = beaconAdvantage
       ? this.diceService.rollWithAdvantage()
@@ -8135,6 +9538,7 @@ export class CombatService {
     };
 
     const events: GameEventData[] = [
+      ...pendingResolutionEvents,
       {
         event_type: "death_save",
         actor_participant_id: participantId,
@@ -8589,10 +9993,91 @@ export class CombatService {
     return this.normalizeDamageType(entry)?.includes(typeKey) ?? false;
   }
 
-  private applyDamageToMonster(
+  private async rollAshPuffSavingThrow(
+    encounter: EncounterEntity,
+    target: EncounterParticipantEntity,
+    requesterUserId: string,
+  ): Promise<SavingThrowResult> {
+    const ability: SaveAbility = "con";
+    const dc = 10;
+    const conditionModifiers = this.conditionEffects.getSavingThrowModifiers(
+      target.conditions ?? [],
+      ability,
+    );
+
+    if (target.type === "pc" && target.characterId) {
+      const ownerId = await this.resolveParticipantOwner(
+        target,
+        requesterUserId,
+      );
+      const result = await this.savingThrowService.rollSavingThrow({
+        characterId: target.characterId,
+        userId: ownerId,
+        ability,
+        dc,
+        advantage: conditionModifiers.hasAdvantage,
+        disadvantage: conditionModifiers.hasDisadvantage,
+        encounterId: encounter.id,
+        sessionId: encounter.sessionId,
+        participantId: target.id,
+      });
+      if (!result.ok || !result.value) {
+        throw new Error(
+          `Falha ao resolver salvaguarda de Ash Puff para ${target.displayName}.`,
+        );
+      }
+      return result.value;
+    }
+
+    const hasAdvantage =
+      conditionModifiers.hasAdvantage ||
+      hasDodgeDexSaveAdvantage(target, ability) ||
+      hasBeaconWisdomSaveAdvantage(target, ability);
+    const hasDisadvantage = conditionModifiers.hasDisadvantage;
+    let roll = 0;
+    let advantage:
+      | { roll1: number; roll2: number; chosen: number; discarded: number }
+      | undefined;
+    if (!conditionModifiers.autoFail) {
+      if (hasAdvantage && !hasDisadvantage) {
+        advantage = this.diceService.rollWithAdvantage();
+        roll = advantage.chosen;
+      } else if (hasDisadvantage && !hasAdvantage) {
+        advantage = this.diceService.rollWithDisadvantage();
+        roll = advantage.chosen;
+      } else {
+        roll = this.diceService.roll(20);
+      }
+    }
+    const modifier = target.monster
+      ? getMonsterSavingThrowBonus(
+          target.monster as unknown as Record<string, unknown>,
+          ability,
+        )
+      : 0;
+    const total = conditionModifiers.autoFail ? 0 : roll + modifier;
+    return {
+      ability,
+      dc,
+      roll,
+      modifier,
+      total,
+      success: !conditionModifiers.autoFail && total >= dc,
+      advantage,
+    };
+  }
+
+  private async applyDamageToMonster(
+    encounter: EncounterEntity,
     participant: EncounterParticipantEntity,
     amount: number,
-  ): { hpAfter: number; defeated: boolean } {
+    requesterUserId: string,
+    knownParticipants: EncounterParticipantEntity[] = [],
+  ): Promise<{
+    hpAfter: number;
+    defeated: boolean;
+    events: GameEventData[];
+  }> {
     let remaining = amount;
 
 
@@ -8616,7 +10101,34 @@ export class CombatService {
       participant.isDefeated = true;
     }
 
-    return { hpAfter: participant.currentHp, defeated };
+    await this.participantRepo.save(participant);
+
+    let triggerSource = participant;
+    if (participant.monsterId && !participant.monster) {
+      triggerSource =
+        (await this.participantRepo.findOne({
+          where: { id: participant.id },
+          relations: ["monster"],
+        })) ?? participant;
+    }
+    const ashPuffResult = this.ashPuff
+      ? await this.ashPuff.triggerAfterMonsterDamage({
+          source: triggerSource,
+          damageApplied: amount,
+          knownParticipants,
+          rollSavingThrow: (target) =>
+            this.rollAshPuffSavingThrow(encounter, target, requesterUserId),
+        })
+      : { events: [] };
+    if (triggerSource !== participant) {
+      participant.effectInstances = triggerSource.effectInstances;
+    }
+
+    return {
+      hpAfter: participant.currentHp,
+      defeated,
+      events: ashPuffResult.events,
+    };
   }
 
   private applyUndeadFortitude(

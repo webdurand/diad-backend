@@ -146,6 +146,329 @@ describe("CharacterSheetService", () => {
     );
   });
 
+  describe("Orc species traits", () => {
+    it("prefers Orc Darkvision 120 ft and exposes both limited-use resources", async () => {
+      const { origin, state } = setupBasicSheet("fighter", 10);
+      origin.race = { slug: "orc", name: "Orc", speed: 30 };
+      state.feature_uses_used = {
+        "adrenaline-rush": 1,
+        "relentless-endurance": 1,
+      };
+      repos.raceTrait.find!.mockResolvedValue([
+        {
+          trait: {
+            slug: "darkvision",
+            name: "Darkvision",
+            description: ["You can see in dim light within 60 feet."],
+            source: { code: "XPHB" },
+          },
+        },
+        {
+          trait: {
+            slug: "darkvision-orc",
+            name: "Darkvision",
+            description: ["You can see in dim light within 120 feet."],
+            source: { code: "SRD" },
+          },
+        },
+        {
+          trait: {
+            slug: "adrenaline-rush",
+            name: "Adrenaline Rush",
+            description: ["Dash and gain temporary Hit Points."],
+            source: { code: "XPHB" },
+          },
+        },
+        {
+          trait: {
+            slug: "relentless-endurance",
+            name: "Relentless Endurance",
+            description: ["Drop to 1 Hit Point instead."],
+            source: { code: "XPHB" },
+          },
+        },
+      ]);
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+      const darkvision = sheet.features.filter(
+        (feature) => feature.slug === "darkvision",
+      );
+      const adrenalineRush = sheet.features.find(
+        (feature) => feature.slug === "adrenaline-rush",
+      );
+      const relentlessEndurance = sheet.features.find(
+        (feature) => feature.slug === "relentless-endurance",
+      );
+
+      expect(darkvision).toHaveLength(1);
+      expect(darkvision[0].displayText).toContain("120 feet");
+      expect(adrenalineRush?.resourceCharges).toEqual({
+        current: 3,
+        max: 4,
+        formula: "Bônus de Proficiência",
+        recharge: "short",
+      });
+      expect(relentlessEndurance?.resourceCharges).toEqual({
+        current: 0,
+        max: 1,
+        formula: "1 uso",
+        recharge: "long",
+      });
+    });
+
+    it("uses Orc raw definitions instead of polluted legacy links", async () => {
+      const { origin } = setupBasicSheet("fighter", 1);
+      origin.race = {
+        slug: "orc",
+        name: "Orc",
+        speed: 30,
+        source: { code: "XPHB" },
+        raw: {
+          source: "XPHB",
+          entries: [
+            {
+              type: "entries",
+              name: "Darkvision",
+              entries: [
+                "You have Darkvision with a range of 120 feet.",
+              ],
+            },
+          ],
+        },
+      };
+      repos.raceTrait.find!.mockResolvedValue([
+        {
+          trait: {
+            slug: "darkvision",
+            name: "Darkvision",
+            description: ["Wrong legacy range: 60 feet."],
+            source: { code: "XPHB" },
+          },
+        },
+      ]);
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+      const darkvision = sheet.features.filter(
+        (feature) => feature.slug === "darkvision",
+      );
+
+      expect(darkvision).toHaveLength(1);
+      expect(darkvision[0].displayText).toContain("120 feet");
+      expect(darkvision[0].displayText).not.toContain(
+        "Wrong legacy range",
+      );
+    });
+  });
+
+  describe("Goliath species traits", () => {
+    it("preserves the selected Giant Ancestry and its resource from race raw", async () => {
+      const { origin, state } = setupBasicSheet("fighter", 5);
+      origin.race = {
+        slug: "goliath",
+        name: "Goliath",
+        speed: 35,
+        source: { code: "XPHB" },
+        raw: {
+          source: "XPHB",
+          entries: [
+            {
+              type: "entries",
+              name: "Giant Ancestry",
+              entries: ["Choose one supernatural boon."],
+            },
+          ],
+        },
+      };
+      origin.race_trait_choices = ["Stone Giant"];
+      state.feature_uses_used = { "giant-ancestry": 1 };
+      repos.raceTrait.find!.mockResolvedValue([
+        {
+          trait: {
+            slug: "giant-ancestry",
+            name: "Wrong catalog fallback",
+            description: ["This polluted row must not win."],
+            source: { code: "XPHB" },
+          },
+        },
+      ]);
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+      const ancestry = sheet.features.find(
+        (feature) => feature.slug === "giant-ancestry",
+      );
+
+      expect(ancestry).toMatchObject({
+        name: "Ancestralidade Gigante — Resistência da Pedra",
+        sourceCode: "XPHB",
+        sourceClass: "Goliath",
+        category: "resource",
+        active: true,
+        resourceCharges: {
+          current: 2,
+          max: 3,
+          formula: "Bônus de Proficiência",
+          recharge: "long",
+        },
+      });
+      expect(ancestry?.displayText).toContain(
+        "reduzir o dano por esse total",
+      );
+    });
+  });
+
+  describe("Human PHB species traits", () => {
+    const humanRace = {
+      id: "race-human-phb",
+      slug: "human-phb",
+      name: "Human",
+      speed: 30,
+      source: { code: "PHB" },
+      raw: {
+        source: "PHB",
+        entries: [
+          {
+            type: "entries",
+            name: "Age",
+            entries: [
+              "Humans reach adulthood in their late teens and live less than a century.",
+            ],
+          },
+          {
+            type: "entries",
+            name: "Size",
+            entries: ["Humans vary widely in height and build."],
+          },
+          {
+            type: "entries",
+            name: "Languages",
+            entries: [
+              "You can speak, read, and write Common and one extra language of your choice.",
+            ],
+          },
+        ],
+      },
+    };
+
+    it("uses the selected race raw ownership and rejects polluted race links", async () => {
+      const { origin } = setupBasicSheet("ranger-phb", 1);
+      origin.race_id = humanRace.id;
+      origin.race = humanRace;
+      origin.subrace_id = undefined;
+      origin.subrace = undefined;
+      repos.raceTrait.find!.mockResolvedValue([
+        {
+          trait: {
+            slug: "age-phb",
+            name: "Age",
+            description: ["Young dragonborn grow quickly."],
+            source: { code: "PHB" },
+          },
+        },
+        {
+          trait: {
+            slug: "languages-phb",
+            name: "Languages",
+            description: ["You know Common and Draconic."],
+            source: { code: "PHB" },
+          },
+        },
+        {
+          trait: {
+            slug: "feat-phb",
+            name: "Feat",
+            description: ["You gain one feat of your choice."],
+            source: { code: "PHB" },
+          },
+        },
+        {
+          trait: {
+            slug: "artisans-intuition-erlw",
+            name: "Artisan's Intuition",
+            description: ["Roll a d4."],
+            source: { code: "ERLW" },
+          },
+        },
+        {
+          trait: {
+            slug: "age-psd",
+            name: "Age",
+            description: ["Aven reach adulthood in their late teens."],
+            source: { code: "PSD" },
+          },
+        },
+      ]);
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+      const humanTraits = sheet.features.filter(
+        (feature) => feature.sourceClass === "Human",
+      );
+
+      expect(
+        humanTraits.map(({ slug, name, sourceCode }) => ({
+          slug,
+          name,
+          sourceCode,
+        })),
+      ).toEqual([
+        { slug: "age", name: "Age", sourceCode: "PHB" },
+        {
+          slug: "languages",
+          name: "Languages",
+          sourceCode: "PHB",
+        },
+      ]);
+      expect(humanTraits[0].displayText).toBe(
+        "Humans reach adulthood in their late teens and live less than a century.",
+      );
+      expect(humanTraits[1].displayText).toBe(
+        "You can speak, read, and write Common and one extra language of your choice.",
+      );
+    });
+
+    it("adds only the explicitly selected Human variant traits", async () => {
+      const { origin } = setupBasicSheet("ranger-phb", 1);
+      origin.race_id = humanRace.id;
+      origin.race = humanRace;
+      origin.subrace_id = "subrace-human-variant-phb";
+      origin.subrace = {
+        id: origin.subrace_id,
+        slug: "human-variant-phb",
+        name: "Variant",
+        source: { code: "PHB" },
+        raw: {
+          source: "PHB",
+          entries: [
+            {
+              type: "entries",
+              name: "Skills",
+              entries: [
+                "You gain proficiency in one skill of your choice.",
+              ],
+            },
+            {
+              type: "entries",
+              name: "Feat",
+              entries: ["You gain one feat of your choice."],
+            },
+          ],
+        },
+      };
+      repos.raceTrait.find!.mockResolvedValue([]);
+
+      const sheet = await service.computeSheet("user-1", "char-1");
+      const humanTraitSlugs = sheet.features
+        .filter((feature) => feature.sourceClass === "Human")
+        .map((feature) => feature.slug);
+
+      expect(humanTraitSlugs).toEqual([
+        "age",
+        "languages",
+        "skills",
+        "feat",
+      ]);
+    });
+  });
+
   describe("Max HP", () => {
     it("level 1 fighter with CON 10: hit_die(10) + conMod(0) = 10", async () => {
       setupBasicSheet("fighter", 1, { con: 10 });

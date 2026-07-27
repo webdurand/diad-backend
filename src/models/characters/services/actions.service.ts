@@ -46,6 +46,7 @@ import {
   getAlwaysPreparedPaladinSpells,
   normalizePreparedSpellSlug,
 } from "src/shared/paladin-spell-rules";
+import { hasPhbFeralSenses } from "src/models/game-engine/services/ranger-phb-rules";
 
 
 
@@ -76,6 +77,7 @@ export interface ActionBlock {
   sourceLabel: string;
   description: string;
   attackBonus?: number;
+  ignoresInvisibleTargetDisadvantage?: boolean;
   damage?: DamageBlock;
   versatileDamage?: DamageBlock;
   saveDc?: number;
@@ -88,6 +90,8 @@ export interface ActionBlock {
   properties?: string[];
 
   weaponSlug?: string;
+  weaponActionSlug?: string;
+  weaponCategory?: "melee" | "ranged";
   itemSlug?: string;
 
   masterySlug?: string;
@@ -444,6 +448,26 @@ export class ActionsService {
       allActions,
     );
 
+    if (
+      hasPhbFeralSenses({
+        classes: charClasses.map((entry) => ({
+          slug: entry.class.slug,
+          level: entry.class_level,
+        })),
+        features: charFeatures.map((entry) => ({
+          slug: entry.feature?.slug,
+          active: entry.active,
+          sourceCode: entry.feature?.source?.code,
+        })),
+      })
+    ) {
+      for (const action of allActions) {
+        if (typeof action.attackBonus === "number") {
+          action.ignoresInvisibleTargetDisadvantage = true;
+        }
+      }
+    }
+
 
     const actions = allActions.filter((a) => a.timing === "action");
     const bonusActions = allActions.filter((a) => a.timing === "bonus_action");
@@ -584,6 +608,7 @@ export class ActionsService {
         range: rangeStr,
         properties: propNames,
         weaponSlug: eq.slug,
+        weaponCategory: isRangedWeapon ? "ranged" : "melee",
         masterySlug,
         proficient: isProficient,
         handSlot,
@@ -738,6 +763,7 @@ export class ActionsService {
       (cs) =>
         (cs.spell.level === 0 ||
           cs.status === "prepared" ||
+          cs.status === SpellStatusEnum.Known ||
           cs.always_prepared) &&
         (includeUnmodeledSpells || !!getSpellAutomationEntry(cs.spell.slug)),
     );
@@ -1107,6 +1133,72 @@ export class ActionsService {
 
       const slug = cf.feature.slug;
 
+      const normalizedFeatureSlug = slug.toLowerCase();
+      const selectedChoice =
+        typeof cf.choices?.option === "string"
+          ? cf.choices.option.toLowerCase()
+          : null;
+      const hasVolleyChoice =
+        normalizedFeatureSlug === "volley-ranger-hunter-11-phb" ||
+        (normalizedFeatureSlug.startsWith("multiattack-ranger-hunter-") &&
+          normalizedFeatureSlug.endsWith("-phb") &&
+          selectedChoice === "multiattack-volley");
+      const rangerClass = charClasses.find(
+        (entry) => normalizeClassSlug(entry.class.slug) === "ranger",
+      );
+      const isPhbHunter =
+        rangerClass?.subclass?.slug?.toLowerCase() === "ranger-hunter-phb";
+      const belongsToRangerClass =
+        rangerClass != null && cf.source_class_id === rangerClass.class_id;
+      if (
+        hasVolleyChoice &&
+        !is2024Rules &&
+        rangerClass &&
+        isPhbHunter &&
+        belongsToRangerClass &&
+        rangerClass.class_level >= 11
+      ) {
+        if (emittedCanonicals.has("volley-ranger-hunter-11-phb")) continue;
+        const rangedWeapons = out.filter(
+          (action) =>
+            action.source === "weapon" &&
+            action.timing === "action" &&
+            action.weaponCategory === "ranged" &&
+            typeof action.attackBonus === "number" &&
+            action.damage != null,
+        );
+        for (const weapon of rangedWeapons) {
+          const weaponRangeFt = this.parseMaximumWeaponRangeFeet(weapon.range);
+          if (weaponRangeFt <= 0) continue;
+          out.push({
+            id: `feature-${cf.id}-volley-${weapon.id}`,
+            name: `Saraivada (Volley) — ${weapon.name}`,
+            timing: "action",
+            source: "feature",
+            sourceLabel: "Patrulheiro · Caçador",
+            description:
+              `Escolha um ponto no alcance de ${weapon.name} e faça um ataque separado contra cada criatura escolhida a até 10 pés dele. ` +
+              "Consome uma única Ação. Limitação atual: munição e linha de visão não são rastreadas pelo mapa.",
+            attackBonus: weapon.attackBonus,
+            damage: weapon.damage,
+            range: weapon.range,
+            properties: weapon.properties,
+            weaponSlug: weapon.weaponSlug,
+            weaponActionSlug: weapon.id,
+            weaponCategory: "ranged",
+            featureSlug: "volley-ranger-hunter-11-phb",
+            aoe: {
+              originType: "point",
+              shape: "sphere",
+              sizeFt: 10,
+              rangeFt: weaponRangeFt,
+            },
+          });
+        }
+        emittedCanonicals.add("volley-ranger-hunter-11-phb");
+        continue;
+      }
+
 
       const classification = classifyFeatureForActions(slug);
       if (classification?.kind === "hide") {
@@ -1198,6 +1290,16 @@ export class ActionsService {
     }
   }
 
+  private parseMaximumWeaponRangeFeet(
+    range: string | null | undefined,
+  ): number {
+    const values = String(range ?? "")
+      .match(/\d+(?:\.\d+)?/g)
+      ?.map(Number)
+      .filter(Number.isFinite);
+    return values?.length ? Math.max(...values) : 0;
+  }
+
 
 
 
@@ -1213,7 +1315,9 @@ export class ActionsService {
     const origin = character.character_origin;
     if (!origin) return;
 
-    const raceSlug = origin.race?.slug ?? "";
+    const raceSlug = (origin.race?.slug ?? "")
+      .toLowerCase()
+      .replace(/-(?:phb|xphb|srd52)$/i, "");
     const traitChoices: string[] = origin.race_trait_choices ?? [];
 
     if (raceSlug === "goliath") {
@@ -1302,6 +1406,27 @@ export class ActionsService {
           usesRecharge: "long_rest",
         });
       }
+      return;
+    }
+
+    if (raceSlug === "orc") {
+      const usesMax = profBonus;
+      const usesUsed =
+        charState?.feature_uses_used?.["adrenaline-rush"] ?? 0;
+      out.push({
+        id: "adrenaline-rush",
+        name: "Adrenaline Rush",
+        timing: "bonus_action",
+        source: "feature",
+        sourceLabel: "Orc",
+        description:
+          `Use Disparada como Ação Bônus e receba ${profBonus} PV temporários. ` +
+          `${Math.max(0, usesMax - usesUsed)}/${usesMax} usos por descanso curto ou longo.`,
+        featureSlug: "adrenaline-rush",
+        uses: Math.max(0, usesMax - usesUsed),
+        usesMax,
+        usesRecharge: "short_rest",
+      });
       return;
     }
 

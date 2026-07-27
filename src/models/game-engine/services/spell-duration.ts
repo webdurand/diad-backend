@@ -55,3 +55,11 @@ export function concentrationDurationRounds(
   if (base == null || !extended) return base;
   return Math.min(base * 2, 14_400);
 }
+
+export function huntersMarkDurationRounds(
+  slotLevel: number,
+  extended = false,
+): number {
+  const base = slotLevel >= 5 ? 14_400 : slotLevel >= 3 ? 4_800 : 600;
+  return extended ? Math.min(base * 2, 14_400) : base;
+}

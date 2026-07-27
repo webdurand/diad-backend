@@ -22,6 +22,7 @@ export type {
   RaceTraitEntry,
 } from "./transform-races";
 export {
+  disambiguateTraitStorageSlugs,
   extractTraitsFromRace,
   extractTraitsFromSubrace,
 } from "./transform-traits";

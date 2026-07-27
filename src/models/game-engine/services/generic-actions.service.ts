@@ -41,6 +41,7 @@ import {
   hasFreedomOfMovement,
   isNonmagicalFreedomRestraint,
 } from "./freedom-of-movement";
+import { hasFastHandsFeature } from "./rogue-fast-hands";
 
 
 @Injectable()
@@ -86,6 +87,36 @@ export class GenericActionsService {
 
     if (encounter.turnOrder[encounter.currentTurnIndex] !== participant.id)
       return failure(GameErrorCode.NOT_YOUR_TURN);
+
+    const fastHandsAvailable =
+      dto.kind === "fast-hands-sleight-of-hand" ||
+      (dto.kind === "use-object" && dto.asBonusAction === true)
+        ? await this.canUseFastHands(participant, dto.ownerUserId)
+        : false;
+    if (
+      dto.kind === "fast-hands-sleight-of-hand" &&
+      !fastHandsAvailable
+    ) {
+      return failure(
+        "Mãos Rápidas exige Rogue Thief de nível 3 ou superior.",
+        "FEATURE_NOT_AVAILABLE",
+      );
+    }
+    const itemAlreadyUsesBonusAction =
+      dto.kind === "use-object" && dto.asBonusAction === true
+        ? await this.itemUsesBonusAction(participant, dto)
+        : false;
+    if (
+      dto.kind === "use-object" &&
+      dto.asBonusAction === true &&
+      !fastHandsAvailable &&
+      !itemAlreadyUsesBonusAction
+    ) {
+      return failure(
+        "Este objeto não pode ser usado como Ação Bônus.",
+        "NO_BONUS_ACTION_AVAILABLE",
+      );
+    }
 
 
 
@@ -167,7 +198,12 @@ export class GenericActionsService {
           dto,
           asBonus,
           useHasteAction,
+          dto.asBonusAction === true &&
+            fastHandsAvailable &&
+            !itemAlreadyUsesBonusAction,
         );
+      case "fast-hands-sleight-of-hand":
+        return this.handleFastHandsSleightOfHand(participant, dto);
       case "escape-web":
         return this.handleEscapeWeb(participant, dto.ownerUserId);
       case "flee-fear":
@@ -200,6 +236,7 @@ export class GenericActionsService {
     dto: GenericActionDto,
   ): Promise<boolean> {
     if (dto.useHasteAction) return false;
+    if (dto.kind === "fast-hands-sleight-of-hand") return true;
     if (dto.asBonusAction === true) return true;
     if (dto.asBonusAction === false) return false;
     if (
@@ -243,6 +280,60 @@ export class GenericActionsService {
         const classSlug = (c.slug ?? "").replace(/-phb$|-xphb$/, "");
         return classSlug === "rogue" && c.level >= 2;
       });
+    } catch {
+      return false;
+    }
+  }
+
+  private async canUseFastHands(
+    participant: EncounterParticipantEntity,
+    ownerUserId?: string,
+  ): Promise<boolean> {
+    if (
+      participant.type !== "pc" ||
+      !participant.characterId ||
+      !ownerUserId ||
+      (participant.transformationState &&
+        !participant.transformationState.retainedAbilities.includes(
+          "class-features",
+        ))
+    ) {
+      return false;
+    }
+    try {
+      const sheet = await this.sheetService.computeSheet(
+        ownerUserId,
+        participant.characterId,
+      );
+      return hasFastHandsFeature(sheet.classes ?? []);
+    } catch {
+      return false;
+    }
+  }
+
+  private async itemUsesBonusAction(
+    participant: EncounterParticipantEntity,
+    dto: GenericActionDto,
+  ): Promise<boolean> {
+    if (
+      !this.inventoryService ||
+      !participant.characterId ||
+      !dto.ownerUserId ||
+      !dto.objectRef?.itemId
+    ) {
+      return false;
+    }
+    try {
+      const inventory = await this.inventoryService.getInventory(
+        dto.ownerUserId,
+        participant.characterId,
+      );
+      const item = inventory.items.find(
+        (candidate) => candidate.id === dto.objectRef?.itemId,
+      );
+      return (
+        item?.equipment.consumableEffect?.actionCost === "bonus_action"
+      );
     } catch {
       return false;
     }
@@ -660,9 +751,17 @@ export class GenericActionsService {
         : searchSense === "sight" && (p.conditions ?? []).includes("blinded")
           ? "blinded"
           : null;
+    const checkModifiers = this.conditionEffects.getAbilityCheckModifiers(
+      p.conditions ?? [],
+    );
+    const disadvantageRoll =
+      !autoFailureReason && checkModifiers.hasDisadvantage
+        ? this.diceService.rollWithDisadvantage()
+        : null;
     const rawRoll = autoFailureReason
       ? 0
-      : this.diceService.rollExpression("1d20").total;
+      : disadvantageRoll?.chosen ??
+        this.diceService.rollExpression("1d20").total;
     let roll = rawRoll;
     let mod = ability === "perception" ? 2 : 1;
     let reliableTalentApplied = false;
@@ -702,7 +801,7 @@ export class GenericActionsService {
         ok: true,
         summary: autoFailureReason
           ? `${p.displayName} falhou automaticamente ao procurar por ${searchSense === "hearing" ? "audição" : "visão"} (${autoFailureReason === "deafened" ? "Surdo" : "Cego"})`
-          : `${p.displayName} procurou (${ability}, ${searchSense}): ${total} (${roll}+${mod})`,
+          : `${p.displayName} procurou (${ability}, ${searchSense}): ${total} (${disadvantageRoll ? `${disadvantageRoll.roll1}/${disadvantageRoll.roll2} → ${roll}` : roll}+${mod})`,
         events: [
           {
             type: "search_roll",
@@ -714,6 +813,8 @@ export class GenericActionsService {
             modifier: mod,
             total,
             reliableTalentApplied,
+            advantage: disadvantageRoll,
+            hasDisadvantage: disadvantageRoll != null,
             autoFailed: autoFailureReason != null,
             autoFailureReason,
           },
@@ -730,6 +831,8 @@ export class GenericActionsService {
         modifier: mod,
         total,
         reliableTalentApplied,
+        advantage: disadvantageRoll,
+        hasDisadvantage: disadvantageRoll != null,
         autoFailed: autoFailureReason != null,
         autoFailureReason,
       }),
@@ -741,6 +844,7 @@ export class GenericActionsService {
     dto: GenericActionDto,
     asBonusAction: boolean = false,
     useHasteAction: boolean = false,
+    viaFastHands: boolean = false,
   ): Promise<GameResult<ExecuteResult>> {
     if (!dto.objectRef) return failure(GameErrorCode.INVALID_PAYLOAD);
 
@@ -799,9 +903,17 @@ export class GenericActionsService {
               encounterId: p.encounterId,
             },
           });
+          const authoritativeTargetHp =
+            target?.type === "pc" &&
+            target.characterId &&
+            this.characterStateService
+              ? await this.characterStateService.getCurrentHp(
+                  target.characterId,
+                )
+              : null;
           const targetAtZero =
             target?.type === "pc" &&
-            (target.currentHp ?? 0) === 0 &&
+            (authoritativeTargetHp ?? target.currentHp ?? 0) === 0 &&
             target.dyingState === "dying";
           const positionsKnown =
             p.positionX != null &&
@@ -839,6 +951,7 @@ export class GenericActionsService {
           p.currentHp = appliedEffect.newCurrentHp;
         }
         if (isHealersKit && target) {
+          target.currentHp = 0;
           target.dyingState = "stable";
           target.isDefeated = false;
           await this.participantRepo.save(target);
@@ -928,6 +1041,15 @@ export class GenericActionsService {
       appliedSummary += ". Ação extra de Haste consumida";
       events.push({ type: "haste_action_used", participantId: p.id });
     }
+    if (viaFastHands) {
+      appliedSummary += ". Mãos Rápidas consumiu a Ação Bônus";
+      events.push({
+        type: "fast_hands_used",
+        participantId: p.id,
+        subAction: "use-object",
+        slug,
+      });
+    }
     await this.participantRepo.save(p);
 
     const step: ActionStep = {
@@ -945,6 +1067,160 @@ export class GenericActionsService {
             }),
           ]
         : []),
+      ...(viaFastHands
+        ? [
+            this.toGameEvent("fast_hands_used", p.id, {
+              subAction: "use-object",
+              slug,
+            }),
+          ]
+        : []),
+    ]);
+  }
+
+  private async handleFastHandsSleightOfHand(
+    p: EncounterParticipantEntity,
+    dto: GenericActionDto,
+  ): Promise<GameResult<ExecuteResult>> {
+    const task = dto.fastHandsTask;
+    const dc = dto.targetDc;
+    if (
+      !task ||
+      !["pick-lock", "disarm-trap", "pick-pocket"].includes(task) ||
+      !Number.isInteger(dc) ||
+      dc! < 1 ||
+      dc! > 30 ||
+      !p.characterId ||
+      !dto.ownerUserId
+    ) {
+      return failure(GameErrorCode.INVALID_PAYLOAD);
+    }
+
+    const sheet = await this.sheetService.computeSheet(
+      dto.ownerUserId,
+      p.characterId,
+    );
+    const requiresThievesTools =
+      task === "pick-lock" || task === "disarm-trap";
+    const proficientWithThievesTools = (sheet.proficiencies ?? []).some(
+      (proficiency) => {
+        const text =
+          `${proficiency.slug} ${proficiency.name}`.toLowerCase();
+        return (
+          text.includes("thieves-tools") ||
+          text.includes("thieves' tools") ||
+          text.includes("thieves’ tools")
+        );
+      },
+    );
+    if (requiresThievesTools) {
+      const ownsThievesTools = (sheet.equipment ?? []).some(
+        (item) =>
+          item.quantity > 0 &&
+          item.slug
+            .trim()
+            .toLowerCase()
+            .replace(/-(phb|xphb|srd52)$/, "") === "thieves-tools",
+      );
+      if (!ownsThievesTools) {
+        return failure(
+          "Abrir fechaduras e desarmar armadilhas com Mãos Rápidas exige Thieves' Tools no inventário.",
+          "PREREQUISITE_NOT_MET",
+        );
+      }
+    }
+
+    const skill = (sheet.skills ?? []).find(
+      (candidate) => candidate.slug === "sleight-of-hand",
+    );
+    const modifier =
+      skill?.bonus ??
+      sheet.abilityScores.find((ability) => ability.slug === "dex")
+        ?.modifier ??
+      0;
+    const checkModifiers = this.conditionEffects.getAbilityCheckModifiers(
+      p.conditions ?? [],
+    );
+    const toolAndSkillAdvantage =
+      requiresThievesTools &&
+      proficientWithThievesTools &&
+      skill?.proficient === true;
+    const hasAdvantage =
+      toolAndSkillAdvantage && !checkModifiers.hasDisadvantage;
+    const hasDisadvantage =
+      checkModifiers.hasDisadvantage && !toolAndSkillAdvantage;
+    const advantageCancelled =
+      toolAndSkillAdvantage && checkModifiers.hasDisadvantage;
+    const pairedRoll = hasAdvantage
+      ? this.diceService.rollWithAdvantage()
+      : hasDisadvantage
+        ? this.diceService.rollWithDisadvantage()
+        : null;
+    const rawRoll =
+      pairedRoll?.chosen ?? this.diceService.rollExpression("1d20").total;
+    const rogueLevel =
+      sheet.classes.find(
+        (characterClass) =>
+          characterClass.slug
+            .trim()
+            .toLowerCase()
+            .replace(/-(phb|xphb|srd52)$/, "") === "rogue",
+      )?.level ?? 0;
+    const reliableTalentApplied =
+      rogueLevel >= 7 &&
+      (skill?.proficient === true ||
+        (requiresThievesTools && proficientWithThievesTools)) &&
+      rawRoll < 10;
+    const roll = reliableTalentApplied ? 10 : rawRoll;
+    const total = roll + modifier;
+    const succeeded = total >= dc!;
+    const taskLabels = {
+      "pick-lock": "abrir fechadura",
+      "disarm-trap": "desarmar armadilha",
+      "pick-pocket": "bater carteira",
+    } as const;
+    const targetLabel = dto.targetLabel?.trim();
+
+    p.bonusActionUsed = true;
+    await this.participantRepo.save(p);
+
+    const eventData = {
+      featureSlug: "fast-hands",
+      subAction: "sleight-of-hand",
+      task,
+      taskLabel: taskLabels[task],
+      targetLabel,
+      dc,
+      roll,
+      rawRoll,
+      modifier,
+      total,
+      success: succeeded,
+      reliableTalentApplied,
+      advantage: pairedRoll,
+      hasAdvantage,
+      hasDisadvantage,
+      advantageCancelled,
+      bonusActionConsumed: true,
+    };
+    const summary = `${p.displayName} usou Mãos Rápidas para ${taskLabels[task]}${targetLabel ? ` (${targetLabel})` : ""}: ${total} vs CD ${dc} — ${succeeded ? "sucesso" : "falha"}`;
+    const step: ActionStep = {
+      kind: "fast-hands-sleight-of-hand",
+      payload: {
+        participantId: p.id,
+        task,
+        targetDc: dc,
+        targetLabel,
+      },
+      result: {
+        ok: true,
+        summary,
+        events: [{ type: "fast_hands_sleight_of_hand", ...eventData }],
+      },
+      timestamp: new Date().toISOString(),
+    };
+    return success({ step, finalState: this.snapshotState(p) }, [
+      this.toGameEvent("fast_hands_sleight_of_hand", p.id, eventData),
     ]);
   }
 

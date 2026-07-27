@@ -65,13 +65,10 @@ import {
 
 type CasterType = CasterClassType;
 
-
 interface MulticlassPrereq {
   abilityScoreSlug: string;
   minimumScore: number;
 }
-
-
 
 export interface LevelUpOptionsResult {
   currentLevel: number;
@@ -118,6 +115,170 @@ export interface AvailableClassOption {
   newProficiencies: Array<{ slug: string; name: string }>;
   spellSelection: SpellSelectionForLevelUp | null;
 }
+
+type FeatureChoiceDescriptor = NonNullable<
+  AvailableClassOption["features"][number]["choice"]
+>;
+
+const RANGER_HUNTER_FEATURE_CHOICES: Array<{
+  matches: (normalizedSlug: string) => boolean;
+  descriptor: FeatureChoiceDescriptor;
+}> = [
+  {
+    matches: (slug) => slug.startsWith("hunters-prey-ranger-hunter-"),
+    descriptor: {
+      key: "option",
+      required: true,
+      options: [
+        {
+          value: "hunters-prey-colossus-slayer",
+          label: "Colossus Slayer",
+          description:
+            "Uma vez por turno, causa dano adicional a uma criatura já ferida.",
+        },
+        {
+          value: "hunters-prey-giant-killer",
+          label: "Giant Killer",
+          description:
+            "Permite reagir quando uma criatura Grande ou maior próxima atacar.",
+        },
+        {
+          value: "hunters-prey-horde-breaker",
+          label: "Horde Breaker",
+          description:
+            "Permite um ataque adicional contra outra criatura próxima do alvo.",
+        },
+      ],
+    },
+  },
+  {
+    matches: (slug) => slug.startsWith("defensive-tactics-ranger-hunter-"),
+    descriptor: {
+      key: "option",
+      required: true,
+      options: [
+        {
+          value: "defensive-tactics-escape-the-horde",
+          label: "Escape the Horde",
+          description:
+            "Impõe desvantagem a ataques de oportunidade contra você.",
+        },
+        {
+          value: "defensive-tactics-multiattack-defense",
+          label: "Multiattack Defense",
+          description:
+            "Concede CA adicional contra ataques subsequentes da mesma criatura.",
+        },
+        {
+          value: "defensive-tactics-steel-will",
+          label: "Steel Will",
+          description: "Concede vantagem contra ficar Amedrontado.",
+        },
+      ],
+    },
+  },
+  {
+    matches: (slug) => slug.startsWith("multiattack-ranger-hunter-"),
+    descriptor: {
+      key: "option",
+      required: true,
+      options: [
+        {
+          value: "multiattack-volley",
+          label: "Volley",
+          description:
+            "Ataca criaturas à escolha dentro de uma área à distância.",
+        },
+        {
+          value: "multiattack-whirlwind-attack",
+          label: "Whirlwind Attack",
+          description:
+            "Ataca criaturas à escolha ao seu redor em alcance corpo a corpo.",
+        },
+      ],
+    },
+  },
+  {
+    matches: (slug) =>
+      slug.startsWith("superior-hunters-defense-ranger-hunter-"),
+    descriptor: {
+      key: "option",
+      required: true,
+      options: [
+        {
+          value: "superior-hunters-defense-evasion",
+          label: "Evasion",
+          description: "Reduz ou evita dano em salvaguardas de Destreza.",
+        },
+        {
+          value: "superior-hunters-defense-stand-against-the-tide",
+          label: "Stand Against the Tide",
+          description: "Redireciona um ataque que erre você.",
+        },
+        {
+          value: "superior-hunters-defense-uncanny-dodge",
+          label: "Uncanny Dodge",
+          description:
+            "Usa a reação para reduzir à metade o dano de um ataque.",
+        },
+      ],
+    },
+  },
+];
+
+const RANGER_HUNTER_CHOICE_CHILDREN: Array<{
+  optionValue: string;
+  featurePrefix: string;
+}> = [
+  {
+    optionValue: "hunters-prey-colossus-slayer",
+    featurePrefix: "colossus-slayer",
+  },
+  {
+    optionValue: "hunters-prey-giant-killer",
+    featurePrefix: "giant-killer",
+  },
+  {
+    optionValue: "hunters-prey-horde-breaker",
+    featurePrefix: "horde-breaker",
+  },
+  {
+    optionValue: "defensive-tactics-escape-the-horde",
+    featurePrefix: "escape-the-horde",
+  },
+  {
+    optionValue: "defensive-tactics-multiattack-defense",
+    featurePrefix: "multiattack-defense",
+  },
+  {
+    optionValue: "defensive-tactics-steel-will",
+    featurePrefix: "steel-will",
+  },
+  {
+    optionValue: "multiattack-volley",
+    featurePrefix: "volley",
+  },
+  {
+    optionValue: "multiattack-whirlwind-attack",
+    featurePrefix: "whirlwind-attack",
+  },
+  {
+    optionValue: "superior-hunters-defense-evasion",
+    featurePrefix: "evasion",
+  },
+  {
+    optionValue: "superior-hunters-defense-stand-against-the-tide",
+    featurePrefix: "stand-against-the-tide",
+  },
+  {
+    optionValue: "superior-hunters-defense-uncanny-dodge",
+    featurePrefix: "uncanny-dodge",
+  },
+];
+
+const RANGER_PHB_SPELLS_KNOWN_BY_LEVEL = [
+  0, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11,
+];
 
 export interface MissingPrerequisite {
   ability: string;
@@ -203,8 +364,6 @@ export class LevelUpService {
     private readonly spellClassRepo: Repository<SpellClassEntity>,
   ) {}
 
-
-
   async getOptions(
     userId: string,
     characterId: string,
@@ -224,14 +383,10 @@ export class LevelUpService {
     const xpRequired = totalLevel < 20 ? XP_THRESHOLDS[totalLevel] : Infinity;
     const canLevelUp = totalLevel < 20 && state.xp >= xpRequired;
 
-
     const abilityMap = new Map<string, number>();
     for (const ca of charAbilities) {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
     }
-
-
-
 
     const allClasses = await this.classRepo.find();
     const canonicalGroups = new Map<string, ClassEntity[]>();
@@ -248,7 +403,6 @@ export class LevelUpService {
     }
 
     const pickRepresentative = (group: ClassEntity[]): ClassEntity => {
-
       const canonical = normalizeClassSlug(group[0].slug);
       const charClass = currentCanonicalMap.get(canonical);
       if (charClass) return charClass.class;
@@ -274,17 +428,13 @@ export class LevelUpService {
       const isMulticlass = !isCurrentClass;
       const nextClassLevel = isCurrentClass ? charClass.class_level + 1 : 1;
 
-
-
       if (!isCurrentClass && !isClassAvailable(cls.slug)) continue;
-
 
       const prereqs = this.parsePrerequisites(cls.multi_classing);
       const missingPrerequisites = isCurrentClass
         ? []
         : this.computeMissingPrerequisites(prereqs, abilityMap);
       const meetsPrereqs = missingPrerequisites.length === 0;
-
 
       if (!isCurrentClass && meetsPrereqs) {
         const currentPrimaryClass = charClasses[0]?.class;
@@ -300,7 +450,6 @@ export class LevelUpService {
         }
       }
 
-
       const { levelData, fallbackSource } = await this.resolveLevelData(
         cls,
         nextClassLevel,
@@ -308,13 +457,7 @@ export class LevelUpService {
         null,
       );
 
-
-      let subclassFeatures: Array<{
-        slug: string;
-        name: string;
-        description: unknown;
-        isSubclassFeature: boolean;
-      }> = [];
+      let subclassFeatureEntities: FeatureEntity[] = [];
 
       if (charClass?.subclass_id) {
         const { levelData: subLevelData } = await this.resolveLevelData(
@@ -337,36 +480,59 @@ export class LevelUpService {
           ),
         );
         if (directOrLinked.length > 0) {
-          subclassFeatures = directOrLinked.map((feature) => ({
-            slug: feature.slug,
-            name: feature.name,
-            description: feature.description,
-            isSubclassFeature: true,
-          }));
+          subclassFeatureEntities = directOrLinked;
         }
       }
 
       const hasAsi = (levelData?.ability_score_bonuses ?? 0) > 0;
-
 
       const editionRules = character.source?.rules;
       const hasSubclass =
         this.isSubclassLevel(cls.slug, nextClassLevel, editionRules) &&
         !charClass?.subclass_id;
 
-
-      let availableSubclasses: Array<{ slug: string; name: string }> = [];
+      let availableSubclassEntities: SubclassEntity[] = [];
       if (hasSubclass) {
         const subs = await this.subclassRepo.find({
           where: { class_id: cls.id },
         });
 
         const allowed = new Set(getCanonicalSubclassSlugs(cls.slug));
-        availableSubclasses = subs
-          .filter((s) => allowed.has(s.slug))
-          .map((s) => ({ slug: s.slug, name: s.name }));
+        availableSubclassEntities = subs.filter(
+          (subclass) =>
+            allowed.has(subclass.slug) ||
+            allowed.has(subclass.slug.replace(/-phb$/, "")),
+        );
+        for (const subclass of availableSubclassEntities) {
+          const { levelData: candidateLevelData } = await this.resolveLevelData(
+            cls,
+            nextClassLevel,
+            character.source?.rules,
+            subclass.id,
+          );
+          const candidateFeatures = this.mergeFeatures(
+            this.filterCompatibleLinkedFeatures(
+              candidateLevelData?.level_features?.map((lf) => lf.feature) ?? [],
+              cls,
+              character.source?.rules,
+            ),
+            await this.findDirectFeatures(
+              cls.id,
+              nextClassLevel,
+              subclass.id,
+              cls.source_id,
+            ),
+          );
+          subclassFeatureEntities = this.mergeFeatures(
+            subclassFeatureEntities,
+            candidateFeatures,
+          );
+        }
       }
-
+      const availableSubclasses = availableSubclassEntities.map((subclass) => ({
+        slug: subclass.slug,
+        name: subclass.name,
+      }));
 
       const classFeatures = this.mergeFeatures(
         this.filterCompatibleLinkedFeatures(
@@ -381,44 +547,21 @@ export class LevelUpService {
           cls.source_id,
         ),
       );
-      const features = classFeatures.map((feature) => ({
-        slug: feature.slug,
-        name: feature.name,
-        description: feature.description,
-        isSubclassFeature: false,
-        ...(feature.slug.startsWith("elemental-fury-")
-          ? {
-              choice: {
-                key: "option",
-                required: true,
-                options: [
-                  {
-                    value: "primal-strike",
-                    label: "Ataque Primordial",
-                    description:
-                      "Uma vez por turno, adiciona dano elemental a um acerto com arma ou ataque de Fera em Forma Selvagem.",
-                  },
-                  {
-                    value: "potent-spellcasting",
-                    label: "Conjuração Potente",
-                    description:
-                      "Adiciona o modificador de Sabedoria ao dano dos truques de Druida.",
-                  },
-                ],
-              },
-            }
-          : {}),
-      }));
-
+      const features = [
+        ...classFeatures.map((feature) =>
+          this.toAvailableFeature(feature, false),
+        ),
+        ...subclassFeatureEntities
+          .filter((feature) => !this.isRangerChoiceChildFeature(feature.slug))
+          .map((feature) => this.toAvailableFeature(feature, true)),
+      ];
 
       let newProficiencies: Array<{ slug: string; name: string }> = [];
       if (!isCurrentClass && nextClassLevel === 1) {
         newProficiencies = this.getMulticlassProficiencies(cls.multi_classing);
       }
 
-
       const spellcasting = levelData?.spellcasting ?? null;
-
 
       const spellSelection = await this.buildSpellSelection(
         cls,
@@ -446,7 +589,7 @@ export class LevelUpService {
         hasAsi,
         hasSubclass,
         availableSubclasses,
-        features: [...features, ...subclassFeatures],
+        features,
         spellcasting,
         newProficiencies,
         spellSelection,
@@ -463,8 +606,6 @@ export class LevelUpService {
       hitDie,
     };
   }
-
-
 
   async execute(
     userId: string,
@@ -483,11 +624,9 @@ export class LevelUpService {
 
     const totalLevel = charClasses.reduce((s, cc) => s + cc.class_level, 0);
 
-
     if (totalLevel >= 20) {
       throw new BadRequestException("Personagem ja esta no nivel maximo (20).");
     }
-
 
     const xpRequired = XP_THRESHOLDS[totalLevel];
     if (state.xp < xpRequired) {
@@ -496,14 +635,10 @@ export class LevelUpService {
       );
     }
 
-
-
     const inputCanonical = normalizeClassSlug(dto.classSlug.toLowerCase());
     const existingCharClass = charClasses.find(
       (cc) => normalizeClassSlug(cc.class.slug) === inputCanonical,
     );
-
-
 
     let classEntity: ClassEntity | null = null;
     if (existingCharClass) {
@@ -541,9 +676,6 @@ export class LevelUpService {
       });
     }
 
-
-
-
     if (inputCanonical === "wizard" && !isNewClass && newClassLevel > 1) {
       this.validateWizardSpellSelection(dto.newSpells);
       await this.validateWizardSpellsDeep(
@@ -553,7 +685,6 @@ export class LevelUpService {
         characterId,
       );
     }
-
 
     if (isNewClass) {
       const abilityMap = new Map<string, number>();
@@ -593,13 +724,30 @@ export class LevelUpService {
       }
     }
 
-
     const abilityMap = new Map<string, number>();
     for (const ca of charAbilities) {
       abilityMap.set(ca.ability_score.slug, ca.base_score + ca.bonus);
     }
-    const conMod = getAbilityModifier(abilityMap.get("con") ?? 10);
-
+    const currentConScore = abilityMap.get("con") ?? 10;
+    const conMod = getAbilityModifier(currentConScore);
+    const conIncreaseRequested = (dto.abilityScoreIncreases ?? [])
+      .filter((increase) => increase.abilitySlug === "con")
+      .reduce((total, increase) => total + increase.increase, 0);
+    const abilityScoreCap = dto.featSlug && totalLevel >= 19 ? 30 : 20;
+    const conScoreAfterIncrease = Math.min(
+      abilityScoreCap,
+      currentConScore + conIncreaseRequested,
+    );
+    const conModIncrease = Math.max(
+      0,
+      getAbilityModifier(conScoreAfterIncrease) - conMod,
+    );
+    const retroactiveConHp = conModIncrease * newTotalLevel;
+    // computeSheet already uses the current CON modifier for the first level.
+    // Persist the remaining retroactive delta in this level-up row so every
+    // max-HP reader converges with current_hp after the ASI.
+    const retroactiveConHpForPreviousLevels =
+      conModIncrease * Math.max(0, newTotalLevel - 1);
 
     let hpGained: number;
     if (dto.hpMethod === "roll") {
@@ -613,16 +761,13 @@ export class LevelUpService {
       }
       hpGained = dto.hpRoll + conMod;
     } else {
-
       hpGained = Math.floor(classEntity.hit_die / 2) + 1 + conMod;
     }
 
     hpGained = Math.max(1, hpGained);
 
-
     return this.dataSource.transaction(async (manager) => {
       const newFeatures: string[] = [];
-
 
       if (isNewClass) {
         const newOrder = charClasses.length + 1;
@@ -645,20 +790,17 @@ export class LevelUpService {
           if (subclass) {
             existingCharClass.subclass_id = subclass.id;
 
-
-
             existingCharClass.subclass = subclass;
           }
         }
         await manager.save(CharacterClassEntity, existingCharClass);
       }
 
-
       await manager.save(CharacterLevelUpEntity, {
         character_id: characterId,
         total_level: newTotalLevel,
         class_id: classEntity.id,
-        hp_gained: hpGained,
+        hp_gained: hpGained + retroactiveConHpForPreviousLevels,
         hp_method:
           dto.hpMethod === "roll" ? HpMethodEnum.Roll : HpMethodEnum.Fixed,
         choices: {
@@ -672,10 +814,8 @@ export class LevelUpService {
         },
       });
 
-
       state.current_hp += hpGained;
       await manager.save(CharacterStateEntity, state);
-
 
       const character = await this.ensureReadAccess(userId, characterId);
       const { levelData, fallbackSource } = await this.resolveLevelData(
@@ -703,27 +843,26 @@ export class LevelUpService {
         }),
       );
       for (const feature of classFeatures) {
-          if (
-            elementalFuryChoice &&
-            (feature.slug.startsWith("primal-strike-") ||
-              feature.slug.startsWith("potent-spellcasting-")) &&
-            !isElementalFuryFeatureSlug(feature.slug, elementalFuryChoice)
-          ) {
-            continue;
-          }
-          const choices = feature.slug.startsWith("elemental-fury-")
-            ? { option: elementalFuryChoice }
-            : (dto.featureChoices?.[feature.slug] ?? {});
-          await manager.save(CharacterFeatureEntity, {
-            character_id: characterId,
-            feature_id: feature.id,
-            source_class_id: classEntity.id,
-            active: true,
-            choices,
-          });
-          newFeatures.push(feature.name);
+        if (
+          elementalFuryChoice &&
+          (feature.slug.startsWith("primal-strike-") ||
+            feature.slug.startsWith("potent-spellcasting-")) &&
+          !isElementalFuryFeatureSlug(feature.slug, elementalFuryChoice)
+        ) {
+          continue;
+        }
+        const choices = feature.slug.startsWith("elemental-fury-")
+          ? { option: elementalFuryChoice }
+          : this.resolveFeatureChoicesForSave(feature, dto.featureChoices);
+        await manager.save(CharacterFeatureEntity, {
+          character_id: characterId,
+          feature_id: feature.id,
+          source_class_id: classEntity.id,
+          active: true,
+          choices,
+        });
+        newFeatures.push(feature.name);
       }
-
 
       const charClass = isNewClass
         ? await manager.findOne(CharacterClassEntity, {
@@ -732,15 +871,6 @@ export class LevelUpService {
         : existingCharClass;
 
       if (charClass?.subclass_id) {
-
-
-
-
-
-
-
-
-
         const subclassJustPicked = Boolean(dto.subclassSlug);
         const levelsToProcess: number[] = subclassJustPicked
           ? Array.from({ length: newClassLevel }, (_, i) => i + 1)
@@ -771,7 +901,14 @@ export class LevelUpService {
             }),
           );
           for (const feature of subclassFeatures) {
-
+            if (
+              !this.shouldMaterializeRangerChoiceChild(
+                feature.slug,
+                dto.featureChoices,
+              )
+            ) {
+              continue;
+            }
             const existing = await manager.findOne(CharacterFeatureEntity, {
               where: {
                 character_id: characterId,
@@ -784,13 +921,15 @@ export class LevelUpService {
               feature_id: feature.id,
               source_class_id: classEntity.id,
               active: true,
-              choices: dto.featureChoices?.[feature.slug] ?? {},
+              choices: this.resolveFeatureChoicesForSave(
+                feature,
+                dto.featureChoices,
+              ),
             });
             newFeatures.push(feature.name);
           }
         }
       }
-
 
       if (dto.abilityScoreIncreases?.length) {
         let totalIncrease = 0;
@@ -812,28 +951,11 @@ export class LevelUpService {
           }
         }
 
-
-        if (dto.abilityScoreIncreases.some((a) => a.abilitySlug === "con")) {
-          const newConScore = abilityMap.get("con") ?? 10;
-          const conAsi = dto.abilityScoreIncreases.find(
-            (a) => a.abilitySlug === "con",
-          );
-          if (conAsi) {
-            const newConMod = Math.floor(
-              (newConScore + conAsi.increase - 10) / 2,
-            );
-            const oldConMod = conMod;
-            const conModDiff = newConMod - oldConMod;
-            if (conModDiff > 0) {
-
-              const retroHp = conModDiff * newTotalLevel;
-              state.current_hp += retroHp;
-              await manager.save(CharacterStateEntity, state);
-            }
-          }
+        if (retroactiveConHp > 0) {
+          state.current_hp += retroactiveConHp;
+          await manager.save(CharacterStateEntity, state);
         }
       }
-
 
       if (dto.newSpells?.length) {
         const casterType = getCasterClassType(classEntity.slug);
@@ -867,7 +989,6 @@ export class LevelUpService {
         }
       }
 
-
       if (dto.removedSpells?.length) {
         for (const spellSlug of dto.removedSpells) {
           const spell = await this.spellRepo.findOneBy({ slug: spellSlug });
@@ -879,18 +1000,15 @@ export class LevelUpService {
         }
       }
 
-
       if (dto.preparedSpells) {
         const casterType = getCasterClassType(classEntity.slug);
         if (casterType === "spellbook" || casterType === "total_access") {
           const preparedSet = new Set(dto.preparedSpells);
 
-
           const allCharSpells = await manager.find(CharacterSpellEntity, {
             where: { character_id: characterId, source: SpellSourceEnum.Class },
             relations: ["spell"],
           });
-
 
           const bySlug = new Map<string, CharacterSpellEntity[]>();
           for (const cs of allCharSpells) {
@@ -901,7 +1019,6 @@ export class LevelUpService {
           }
 
           for (const [slug, records] of bySlug) {
-
             const keep = records[0];
             for (let i = 1; i < records.length; i++) {
               await manager.remove(CharacterSpellEntity, records[i]);
@@ -927,7 +1044,6 @@ export class LevelUpService {
             }
           }
 
-
           if (casterType === "total_access") {
             const existingSlugs = new Set(bySlug.keys());
             for (const slug of dto.preparedSpells) {
@@ -945,7 +1061,6 @@ export class LevelUpService {
           }
         }
       }
-
 
       if (isNewClass) {
         const multiProfs = this.getMulticlassProficiencies(
@@ -980,9 +1095,6 @@ export class LevelUpService {
     });
   }
 
-
-
-
   private async buildSpellSelection(
     cls: ClassEntity,
     newClassLevel: number,
@@ -993,7 +1105,6 @@ export class LevelUpService {
   ): Promise<SpellSelectionForLevelUp | null> {
     const casterType = getCasterClassType(cls.slug);
     if (!casterType) return null;
-
 
     const [newLevelData, prevLevelData] = await Promise.all([
       this.levelRepo.findOne({
@@ -1020,12 +1131,10 @@ export class LevelUpService {
       number
     >;
 
-
     const newCantrips = Math.max(
       0,
       (newSc["cantrips_known"] ?? 0) - (prevSc["cantrips_known"] ?? 0),
     );
-
 
     let maxSpellLevel = 0;
     for (let i = 1; i <= 9; i++) {
@@ -1048,22 +1157,25 @@ export class LevelUpService {
       }
     }
 
-
-
-
     let newSpells = 0;
     let canSwapSpell = false;
 
     if (casterType === "known" || casterType === "pact") {
-      newSpells = Math.max(
-        0,
-        (newSc["spells_known"] ?? 0) - (prevSc["spells_known"] ?? 0),
+      const newKnownSpells = this.getKnownSpellsAtLevel(
+        cls.slug,
+        newClassLevel,
+        newSc,
       );
+      const previousKnownSpells = this.getKnownSpellsAtLevel(
+        cls.slug,
+        currentClassLevel,
+        prevSc,
+      );
+      newSpells = Math.max(0, newKnownSpells - previousKnownSpells);
       canSwapSpell = currentClassLevel > 0;
     } else if (casterType === "spellbook") {
       newSpells = 2;
     }
-
 
     const seenCantrips = new Set<string>();
     const currentCantrips = charSpells
@@ -1090,7 +1202,6 @@ export class LevelUpService {
         name: cs.spell.name,
         level: cs.spell.level,
       }));
-
 
     const classSpellLinks = await this.spellClassRepo.find({
       where: { class_id: cls.id },
@@ -1119,7 +1230,6 @@ export class LevelUpService {
         level: sc.spell.level,
       }))
       .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-
 
     const maxPrepared = this.computeMaxPrepared(
       cls.slug,
@@ -1153,6 +1263,26 @@ export class LevelUpService {
     };
   }
 
+  private getKnownSpellsAtLevel(
+    classSlug: string,
+    classLevel: number,
+    spellcasting: Record<string, number>,
+  ): number {
+    if (classLevel <= 0) return 0;
+    if (typeof spellcasting["spells_known"] === "number") {
+      return spellcasting["spells_known"];
+    }
+    if (
+      classSlug.endsWith("-phb") &&
+      normalizeClassSlug(classSlug) === "ranger"
+    ) {
+      return RANGER_PHB_SPELLS_KNOWN_BY_LEVEL[
+        Math.min(classLevel, RANGER_PHB_SPELLS_KNOWN_BY_LEVEL.length) - 1
+      ];
+    }
+    return 0;
+  }
+
   private computeMaxPrepared(
     classSlug: string,
     classLevel: number,
@@ -1173,7 +1303,6 @@ export class LevelUpService {
 
     switch (casterType) {
       case "total_access": {
-
         const formula = getPreparedFormula(
           normalizeClassSlug(classSlug),
           editionRules,
@@ -1198,8 +1327,6 @@ export class LevelUpService {
     userId: string,
     characterId: string,
   ): Promise<CharacterEntity> {
-
-
     return ensureCharacterReadAccess(
       this.characterRepo,
       userId,
@@ -1277,9 +1404,6 @@ export class LevelUpService {
       ? { class_id: classEntity.id, level: nextLevel, subclass_id: subclassId }
       : { class_id: classEntity.id, level: nextLevel, subclass_id: IsNull() };
 
-
-
-
     const nativeRows = await this.levelRepo.find({
       where: whereClause,
       relations: [
@@ -1298,10 +1422,8 @@ export class LevelUpService {
       return { levelData: sourceMatched };
     }
 
-
     const fallbackCode = rules?.featureFallbackSource;
     if (!fallbackCode || subclassId) {
-
       return { levelData: null };
     }
 
@@ -1370,7 +1492,6 @@ export class LevelUpService {
     return true;
   }
 
-
   private validateWizardSpellSelection(newSpells: string[] | undefined): void {
     const spells = newSpells ?? [];
     if (spells.length === 0) {
@@ -1410,24 +1531,20 @@ export class LevelUpService {
     }
   }
 
-
   private async validateWizardSpellsDeep(
     slugs: string[],
     wizardClass: ClassEntity,
     newClassLevel: number,
     characterId: string,
   ): Promise<void> {
-
     const slots = FULL_CASTER_SLOTS[newClassLevel] ?? [];
     const maxSpellLevel = slots.length;
-
 
     const existing = await this.charSpellRepo.find({
       where: { character_id: characterId },
       relations: ["spell"],
     });
     const existingSlugs = new Set(existing.map((cs) => cs.spell.slug));
-
 
     const classLinks = await this.spellClassRepo.find({
       where: { class_id: wizardClass.id },
@@ -1471,20 +1588,130 @@ export class LevelUpService {
     }
   }
 
+  private getFeatureChoiceDescriptor(
+    featureSlug: string,
+  ): FeatureChoiceDescriptor | undefined {
+    if (featureSlug.startsWith("elemental-fury-")) {
+      return {
+        key: "option",
+        required: true,
+        options: [
+          {
+            value: "primal-strike",
+            label: "Ataque Primordial",
+            description:
+              "Uma vez por turno, adiciona dano elemental a um acerto com arma ou ataque de Fera em Forma Selvagem.",
+          },
+          {
+            value: "potent-spellcasting",
+            label: "Conjuração Potente",
+            description:
+              "Adiciona o modificador de Sabedoria ao dano dos truques de Druida.",
+          },
+        ],
+      };
+    }
+    const normalized = featureSlug.replace(/-(?:phb|xphb|srd52)$/, "");
+    return RANGER_HUNTER_FEATURE_CHOICES.find((entry) =>
+      entry.matches(normalized),
+    )?.descriptor;
+  }
+
+  private getRangerChoiceChild(
+    featureSlug: string,
+  ): (typeof RANGER_HUNTER_CHOICE_CHILDREN)[number] | undefined {
+    const normalized = featureSlug.replace(/-(?:phb|xphb|srd52)$/, "");
+    return RANGER_HUNTER_CHOICE_CHILDREN.find((entry) =>
+      normalized.startsWith(`${entry.featurePrefix}-ranger-hunter-`),
+    );
+  }
+
+  private isRangerChoiceChildFeature(featureSlug: string): boolean {
+    return this.getRangerChoiceChild(featureSlug) !== undefined;
+  }
+
+  private shouldMaterializeRangerChoiceChild(
+    featureSlug: string,
+    featureChoices?: Record<string, unknown>,
+  ): boolean {
+    const child = this.getRangerChoiceChild(featureSlug);
+    if (!child) return true;
+    const parentChoice = RANGER_HUNTER_FEATURE_CHOICES.find((entry) =>
+      entry.descriptor.options.some(
+        (option) => option.value === child.optionValue,
+      ),
+    );
+    if (!parentChoice) return false;
+    return Object.entries(featureChoices ?? {}).some(([parentSlug, raw]) => {
+      const normalizedParentSlug = parentSlug.replace(
+        /-(?:phb|xphb|srd52)$/,
+        "",
+      );
+      if (!parentChoice.matches(normalizedParentSlug)) return false;
+      const selected =
+        raw && typeof raw === "object"
+          ? (raw as Record<string, unknown>).option
+          : raw;
+      return selected === child.optionValue;
+    });
+  }
+
+  private toAvailableFeature(
+    feature: FeatureEntity,
+    isSubclassFeature: boolean,
+  ): AvailableClassOption["features"][number] {
+    const choice = this.getFeatureChoiceDescriptor(feature.slug);
+    return {
+      slug: feature.slug,
+      name: feature.name,
+      description: feature.description,
+      isSubclassFeature,
+      ...(choice ? { choice } : {}),
+    };
+  }
+
+  private resolveFeatureChoicesForSave(
+    feature: FeatureEntity,
+    featureChoices?: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const raw = featureChoices?.[feature.slug];
+    const descriptor = this.getFeatureChoiceDescriptor(feature.slug);
+    if (!descriptor) {
+      return raw && typeof raw === "object"
+        ? (raw as Record<string, unknown>)
+        : {};
+    }
+
+    const selected =
+      raw && typeof raw === "object"
+        ? (raw as Record<string, unknown>)[descriptor.key]
+        : raw;
+    const allowed = descriptor.options.some(
+      (option) => option.value === selected,
+    );
+    if (!allowed) {
+      throw new BadRequestException({
+        code: "FEATURE_CHOICE_REQUIRED",
+        field: "featureChoices",
+        featureSlug: feature.slug,
+        choiceKey: descriptor.key,
+        allowedValues: descriptor.options.map((option) => option.value),
+        error: `Escolha válida obrigatória para ${feature.name}.`,
+      });
+    }
+    return { [descriptor.key]: selected };
+  }
+
   private resolveElementalFuryChoice(
     featureChoices?: Record<string, unknown>,
   ): ElementalFuryChoice | null {
     for (const [slug, value] of Object.entries(featureChoices ?? {})) {
-      if (
-        slug === "elemental-fury" ||
-        slug.startsWith("elemental-fury-")
-      ) {
+      if (slug === "elemental-fury" || slug.startsWith("elemental-fury-")) {
         return normalizeElementalFuryChoice(value);
       }
     }
     return null;
   }
-
 
   private computeMissingPrerequisites(
     prereqs: MulticlassPrereq[],
@@ -1515,7 +1742,6 @@ export class LevelUpService {
       .filter((p) => p.index && p.name)
       .map((p) => ({ slug: p.index!, name: p.name! }));
   }
-
 
   private isSubclassLevel(
     classSlug: string,

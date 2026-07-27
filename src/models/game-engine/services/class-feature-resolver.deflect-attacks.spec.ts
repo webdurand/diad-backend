@@ -43,20 +43,34 @@ describe("ClassFeatureResolverService — Deflect Attacks", () => {
     save: jest.fn(async (state: any) => state),
   };
   const dice = { roll: jest.fn() };
+  const effects = {
+    removeEffect: jest.fn(async (participant: any, effectId: string) => {
+      participant.effectInstances = (participant.effectInstances ?? []).filter(
+        (effect: any) => effect.id !== effectId,
+      );
+      return {
+        removed: true,
+        events: [{ event_type: "effect_removed", data: { effectId } }],
+      };
+    }),
+  };
 
   const makeService = () =>
     new ClassFeatureResolverService(
       participants as never,
       charStates as never,
       {} as never,
-      {} as never,
+      effects as never,
       dice as never,
       {} as never,
       {} as never,
       {} as never,
     );
 
-  const arm = (incomingDamage: number) => {
+  const arm = (
+    incomingDamage: number,
+    includeRelentlessEndurance = false,
+  ) => {
     source.effectInstances = [
       {
         id: "pending-deflect",
@@ -71,6 +85,15 @@ describe("ClassFeatureResolverService — Deflect Attacks", () => {
           isMeleeAttack: true,
         },
       },
+      ...(includeRelentlessEndurance
+        ? [
+            {
+              id: "pending-relentless",
+              kind: "relentless_endurance_pending",
+              payload: { triggerEventId: "relentless-trigger" },
+            },
+          ]
+        : []),
     ];
   };
 
@@ -86,7 +109,7 @@ describe("ClassFeatureResolverService — Deflect Attacks", () => {
   });
 
   it("reconstructs HP from the pre-attack value after a partial reduction", async () => {
-    arm(18);
+    arm(18, true);
     dice.roll.mockReturnValueOnce(1);
 
     const result = await makeService().resolveInvocation(source.id, {
@@ -107,6 +130,37 @@ describe("ClassFeatureResolverService — Deflect Attacks", () => {
     expect(monkState.current_hp).toBe(12);
     expect(source.currentHp).toBe(12);
     expect(source.effectInstances).toEqual([]);
+    expect(effects.removeEffect).toHaveBeenCalledWith(
+      source,
+      "pending-relentless",
+      "manual",
+    );
+  });
+
+  it("keeps Relentless Endurance pending when Deflect Attacks still leaves 0 HP", async () => {
+    arm(30, true);
+    dice.roll.mockReturnValueOnce(1);
+
+    const result = await makeService().resolveInvocation(source.id, {
+      featureSlug: "deflect-attacks",
+      options: { triggerEventId: "damage-event-1" },
+      caster: { abilityMods: { dex: 4 }, classLevel: 5 },
+      saveDc: 11,
+    });
+
+    expect(result.resolutionPayload).toMatchObject({
+      incomingDamage: 30,
+      reductionTotal: 10,
+      damageAfter: 20,
+      hpAfter: 0,
+    });
+    expect(source.effectInstances).toEqual([
+      expect.objectContaining({
+        id: "pending-relentless",
+        kind: "relentless_endurance_pending",
+      }),
+    ]);
+    expect(effects.removeEffect).not.toHaveBeenCalled();
   });
 
   it("spends Focus and damages the attacker when the redirected save fails", async () => {

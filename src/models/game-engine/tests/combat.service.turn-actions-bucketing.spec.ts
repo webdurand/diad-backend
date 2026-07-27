@@ -842,4 +842,81 @@ describe("CombatService.getTurnActions — US13 bucketing (Spec 005)", () => {
       ]),
     );
   });
+
+  it("expõe a transferência da Marca do Caçador somente em turno posterior do conjurador", async () => {
+    const h = createHarness();
+    const ranger = makeParticipant({
+      id: "ranger-mark",
+      type: "pc",
+      characterId: "char-ranger",
+      currentHp: 30,
+      positionX: 2,
+      positionY: 2,
+      isConcentrating: true,
+      concentratingOn: "hunters-mark-phb",
+    });
+    const defeatedTarget = makeParticipant({
+      id: "marked-target",
+      type: "monster",
+      currentHp: 0,
+      isDefeated: true,
+      positionX: 3,
+      positionY: 2,
+      effectInstances: [
+        {
+          id: "hunter-mark-1",
+          kind: "hunter_mark",
+          sourceSpellSlug: "hunters-mark",
+          sourceCasterParticipantId: ranger.id,
+          payload: {
+            riderDice: "1d6",
+            transferReadyTurnKey: "1:0",
+          },
+          expiresAt: { kind: "concentration" },
+          requiresConcentration: true,
+        },
+      ],
+    });
+    h.participants.set(ranger.id, ranger);
+    h.participants.set(defeatedTarget.id, defeatedTarget);
+    h.encounter.currentRound = 2;
+    h.encounter.currentTurnIndex = 0;
+    h.encounter.turnOrder = [ranger.id, defeatedTarget.id];
+
+    const available = await h.combat.getTurnActions(
+      h.encounter.id,
+      ranger.id,
+      "dm-1",
+    );
+
+    expect(available.ok).toBe(true);
+    if (!available.ok) return;
+    expect(available.value.bonusActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `transfer-mark-hunters-mark-${defeatedTarget.id}`,
+          kind: "mark-transfer",
+          timing: "bonus_action",
+          range: "90 feet",
+          spellSlug: "hunters-mark",
+          targetParticipantId: defeatedTarget.id,
+        }),
+      ]),
+    );
+
+    h.encounter.currentRound = 1;
+    h.encounter.currentTurnIndex = 0;
+    const sameTurn = await h.combat.getTurnActions(
+      h.encounter.id,
+      ranger.id,
+      "dm-1",
+    );
+    expect(sameTurn.ok).toBe(true);
+    if (!sameTurn.ok) return;
+    expect(
+      sameTurn.value.bonusActions.some(
+        (action) => action.kind === "mark-transfer",
+      ),
+    ).toBe(false);
+  });
 });

@@ -10,7 +10,10 @@ import { SpellService } from "src/models/characters/services/spell.service";
 import { DiceService } from "./dice.service";
 import { SavingThrowService } from "./saving-throw.service";
 import { hasHasteDexSaveAdvantage } from "./haste-action";
-import { CombatService } from "./combat.service";
+import {
+  CombatService,
+  type SavingThrowDamageContext,
+} from "./combat.service";
 import { EncounterService } from "./encounter.service";
 import { MonsterSpellcastingService } from "./monster-spellcasting.service";
 import {
@@ -71,7 +74,10 @@ import {
   type SummonBeastForm,
   type SummonElementalForm,
 } from "./summon-stat-block";
-import { concentrationDurationRounds } from "./spell-duration";
+import {
+  concentrationDurationRounds,
+  huntersMarkDurationRounds,
+} from "./spell-duration";
 import type {
   SummonConcentrationBreakBehavior,
   SummonControlMode,
@@ -716,6 +722,11 @@ export class SpellCastingService {
           amount: damageBeforeDefenses,
           damageType: "lightning",
           ownerUserId,
+          savingThrow: {
+            ability: "dex",
+            success: save.success,
+            halfDamageOnSuccess: true,
+          },
         },
         { emitEvents: false },
       );
@@ -1809,6 +1820,27 @@ export class SpellCastingService {
     const normalizedSpellSlug = dto.spellSlug
       .toLowerCase()
       .replace(/-(phb|xphb|srd52)$/, "");
+    if (
+      dto.asReaction &&
+      normalizedSpellSlug === "shield" &&
+      dto.triggerEventId
+    ) {
+      const shieldTrigger = await this.gameEventRepo.findOne({
+        where: { id: dto.triggerEventId },
+      });
+      if (
+        !shieldTrigger ||
+        shieldTrigger.eventType !== "attack_roll" ||
+        shieldTrigger.encounterId !== dto.encounterId ||
+        shieldTrigger.targetParticipantId !== participant.id ||
+        (shieldTrigger.data as { hit?: unknown }).hit !== true
+      ) {
+        return failure(
+          "O gatilho de Shield não corresponde a um acerto atual contra este conjurador.",
+          "INVALID_ACTION",
+        );
+      }
+    }
     let preparedDispelTarget: PreparedDispelMagicTarget | null = null;
     if (normalizedSpellSlug === "dispel-magic") {
       const explicitParticipantTarget =
@@ -2854,10 +2886,15 @@ export class SpellCastingService {
       const startResult = await this.concentration.startNew(
         participant,
         dto.spellSlug,
-        concentrationDurationRounds(
-          spellData.duration,
-          metamagicAppliedType === "extended",
-        ),
+        normalizedSpellSlug === "hunters-mark"
+          ? huntersMarkDurationRounds(
+              dto.slotLevel,
+              metamagicAppliedType === "extended",
+            )
+          : concentrationDurationRounds(
+              spellData.duration,
+              metamagicAppliedType === "extended",
+            ),
         null,
       );
       concentrationEvents.push(...startResult.events);
@@ -3198,6 +3235,9 @@ export class SpellCastingService {
         total: number;
         dc: number;
       } | null = null;
+      let damageSavingThrow:
+        | SavingThrowDamageContext
+        | undefined;
       if (spellData.attack_type) {
         const resolution = await this.combatService.resolveSpellAttackRoll(
           participant,
@@ -3329,8 +3369,13 @@ export class SpellCastingService {
               advantageCancelled: saveResult.advantageCancelled,
             },
           });
+          const dcSuccess = dcInfo.dc_success ?? "half";
+          damageSavingThrow = {
+            ability: saveAbility,
+            success: saveResult.success,
+            halfDamageOnSuccess: dcSuccess === "half",
+          };
           if (saveResult.success) {
-            const dcSuccess = dcInfo.dc_success ?? "half";
             if (dcSuccess === "half") {
               finalDamage = Math.floor(finalDamage / 2);
             } else if (dcSuccess === "none") {
@@ -3347,6 +3392,7 @@ export class SpellCastingService {
             amount: finalDamage,
             damageType,
             ownerUserId: dto.ownerUserId,
+            savingThrow: damageSavingThrow,
           },
           { emitEvents: false },
         );
@@ -4165,6 +4211,72 @@ export class SpellCastingService {
   }
 
 
+  private async rollbackAttackBoundEffects(
+    encounterId: string,
+    trigger: GameEventEntity,
+  ): Promise<{ removedEffectIds: string[]; events: GameEventData[] }> {
+    const data = trigger.data as {
+      attackBoundEffectRefs?: Array<{
+        participantId?: unknown;
+        effectId?: unknown;
+        sourceFeatureSlug?: unknown;
+      }>;
+    };
+    const refs = Array.isArray(data.attackBoundEffectRefs)
+      ? data.attackBoundEffectRefs
+      : [];
+    const removedEffectIds: string[] = [];
+    const events: GameEventData[] = [];
+
+    for (const ref of refs) {
+      const participantId =
+        typeof ref.participantId === "string" ? ref.participantId : null;
+      const effectId = typeof ref.effectId === "string" ? ref.effectId : null;
+      const sourceFeatureSlug =
+        ref.sourceFeatureSlug === "colossus-slayer" ||
+        ref.sourceFeatureSlug === "multiattack-defense"
+          ? ref.sourceFeatureSlug
+          : null;
+      if (!participantId || !effectId || !sourceFeatureSlug) continue;
+
+      const expectedParticipantId =
+        sourceFeatureSlug === "colossus-slayer"
+          ? trigger.actorParticipantId
+          : trigger.targetParticipantId;
+      if (!expectedParticipantId || participantId !== expectedParticipantId) {
+        continue;
+      }
+
+      const participant = await this.participantRepo.findOne({
+        where: { id: participantId, encounterId },
+      });
+      if (!participant) continue;
+      const effect = (participant.effectInstances ?? []).find(
+        (candidate) => candidate.id === effectId,
+      );
+      const matchesFeature =
+        sourceFeatureSlug === "colossus-slayer"
+          ? effect?.kind === "colossus_slayer_used_this_turn" &&
+            effect.sourceFeatureSlug === "colossus-slayer"
+          : effect?.kind === "ac_bonus" &&
+            effect.sourceFeatureSlug === "multiattack-defense" &&
+            effect.payload?.attackerParticipantId ===
+              trigger.actorParticipantId;
+      if (!effect || !matchesFeature) continue;
+
+      const removed = await this.effectInstanceService.removeEffect(
+        participant,
+        effect.id,
+        "trigger_invalidated",
+      );
+      if (!removed.removed) continue;
+      removedEffectIds.push(effect.id);
+      events.push(...removed.events);
+    }
+
+    return { removedEffectIds, events };
+  }
+
   private async recomputeShieldTrigger(
     encounterId: string,
     triggerEventId: string,
@@ -4174,18 +4286,29 @@ export class SpellCastingService {
     newHit: boolean;
     previousHit: boolean;
     damageReverted: number;
+    attackBoundEffectsReverted: string[];
     events: any[];
   } | null> {
     const trigger = await this.gameEventRepo.findOne({
       where: { id: triggerEventId },
     });
-    if (!trigger || trigger.eventType !== "attack_roll") return null;
+    if (
+      !trigger ||
+      trigger.eventType !== "attack_roll" ||
+      trigger.encounterId !== encounterId ||
+      trigger.targetParticipantId !== casterParticipantId
+    ) {
+      return null;
+    }
     const data = trigger.data as any;
     const prevHit: boolean = data.hit ?? false;
     const prevTotal: number = data.total ?? 0;
     const prevAc: number = data.targetAc ?? 10;
     const newAc = prevAc + 5;
-    const newHit = prevTotal >= newAc && !data.criticalMiss;
+    const newHit =
+      prevHit &&
+      (data.roll === 20 ||
+        (prevTotal >= newAc && !data.criticalMiss));
     const events: any[] = [
       {
         event_type: "shield_retroactive_review",
@@ -4203,7 +4326,15 @@ export class SpellCastingService {
     ];
 
     let damageReverted = 0;
+    let attackBoundEffectsReverted: string[] = [];
     if (prevHit && !newHit) {
+      const rolledBackEffects = await this.rollbackAttackBoundEffects(
+        encounterId,
+        trigger,
+      );
+      attackBoundEffectsReverted =
+        rolledBackEffects.removedEffectIds;
+      events.push(...rolledBackEffects.events);
 
 
 
@@ -4248,6 +4379,7 @@ export class SpellCastingService {
       newHit,
       previousHit: prevHit,
       damageReverted,
+      attackBoundEffectsReverted,
       events,
     };
   }
@@ -4421,6 +4553,7 @@ export class SpellCastingService {
 
       if (baseRoll) {
         let finalDamage = baseRoll.total;
+        let savingThrow: SavingThrowDamageContext | undefined;
         if (saveAbility) {
           if (target.type === "pc" && target.characterId) {
             const saveRes = await this.savingThrowService.rollSavingThrow({
@@ -4434,6 +4567,13 @@ export class SpellCastingService {
               finalDamage = Math.floor(finalDamage / 2);
               entry.savedSuccessfully = true;
             }
+            if (saveRes.ok && saveRes.value) {
+              savingThrow = {
+                ability: saveAbility,
+                success: saveRes.value.success,
+                halfDamageOnSuccess: true,
+              };
+            }
           }
         }
 
@@ -4442,6 +4582,7 @@ export class SpellCastingService {
           amount: finalDamage,
           damageType,
           ownerUserId: dto.ownerUserId,
+          savingThrow,
         });
         entry.damageDealt = finalDamage;
         if (dmg.ok) entry.defeated = dmg.value.defeated;

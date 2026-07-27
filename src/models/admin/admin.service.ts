@@ -62,6 +62,7 @@ import {
   transformWeaponMasteryProperties,
   transformRaces,
   transformSubraces,
+  disambiguateTraitStorageSlugs,
   extractTraitsFromRace,
   extractTraitsFromSubrace,
   transformClasses,
@@ -964,8 +965,6 @@ export class AdminService {
 
   async seedTraits(): Promise<SeedResult> {
     const sourceMap = await this.sourceCodeToIdMap();
-    const rtRepo = this.ds.getRepository(RaceTraitEntity);
-    const stRepo = this.ds.getRepository(SubraceTraitEntity);
     const raceMap = await this.slugToIdMap(RaceEntity);
     const subraceMap = await this.slugToIdMap(SubraceEntity);
     const errors: { slug: string; message: string }[] = [];
@@ -976,6 +975,7 @@ export class AdminService {
     const raceItems = transformRaces();
     const allTraits: Array<{
       slug: string;
+      canonical_slug: string;
       name: string;
       description: string[];
       proficiency_choices: Record<string, unknown> | null;
@@ -983,13 +983,9 @@ export class AdminService {
       language_options: Record<string, unknown> | null;
       source_code: string;
       race_slug: string;
+      parent_slug: string | null;
       raw: Record<string, unknown>;
     }> = [];
-    const subraceTraitLinks: Array<{
-      trait_slug: string;
-      subrace_slug: string;
-    }> = [];
-
     for (const race of raceItems) {
       const extracted = extractTraitsFromRace({
         raceSlug: race.slug,
@@ -1014,14 +1010,42 @@ export class AdminService {
       });
       for (const t of extracted) {
         allTraits.push(t);
-        subraceTraitLinks.push({ trait_slug: t.slug, subrace_slug: sub.slug });
       }
     }
 
+    const storageTraits = disambiguateTraitStorageSlugs(allTraits);
+    const raceTraitLinks = storageTraits.flatMap((trait) => {
+      const owner = trait.raw.traitOwner as
+        | { kind?: unknown; raceSlug?: unknown }
+        | undefined;
+      return owner?.kind === "race" &&
+        typeof owner.raceSlug === "string"
+        ? [
+            {
+              trait_slug: trait.slug,
+              race_slug: owner.raceSlug,
+            },
+          ]
+        : [];
+    });
+    const subraceTraitLinks = storageTraits.flatMap((trait) => {
+      const owner = trait.raw.traitOwner as
+        | { kind?: unknown; subraceSlug?: unknown }
+        | undefined;
+      return owner?.kind === "subrace" &&
+        typeof owner.subraceSlug === "string"
+        ? [
+            {
+              trait_slug: trait.slug,
+              subrace_slug: owner.subraceSlug,
+            },
+          ]
+        : [];
+    });
 
     const seenSlugs = new Set<string>();
     const uniqueTraits: typeof allTraits = [];
-    for (const t of allTraits) {
+    for (const t of storageTraits) {
       if (!seenSlugs.has(t.slug)) {
         seenSlugs.add(t.slug);
         uniqueTraits.push(t);
@@ -1067,36 +1091,70 @@ export class AdminService {
 
 
     const traitMap = await this.slugToIdMap(TraitEntity);
-    for (const item of allTraits) {
-      const traitId = traitMap.get(item.slug);
-      const raceId = raceMap.get(item.race_slug);
-      if (!traitId || !raceId) continue;
+    const desiredRaceTraitLinks = raceTraitLinks.map((link) => ({
+      race_id: raceMap.get(link.race_slug),
+      trait_id: traitMap.get(link.trait_slug),
+      label: `${link.trait_slug}→race:${link.race_slug}`,
+    }));
+    const desiredSubraceTraitLinks = subraceTraitLinks.map((link) => ({
+      subrace_id: subraceMap.get(link.subrace_slug),
+      trait_id: traitMap.get(link.trait_slug),
+      label: `${link.trait_slug}→subrace:${link.subrace_slug}`,
+    }));
+    const unresolvedLinks = [
+      ...desiredRaceTraitLinks
+        .filter((link) => !link.race_id || !link.trait_id)
+        .map((link) => link.label),
+      ...desiredSubraceTraitLinks
+        .filter((link) => !link.subrace_id || !link.trait_id)
+        .map((link) => link.label),
+    ];
+
+    if (unresolvedLinks.length > 0) {
+      errors.push({
+        slug: "trait-links",
+        message: `Não foi possível resolver ${unresolvedLinks.length} vínculo(s): ${unresolvedLinks.join(", ")}`,
+      });
+    } else {
       try {
-        await rtRepo.upsert(
-          { race_id: raceId, trait_id: traitId },
-          { conflictPaths: ["race_id", "trait_id"] },
-        );
-      } catch (err: any) {
-        errors.push({
-          slug: `${item.slug}→race:${item.race_slug}`,
-          message: err.message,
+        await this.ds.transaction(async (manager) => {
+          await manager
+            .createQueryBuilder()
+            .delete()
+            .from(RaceTraitEntity)
+            .execute();
+          await manager
+            .createQueryBuilder()
+            .delete()
+            .from(SubraceTraitEntity)
+            .execute();
+
+          const transactionalRaceTraits =
+            manager.getRepository(RaceTraitEntity);
+          const transactionalSubraceTraits =
+            manager.getRepository(SubraceTraitEntity);
+          for (const link of desiredRaceTraitLinks) {
+            await transactionalRaceTraits.upsert(
+              {
+                race_id: link.race_id!,
+                trait_id: link.trait_id!,
+              },
+              { conflictPaths: ["race_id", "trait_id"] },
+            );
+          }
+          for (const link of desiredSubraceTraitLinks) {
+            await transactionalSubraceTraits.upsert(
+              {
+                subrace_id: link.subrace_id!,
+                trait_id: link.trait_id!,
+              },
+              { conflictPaths: ["subrace_id", "trait_id"] },
+            );
+          }
         });
-      }
-    }
-
-
-    for (const link of subraceTraitLinks) {
-      const traitId = traitMap.get(link.trait_slug);
-      const subraceId = subraceMap.get(link.subrace_slug);
-      if (!traitId || !subraceId) continue;
-      try {
-        await stRepo.upsert(
-          { subrace_id: subraceId, trait_id: traitId },
-          { conflictPaths: ["subrace_id", "trait_id"] },
-        );
       } catch (err: any) {
         errors.push({
-          slug: `${link.trait_slug}→subrace:${link.subrace_slug}`,
+          slug: "trait-links",
           message: err.message,
         });
       }

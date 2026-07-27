@@ -111,6 +111,38 @@ describe("SkillCheckService", () => {
     expect(result.value.success).toBe(result.value.total >= 15);
   });
 
+  it("reads persisted encounter conditions and applies Ash Puff disadvantage", async () => {
+    service = new SkillCheckService(
+      mockSheetService as any,
+      diceService,
+      new ConditionEffectsService(),
+      mockEventService as any,
+      { consumeIfArmed: async () => ({ consumed: false }) } as any,
+      new ExhaustionService(),
+      {
+        findOne: async () => ({
+          id: "participant-1",
+          conditions: ["ash_puff"],
+        }),
+      } as any,
+    );
+
+    const result = await service.rollAbilityCheck({
+      ...baseDto,
+      participantId: "participant-1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.advantage).toBeDefined();
+    expect(result.value.advantage!.used).toBe(
+      Math.min(
+        result.value.advantage!.roll1,
+        result.value.advantage!.roll2,
+      ),
+    );
+  });
+
   it("should use skill modifier when skill is specified", async () => {
     const result = await service.rollAbilityCheck({
       ...baseDto,

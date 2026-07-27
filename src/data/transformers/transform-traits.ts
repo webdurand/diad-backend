@@ -2,12 +2,9 @@ import { generateSlug } from "./slug-generator";
 import { parseEntries } from "./entries-parser";
 import { extractTraitEntries, type RaceTraitEntry } from "./transform-races";
 
-
-
-
-
 export interface TransformedTrait {
   slug: string;
+  canonical_slug: string;
   name: string;
   description: string[];
   proficiency_choices: Record<string, unknown> | null;
@@ -19,9 +16,67 @@ export interface TransformedTrait {
   raw: Record<string, unknown>;
 }
 
+function ownerScopedTraitSlug(
+  canonicalSlug: string,
+  ownerKind: "race" | "subrace",
+  ownerSlug: string,
+): string {
+  return `${ownerKind}-${ownerSlug}-${canonicalSlug}`;
+}
 
+export function disambiguateTraitStorageSlugs(
+  traits: TransformedTrait[],
+): TransformedTrait[] {
+  const definitions = new Map<string, Set<string>>();
+  for (const trait of traits) {
+    const fingerprint = JSON.stringify({
+      name: trait.name,
+      description: trait.description,
+      proficiency_choices: trait.proficiency_choices,
+      trait_specific: trait.trait_specific,
+      language_options: trait.language_options,
+      source_code: trait.source_code,
+    });
+    const fingerprints =
+      definitions.get(trait.canonical_slug) ?? new Set<string>();
+    fingerprints.add(fingerprint);
+    definitions.set(trait.canonical_slug, fingerprints);
+  }
 
-
+  return traits.map((trait) => {
+    if ((definitions.get(trait.canonical_slug)?.size ?? 0) <= 1) {
+      return trait;
+    }
+    const owner = trait.raw.traitOwner as
+      | {
+          kind?: unknown;
+          raceSlug?: unknown;
+          subraceSlug?: unknown;
+        }
+      | undefined;
+    if (owner?.kind === "race" && typeof owner.raceSlug === "string") {
+      return {
+        ...trait,
+        slug: ownerScopedTraitSlug(
+          trait.canonical_slug,
+          "race",
+          owner.raceSlug,
+        ),
+      };
+    }
+    if (owner?.kind === "subrace" && typeof owner.subraceSlug === "string") {
+      return {
+        ...trait,
+        slug: ownerScopedTraitSlug(
+          trait.canonical_slug,
+          "subrace",
+          owner.subraceSlug,
+        ),
+      };
+    }
+    return trait;
+  });
+}
 
 function resolveTraitSpecific(
   entry: RaceTraitEntry,
@@ -29,11 +84,9 @@ function resolveTraitSpecific(
 ): Record<string, unknown> | null {
   const nameLower = entry.name.toLowerCase();
 
-
   if (nameLower.includes("breath weapon")) {
     return { breath_weapon: true };
   }
-
 
   if (
     raceRaw.additionalSpells &&
@@ -77,10 +130,6 @@ function resolveProficiencyChoices(
   return null;
 }
 
-
-
-
-
 export interface TraitExtractionInput {
   raceSlug: string;
   sourceCode: string;
@@ -98,7 +147,6 @@ export function extractTraitsFromRace(
   const results: TransformedTrait[] = [];
 
   for (const entry of traitEntries) {
-
     const nameLower = entry.name.toLowerCase();
     if (
       nameLower === "size" ||
@@ -110,10 +158,15 @@ export function extractTraitsFromRace(
     if (nameLower === "creature type" || nameLower === "creature type:")
       continue;
 
-    const slug = generateSlug(entry.name, input.sourceCode, input.srd52);
+    const canonicalSlug = generateSlug(
+      entry.name,
+      input.sourceCode,
+      input.srd52,
+    );
 
     results.push({
-      slug,
+      slug: canonicalSlug,
+      canonical_slug: canonicalSlug,
       name: entry.name,
       description: entry.description,
       proficiency_choices: resolveProficiencyChoices(entry),
@@ -126,6 +179,11 @@ export function extractTraitsFromRace(
         name: entry.name,
         entries: entry.description,
         source: input.sourceCode,
+        canonicalSlug,
+        traitOwner: {
+          kind: "race",
+          raceSlug: input.raceSlug,
+        },
       },
     });
   }
@@ -150,10 +208,15 @@ export function extractTraitsFromSubrace(input: {
     const nameLower = entry.name.toLowerCase();
     if (nameLower === "size" || nameLower === "size:") continue;
 
-    const slug = generateSlug(entry.name, input.sourceCode, input.srd52);
+    const canonicalSlug = generateSlug(
+      entry.name,
+      input.sourceCode,
+      input.srd52,
+    );
 
     results.push({
-      slug,
+      slug: canonicalSlug,
+      canonical_slug: canonicalSlug,
       name: entry.name,
       description: entry.description,
       proficiency_choices: resolveProficiencyChoices(entry),
@@ -166,6 +229,12 @@ export function extractTraitsFromSubrace(input: {
         name: entry.name,
         entries: entry.description,
         source: input.sourceCode,
+        canonicalSlug,
+        traitOwner: {
+          kind: "subrace",
+          raceSlug: input.raceSlug,
+          subraceSlug: input.subraceSlug,
+        },
       },
     });
   }

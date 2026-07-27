@@ -17,71 +17,89 @@ export class EventService {
     sessionId: string,
     encounterId: string | null,
     events: GameEventData[],
+    manager?: EntityManager,
   ): Promise<GameEventEntity[]> {
     if (events.length === 0) return [];
 
-    return this.dataSource.transaction(async (manager) => {
-      await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-        `game_event:${sessionId}`,
-      ]);
+    if (manager) {
+      return this.persist(manager, sessionId, encounterId, events);
+    }
+    return this.dataSource.transaction((transactionManager) =>
+      this.persist(
+        transactionManager,
+        sessionId,
+        encounterId,
+        events,
+      ),
+    );
+  }
 
-      const startSeq = await this.computeNextSequence(manager, sessionId);
-      const participantIds = [
-        ...new Set(
-          events.flatMap((event) =>
-            [event.actor_participant_id, event.target_participant_id].filter(
-              (id): id is string => typeof id === "string",
-            ),
+  private async persist(
+    manager: EntityManager,
+    sessionId: string,
+    encounterId: string | null,
+    events: GameEventData[],
+  ): Promise<GameEventEntity[]> {
+    await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      `game_event:${sessionId}`,
+    ]);
+
+    const startSeq = await this.computeNextSequence(manager, sessionId);
+    const participantIds = [
+      ...new Set(
+        events.flatMap((event) =>
+          [event.actor_participant_id, event.target_participant_id].filter(
+            (id): id is string => typeof id === "string",
           ),
         ),
-      ];
-      const participantNames =
-        participantIds.length > 0
-          ? new Map(
-              (
-                await manager
-                  .createQueryBuilder(EncounterParticipantEntity, "participant")
-                  .select(["participant.id", "participant.displayName"])
-                  .where("participant.id IN (:...participantIds)", {
-                    participantIds,
-                  })
-                  .getMany()
-              ).map((participant) => [
-                participant.id,
-                participant.displayName,
-              ]),
-            )
-          : new Map<string, string>();
-      const entities = events.map((e, i) =>
-        manager.create(GameEventEntity, {
-          sessionId,
-          encounterId: encounterId ?? undefined,
-          sequence: startSeq + i,
-          eventType: e.event_type,
-          actorParticipantId: e.actor_participant_id,
-          targetParticipantId: e.target_participant_id,
-          data: {
-            ...e.data,
-            ...(e.actor_participant_id &&
-            participantNames.has(e.actor_participant_id) &&
-            typeof e.data?.actorName !== "string"
-              ? {
-                  actorName: participantNames.get(e.actor_participant_id),
-                }
-              : {}),
-            ...(e.target_participant_id &&
-            participantNames.has(e.target_participant_id) &&
-            typeof e.data?.targetName !== "string"
-              ? {
-                  targetName: participantNames.get(e.target_participant_id),
-                }
-              : {}),
-          },
-        }),
-      );
+      ),
+    ];
+    const participantNames =
+      participantIds.length > 0
+        ? new Map(
+            (
+              await manager
+                .createQueryBuilder(EncounterParticipantEntity, "participant")
+                .select(["participant.id", "participant.displayName"])
+                .where("participant.id IN (:...participantIds)", {
+                  participantIds,
+                })
+                .getMany()
+            ).map((participant) => [
+              participant.id,
+              participant.displayName,
+            ]),
+          )
+        : new Map<string, string>();
+    const entities = events.map((e, i) =>
+      manager.create(GameEventEntity, {
+        sessionId,
+        encounterId: encounterId ?? undefined,
+        sequence: startSeq + i,
+        eventType: e.event_type,
+        actorParticipantId: e.actor_participant_id,
+        targetParticipantId: e.target_participant_id,
+        data: {
+          ...e.data,
+          ...(e.actor_participant_id &&
+          participantNames.has(e.actor_participant_id) &&
+          typeof e.data?.actorName !== "string"
+            ? {
+                actorName: participantNames.get(e.actor_participant_id),
+              }
+            : {}),
+          ...(e.target_participant_id &&
+          participantNames.has(e.target_participant_id) &&
+          typeof e.data?.targetName !== "string"
+            ? {
+                targetName: participantNames.get(e.target_participant_id),
+              }
+            : {}),
+        },
+      }),
+    );
 
-      return manager.save(GameEventEntity, entities);
-    });
+    return manager.save(GameEventEntity, entities);
   }
 
   async getSessionTimeline(

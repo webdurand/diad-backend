@@ -516,6 +516,43 @@ describe("GenericActionsService", () => {
         });
       }
     });
+
+    it("rola Search com desvantagem enquanto Ash Puff estiver ativo", async () => {
+      const actor = makeParticipant("a", { conditions: ["ash_puff"] });
+      const disadvantageSpy = jest
+        .spyOn(DiceService.prototype, "rollWithDisadvantage")
+        .mockReturnValue({
+          roll1: 4,
+          roll2: 18,
+          chosen: 4,
+          discarded: 18,
+        });
+      const { svc } = makeService(makeEncounter(["a"]), { a: actor });
+
+      const result = await svc.execute("enc-1", {
+        kind: "search",
+        participantId: "a",
+        ability: "perception",
+        searchSense: "sight",
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.events[0].data).toMatchObject({
+          roll: 4,
+          rawRoll: 4,
+          hasDisadvantage: true,
+          advantage: {
+            roll1: 4,
+            roll2: 18,
+            chosen: 4,
+            discarded: 18,
+          },
+        });
+        expect(result.value.step.result.summary).toContain("4/18");
+      }
+      disadvantageSpy.mockRestore();
+    });
   });
 
   describe("use-object", () => {
@@ -603,7 +640,8 @@ describe("GenericActionsService", () => {
         faction: "ally",
         characterId: "char-b",
         displayName: "Aliado caído",
-        currentHp: 0,
+        // Participant HP can lag behind the authoritative character state.
+        currentHp: 20,
         maxHp: 20,
         dyingState: "dying",
         positionX: 2,
@@ -630,6 +668,7 @@ describe("GenericActionsService", () => {
         }),
       };
       const characterStateService = {
+        getCurrentHp: jest.fn().mockResolvedValue(0),
         stabilizeAtZero: jest.fn().mockResolvedValue(undefined),
       };
       const { svc } = makeService(
@@ -668,6 +707,321 @@ describe("GenericActionsService", () => {
           remainingQuantity: 0,
         });
       }
+    });
+  });
+
+  describe("Fast Hands (Thief 2024)", () => {
+    const thiefSheet = {
+      classes: [
+        {
+          slug: "rogue-xphb",
+          level: 10,
+          subclass: { slug: "thief-xphb", name: "Thief" },
+        },
+      ],
+      abilityScores: [{ slug: "dex", modifier: 5 }],
+      skills: [
+        {
+          slug: "sleight-of-hand",
+          bonus: 9,
+          proficient: true,
+          expertise: false,
+        },
+      ],
+      equipment: [
+        {
+          slug: "thieves-tools-xphb",
+          name: "Thieves' Tools",
+          quantity: 1,
+        },
+      ],
+      proficiencies: [
+        {
+          slug: "thieves-tools",
+          name: "Thieves' Tools",
+        },
+      ],
+    };
+
+    it("uses a real Healer's Kit as a bonus action without reopening the normal action", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        faction: "ally",
+        characterId: "char-a",
+        actionUsed: true,
+        positionX: 1,
+        positionY: 1,
+      });
+      const target = makeParticipant("b", {
+        type: "pc",
+        faction: "ally",
+        characterId: "char-b",
+        displayName: "Aliado caído",
+        // Participant HP can lag behind the authoritative character state.
+        currentHp: 20,
+        maxHp: 20,
+        dyingState: "dying",
+        positionX: 2,
+        positionY: 1,
+      });
+      const inventoryService = {
+        getInventory: jest.fn().mockResolvedValue({
+          items: [
+            {
+              id: "item-kit",
+              quantity: 1,
+              equipment: {
+                slug: "healers-kit",
+                name: "Healer's Kit",
+                consumableEffect: {
+                  type: "utility",
+                  autoApply: false,
+                  actionCost: "action",
+                },
+              },
+            },
+          ],
+        }),
+        useItem: jest.fn().mockResolvedValue({
+          consumed: true,
+          remainingQuantity: 0,
+          effect: { type: "consumed", message: "Healer's Kit usado." },
+        }),
+      };
+      const characterStateService = {
+        getCurrentHp: jest.fn().mockResolvedValue(0),
+        stabilizeAtZero: jest.fn().mockResolvedValue(undefined),
+      };
+      const { svc, sheetService } = makeService(
+        makeEncounter(["a", "b"]),
+        { a: actor, b: target },
+        { inventoryService, characterStateService },
+      );
+      sheetService.computeSheet.mockResolvedValue(thiefSheet);
+
+      const result = await svc.execute("enc-1", {
+        kind: "use-object",
+        participantId: "a",
+        targetParticipantId: "b",
+        ownerUserId: "user-a",
+        asBonusAction: true,
+        objectRef: {
+          source: "inventory",
+          slug: "healers-kit",
+          itemId: "item-kit",
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(actor.bonusActionUsed).toBe(true);
+      expect(target.currentHp).toBe(0);
+      expect(target.dyingState).toBe("stable");
+      expect(inventoryService.useItem).toHaveBeenCalledTimes(1);
+      expect(characterStateService.getCurrentHp).toHaveBeenCalledWith(
+        "char-b",
+      );
+      if (result.ok) {
+        expect(result.value.finalState.actionUsed).toBe(true);
+        expect(result.value.finalState.bonusUsed).toBe(true);
+        expect(
+          result.events.some(
+            (event) => event.event_type === "fast_hands_used",
+          ),
+        ).toBe(true);
+      }
+    });
+
+    it("rejects an action-cost object as a bonus action for a non-Thief without consuming it", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        characterId: "char-a",
+      });
+      const inventoryService = {
+        getInventory: jest.fn().mockResolvedValue({
+          items: [
+            {
+              id: "item-potion",
+              quantity: 1,
+              equipment: {
+                slug: "potion-of-healing",
+                name: "Potion of Healing",
+                consumableEffect: {
+                  type: "healing",
+                  autoApply: true,
+                  actionCost: "action",
+                },
+              },
+            },
+          ],
+        }),
+        useItem: jest.fn(),
+      };
+      const { svc, sheetService } = makeService(
+        makeEncounter(["a"]),
+        { a: actor },
+        { inventoryService },
+      );
+      sheetService.computeSheet.mockResolvedValue({
+        classes: [
+          {
+            slug: "rogue",
+            level: 10,
+            subclass: { slug: "assassin", name: "Assassin" },
+          },
+        ],
+      });
+
+      const result = await svc.execute("enc-1", {
+        kind: "use-object",
+        participantId: "a",
+        ownerUserId: "user-a",
+        asBonusAction: true,
+        objectRef: {
+          source: "inventory",
+          slug: "potion-of-healing",
+          itemId: "item-potion",
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      expect(actor.actionUsed).toBe(false);
+      expect(actor.bonusActionUsed).toBe(false);
+      expect(inventoryService.useItem).not.toHaveBeenCalled();
+    });
+
+    it("rejects Fast Hands while a transformation suppresses class features", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        characterId: "char-a",
+        transformationState: {
+          retainedAbilities: ["mental-stats"],
+        } as never,
+      });
+      const { svc, sheetService } = makeService(makeEncounter(["a"]), {
+        a: actor,
+      });
+      sheetService.computeSheet.mockResolvedValue(thiefSheet);
+
+      const result = await svc.execute("enc-1", {
+        kind: "fast-hands-sleight-of-hand",
+        participantId: "a",
+        ownerUserId: "user-a",
+        fastHandsTask: "pick-pocket",
+        targetDc: 15,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(actor.bonusActionUsed).toBe(false);
+      expect(sheetService.computeSheet).not.toHaveBeenCalled();
+    });
+
+    it("applies Reliable Talent to a Sleight of Hand check and persists only the bonus-action cost", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        characterId: "char-a",
+        actionUsed: true,
+      });
+      const { svc, sheetService, participantRepo } = makeService(
+        makeEncounter(["a"]),
+        { a: actor },
+      );
+      sheetService.computeSheet.mockResolvedValue(thiefSheet);
+      const rollSpy = jest
+        .spyOn(DiceService.prototype, "rollExpression")
+        .mockReturnValue({
+          expression: "1d20",
+          rolls: [4],
+          modifier: 0,
+          total: 4,
+        });
+
+      const result = await svc.execute("enc-1", {
+        kind: "fast-hands-sleight-of-hand",
+        participantId: "a",
+        ownerUserId: "user-a",
+        fastHandsTask: "pick-pocket",
+        targetDc: 15,
+        targetLabel: "bolsa do guarda",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(actor.actionUsed).toBe(true);
+      expect(actor.bonusActionUsed).toBe(true);
+      expect(participantRepo.save).toHaveBeenCalledWith(actor);
+      if (result.ok) {
+        expect(result.value.step.result.events[0]).toMatchObject({
+          type: "fast_hands_sleight_of_hand",
+          rawRoll: 4,
+          roll: 10,
+          modifier: 9,
+          total: 19,
+          success: true,
+          reliableTalentApplied: true,
+          bonusActionConsumed: true,
+        });
+      }
+      rollSpy.mockRestore();
+    });
+
+    it("requires Thieves' Tools and grants advantage when both tool and Sleight proficiencies apply", async () => {
+      const actor = makeParticipant("a", {
+        type: "pc",
+        characterId: "char-a",
+      });
+      const { svc, sheetService } = makeService(makeEncounter(["a"]), {
+        a: actor,
+      });
+      sheetService.computeSheet.mockResolvedValue(thiefSheet);
+      const advantageSpy = jest
+        .spyOn(DiceService.prototype, "rollWithAdvantage")
+        .mockReturnValue({
+          roll1: 7,
+          roll2: 14,
+          chosen: 14,
+          discarded: 7,
+        });
+
+      const result = await svc.execute("enc-1", {
+        kind: "fast-hands-sleight-of-hand",
+        participantId: "a",
+        ownerUserId: "user-a",
+        fastHandsTask: "pick-lock",
+        targetDc: 20,
+        targetLabel: "cofre",
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.step.result.events[0]).toMatchObject({
+          roll: 14,
+          total: 23,
+          success: true,
+          hasAdvantage: true,
+          advantage: {
+            roll1: 7,
+            roll2: 14,
+            chosen: 14,
+            discarded: 7,
+          },
+        });
+      }
+      advantageSpy.mockRestore();
+
+      actor.bonusActionUsed = false;
+      sheetService.computeSheet.mockResolvedValue({
+        ...thiefSheet,
+        equipment: [],
+      });
+      const missingTools = await svc.execute("enc-1", {
+        kind: "fast-hands-sleight-of-hand",
+        participantId: "a",
+        ownerUserId: "user-a",
+        fastHandsTask: "disarm-trap",
+        targetDc: 15,
+      });
+      expect(missingTools.ok).toBe(false);
+      expect(actor.bonusActionUsed).toBe(false);
     });
   });
 

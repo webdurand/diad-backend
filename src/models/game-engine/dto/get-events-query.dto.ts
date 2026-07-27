@@ -79,6 +79,8 @@ export const VALID_EVENT_TYPES = [
   "aoeTargetHit",
   "multiattackStart",
   "multiattackEnd",
+  "volleyStarted",
+  "volleyResolved",
   "savingThrow",
   "skillCheck",
   "saveRolled",

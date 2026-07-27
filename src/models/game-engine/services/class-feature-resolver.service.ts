@@ -24,6 +24,7 @@ import {
   applyEffectSpeedModifiers,
   reconcileRemainingMovement,
 } from "./movement.service";
+import { canMoveFromConditions } from "./condition-effects.service";
 import { PersistentAreaService } from "./persistent-area.service";
 import { hasBeaconWisdomSaveAdvantage } from "./beacon-of-hope";
 
@@ -186,9 +187,15 @@ export class ClassFeatureResolverService {
       case "patient-defense":
         return this.handlePatientDefense(sourceParticipantId, payload, events);
       case "step-of-the-wind-dash":
-        return this.handleStepOfTheWindDash(sourceParticipantId, events);
+        return this.handleStepOfTheWindDash(
+          sourceParticipantId,
+          payload,
+          events,
+        );
       case "step-of-the-wind":
         return this.handleStepOfTheWind(sourceParticipantId, payload, events);
+      case "adrenaline-rush":
+        return this.handleAdrenalineRush(sourceParticipantId, payload, events);
       case "stunning-strike":
         return this.handleStunningStrike(sourceParticipantId, payload, events);
       case "deflect-attacks":
@@ -207,6 +214,12 @@ export class ClassFeatureResolverService {
         return this.handleCunningStrike(sourceParticipantId, payload, events);
       case "uncanny-dodge":
         return this.handleUncannyDodge(sourceParticipantId, payload, events);
+      case "relentless-endurance":
+        return this.handleRelentlessEndurance(
+          sourceParticipantId,
+          payload,
+          events,
+        );
       case "tireless":
         return this.handleTireless(sourceParticipantId, payload, events);
       case "natures-veil":
@@ -1272,6 +1285,7 @@ export class ClassFeatureResolverService {
       state.death_saves_fail = 0;
       source.dyingState = "none";
       source.isDefeated = false;
+      await this.clearRelentlessEndurancePending(source, events);
     }
     source.effectInstances = (source.effectInstances ?? []).filter(
       (effect) => effect.id !== pending.id,
@@ -1767,6 +1781,7 @@ export class ClassFeatureResolverService {
       state.death_saves_fail = 0;
       source.dyingState = "none";
       source.isDefeated = false;
+      await this.clearRelentlessEndurancePending(source, events);
     }
     source.currentHp = hpAfter;
     source.effectInstances = (source.effectInstances ?? []).filter(
@@ -1794,6 +1809,107 @@ export class ClassFeatureResolverService {
         damagePrevented,
         damageAfter,
         hpAfter,
+      },
+    };
+  }
+
+  private async handleRelentlessEndurance(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    const triggerEventId = payload.options?.triggerEventId as
+      | string
+      | undefined;
+    if (!source?.characterId || !triggerEventId) {
+      return { resolved: false, events };
+    }
+
+    const pending = (source.effectInstances ?? []).find(
+      (effect) =>
+        effect.kind === "relentless_endurance_pending" &&
+        effect.payload?.triggerEventId === triggerEventId,
+    );
+    if (!pending) return { resolved: false, events };
+
+    const state = await this.charStates.findOne({
+      where: { character_id: source.characterId },
+    });
+    if (!state) return { resolved: false, events };
+    if (
+      state.current_hp !== 0 ||
+      source.dyingState !== "dying" ||
+      source.isDefeated === true
+    ) {
+      await this.clearRelentlessEndurancePending(source, events);
+      events.push({
+        event_type: "class_feature_error",
+        actor_participant_id: sourceId,
+        data: {
+          featureSlug: "relentless-endurance",
+          error:
+            "Relentless Endurance só pode ser aceita enquanto o Orc está a 0 PV.",
+        },
+      });
+      return {
+        resolved: false,
+        events,
+        resolutionPayload: { resourceConsumed: false },
+      };
+    }
+
+    state.current_hp = 1;
+    state.death_saves_success = 0;
+    state.death_saves_fail = 0;
+    state.conditions = (state.conditions ?? []).filter(
+      (condition) =>
+        condition !== "dying" &&
+        condition !== "unconscious" &&
+        condition !== "dead",
+    );
+    source.currentHp = 1;
+    source.dyingState = "none";
+    source.isDefeated = false;
+    source.conditions = (source.conditions ?? []).filter(
+      (condition) =>
+        condition !== "dying" &&
+        condition !== "unconscious" &&
+        condition !== "dead",
+    );
+    source.conditionInstances = (source.conditionInstances ?? []).filter(
+      (condition) =>
+        !["dying", "unconscious", "dead"].includes(condition.slug),
+    );
+
+    await this.charStates.save(state);
+    const removed = await this.effectInstances.removeEffect(
+      source,
+      pending.id,
+      "consumed",
+    );
+    events.push(...removed.events);
+    await this.participants.save(source);
+    events.push({
+      event_type: "class_feature_triggered",
+      actor_participant_id: sourceId,
+      target_participant_id: sourceId,
+      data: {
+        featureSlug: "relentless-endurance",
+        triggerEventId,
+        hpBefore: 0,
+        hpAfter: 1,
+        resourceConsumed: true,
+      },
+    });
+    return {
+      resolved: true,
+      events,
+      resolutionPayload: {
+        triggerEventId,
+        hpBefore: 0,
+        hpAfter: 1,
+        resourceConsumed: true,
       },
     };
   }
@@ -2642,16 +2758,14 @@ export class ClassFeatureResolverService {
 
   private async handleStepOfTheWind(
     sourceId: string,
-    _payload: ClassFeatureInvokedPayload,
+    payload: ClassFeatureInvokedPayload,
     events: GameEventData[],
   ) {
     const source = await this.participants.findOne({ where: { id: sourceId } });
     if (!source) return { resolved: false, events };
     source.hasDashed = true;
     source.hasDisengaged = true;
-    if (source.movementRemaining != null) {
-      source.movementRemaining *= 2;
-    }
+    this.addCurrentSpeedToMovement(source, payload);
     await this.participants.save(source);
     events.push({
       event_type: "step_of_the_wind_activated",
@@ -2663,14 +2777,13 @@ export class ClassFeatureResolverService {
 
   private async handleStepOfTheWindDash(
     sourceId: string,
+    payload: ClassFeatureInvokedPayload,
     events: GameEventData[],
   ) {
     const source = await this.participants.findOne({ where: { id: sourceId } });
     if (!source) return { resolved: false, events };
     source.hasDashed = true;
-    if (source.movementRemaining != null) {
-      source.movementRemaining *= 2;
-    }
+    this.addCurrentSpeedToMovement(source, payload);
     await this.participants.save(source);
     events.push({
       event_type: "step_of_the_wind_activated",
@@ -2678,6 +2791,97 @@ export class ClassFeatureResolverService {
       data: { focusPointsCost: 0, dashed: true, disengaged: false },
     });
     return { resolved: true, events };
+  }
+
+  private async handleAdrenalineRush(
+    sourceId: string,
+    payload: ClassFeatureInvokedPayload,
+    events: GameEventData[],
+  ) {
+    const source = await this.participants.findOne({ where: { id: sourceId } });
+    if (!source?.characterId) return { resolved: false, events };
+    const state = await this.charStates.findOne({
+      where: { character_id: source.characterId },
+    });
+    if (!state) return { resolved: false, events };
+
+    const currentSpeed = canMoveFromConditions(source.conditions)
+      ? applyEffectSpeedModifiers(
+          payload.caster?.speed ?? 30,
+          source.effectInstances,
+        )
+      : 0;
+    const movementBefore = source.movementRemaining ?? currentSpeed;
+    const movementAfter = movementBefore + currentSpeed;
+    const proficiencyBonus = Math.max(2, payload.caster?.profBonus ?? 2);
+    const tempHpBefore = Math.max(source.tempHp ?? 0, state.temp_hp ?? 0);
+    const tempHpAfter = Math.max(tempHpBefore, proficiencyBonus);
+
+    source.hasDashed = true;
+    source.movementRemaining = movementAfter;
+    source.tempHp = tempHpAfter;
+    state.temp_hp = tempHpAfter;
+    await this.charStates.save(state);
+    await this.participants.save(source);
+
+    events.push({
+      event_type: "class_feature_triggered",
+      actor_participant_id: sourceId,
+      target_participant_id: sourceId,
+      data: {
+        featureSlug: "adrenaline-rush",
+        dashed: true,
+        speed: currentSpeed,
+        movementBefore,
+        movementAfter,
+        proficiencyBonus,
+        tempHpBefore,
+        tempHpAfter,
+      },
+    });
+    return {
+      resolved: true,
+      events,
+      resolutionPayload: {
+        dashed: true,
+        speed: currentSpeed,
+        movementBefore,
+        movementAfter,
+        proficiencyBonus,
+        tempHpBefore,
+        tempHpAfter,
+        resourceConsumed: true,
+      },
+    };
+  }
+
+  private addCurrentSpeedToMovement(
+    source: EncounterParticipantEntity,
+    payload: ClassFeatureInvokedPayload,
+  ): void {
+    const currentSpeed = applyEffectSpeedModifiers(
+      payload.caster?.speed ?? 30,
+      source.effectInstances,
+    );
+    source.movementRemaining =
+      (source.movementRemaining ?? currentSpeed) + currentSpeed;
+  }
+
+  private async clearRelentlessEndurancePending(
+    source: EncounterParticipantEntity,
+    events: GameEventData[],
+  ): Promise<void> {
+    const pendingEffects = (source.effectInstances ?? []).filter(
+      (effect) => effect.kind === "relentless_endurance_pending",
+    );
+    for (const pending of pendingEffects) {
+      const removed = await this.effectInstances.removeEffect(
+        source,
+        pending.id,
+        "manual",
+      );
+      events.push(...removed.events);
+    }
   }
 
   private async handleDeflectAttacks(
@@ -2726,6 +2930,7 @@ export class ClassFeatureResolverService {
       state.death_saves_fail = 0;
       source.dyingState = "none";
       source.isDefeated = false;
+      await this.clearRelentlessEndurancePending(source, events);
     }
 
     let redirected = false;

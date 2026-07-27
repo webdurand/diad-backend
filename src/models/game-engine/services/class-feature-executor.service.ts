@@ -4,6 +4,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { CharacterStateEntity } from "src/entities/character-state.entity";
 import { canTakeReactionFromConditions } from "./condition-effects.service";
 import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
@@ -30,7 +31,18 @@ import {
   abjureFoesChoiceError,
   chooseAbjureFoesTurnOption,
 } from "./abjure-foes";
+import { ConcentrationService } from "./concentration.service";
 
+type RelentlessEnduranceAtomicOutcome =
+  | {
+      kind: "failure";
+      result: GameResult<unknown>;
+    }
+  | {
+      kind: "accepted" | "declined";
+      events: GameEventData[];
+      value: Record<string, unknown>;
+    };
 
 @Injectable()
 export class ClassFeatureExecutorService {
@@ -48,6 +60,7 @@ export class ClassFeatureExecutorService {
     private readonly classFeatureResolver: ClassFeatureResolverService,
     private readonly conditionLifecycle: ConditionLifecycleService,
     private readonly encounterEndDetector: EncounterEndDetectorService,
+    private readonly concentration: ConcentrationService,
   ) {}
 
 
@@ -159,6 +172,15 @@ export class ClassFeatureExecutorService {
           "PREREQUISITE_NOT_MET",
         );
       }
+    }
+
+    if (spec.slug === "relentless-endurance") {
+      return this.resolveRelentlessEnduranceAtomically(
+        encounter,
+        participant.id,
+        body.triggerEventId as string | undefined,
+        body.decline === true,
+      );
     }
 
     const is2024Rules = sheet.source?.code !== "PHB";
@@ -346,6 +368,15 @@ export class ClassFeatureExecutorService {
     }
 
 
+    if (
+      spec.slug === "adrenaline-rush" &&
+      !canTakeReactionFromConditions(participant.conditions)
+    ) {
+      return failure(
+        "A condição atual impede Adrenaline Rush.",
+        "CONDITION_PREVENTS_ACTION",
+      );
+    }
     if (spec.actionCost === "reaction") {
       if (!canTakeReactionFromConditions(participant.conditions)) {
         return failure(
@@ -1162,6 +1193,7 @@ export class ClassFeatureExecutorService {
       spec.slug === "healing-hands" ||
       spec.slug === "celestial-revelation" ||
       spec.slug === "abjure-foes" ||
+      spec.slug === "adrenaline-rush" ||
       [
         "clouds-jaunt",
         "fires-burn",
@@ -1302,6 +1334,7 @@ export class ClassFeatureExecutorService {
         spec.slug === "healing-hands" ||
         spec.slug === "celestial-revelation" ||
         spec.slug === "abjure-foes" ||
+        spec.slug === "adrenaline-rush" ||
         [
           "clouds-jaunt",
           "fires-burn",
@@ -1331,6 +1364,8 @@ export class ClassFeatureExecutorService {
           "Revelação Celestial não pôde ser ativada.",
         "abjure-foes":
           "Abjurar Inimigos exige ao menos um alvo hostil válido a até 60 pés.",
+        "adrenaline-rush":
+          "Adrenaline Rush não pôde ser aplicada.",
         "clouds-jaunt": "O destino do Salto das Nuvens é inválido.",
         "fires-burn": "A oportunidade da Queimadura do Fogo expirou.",
         "frosts-chill": "A oportunidade do Calafrio do Gelo expirou.",
@@ -1367,7 +1402,12 @@ export class ClassFeatureExecutorService {
       }
       await this.participantRepo.save(participantAfterResolution);
     }
-    if (resolution.resolved && spendAfterResolution && hasMaxUses) {
+    if (
+      resolution.resolved &&
+      spendAfterResolution &&
+      hasMaxUses &&
+      resolution.resolutionPayload?.resourceConsumed !== false
+    ) {
       await this.stateService.incrementFeatureUses(
         participant.characterId!,
         incrementKey,
@@ -1425,6 +1465,277 @@ export class ClassFeatureExecutorService {
       return (character as any).userId;
     }
     return ownerUserId;
+  }
+
+  private async resolveRelentlessEnduranceAtomically(
+    encounter: EncounterEntity,
+    participantId: string,
+    triggerEventId: string | undefined,
+    decline: boolean,
+  ): Promise<GameResult<unknown>> {
+    if (!triggerEventId) {
+      return failure(
+        "A oportunidade de Relentless Endurance não está mais disponível.",
+        "FEATURE_NOT_AVAILABLE",
+      );
+    }
+
+    const outcome = await this.participantRepo.manager.transaction(
+      async (manager): Promise<RelentlessEnduranceAtomicOutcome> => {
+        const participantRepo = manager.getRepository(
+          EncounterParticipantEntity,
+        );
+        const stateRepo = manager.getRepository(CharacterStateEntity);
+        const participant = await participantRepo.findOne({
+          where: { id: participantId, encounterId: encounter.id },
+          lock: { mode: "pessimistic_write" },
+        });
+        if (!participant?.characterId) {
+          return {
+            kind: "failure",
+            result: failure(
+              "Participante não encontrado.",
+              "PARTICIPANT_NOT_FOUND",
+            ),
+          };
+        }
+
+        const pending = (participant.effectInstances ?? []).find(
+          (effect) =>
+            effect.kind === "relentless_endurance_pending" &&
+            effect.payload?.triggerEventId === triggerEventId,
+        );
+        if (!pending) {
+          return {
+            kind: "failure",
+            result: failure(
+              "A oportunidade de Relentless Endurance não está mais disponível.",
+              "FEATURE_NOT_AVAILABLE",
+            ),
+          };
+        }
+
+        const explicitDeadline =
+          typeof pending.payload?.decisionDeadlineAt === "string"
+            ? Date.parse(pending.payload.decisionDeadlineAt)
+            : Number.NaN;
+        const appliedAt = Date.parse(pending.appliedAt ?? "");
+        const rawTimeout = Number(pending.payload?.timeoutSeconds ?? 20);
+        const timeoutSeconds = Number.isFinite(rawTimeout)
+          ? Math.max(0, Math.floor(rawTimeout))
+          : 20;
+        const deadlineMs = Number.isFinite(explicitDeadline)
+          ? explicitDeadline
+          : Number.isFinite(appliedAt)
+            ? appliedAt + timeoutSeconds * 1_000
+            : 0;
+        const timedOut = Date.now() >= deadlineMs;
+
+        const state = await stateRepo.findOne({
+          where: { character_id: participant.characterId },
+          lock: { mode: "pessimistic_write" },
+        });
+        const canResolve =
+          state?.current_hp === 0 &&
+          participant.dyingState === "dying" &&
+          participant.isDefeated !== true;
+        const uses =
+          state?.feature_uses_used?.["relentless-endurance"] ?? 0;
+        const noUsesRemaining = canResolve && !decline && uses >= 1;
+        const effectiveDecline =
+          decline || timedOut || noUsesRemaining;
+
+        const effectsToRemove = canResolve
+          ? [pending]
+          : (participant.effectInstances ?? []).filter(
+              (effect) =>
+                effect.kind === "relentless_endurance_pending",
+            );
+        const effectExpiredEvents: GameEventData[] =
+          effectsToRemove.map((effect) => ({
+            event_type: "effect_expired",
+            target_participant_id: participant.id,
+            data: {
+              effectId: effect.id,
+              reason: canResolve
+                ? effectiveDecline
+                  ? timedOut
+                    ? "duration"
+                    : "manual"
+                  : "consumed"
+                : "manual",
+              kind: effect.kind,
+              sourceSpellSlug: effect.sourceSpellSlug,
+              sourceFeatureSlug: effect.sourceFeatureSlug,
+              payload: effect.payload,
+            },
+          }));
+        participant.effectInstances = (
+          participant.effectInstances ?? []
+        ).filter(
+          (effect) =>
+            !effectsToRemove.some(
+              (removed) => removed.id === effect.id,
+            ),
+        );
+
+        if (!state || !canResolve) {
+          await participantRepo.save(participant);
+          await this.eventService.emit(
+            encounter.sessionId,
+            encounter.id,
+            effectExpiredEvents,
+            manager,
+          );
+          return {
+            kind: "failure",
+            result: failure(
+              "A oportunidade de Relentless Endurance não está mais disponível.",
+              "FEATURE_NOT_AVAILABLE",
+            ),
+          };
+        }
+
+        if (effectiveDecline) {
+          await participantRepo.save(participant);
+          const events: GameEventData[] = [
+            ...effectExpiredEvents,
+            {
+              event_type: "relentless_endurance_declined",
+              actor_participant_id: participant.id,
+              target_participant_id: participant.id,
+              data: {
+                featureSlug: "relentless-endurance",
+                triggerEventId,
+                resourceConsumed: false,
+                hpAfter: 0,
+                dyingState: "dying",
+                reason: timedOut
+                  ? "decision-timeout"
+                  : noUsesRemaining
+                    ? "no-uses-remaining"
+                    : "declined",
+              },
+            },
+            {
+              event_type: "fell_unconscious",
+              target_participant_id: participant.id,
+              data: {
+                dyingState: "dying",
+                sourceFeatureSlug: "relentless-endurance",
+              },
+            },
+          ];
+          if (participant.isConcentrating) {
+            const broken = await this.concentration.break(
+              participant,
+              "incapacitated",
+              manager,
+            );
+            events.push(...broken.events);
+          }
+          await this.eventService.emit(
+            encounter.sessionId,
+            encounter.id,
+            events,
+            manager,
+          );
+          return {
+            kind: "declined",
+            events,
+            value: {
+              featureSlug: "relentless-endurance",
+              declined: true,
+              timedOut,
+              unavailable: noUsesRemaining,
+              reactionConsumed: false,
+              resourceConsumed: false,
+              hpAfter: 0,
+            },
+          };
+        }
+
+        state.current_hp = 1;
+        state.death_saves_success = 0;
+        state.death_saves_fail = 0;
+        state.conditions = (state.conditions ?? []).filter(
+          (condition) =>
+            !["dying", "unconscious", "dead"].includes(condition),
+        );
+        state.feature_uses_used = {
+          ...(state.feature_uses_used ?? {}),
+          "relentless-endurance": uses + 1,
+        };
+        participant.currentHp = 1;
+        participant.dyingState = "none";
+        participant.isDefeated = false;
+        participant.conditions = (participant.conditions ?? []).filter(
+          (condition) =>
+            !["dying", "unconscious", "dead"].includes(condition),
+        );
+        participant.conditionInstances = (
+          participant.conditionInstances ?? []
+        ).filter(
+          (condition) =>
+            !["dying", "unconscious", "dead"].includes(
+              condition.slug,
+            ),
+        );
+        await stateRepo.save(state);
+        await participantRepo.save(participant);
+
+        const invoked: GameEventData = {
+          event_type: "class_feature_invoked",
+          actor_participant_id: participant.id,
+          data: {
+            featureSlug: "relentless-endurance",
+            actionCost: "free",
+            targets: [],
+            options: { triggerEventId },
+            encounterId: encounter.id,
+            status: "emitted_pending_resolution",
+          },
+        };
+        const triggered: GameEventData = {
+          event_type: "class_feature_triggered",
+          actor_participant_id: participant.id,
+          target_participant_id: participant.id,
+          data: {
+            featureSlug: "relentless-endurance",
+            triggerEventId,
+            hpBefore: 0,
+            hpAfter: 1,
+            resourceConsumed: true,
+          },
+        };
+        const events = [invoked, ...effectExpiredEvents, triggered];
+        await this.eventService.emit(
+          encounter.sessionId,
+          encounter.id,
+          events,
+          manager,
+        );
+        return {
+          kind: "accepted",
+          events,
+          value: {
+            featureSlug: "relentless-endurance",
+            deferred: false,
+            resolved: true,
+            status: "resolved",
+            resolutionPayload: {
+              triggerEventId,
+              hpBefore: 0,
+              hpAfter: 1,
+              resourceConsumed: true,
+            },
+          },
+        };
+      },
+    );
+
+    if (outcome.kind === "failure") return outcome.result;
+    return success(outcome.value, outcome.events);
   }
 
   private extractOptions(

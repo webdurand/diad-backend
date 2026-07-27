@@ -1,6 +1,7 @@
 import { CombatService } from "../services/combat.service";
 import { DiceService } from "../services/dice.service";
 import { ConditionEffectsService } from "../services/condition-effects.service";
+import { MonsterActionResolver } from "../services/monster-action-resolver.service";
 
 
 
@@ -90,6 +91,7 @@ function createHarness() {
     { successes: number; failures: number }
   > = {};
   const hpByChar: Record<string, { current: number; max: number }> = {};
+  const featureUsesByChar: Record<string, Record<string, number>> = {};
 
   const encounterRepo: any = {
     findOne: jest.fn(async () => encounter),
@@ -126,10 +128,16 @@ function createHarness() {
   };
 
   const eventService: any = {
-    emit: jest.fn(async () => undefined),
+    emit: jest.fn(async () => []),
   };
 
   const stateService: any = {
+    getCurrentHp: jest.fn(
+      async (cid: string) => hpByChar[cid]?.current ?? null,
+    ),
+    getFeatureUsesUsed: jest.fn(
+      async (cid: string) => featureUsesByChar[cid] ?? {},
+    ),
     updateHp: jest.fn(
       async (
         _uid: string,
@@ -197,7 +205,11 @@ function createHarness() {
   };
 
   const sheetService: any = {
-    computeSheet: jest.fn(async () => ({ armorClass: 14 })),
+    computeSheet: jest.fn(async () => ({
+      armorClass: 14,
+      race: { slug: "human", name: "Human" },
+      classes: [],
+    })),
   };
 
   const actionsService: any = {
@@ -214,10 +226,7 @@ function createHarness() {
 
   const diceService = new DiceService();
   const conditionEffects = new ConditionEffectsService();
-  const monsterActionResolver: any = {
-    resolve: jest.fn(),
-    resolveByName: jest.fn(() => null),
-  };
+  const monsterActionResolver = new MonsterActionResolver();
 
   const encounterEndDetector: any = {
     tryAutoEnd: jest.fn(async () => null),
@@ -225,6 +234,17 @@ function createHarness() {
   };
   const startTurnOrchestrator: any = {
     run: jest.fn(async () => ({ events: [] })),
+  };
+  const concentration: any = {
+    startNew: jest.fn(async () => ({ events: [], broken: false })),
+    break: jest.fn(async () => ({ events: [] })),
+    breakDueToDeath: jest.fn(async () => ({ events: [] })),
+    trackAppliedEffect: jest.fn(async () => {}),
+    checkBreakOnCondition: jest.fn(async () => ({
+      events: [],
+      broken: false,
+    })),
+    decrementDurationFor: jest.fn(async () => ({ events: [] })),
   };
 
   const combat = new CombatService(
@@ -258,8 +278,50 @@ function createHarness() {
       expireAtParticipantTurnEnd: async () => ({ events: [] }),
     } as any,
     {
-      addEffect: async () => ({ effect: {} as any, events: [] }),
-      removeEffect: async () => ({ removed: false, events: [] }),
+      addEffect: async (target: any, input: any) => {
+        const effect = {
+          id: `effect-${(target.effectInstances ?? []).length + 1}`,
+          ...input,
+          appliedAt: new Date().toISOString(),
+        };
+        target.effectInstances = [...(target.effectInstances ?? []), effect];
+        participants.set(target.id, target);
+        return {
+          effect,
+          applied: true,
+          events: [
+            {
+              event_type: "effect_applied",
+              target_participant_id: target.id,
+              data: {
+                effectId: effect.id,
+                kind: effect.kind,
+                sourceFeatureSlug: effect.sourceFeatureSlug,
+              },
+            },
+          ],
+        };
+      },
+      removeEffect: async (target: any, effectId: string) => {
+        const before = target.effectInstances ?? [];
+        const removed = before.some((effect: any) => effect.id === effectId);
+        target.effectInstances = before.filter(
+          (effect: any) => effect.id !== effectId,
+        );
+        participants.set(target.id, target);
+        return {
+          removed,
+          events: removed
+            ? [
+                {
+                  event_type: "effect_removed",
+                  target_participant_id: target.id,
+                  data: { effectId },
+                },
+              ]
+            : [],
+        };
+      },
       removeAllByConcentrationBreak: async () => ({ events: [] }),
       tickAtEndOfTurn: async () => ({ events: [], ticked: [], expired: [] }),
       tickAtEndOfCasterTurn: async () => ({
@@ -267,16 +329,13 @@ function createHarness() {
         ticked: [],
         expired: [],
       }),
+      expireAtParticipantTurnEnd: async () => ({
+        events: [],
+        expired: [],
+      }),
       expireAtStartOfTurn: async () => ({ events: [] }),
     } as any,
-    {
-      startNew: async () => ({ events: [], broken: false }),
-      break: async () => ({ events: [] }),
-      breakDueToDeath: async () => ({ events: [] }),
-      trackAppliedEffect: async () => {},
-      checkBreakOnCondition: async () => ({ events: [], broken: false }),
-      decrementDurationFor: async () => ({ events: [] }),
-    } as any,
+    concentration,
     { resolveInvocation: async () => ({ resolved: false, events: [] }) } as any,
     { consumeIfArmed: async () => ({ consumed: false }) } as any,
     {
@@ -340,7 +399,11 @@ function createHarness() {
         events: [],
       }),
     } as any,
-    { shouldOfferShield: async () => null } as any,
+    {
+      shouldOfferShield: async () => null,
+      shouldOfferDeflectAttacks: async () => null,
+      shouldOfferUncannyDodge: async () => null,
+    } as any,
 
     encounterEndDetector,
     { processRoundStart: async () => [] } as any,
@@ -359,12 +422,15 @@ function createHarness() {
     participants,
     encounter,
     hpByChar,
+    featureUsesByChar,
     deathSavesByChar,
     stateService,
     eventService,
     diceService,
     encounterEndDetector,
     startTurnOrchestrator,
+    sheetService,
+    concentration,
   };
 }
 
@@ -393,6 +459,224 @@ describe("CombatService — US1 death-save flow", () => {
       expect(res.events.some((e) => e.event_type === "fell_unconscious")).toBe(
         true,
       );
+    });
+
+    it("persists an optional Relentless Endurance opportunity for an Orc reduced to 0 HP", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "orc-relentless",
+        characterId: "orc-char",
+        currentHp: 5,
+        isConcentrating: true,
+        concentratingOn: "bless",
+      });
+      h.participants.set(pc.id, pc);
+      h.hpByChar["orc-char"] = { current: 5, max: 10 };
+      h.sheetService.computeSheet.mockResolvedValue({
+        armorClass: 14,
+        race: { slug: "orc", name: "Orc" },
+        classes: [{ slug: "fighter", level: 1 }],
+      });
+
+      const res = await h.combat.applyDamage(h.encounter.id, {
+        targetParticipantId: pc.id,
+        amount: 5,
+        damageType: "slashing",
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value).toMatchObject({
+        hpAfter: 0,
+        dyingState: "dying",
+        instantDeath: false,
+      });
+      expect(pc.effectInstances).toContainEqual(
+        expect.objectContaining({
+          kind: "relentless_endurance_pending",
+          sourceFeatureSlug: "relentless-endurance",
+          expiresAt: { kind: "until_consumed" },
+          payload: expect.objectContaining({
+            hpBefore: 5,
+            hpAfter: 0,
+            incomingDamage: 5,
+            damageType: "slashing",
+            timeoutSeconds: 20,
+            decisionDeadlineAt: expect.any(String),
+          }),
+        }),
+      );
+      expect(res.events).toContainEqual(
+        expect.objectContaining({
+          event_type: "relentless_endurance_opportunity",
+          target_participant_id: pc.id,
+          data: expect.objectContaining({
+            timeoutSeconds: 20,
+            decisionDeadlineAt: expect.any(String),
+          }),
+        }),
+      );
+      expect(
+        res.events.some((event) => event.event_type === "fell_unconscious"),
+      ).toBe(false);
+      expect(res.events).toContainEqual(
+        expect.objectContaining({
+          event_type: "concentration_check",
+          target_participant_id: pc.id,
+        }),
+      );
+    });
+
+    it("defers unconsciousness side effects but still checks concentration on a lethal attack against an Orc", async () => {
+      const h = createHarness();
+      const attacker = makeParticipant({
+        id: "orc-attacker",
+        type: "monster",
+        characterId: undefined,
+        monsterId: "monster-orc-attacker",
+        faction: "enemy",
+        monster: {
+          slug: "test-brute",
+          name: "Test Brute",
+          armor_class: [{ value: 12 }],
+          actions: [
+            {
+              name: "Tap",
+              attack_bonus: 100,
+              damage: [
+                {
+                  damage_dice: "1",
+                  damage_type: { name: "bludgeoning" },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const orc = makeParticipant({
+        id: "orc-concentrating",
+        characterId: "orc-concentrating-char",
+        currentHp: 1,
+        maxHp: 10,
+        isConcentrating: true,
+        concentratingOn: "bless",
+      });
+      h.participants.set(attacker.id, attacker);
+      h.participants.set(orc.id, orc);
+      h.encounter.turnOrder = [attacker.id, orc.id];
+      h.encounter.currentTurnIndex = 0;
+      h.hpByChar[orc.characterId!] = { current: 1, max: 10 };
+      h.sheetService.computeSheet.mockResolvedValue({
+        armorClass: 14,
+        race: { slug: "orc", name: "Orc" },
+        classes: [{ slug: "fighter", level: 1 }],
+        abilityScores: [{ slug: "con", modifier: 0 }],
+      });
+      jest.spyOn(h.diceService, "roll").mockReturnValue(10);
+
+      const res = await h.combat.resolveAttack(h.encounter.id, {
+        attackerParticipantId: attacker.id,
+        targetParticipantId: orc.id,
+        actionName: "Tap",
+        ownerUserId: "dm-1",
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value).toMatchObject({
+        targetHpAfter: 0,
+        targetDefeated: false,
+      });
+      expect(orc.effectInstances).toContainEqual(
+        expect.objectContaining({ kind: "relentless_endurance_pending" }),
+      );
+      expect(res.events).toContainEqual(
+        expect.objectContaining({
+          event_type: "concentration_check",
+          target_participant_id: orc.id,
+        }),
+      );
+      expect(
+        res.events.some((event) => event.event_type === "fell_unconscious"),
+      ).toBe(false);
+    });
+
+    it("does not offer Relentless Endurance on instant death", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "orc-massive-damage",
+        characterId: "orc-massive-char",
+        currentHp: 5,
+      });
+      h.participants.set(pc.id, pc);
+      h.hpByChar["orc-massive-char"] = { current: 5, max: 10 };
+      h.sheetService.computeSheet.mockResolvedValue({
+        armorClass: 14,
+        race: { slug: "orc", name: "Orc" },
+        classes: [{ slug: "fighter", level: 1 }],
+      });
+
+      const res = await h.combat.applyDamage(h.encounter.id, {
+        targetParticipantId: pc.id,
+        amount: 25,
+        damageType: "slashing",
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value.instantDeath).toBe(true);
+      expect(
+        pc.effectInstances?.some(
+          (effect) => effect.kind === "relentless_endurance_pending",
+        ) ?? false,
+      ).toBe(false);
+      expect(
+        res.events.some(
+          (event) =>
+            event.event_type === "relentless_endurance_opportunity",
+        ),
+      ).toBe(false);
+    });
+
+    it("does not offer a second Relentless Endurance after its use is spent", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "orc-relentless-spent",
+        characterId: "orc-spent-char",
+        currentHp: 5,
+      });
+      h.participants.set(pc.id, pc);
+      h.hpByChar["orc-spent-char"] = { current: 5, max: 10 };
+      h.featureUsesByChar["orc-spent-char"] = {
+        "relentless-endurance": 1,
+      };
+      h.sheetService.computeSheet.mockResolvedValue({
+        armorClass: 14,
+        race: { slug: "orc", name: "Orc" },
+        classes: [{ slug: "fighter", level: 1 }],
+      });
+
+      const res = await h.combat.applyDamage(h.encounter.id, {
+        targetParticipantId: pc.id,
+        amount: 5,
+        damageType: "slashing",
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      expect(
+        pc.effectInstances?.some(
+          (effect) => effect.kind === "relentless_endurance_pending",
+        ) ?? false,
+      ).toBe(false);
+      expect(
+        res.events.some(
+          (event) =>
+            event.event_type === "relentless_endurance_opportunity",
+        ),
+      ).toBe(false);
     });
 
     it("transitions directly to dead on massive damage (instantDeath)", async () => {
@@ -490,6 +774,90 @@ describe("CombatService — US1 death-save flow", () => {
       expect(pc.dyingState).toBe("dead");
       expect(pc.isDefeated).toBe(true);
     });
+
+    it("Evasion reduces successful Dexterity half-damage saves to zero", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "rogue-evasion-success",
+        characterId: "rogue-char",
+      });
+      h.participants.set(pc.id, pc);
+      h.hpByChar["rogue-char"] = { current: 40, max: 40 };
+      h.sheetService.computeSheet.mockResolvedValue({
+        armorClass: 16,
+        classes: [{ slug: "rogue-xphb", level: 10 }],
+      });
+
+      const result = await h.combat.applyDamage(h.encounter.id, {
+        targetParticipantId: pc.id,
+        amount: 17,
+        damageType: "fire",
+        ownerUserId: "u1",
+        savingThrow: {
+          ability: "dex",
+          success: true,
+          halfDamageOnSuccess: true,
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.damageApplied).toBe(0);
+      expect(result.value.hpAfter).toBe(40);
+      expect(
+        result.events.find(
+          (event) =>
+            event.event_type === "class_feature_triggered" &&
+            event.data.featureSlug === "evasion",
+        )?.data,
+      ).toMatchObject({
+        saveSucceeded: true,
+        damageBeforeEvasion: 17,
+        damageAfterEvasion: 0,
+      });
+    });
+
+    it("Evasion halves damage after a failed Dexterity save", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "rogue-evasion-failure",
+        characterId: "rogue-char",
+      });
+      h.participants.set(pc.id, pc);
+      h.hpByChar["rogue-char"] = { current: 40, max: 40 };
+      h.sheetService.computeSheet.mockResolvedValue({
+        armorClass: 16,
+        classes: [{ slug: "rogue", level: 10 }],
+      });
+
+      const result = await h.combat.applyDamage(h.encounter.id, {
+        targetParticipantId: pc.id,
+        amount: 35,
+        damageType: "fire",
+        ownerUserId: "u1",
+        savingThrow: {
+          ability: "dex",
+          success: false,
+          halfDamageOnSuccess: true,
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.damageApplied).toBe(17);
+      expect(result.value.hpAfter).toBe(23);
+      expect(
+        result.events.find(
+          (event) =>
+            event.event_type === "class_feature_triggered" &&
+            event.data.featureSlug === "evasion",
+        )?.data,
+      ).toMatchObject({
+        saveSucceeded: false,
+        damageBeforeEvasion: 35,
+        damageAfterEvasion: 17,
+      });
+    });
   });
 
   describe("applyHealing", () => {
@@ -520,6 +888,44 @@ describe("CombatService — US1 death-save flow", () => {
         successes: 0,
         failures: 0,
       });
+    });
+
+    it("removes a stale Relentless Endurance prompt when healing restores HP", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "orc-healed-before-choice",
+        characterId: "orc-healed-char",
+        currentHp: 0,
+        dyingState: "dying",
+        effectInstances: [
+          {
+            id: "pending-relentless-healed",
+            kind: "relentless_endurance_pending",
+            sourceFeatureSlug: "relentless-endurance",
+            payload: { triggerEventId: "trigger-healed" },
+          },
+        ],
+      });
+      h.participants.set(pc.id, pc);
+      h.hpByChar["orc-healed-char"] = { current: 0, max: 10 };
+
+      const res = await h.combat.applyHealing(h.encounter.id, {
+        targetParticipantId: pc.id,
+        amount: 5,
+        ownerUserId: "u1",
+      });
+
+      expect(res.ok).toBe(true);
+      expect(pc.currentHp).toBe(5);
+      expect(pc.effectInstances).toEqual([]);
+      expect(res.events).toContainEqual(
+        expect.objectContaining({
+          event_type: "effect_removed",
+          data: expect.objectContaining({
+            effectId: "pending-relentless-healed",
+          }),
+        }),
+      );
     });
 
     it("refuses to heal a dead PC", async () => {
@@ -674,6 +1080,54 @@ describe("CombatService — US1 death-save flow", () => {
       expect(res.value.dyingState).toBe("none");
       expect(pc.dyingState).toBe("none");
       expect(pc.isDefeated).toBe(false);
+    });
+
+    it("treats starting a death save as declining and clears pending Relentless Endurance", async () => {
+      const h = createHarness();
+      const pc = makeParticipant({
+        id: "orc-death-save",
+        characterId: "char-orc-death-save",
+        currentHp: 0,
+        dyingState: "dying",
+        isConcentrating: true,
+        concentratingOn: "bless",
+        effectInstances: [
+          {
+            id: "relentless-before-death-save",
+            kind: "relentless_endurance_pending",
+            sourceFeatureSlug: "relentless-endurance",
+            payload: { triggerEventId: "relentless-death-save-trigger" },
+            expiresAt: { kind: "until_consumed" },
+            requiresConcentration: false,
+          },
+        ],
+      });
+      h.participants.set(pc.id, pc);
+      h.deathSavesByChar[pc.characterId!] = { successes: 0, failures: 0 };
+      jest.spyOn(h.diceService, "roll").mockReturnValueOnce(12);
+
+      const res = await h.combat.resolveDeathSave(
+        h.encounter.id,
+        pc.id,
+        "u1",
+      );
+
+      expect(res.ok).toBe(true);
+      expect(pc.effectInstances).toEqual([]);
+      expect(h.concentration.break).toHaveBeenCalledWith(
+        pc,
+        "incapacitated",
+      );
+      expect(res.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event_type: "relentless_endurance_declined",
+            data: expect.objectContaining({ reason: "death-save-started" }),
+          }),
+          expect.objectContaining({ event_type: "fell_unconscious" }),
+          expect.objectContaining({ event_type: "death_save" }),
+        ]),
+      );
     });
 
     it("natural 1 counts as two failures", async () => {

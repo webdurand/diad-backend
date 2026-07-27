@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { EntityManager, Repository } from "typeorm";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
@@ -86,14 +86,24 @@ export class ConcentrationService {
   async break(
     caster: EncounterParticipantEntity,
     reason: ConcentrationBreakReason,
+    manager?: EntityManager,
   ): Promise<{ events: GameEventData[] }> {
     const events: GameEventData[] = [];
     if (!caster.isConcentrating) {
       return { events };
     }
+    const participants = manager
+      ? manager.getRepository(EncounterParticipantEntity)
+      : this.participants;
+    const areas = manager
+      ? manager.getRepository(PersistentAreaEffectEntity)
+      : this.areas;
+    const encounters = manager
+      ? manager.getRepository(EncounterEntity)
+      : this.encounters;
     const prev = caster.concentratingOn;
     const effects = caster.appliedEffects ?? [];
-    const activeEncounter = await this.encounters.findOne({
+    const activeEncounter = await encounters.findOne({
       where: { id: caster.encounterId },
     });
     const activeParticipantId =
@@ -105,7 +115,7 @@ export class ConcentrationService {
       .map((e) => e.targetParticipantId as string);
     const uniqueIds = Array.from(new Set(targetIds));
     const fetchedTargets = uniqueIds.length
-      ? await this.participants.findByIds(uniqueIds)
+      ? await participants.findByIds(uniqueIds)
       : [];
     const targets = uniqueIds
       .map((id) =>
@@ -153,8 +163,8 @@ export class ConcentrationService {
 
 
 
-        const area = await this.areas.findOne({ where: { id: eff.refId } });
-        await this.areas.delete({ id: eff.refId });
+        const area = await areas.findOne({ where: { id: eff.refId } });
+        await areas.delete({ id: eff.refId });
         events.push({
           event_type: area?.effectKind
             ? "tile_effect_concentration_broken"
@@ -170,16 +180,23 @@ export class ConcentrationService {
           },
         });
       } else if (eff.kind === "summon") {
-        await this.resolveSummonConcentrationBreak(caster, eff, reason, events);
+        await this.resolveSummonConcentrationBreak(
+          caster,
+          eff,
+          reason,
+          events,
+          participants,
+          encounters,
+        );
       }
     }
-    if (targets.length) await this.participants.save(targets);
+    if (targets.length) await participants.save(targets);
 
 
 
 
 
-    const orphanAreas = await this.areas.find({
+    const orphanAreas = await areas.find({
       where: { casterParticipantId: caster.id, sourceConcentration: true },
     });
     if (orphanAreas.length) {
@@ -204,14 +221,14 @@ export class ConcentrationService {
           },
         });
       }
-      await this.areas.delete(orphanAreas.map((a) => a.id));
+      await areas.delete(orphanAreas.map((a) => a.id));
     }
 
 
 
 
 
-    const encounterParticipants = await this.participants.find({
+    const encounterParticipants = await participants.find({
       where: { encounterId: caster.encounterId },
     });
     for (const p of encounterParticipants) {
@@ -293,7 +310,7 @@ export class ConcentrationService {
           caster.conditionInstances = p.conditionInstances;
           caster.conditions = p.conditions;
         } else {
-          await this.participants.save(p);
+          await participants.save(p);
         }
       }
 
@@ -309,7 +326,7 @@ export class ConcentrationService {
         const originalDisplay = tState.original.displayName;
         p.displayName = originalDisplay;
         p.transformationState = null;
-        await this.participants.save(p);
+        await participants.save(p);
         events.push({
           event_type: "transformation_reverted",
           target_participant_id: p.id,
@@ -328,7 +345,7 @@ export class ConcentrationService {
     caster.concentrationRoundsRemaining = null;
     caster.concentrationSaveDc = null;
     caster.appliedEffects = [];
-    await this.participants.save(caster);
+    await participants.save(caster);
 
     events.push({
       event_type: "concentration_lost",
@@ -343,8 +360,10 @@ export class ConcentrationService {
     effect: AppliedEffect,
     reason: ConcentrationBreakReason,
     events: GameEventData[],
+    participants: Repository<EncounterParticipantEntity>,
+    encounters: Repository<EncounterEntity>,
   ): Promise<void> {
-    const summon = await this.participants.findOne({
+    const summon = await participants.findOne({
       where: { id: effect.refId },
     });
     if (!summon || summon.linkedCasterParticipantId !== caster.id) return;
@@ -358,7 +377,7 @@ export class ConcentrationService {
       summon.controlledBy = "ai";
       summon.faction = caster.faction === "ally" ? "enemy" : "ally";
       summon.linkedCasterParticipantId = null;
-      await this.participants.save(summon);
+      await participants.save(summon);
       events.push({
         event_type: "summon_control_lost",
         actor_participant_id: caster.id,
@@ -374,8 +393,8 @@ export class ConcentrationService {
       return;
     }
 
-    await this.removeFromTurnOrder(summon);
-    await this.participants.remove(summon);
+    await this.removeFromTurnOrder(summon, encounters);
+    await participants.remove(summon);
     events.push({
       event_type: "summon_dismissed",
       actor_participant_id: caster.id,
@@ -390,8 +409,9 @@ export class ConcentrationService {
 
   private async removeFromTurnOrder(
     participant: EncounterParticipantEntity,
+    encounters: Repository<EncounterEntity>,
   ): Promise<void> {
-    const encounter = await this.encounters.findOne({
+    const encounter = await encounters.findOne({
       where: { id: participant.encounterId },
     });
     if (!encounter || !Array.isArray(encounter.turnOrder)) return;
@@ -410,7 +430,7 @@ export class ConcentrationService {
         Math.max(0, encounter.turnOrder.length - 1),
       );
     }
-    await this.encounters.save(encounter);
+    await encounters.save(encounter);
   }
 
   async breakDueToDeath(

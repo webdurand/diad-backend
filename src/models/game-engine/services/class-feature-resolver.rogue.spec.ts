@@ -52,6 +52,15 @@ describe("ClassFeatureResolverService — Rogue", () => {
   };
   const effects = {
     addEffect: jest.fn(async () => ({ events: [] })),
+    removeEffect: jest.fn(async (participant: any, effectId: string) => {
+      participant.effectInstances = (participant.effectInstances ?? []).filter(
+        (effect: any) => effect.id !== effectId,
+      );
+      return {
+        removed: true,
+        events: [{ event_type: "effect_removed", data: { effectId } }],
+      };
+    }),
   };
   const dice = { roll: jest.fn() };
 
@@ -94,6 +103,11 @@ describe("ClassFeatureResolverService — Rogue", () => {
           damageType: "slashing",
         },
       },
+      {
+        id: "relentless-pending",
+        kind: "relentless_endurance_pending",
+        payload: { triggerEventId: "relentless-1" },
+      },
     ];
 
     const result = await makeService().resolveInvocation(rogue.id, {
@@ -109,6 +123,49 @@ describe("ClassFeatureResolverService — Rogue", () => {
     });
     expect(rogueState.current_hp).toBe(8);
     expect(rogue.effectInstances).toEqual([]);
+    expect(effects.removeEffect).toHaveBeenCalledWith(
+      rogue,
+      "relentless-pending",
+      "manual",
+    );
+  });
+
+  it("keeps Relentless Endurance pending when Uncanny Dodge still leaves 0 HP", async () => {
+    rogue.effectInstances = [
+      {
+        id: "uncanny-pending-zero",
+        kind: "uncanny_dodge_pending",
+        payload: {
+          triggerEventId: "damage-zero",
+          incomingDamage: 20,
+          hpBefore: 8,
+          hpAfter: 0,
+          damageType: "slashing",
+        },
+      },
+      {
+        id: "relentless-pending-zero",
+        kind: "relentless_endurance_pending",
+        payload: { triggerEventId: "relentless-zero" },
+      },
+    ];
+
+    const result = await makeService().resolveInvocation(rogue.id, {
+      featureSlug: "uncanny-dodge",
+      options: { triggerEventId: "damage-zero" },
+    });
+
+    expect(result.resolutionPayload).toMatchObject({
+      damageAfter: 10,
+      hpAfter: 0,
+    });
+    expect(rogue.effectInstances).toEqual([
+      expect.objectContaining({
+        id: "relentless-pending-zero",
+        kind: "relentless_endurance_pending",
+      }),
+    ]);
+    expect(effects.removeEffect).not.toHaveBeenCalled();
   });
 
   it("trades one Sneak Attack die for Trip and applies Prone on a failed save", async () => {

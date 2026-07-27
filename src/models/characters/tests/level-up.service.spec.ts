@@ -144,12 +144,7 @@ describe("LevelUpService", () => {
         },
       ]);
 
-      const result = await (service as any).resolveLevelData(
-        cls,
-        2,
-        {},
-        null,
-      );
+      const result = await (service as any).resolveLevelData(cls, 2, {}, null);
 
       expect(result.levelData.id).toBe("level-xphb");
       expect(
@@ -305,7 +300,6 @@ describe("LevelUpService", () => {
     });
 
     it("should calculate fixed HP as hitDie/2 + 1 + conMod", async () => {
-
       setupForExecute({ totalLevel: 1, xp: 300, con: 14 });
 
       const result = await service.execute("user-1", "char-1", {
@@ -331,11 +325,8 @@ describe("LevelUpService", () => {
     });
 
     it("should enforce minimum 1 HP gained", async () => {
-
-
       setupForExecute({ classSlug: "wizard", totalLevel: 1, xp: 300, con: 6 });
       repos.class.findOneBy!.mockResolvedValue(makeClass("wizard"));
-
 
       const alarm = { id: "sp-al", slug: "alarm", level: 1 };
       const mm = { id: "sp-mm", slug: "magic-missile", level: 1 };
@@ -386,20 +377,33 @@ describe("LevelUpService", () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it("should handle CON ASI with retroactive HP adjustment", async () => {
-
-
-
-      setupForExecute({ totalLevel: 1, xp: 300, con: 14 });
+    it("persists the retroactive CON HP delta so current and maximum HP converge", async () => {
+      const { state } = setupForExecute({
+        totalLevel: 9,
+        xp: XP_THRESHOLDS[9],
+        con: 15,
+      });
+      // Fighter 9 with CON 15: 12 + 8 * 8.
+      state.current_hp = 76;
 
       const result = await service.execute("user-1", "char-1", {
         classSlug: "fighter",
         hpMethod: "fixed",
-        abilityScoreIncreases: [{ abilitySlug: "con", increase: 2 }],
+        abilityScoreIncreases: [{ abilitySlug: "con", increase: 1 }],
       });
 
       expect(result.hpGained).toBe(8);
+      expect(state.current_hp).toBe(94);
 
+      const levelUpSave = mockManager.save.mock.calls.find(
+        (call: any[]) =>
+          typeof call[0] === "function" &&
+          call[0].name === "CharacterLevelUpEntity",
+      );
+      // The new-level gain uses the old +2 modifier (8). The row also stores
+      // +1 for the nine previous levels; computeSheet supplies the first-level
+      // +1 directly from the new CON modifier.
+      expect(levelUpSave?.[1].hp_gained).toBe(17);
 
       const stateSaves = mockManager.save.mock.calls.filter((call: any[]) => {
         const entity = call[0];
@@ -407,7 +411,30 @@ describe("LevelUpService", () => {
           typeof entity === "function" && entity.name === "CharacterStateEntity"
         );
       });
-      expect(stateSaves.length).toBeGreaterThanOrEqual(1);
+      expect(stateSaves).toHaveLength(2);
+    });
+
+    it("does not add retroactive HP when a CON increase does not change its modifier", async () => {
+      const { state } = setupForExecute({
+        totalLevel: 9,
+        xp: XP_THRESHOLDS[9],
+        con: 14,
+      });
+      state.current_hp = 76;
+
+      await service.execute("user-1", "char-1", {
+        classSlug: "fighter",
+        hpMethod: "fixed",
+        abilityScoreIncreases: [{ abilitySlug: "con", increase: 1 }],
+      });
+
+      expect(state.current_hp).toBe(84);
+      const levelUpSave = mockManager.save.mock.calls.find(
+        (call: any[]) =>
+          typeof call[0] === "function" &&
+          call[0].name === "CharacterLevelUpEntity",
+      );
+      expect(levelUpSave?.[1].hp_gained).toBe(8);
     });
 
     it("should add new spells during level-up", async () => {
@@ -438,13 +465,10 @@ describe("LevelUpService", () => {
         newSpells: ["magic-missile", "alarm"],
       });
 
-
       const spellSaves = mockManager.save.mock.calls.filter((call: any[]) => {
         const data = call[1];
         return data?.spell_id === "spell-mm";
       });
-
-
 
       expect(spellSaves.length).toBeGreaterThanOrEqual(1);
       expect(spellSaves[0][1].status).toBe(SpellStatusEnum.Spellbook);
@@ -525,6 +549,48 @@ describe("LevelUpService", () => {
       );
     });
 
+    it("validates the advertised Ranger Hunter feature choice", () => {
+      const feature = {
+        slug: "hunters-prey-ranger-hunter-3-phb",
+        name: "Hunter's Prey",
+      };
+
+      expect(
+        (service as any).resolveFeatureChoicesForSave(feature, {
+          [feature.slug]: { option: "hunters-prey-colossus-slayer" },
+        }),
+      ).toEqual({ option: "hunters-prey-colossus-slayer" });
+      expect(() =>
+        (service as any).resolveFeatureChoicesForSave(feature, {
+          [feature.slug]: { option: "invented-choice" },
+        }),
+      ).toThrow(BadRequestException);
+      const choices = {
+        [feature.slug]: { option: "hunters-prey-colossus-slayer" },
+      };
+      expect(
+        (service as any).shouldMaterializeRangerChoiceChild(
+          "colossus-slayer-ranger-hunter-3-phb",
+          choices,
+        ),
+      ).toBe(true);
+      expect(
+        (service as any).shouldMaterializeRangerChoiceChild(
+          "horde-breaker-ranger-hunter-3-phb",
+          choices,
+        ),
+      ).toBe(false);
+      expect(
+        (service as any).shouldMaterializeRangerChoiceChild(
+          "horde-breaker-ranger-hunter-3-phb",
+          {
+            [feature.slug]: { option: "hunters-prey-colossus-slayer" },
+            invented: { option: "hunters-prey-horde-breaker" },
+          },
+        ),
+      ).toBe(false);
+    });
+
     it("should throw NotFoundException for missing character", async () => {
       repos.character.findOne!.mockResolvedValue(null);
 
@@ -536,10 +602,6 @@ describe("LevelUpService", () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
-
-
-
-
 
   describe("Spec 005: PHB slug normalization", () => {
     const setupForPhbExecute = (opts: {
@@ -563,7 +625,6 @@ describe("LevelUpService", () => {
       repos.charClass.find!.mockResolvedValue([cc]);
       repos.charAbility.find!.mockResolvedValue(abilities);
 
-
       repos.class.findOneBy!.mockImplementation(
         async (where: { slug: string }) => {
           if (where.slug === opts.ccSlug) return classEntity;
@@ -586,7 +647,6 @@ describe("LevelUpService", () => {
 
       expect(result.totalLevel).toBe(2);
       expect(result.classLevel).toBe(2);
-
     });
 
     it('PC fighter-phb + classSlug "fighter-phb" → advances L2 (idempotent)', async () => {
@@ -676,6 +736,97 @@ describe("LevelUpService", () => {
       expect(entry).toBeDefined();
       expect(entry!.sourceQualifiedSlug).toBe("fighter");
       expect(entry!.isCurrentClass).toBe(true);
+    });
+
+    it("GET /level-up-options: exposes the source-qualified PHB subclass at its choice level", async () => {
+      const phbCc = makeCharacterClass("ranger-phb", 2);
+      const phbRanger = phbCc.class;
+      const state = makeCharacterState({ xp: 900 });
+      const hunterSubclass = {
+        id: "subclass-ranger-hunter-phb",
+        class_id: phbRanger.id,
+        slug: "ranger-hunter-phb",
+        name: "Hunter",
+      };
+      const huntersPrey = {
+        id: "feature-hunters-prey-phb",
+        class_id: phbRanger.id,
+        subclass_id: hunterSubclass.id,
+        slug: "hunters-prey-ranger-hunter-3-phb",
+        name: "Hunter's Prey",
+        description: {},
+        level: 3,
+      };
+      const choiceChildren = [
+        ["colossus-slayer", "Colossus Slayer"],
+        ["giant-killer", "Giant Killer"],
+        ["horde-breaker", "Horde Breaker"],
+      ].map(([slug, name]) => ({
+        id: `feature-${slug}-phb`,
+        class_id: phbRanger.id,
+        subclass_id: hunterSubclass.id,
+        slug: `${slug}-ranger-hunter-3-phb`,
+        name,
+        description: {},
+        level: 3,
+      }));
+
+      repos.character.findOne!.mockResolvedValue(
+        makeCharacter({
+          source: {
+            code: "PHB",
+            rules: {},
+          },
+        }),
+      );
+      repos.state.findOne!.mockResolvedValue(state);
+      repos.charClass.find!.mockResolvedValue([phbCc]);
+      repos.charAbility.find!.mockResolvedValue(makeCharacterAbilityScores());
+      repos.charSpell.find!.mockResolvedValue([]);
+      repos.class.find!.mockResolvedValue([phbRanger]);
+      repos.level.findOne!.mockResolvedValue(null);
+      repos.subclass.find!.mockResolvedValue([hunterSubclass]);
+      repos.feature.find!.mockImplementation(async (options: any) =>
+        options?.where?.subclass_id === hunterSubclass.id
+          ? [huntersPrey, ...choiceChildren]
+          : [],
+      );
+      repos.spellClass.find!.mockResolvedValue([]);
+
+      const result = await service.getOptions("user-1", "char-1");
+      const entry = result.availableClasses.find(
+        (row) => row.slug === "ranger",
+      );
+
+      expect(entry?.hasSubclass).toBe(true);
+      expect(entry?.availableSubclasses).toEqual([
+        { slug: "ranger-hunter-phb", name: "Hunter" },
+      ]);
+      expect(entry?.features).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            slug: "hunters-prey-ranger-hunter-3-phb",
+            isSubclassFeature: true,
+            choice: expect.objectContaining({
+              key: "option",
+              required: true,
+              options: expect.arrayContaining([
+                expect.objectContaining({
+                  value: "hunters-prey-colossus-slayer",
+                }),
+              ]),
+            }),
+          }),
+        ]),
+      );
+      expect(entry?.features.map((feature) => feature.slug)).not.toEqual(
+        expect.arrayContaining([
+          "colossus-slayer-ranger-hunter-3-phb",
+          "giant-killer-ranger-hunter-3-phb",
+          "horde-breaker-ranger-hunter-3-phb",
+        ]),
+      );
+      expect(entry?.spellSelection?.newSpells).toBe(1);
     });
 
     it("GET /level-up-options: Fighter PHB + Wizard in DB → Wizard entry is isCurrentClass=false, isMulticlass=true, nextLevel=1", async () => {
@@ -1123,9 +1274,6 @@ describe("LevelUpService", () => {
     });
 
     it("GET /level-up-options: Paladin PHB formula = halfLevel+mod; XPHB = level+mod", async () => {
-
-
-
       const paladinCc = makeCharacterClass("paladin", 5, {
         class: {
           ...makeClass("paladin"),
@@ -1162,7 +1310,6 @@ describe("LevelUpService", () => {
       );
       expect(paladinPhb?.spellSelection?.maxPrepared).toBe(5);
 
-
       const xphbCharacter = makeCharacter({
         source: {
           code: "XPHB",
@@ -1179,7 +1326,6 @@ describe("LevelUpService", () => {
     });
 
     it("POST /level-up: Fighter STR 12 CHA 8 attempting Paladin → 403 with BOTH missing prereqs", async () => {
-
       const fighterCc = makeCharacterClass("fighter", 1);
       const paladinEntity = makeClass("paladin", {
         multi_classing: {
@@ -1231,7 +1377,6 @@ describe("LevelUpService", () => {
     });
 
     it("Non-Wizard classes are not gated by the 2-spells rule", async () => {
-
       setupForExecute({ classSlug: "bard", totalLevel: 1, xp: 300 });
       repos.class.findOneBy!.mockResolvedValue(makeClass("bard"));
 
@@ -1243,7 +1388,6 @@ describe("LevelUpService", () => {
     });
 
     it("Wizard first level (multiclass entry at L1) does NOT require 2 spells", async () => {
-
       const fighterCc = makeCharacterClass("fighter", 1);
       const wizardEntity = makeClass("wizard");
       const state = makeCharacterState({ xp: 300, current_hp: 10 });

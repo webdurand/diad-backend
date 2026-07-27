@@ -182,6 +182,29 @@ describe("SeedCharacterService", () => {
       expect(createCall.data.abilityScores.str).toBe(15);
     });
 
+    it("não prepara magias para Ranger PHB antes de Spellcasting no nível 2", async () => {
+      classRepo.findOneBy = jest
+        .fn()
+        .mockResolvedValue({ id: "class-ranger-phb", slug: "ranger-phb" });
+      subclassRepo.findOneBy = jest.fn().mockResolvedValue({
+        id: "sub-ranger-hunter-phb",
+        slug: "ranger-hunter-phb",
+        class_id: "class-ranger-phb",
+      });
+
+      await service.seed({
+        ...validDto,
+        classSlug: "ranger",
+        subclassSlug: "ranger-hunter-phb",
+        edition: "PHB",
+      });
+
+      const createCall = charactersService.create.mock.calls[0][0];
+      expect(createCall.data.classCantrips).toBeUndefined();
+      expect(createCall.data.classPreparedSpells).toBeUndefined();
+      expect(createCall.data.classSpellbook).toBeUndefined();
+    });
+
     it("respeita abilityArray customizado", async () => {
       await service.seed({
         ...validDto,

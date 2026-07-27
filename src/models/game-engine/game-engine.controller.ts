@@ -60,6 +60,7 @@ import type { SavingThrowDto } from "./services/saving-throw.service";
 import { PermissionResolver } from "./services/permission-resolver.service";
 import { DeathSaveDto } from "./dto/death-save.dto";
 import { GenericActionDto } from "./dto/generic-action.dto";
+import { AarakocraRitualActionDto } from "./dto/aarakocra-ritual.dto";
 import { GenericActionsService } from "./services/generic-actions.service";
 import { ClassFeatureExecutorService } from "./services/class-feature-executor.service";
 import { FightingStyleReactionsService } from "./services/fighting-style-reactions.service";
@@ -124,7 +125,11 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
-import { failure, GameErrorCode } from "./interfaces/result.type";
+import {
+  failure,
+  GameErrorCode,
+  type GameResult,
+} from "./interfaces/result.type";
 
 import { toEnrichedEncounterResponse } from "./dto/encounter-response.dto";
 import {
@@ -236,6 +241,23 @@ export class GameEngineController {
       );
     } catch {
 
+    }
+  }
+
+  private emitRelentlessEnduranceOpportunityInvalidate(
+    encounterId: string,
+    result: GameResult<unknown>,
+  ): void {
+    if (
+      result.ok &&
+      result.events.some(
+        (event) => event.event_type === "relentless_endurance_opportunity",
+      )
+    ) {
+      this.emitEncounterInvalidate(
+        encounterId,
+        "relentless-endurance-opportunity",
+      );
     }
   }
 
@@ -752,8 +774,11 @@ export class GameEngineController {
   }
 
   @Delete("encounters/:id/participants/:participantId")
-  async removeParticipant(@Param("participantId") participantId: string) {
-    return this.encounterService.removeParticipant(participantId);
+  async removeParticipant(
+    @Param("id") encounterId: string,
+    @Param("participantId") participantId: string,
+  ) {
+    return this.encounterService.removeParticipant(encounterId, participantId);
   }
 
   @Post("encounters/:id/roll-initiative")
@@ -1058,6 +1083,29 @@ export class GameEngineController {
     });
   }
 
+  @Post("encounters/:id/volley")
+  async resolveVolley(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body()
+    body: {
+      attackerParticipantId: string;
+      actionSlug: string;
+      originCell: { x: number; y: number };
+      targetParticipantIds: string[];
+    },
+  ) {
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
+      body.attackerParticipantId,
+      getUserId(req),
+      id,
+    );
+    return this.combatService.resolveVolley(id, {
+      ...body,
+      ownerUserId,
+    });
+  }
+
   @Post("encounters/:id/attack")
   async resolveAttack(
     @Req() req: AuthRequest,
@@ -1117,7 +1165,7 @@ export class GameEngineController {
 
     const isMultiattack = /multiataque|multiattack/i.test(actionName);
     if (isMultiattack) {
-      return this.combatService.resolveMultiattack(id, {
+      const result = await this.combatService.resolveMultiattack(id, {
         attackerParticipantId: body.attackerParticipantId,
         targetParticipantId: body.targetParticipantId ?? "",
         targetParticipantIds: body.targetParticipantIds,
@@ -1128,6 +1176,8 @@ export class GameEngineController {
         forceDisadvantage: body.forceDisadvantage,
         ownerUserId,
       });
+      this.emitRelentlessEnduranceOpportunityInvalidate(id, result);
+      return result;
     }
     if (!body.targetParticipantId) {
       return {
@@ -1136,7 +1186,7 @@ export class GameEngineController {
         code: "INVALID_PAYLOAD",
       };
     }
-    return this.combatService.resolveAttack(id, {
+    const result = await this.combatService.resolveAttack(id, {
       attackerParticipantId: body.attackerParticipantId,
       targetParticipantId: body.targetParticipantId,
       actionName,
@@ -1146,6 +1196,8 @@ export class GameEngineController {
       forceDisadvantage: body.forceDisadvantage,
       ownerUserId,
     });
+    this.emitRelentlessEnduranceOpportunityInvalidate(id, result);
+    return result;
   }
 
 
@@ -1166,7 +1218,12 @@ export class GameEngineController {
       getUserId(req),
       id,
     );
-    return this.combatService.applyDamage(id, { ...body, ownerUserId });
+    const result = await this.combatService.applyDamage(id, {
+      ...body,
+      ownerUserId,
+    });
+    this.emitRelentlessEnduranceOpportunityInvalidate(id, result);
+    return result;
   }
 
   @Post("encounters/:id/heal")
@@ -1428,18 +1485,20 @@ export class GameEngineController {
     },
   ) {
     const authUserId = getUserId(req);
-    await this.permissionResolver.resolveMutationOwner(
+    const ownerUserId = await this.permissionResolver.resolveMutationOwner(
       body.participantId,
       authUserId,
       id,
     );
-    return this.classFeatureExecutor.execute(
+    const result = await this.classFeatureExecutor.execute(
       id,
       body.participantId,
       body.featureSlug,
       body,
-      authUserId,
+      ownerUserId,
     );
+    this.emitRelentlessEnduranceOpportunityInvalidate(id, result);
+    return result;
   }
 
   @Post("encounters/:id/death-save/:participantId")
@@ -1938,13 +1997,21 @@ export class GameEngineController {
       sourceSpellSlug: "hunters-mark" | "hex";
     },
   ) {
-    return this.markTransferService.transferMark({
+    const result = await this.markTransferService.transferMark({
       encounterId: id,
       casterParticipantId: body.casterParticipantId,
       newTargetParticipantId: body.newTargetParticipantId,
       sourceSpellSlug: body.sourceSpellSlug,
       ownerUserId: getUserId(req),
     });
+    if (result.ok && result.events?.length) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+      this.emitEncounterInvalidate(id, "mark-transfer");
+    }
+    return result;
   }
 
 
@@ -2034,9 +2101,15 @@ export class GameEngineController {
 
   @Post("encounters/:id/aarakocra-air-elemental-ritual")
   async aarakocraAirElementalRitual(
+    @Req() req: AuthRequest,
     @Param("id") id: string,
-    @Body() body: { participantId: string },
+    @Body() body: AarakocraRitualActionDto,
   ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
     const result = await this.aarakocraRitualService.perform(
       id,
       body.participantId,
@@ -2047,6 +2120,38 @@ export class GameEngineController {
         await this.eventService.emit(encounter.sessionId, id, result.events);
       }
       this.emitEncounterInvalidate(id, "aarakocra-air-elemental-ritual");
+    }
+    return result;
+  }
+
+  @Post(
+    "encounters/:id/aarakocra-air-elemental-ritual/:summonId/dismiss",
+  )
+  async dismissAarakocraAirElemental(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Param("summonId") summonId: string,
+    @Body() body: AarakocraRitualActionDto,
+  ) {
+    await this.permissionResolver.resolveMutationOwner(
+      body.participantId,
+      getUserId(req),
+      id,
+    );
+    const result = await this.summoningService.dismissAarakocraAirElemental(
+      id,
+      summonId,
+      body.participantId,
+    );
+    if (result.ok && result.events.length > 0) {
+      const encounter = await this.encounterRepo.findOne({ where: { id } });
+      if (encounter?.sessionId) {
+        await this.eventService.emit(encounter.sessionId, id, result.events);
+      }
+      this.emitEncounterInvalidate(
+        id,
+        "aarakocra-air-elemental-ritual-dismiss",
+      );
     }
     return result;
   }

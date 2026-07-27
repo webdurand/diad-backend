@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateIf,
   ValidateNested,
@@ -24,6 +25,7 @@ export type GenericActionKind =
   | "ready"
   | "search"
   | "use-object"
+  | "fast-hands-sleight-of-hand"
   | "escape-web"
   | "freedom-escape"
   | "flee-fear"
@@ -87,6 +89,7 @@ export class GenericActionDto {
     ready: "ready",
     search: "search",
     "use-object": "use-object",
+    "fast-hands-sleight-of-hand": "fast-hands-sleight-of-hand",
     "escape-web": "escape-web",
     "freedom-escape": "freedom-escape",
     "flee-fear": "flee-fear",
@@ -138,6 +141,24 @@ export class GenericActionDto {
   @ValidateNested()
   @Type(() => ObjectRefDto)
   objectRef?: ObjectRefDto;
+
+  @ValidateIf(
+    (o: GenericActionDto) => o.kind === "fast-hands-sleight-of-hand",
+  )
+  @IsIn(["pick-lock", "disarm-trap", "pick-pocket"])
+  fastHandsTask?: "pick-lock" | "disarm-trap" | "pick-pocket";
+
+  @ValidateIf(
+    (o: GenericActionDto) => o.kind === "fast-hands-sleight-of-hand",
+  )
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  targetDc?: number;
+
+  @IsOptional()
+  @IsString()
+  targetLabel?: string;
 
 
   @IsOptional()

@@ -10,10 +10,15 @@ import { randomUUID } from "crypto";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { MonsterEntity } from "src/entities/monster.entity";
 import { EncounterEntity } from "src/entities/encounter.entity";
-import { SummonSpawnDto } from "../interfaces/summoning.interfaces";
+import {
+  AARAKOCRA_RITUAL_SIZE,
+  AARAKOCRA_RITUAL_SUMMON_SOURCE,
+  SummonSpawnDto,
+} from "../interfaces/summoning.interfaces";
 import { getAbilityModifier } from "src/shared/srd-utils";
 import {
   failure,
+  GameErrorCode,
   success,
   type GameEventData,
   type GameResult,
@@ -31,6 +36,22 @@ type SummonDismissReason =
 
 interface SummonDismissResult {
   removed: boolean;
+  events: GameEventData[];
+}
+
+export interface AarakocraRitualDismissResult {
+  actorParticipantId: string;
+  summonParticipantId: string;
+  ritualParticipantIds: string[];
+  actionConsumed: false;
+  bonusActionConsumed: true;
+  dismissed: true;
+}
+
+export interface SummonDurationTickResult {
+  tracked: boolean;
+  removed: boolean;
+  remaining: number | null;
   events: GameEventData[];
 }
 
@@ -113,6 +134,10 @@ export class SummoningService {
     summon.reactionsUsed = 0;
     summon.conditions = [];
     summon.conditionInstances = [];
+    const durationRoundsTotal =
+      dto.durationRoundsTotal == null
+        ? null
+        : Math.max(0, Math.trunc(dto.durationRoundsTotal));
     summon.appliedEffects = [
       {
         kind: "summon",
@@ -124,6 +149,13 @@ export class SummoningService {
         metadata: {
           source: dto.source,
           ...(dto.metadata ?? {}),
+          ...(durationRoundsTotal != null
+            ? {
+                durationRoundsTotal,
+                durationRoundsRemaining: durationRoundsTotal,
+                durationCycleStarted: false,
+              }
+            : {}),
           ...(dto.statBlock ? { statBlock: dto.statBlock } : {}),
         },
       },
@@ -238,6 +270,8 @@ export class SummoningService {
   async dismissSummon(
     summonParticipantId: string,
     reason: SummonDismissReason,
+    actorParticipantId?: string,
+    eventData?: Record<string, unknown>,
   ): Promise<SummonDismissResult> {
     const summon = await this.participantRepo.findOne({
       where: { id: summonParticipantId },
@@ -256,15 +290,272 @@ export class SummoningService {
         {
           event_type: "summon_dismissed",
           target_participant_id: summon.id,
-          actor_participant_id: summon.linkedCasterParticipantId,
+          actor_participant_id:
+            actorParticipantId ?? summon.linkedCasterParticipantId,
           data: {
             reason,
             summonId: summon.id,
             displayName: summon.displayName,
+            ...(eventData ?? {}),
           },
         },
       ],
     };
+  }
+
+  async tickSummonDurationAfterTurn(
+    summonParticipantId: string,
+  ): Promise<SummonDurationTickResult> {
+    const summon = await this.participantRepo.findOne({
+      where: { id: summonParticipantId },
+    });
+    if (!summon?.linkedCasterParticipantId) {
+      return {
+        tracked: false,
+        removed: false,
+        remaining: null,
+        events: [],
+      };
+    }
+    const metadata = getSummonMetadata(summon);
+    if (metadata?.source !== AARAKOCRA_RITUAL_SUMMON_SOURCE) {
+      return {
+        tracked: false,
+        removed: false,
+        remaining: null,
+        events: [],
+      };
+    }
+    const total = this.nonNegativeInteger(metadata?.durationRoundsTotal);
+    if (total == null) {
+      return {
+        tracked: false,
+        removed: false,
+        remaining: null,
+        events: [],
+      };
+    }
+    const remaining =
+      this.nonNegativeInteger(metadata?.durationRoundsRemaining) ?? total;
+    if (remaining <= 0) {
+      const dismissed = await this.dismissSummon(
+        summon.id,
+        "duration-end",
+        undefined,
+        {
+          durationRoundsTotal: total,
+          durationRoundsRemaining: 0,
+        },
+      );
+      return {
+        tracked: true,
+        removed: dismissed.removed,
+        remaining: 0,
+        events: dismissed.events,
+      };
+    }
+    const nextRemaining = Math.max(0, remaining - 1);
+    if (nextRemaining === 0) {
+      const dismissed = await this.dismissSummon(
+        summon.id,
+        "duration-end",
+        undefined,
+        {
+          durationRoundsTotal: total,
+          durationRoundsRemaining: 0,
+        },
+      );
+      return {
+        tracked: true,
+        removed: dismissed.removed,
+        remaining: 0,
+        events: dismissed.events,
+      };
+    }
+    this.patchSummonMetadata(summon, {
+      durationRoundsTotal: total,
+      durationRoundsRemaining: nextRemaining,
+      durationCycleStarted: true,
+    });
+    await this.participantRepo.save(summon);
+    return {
+      tracked: true,
+      removed: false,
+      remaining: nextRemaining,
+      events: [],
+    };
+  }
+
+  async findAarakocraRitualSummonForMember(
+    encounterId: string,
+    participantId: string,
+  ): Promise<EncounterParticipantEntity | null> {
+    const participants = await this.participantRepo.find({
+      where: { encounterId },
+    });
+    return (
+      participants.find((candidate) => {
+        const group = this.getAarakocraRitualGroup(candidate);
+        return (
+          group != null &&
+          group.participantIds.includes(participantId) &&
+          !candidate.isDefeated &&
+          (candidate.currentHp ?? 1) > 0
+        );
+      }) ?? null
+    );
+  }
+
+  async dismissAarakocraAirElemental(
+    encounterId: string,
+    summonParticipantId: string,
+    actorParticipantId: string,
+  ): Promise<GameResult<AarakocraRitualDismissResult>> {
+    const result = await this.encounterRepo.manager.transaction(
+      async (manager) => {
+        const encounterRepo = manager.getRepository(EncounterEntity);
+        const participantRepo = manager.getRepository(
+          EncounterParticipantEntity,
+        );
+        const encounter = await encounterRepo.findOne({
+          where: { id: encounterId },
+          lock: { mode: "pessimistic_write" },
+        });
+        if (!encounter || encounter.status !== "active") {
+          return failure(
+            "Encontro não está ativo.",
+            GameErrorCode.ENCOUNTER_NOT_ACTIVE,
+          );
+        }
+
+        const summon = await participantRepo.findOne({
+          where: { id: summonParticipantId, encounterId },
+          lock: { mode: "pessimistic_write" },
+        });
+        const group = this.getAarakocraRitualGroup(summon);
+        if (!summon || !group) {
+          return failure(
+            "O Air Elemental ritual não está disponível neste encontro.",
+            GameErrorCode.INVALID_ACTION,
+          );
+        }
+        const actor = await participantRepo.findOne({
+          where: { id: actorParticipantId, encounterId },
+          lock: { mode: "pessimistic_write" },
+        });
+        if (!actor || !group.participantIds.includes(actor.id)) {
+          return failure(
+            "Somente um dos cinco ritualistas pode dispensar o Air Elemental.",
+            GameErrorCode.FORBIDDEN,
+          );
+        }
+        if (
+          actor.isDefeated ||
+          actor.dyingState === "dead" ||
+          (actor.currentHp ?? 1) <= 0
+        ) {
+          return failure(
+            "Um ritualista morto ou derrotado não pode dispensar a invocação.",
+            GameErrorCode.INVALID_ACTION,
+          );
+        }
+        if (encounter.turnOrder[encounter.currentTurnIndex] !== actor.id) {
+          return failure(
+            "Não é o turno deste ritualista.",
+            GameErrorCode.NOT_YOUR_TURN,
+          );
+        }
+        if (actor.bonusActionUsed) {
+          return failure(
+            "A ação bônus já foi utilizada neste turno.",
+            GameErrorCode.NO_BONUS_ACTION_AVAILABLE,
+          );
+        }
+        if (this.hasActionBlockingCondition(actor)) {
+          return failure(
+            "Uma condição impede o ritualista de usar ações.",
+            GameErrorCode.CONDITION_PREVENTS_ACTION,
+          );
+        }
+
+        const summonId = summon.id;
+        const summonName = summon.displayName;
+        actor.bonusActionUsed = true;
+        this.removeParticipantFromEncounterTurnOrder(encounter, summonId);
+        await participantRepo.save(actor);
+        await encounterRepo.save(encounter);
+        await participantRepo.remove(summon);
+
+        const events: GameEventData[] = [
+          {
+            event_type: "summon_dismissed",
+            target_participant_id: summonId,
+            actor_participant_id: actor.id,
+            data: {
+              reason: "player-dismiss",
+              summonId,
+              displayName: summonName,
+              source: AARAKOCRA_RITUAL_SUMMON_SOURCE,
+              ritualParticipantIds: group.participantIds,
+              ritualParticipantNames: group.participantNames,
+              actionConsumed: false,
+              bonusActionConsumed: true,
+            },
+          },
+        ];
+        return success<AarakocraRitualDismissResult>(
+          {
+            actorParticipantId: actor.id,
+            summonParticipantId: summonId,
+            ritualParticipantIds: group.participantIds,
+            actionConsumed: false,
+            bonusActionConsumed: true,
+            dismissed: true,
+          },
+          events,
+        );
+      },
+    );
+    if (result.ok) {
+      this.logger.log(
+        `[summoning] dismissed ${summonParticipantId} (reason=player-dismiss)`,
+      );
+    }
+    return result;
+  }
+
+  async reconcileAarakocraRitualSummons(
+    encounterId: string,
+  ): Promise<GameEventData[]> {
+    const participants = await this.participantRepo.find({
+      where: { encounterId },
+    });
+    const byId = new Map(
+      participants.map((participant) => [participant.id, participant]),
+    );
+    const events: GameEventData[] = [];
+    for (const summon of participants) {
+      const group = this.getAarakocraRitualGroup(summon);
+      if (!group) continue;
+      const livingCount = group.participantIds.reduce((count, id) => {
+        const ritualist = byId.get(id);
+        return this.isRitualistAlive(ritualist) ? count + 1 : count;
+      }, 0);
+      if (livingCount > 0) continue;
+      const dismissed = await this.dismissSummon(
+        summon.id,
+        "caster-death",
+        summon.linkedCasterParticipantId ?? undefined,
+        {
+          source: AARAKOCRA_RITUAL_SUMMON_SOURCE,
+          ritualParticipantIds: group.participantIds,
+          ritualParticipantNames: group.participantNames,
+          livingRitualistCount: 0,
+        },
+      );
+      events.push(...dismissed.events);
+    }
+    return events;
   }
 
 
@@ -656,6 +947,86 @@ export class SummoningService {
     return caster.controlledBy ?? "pc";
   }
 
+  private getAarakocraRitualGroup(
+    participant: EncounterParticipantEntity | null | undefined,
+  ): { participantIds: string[]; participantNames: string[] } | null {
+    const metadata = getSummonMetadata(participant);
+    if (metadata?.source !== AARAKOCRA_RITUAL_SUMMON_SOURCE) return null;
+    if (!Array.isArray(metadata.ritualParticipantIds)) return null;
+    const participantIds = metadata.ritualParticipantIds.filter(
+      (id): id is string => typeof id === "string" && id.length > 0,
+    );
+    if (
+      participantIds.length !== AARAKOCRA_RITUAL_SIZE ||
+      new Set(participantIds).size !== AARAKOCRA_RITUAL_SIZE
+    ) {
+      return null;
+    }
+    const persistedNames = Array.isArray(metadata.ritualParticipantNames)
+      ? metadata.ritualParticipantNames.filter(
+          (name): name is string => typeof name === "string" && name.length > 0,
+        )
+      : [];
+    return {
+      participantIds,
+      participantNames: participantIds.map(
+        (id, index) => persistedNames[index] ?? id,
+      ),
+    };
+  }
+
+  private isRitualistAlive(
+    participant: EncounterParticipantEntity | null | undefined,
+  ): boolean {
+    if (!participant || participant.dyingState === "dead") return false;
+    if (participant.type === "pc") {
+      return true;
+    }
+    return (
+      participant.isDefeated !== true && (participant.currentHp ?? 1) > 0
+    );
+  }
+
+  private patchSummonMetadata(
+    summon: EncounterParticipantEntity,
+    patch: Record<string, unknown>,
+  ): void {
+    let patched = false;
+    summon.appliedEffects = (summon.appliedEffects ?? []).map((effect) => {
+      if (patched || effect.kind !== "summon") return effect;
+      patched = true;
+      return {
+        ...effect,
+        metadata: {
+          ...(effect.metadata ?? {}),
+          ...patch,
+        },
+      };
+    });
+  }
+
+  private nonNegativeInteger(value: unknown): number | null {
+    return typeof value === "number" && Number.isFinite(value)
+      ? Math.max(0, Math.trunc(value))
+      : null;
+  }
+
+  private hasActionBlockingCondition(
+    participant: EncounterParticipantEntity,
+  ): boolean {
+    return (participant.conditions ?? []).some((condition) =>
+      [
+        "incapacitated",
+        "stunned",
+        "paralyzed",
+        "petrified",
+        "unconscious",
+        "haste_lethargy",
+        "hypnotized",
+      ].includes(condition),
+    );
+  }
+
   private async addSummonToTurnOrder(
     encounterId: string,
     caster: EncounterParticipantEntity,
@@ -696,10 +1067,23 @@ export class SummoningService {
     });
     if (!encounter || !Array.isArray(encounter.turnOrder)) return;
 
-    const removeIndex = encounter.turnOrder.indexOf(summon.id);
-    if (removeIndex < 0) return;
+    if (!this.removeParticipantFromEncounterTurnOrder(encounter, summon.id)) {
+      return;
+    }
+    await this.encounterRepo.save(encounter);
+  }
 
-    encounter.turnOrder = encounter.turnOrder.filter((id) => id !== summon.id);
+  private removeParticipantFromEncounterTurnOrder(
+    encounter: EncounterEntity,
+    participantId: string,
+  ): boolean {
+    if (!Array.isArray(encounter.turnOrder)) return false;
+    const removeIndex = encounter.turnOrder.indexOf(participantId);
+    if (removeIndex < 0) return false;
+
+    encounter.turnOrder = encounter.turnOrder.filter(
+      (id) => id !== participantId,
+    );
     if (removeIndex < encounter.currentTurnIndex) {
       encounter.currentTurnIndex = Math.max(0, encounter.currentTurnIndex - 1);
     } else if (removeIndex === encounter.currentTurnIndex) {
@@ -708,7 +1092,7 @@ export class SummoningService {
         Math.max(0, encounter.turnOrder.length - 1),
       );
     }
-    await this.encounterRepo.save(encounter);
+    return true;
   }
 
   private async trackConcentrationSummon(

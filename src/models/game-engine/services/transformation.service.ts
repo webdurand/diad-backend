@@ -18,7 +18,6 @@ import {
 } from "../interfaces/transformation.interfaces";
 import type { GameEventData } from "../interfaces/result.type";
 
-
 @Injectable()
 export class TransformationService {
   private readonly logger = new Logger(TransformationService.name);
@@ -41,7 +40,6 @@ export class TransformationService {
   ): TransformationState | null {
     return participant.transformationState ?? null;
   }
-
 
   async enterForm(
     participantId: string,
@@ -91,10 +89,8 @@ export class TransformationService {
       );
     }
 
-
     const original: TransformationOriginalSnapshot =
       await this.snapshotOriginal(participant);
-
 
     const form: TransformationForm = this.buildFormFromMonster(
       monster,
@@ -110,17 +106,19 @@ export class TransformationService {
     }
     const isXphbWildShape = dto.rulesMode === "xphb-wild-shape";
     const grantedTempHp = isXphbWildShape
-      ? Math.max(
-          1,
-          (dto.druidLevel ?? 2) * (dto.isMoonDruid ? 3 : 1),
-        )
+      ? Math.max(1, (dto.druidLevel ?? 2) * (dto.isMoonDruid ? 3 : 1))
       : 0;
     if (isXphbWildShape) {
+      const effectiveTempHp = Math.max(
+        original.tempHp ?? 0,
+        participant.tempHp ?? 0,
+        grantedTempHp,
+      );
       const originalMaxHp = dto.originalMaxHp ?? original.currentHp;
       original.maxHp = originalMaxHp;
       form.maxHp = originalMaxHp;
       form.currentHp = original.currentHp;
-      form.tempHp = grantedTempHp;
+      form.tempHp = effectiveTempHp;
       if (dto.isMoonDruid) {
         form.ac = Math.max(form.ac, 13 + (dto.wisdomModifier ?? 0));
       }
@@ -148,13 +146,9 @@ export class TransformationService {
 
     participant.transformationState = state;
 
-
-
-
     const newDisplay = dto.formDisplayName ?? form.formName;
     participant.displayName = newDisplay;
     form.displayName = newDisplay;
-
 
     if (dto.source === "wild-shape") {
       participant.bonusActionUsed = true;
@@ -172,7 +166,11 @@ export class TransformationService {
           await this.stateRepo.save(characterState);
         }
       }
-      participant.tempHp = Math.max(participant.tempHp ?? 0, grantedTempHp);
+      participant.tempHp = Math.max(
+        original.tempHp ?? 0,
+        participant.tempHp ?? 0,
+        grantedTempHp,
+      );
     }
 
     await this.participantRepo.save(participant);
@@ -181,7 +179,6 @@ export class TransformationService {
     );
     return participant;
   }
-
 
   async revertForm(
     participantId: string,
@@ -207,18 +204,7 @@ export class TransformationService {
           (state.original.walkSpeed - state.form.speed.walk),
       );
     }
-    if (state.rulesMode === "xphb-wild-shape" && state.grantedTempHp) {
-      if (participant.characterId) {
-        const characterState = await this.stateRepo.findOne({
-          where: { character_id: participant.characterId },
-        });
-        if (characterState) {
-          characterState.temp_hp = 0;
-          await this.stateRepo.save(characterState);
-        }
-      }
-      participant.tempHp = 0;
-    }
+    await this.removeWildShapeTempHp(participant, state);
 
     await this.participantRepo.save(participant);
     this.logger.log(
@@ -226,7 +212,6 @@ export class TransformationService {
     );
     return participant;
   }
-
 
   async applyDamageToForm(
     participantId: string,
@@ -260,7 +245,6 @@ export class TransformationService {
     const reverted = state.form.currentHp <= 0 && state.revertTriggers.hpZero;
 
     if (reverted) {
-
       participant.displayName = state.original.displayName;
       participant.transformationState = null;
       await this.participantRepo.save(participant);
@@ -287,7 +271,6 @@ export class TransformationService {
     };
   }
 
-
   async tickDurationOnTurnStart(
     participantId: string,
   ): Promise<{ events: GameEventData[] }> {
@@ -305,10 +288,7 @@ export class TransformationService {
       return { events };
     }
 
-
     if (state.source === "true-polymorph-spell") {
-
-
       state.sourceCasterParticipantId = null;
       state.revertTriggers = {
         ...state.revertTriggers,
@@ -332,10 +312,10 @@ export class TransformationService {
       return { events };
     }
 
-
     const formName = state.form.formName;
     const originalDisplay = state.original.displayName;
     participant.displayName = originalDisplay;
+    await this.removeWildShapeTempHp(participant, state);
     participant.transformationState = null;
     await this.participantRepo.save(participant);
     events.push({
@@ -354,7 +334,6 @@ export class TransformationService {
     return { events };
   }
 
-
   getEffectiveSpeed(
     participant: EncounterParticipantEntity,
   ): TransformationForm["speed"] | null {
@@ -370,8 +349,6 @@ export class TransformationService {
   ): TransformationForm["actions"] | null {
     return participant.transformationState?.form.actions ?? null;
   }
-
-
 
   private async snapshotOriginal(
     participant: EncounterParticipantEntity,
@@ -469,5 +446,43 @@ export class TransformationService {
       if (typeof v === "number") return v;
     }
     return 10;
+  }
+
+  private async removeWildShapeTempHp(
+    participant: EncounterParticipantEntity,
+    state: TransformationState,
+  ): Promise<void> {
+    const grantedTempHp = Math.max(0, state.grantedTempHp ?? 0);
+    if (state.rulesMode !== "xphb-wild-shape" || grantedTempHp === 0) {
+      return;
+    }
+
+    const originalTempHp = Math.max(0, state.original.tempHp ?? 0);
+    const wildShapePoolReplacedOriginal = grantedTempHp > originalTempHp;
+    const tempHpAfterRevert = (currentTempHp: number): number => {
+      const normalizedCurrent = Math.max(0, currentTempHp);
+      if (wildShapePoolReplacedOriginal && normalizedCurrent <= grantedTempHp) {
+        return 0;
+      }
+      return normalizedCurrent;
+    };
+
+    if (participant.characterId) {
+      const characterState = await this.stateRepo.findOne({
+        where: { character_id: participant.characterId },
+      });
+      if (characterState) {
+        const currentTempHp = Math.max(0, characterState.temp_hp ?? 0);
+        const nextTempHp = tempHpAfterRevert(currentTempHp);
+        if (nextTempHp !== currentTempHp) {
+          characterState.temp_hp = nextTempHp;
+          await this.stateRepo.save(characterState);
+        }
+        participant.tempHp = nextTempHp;
+        return;
+      }
+    }
+
+    participant.tempHp = tempHpAfterRevert(participant.tempHp ?? 0);
   }
 }

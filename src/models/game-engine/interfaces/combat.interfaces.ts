@@ -170,9 +170,14 @@ export interface TurnActionBlock {
     | "relocate-area"
     | "familiar-action"
     | "steed-gift"
+    | "use-object"
+    | "fast-hands-sleight-of-hand"
+    | "mark-transfer"
     | "condition-escape"
-    | "wake-hypnotized";
+    | "wake-hypnotized"
+    | "summon-dismiss";
   attackBonus?: number;
+  ignoresInvisibleTargetDisadvantage?: boolean;
   damage?: { dice: string; type: string; bonus?: number };
   secondarySaveDamage?: {
     save: {
@@ -215,6 +220,8 @@ export interface TurnActionBlock {
   featureSlug?: string;
 
   weaponSlug?: string;
+  weaponActionSlug?: string;
+  weaponCategory?: "melee" | "ranged";
   itemSlug?: string;
 
   masterySlug?: string;
@@ -344,6 +351,12 @@ export type PlannedActionStep =
         itemId?: string;
       };
     }
+  | {
+      kind: "fast-hands-sleight-of-hand";
+      fastHandsTask: "pick-lock" | "disarm-trap" | "pick-pocket";
+      targetDc: number;
+      targetLabel?: string;
+    }
   | { kind: "escape-web" }
   | { kind: "freedom-escape" }
   | { kind: "flee-fear" }
@@ -404,7 +417,8 @@ export type ConditionSlug =
   | "haste_lethargy"
   | "hypnotized"
   | "banished"
-  | "truth_bound";
+  | "truth_bound"
+  | "ash_puff";
 
 export type SaveAbility = "str" | "dex" | "con" | "int" | "wis" | "cha";
 
@@ -506,6 +520,7 @@ export type EffectInstanceKind =
   | "hex_mark"
   | "hunter_mark"
   | "foe_slayer_used_this_turn"
+  | "colossus_slayer_used_this_turn"
   | "bardic_inspiration"
   | "bane"
   | "bless"
@@ -525,6 +540,7 @@ export type EffectInstanceKind =
   | "open_hand_technique_pending"
   | "deflect_attacks_pending"
   | "uncanny_dodge_pending"
+  | "relentless_endurance_pending"
   | "cunning_strike_pending"
   | "divine_smite_pending"
   | "aura_half_cover"
@@ -540,6 +556,7 @@ export type EffectInstanceKind =
   | "celestial_revelation_used_turn"
   | "abjure_foes_turn_choice"
   | "disintegrated"
+  | "ash_puff_triggered"
   | "tile_effect_entry_marker"
   | "tile_effect_turn_trigger_marker";
 
@@ -550,6 +567,7 @@ export type EffectExpirationKind =
   | "until_caster_turn"
   | "until_target_turn"
   | "caster_turn_ends"
+  | "participant_turn_ends"
   | "until_consumed"
   | "end_of_encounter";
 
@@ -603,6 +621,10 @@ export interface EffectInstancePayload {
 
   usedThisTurn?: boolean;
 
+  transferReadyTurnKey?: string;
+  transferReadyRound?: number;
+  transferReadyTurnIndex?: number;
+
   consumeOn?: "targeted_by_attack";
 
   ritualGroupId?: string;
@@ -615,6 +637,8 @@ export interface EffectInstancePayload {
   size?: string;
   usesRemaining?: number;
   usesMax?: number;
+  timeoutSeconds?: number;
+  decisionDeadlineAt?: string;
   primalStrikeAvailable?: boolean;
   lunarRadianceAvailable?: boolean;
   lunarRadianceDice?: string;
@@ -646,6 +670,7 @@ export interface EffectInstance {
     kind: EffectExpirationKind;
     value?: number;
   };
+  expiresAtTurnEndParticipantId?: string | null;
 
   requiresConcentration: boolean;
   appliedAt: string;

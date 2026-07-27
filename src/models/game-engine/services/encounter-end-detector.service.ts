@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { EncounterEntity } from "src/entities/encounter.entity";
@@ -13,6 +13,8 @@ import {
   type CRBand,
 } from "./loot-roll.service";
 import type { PartyTier } from "./magic-item-selector.service";
+import { SummoningService } from "./summoning.service";
+import { EventService } from "./event.service";
 
 const ENCOUNTER_TO_LOOT_DIFFICULTY: Record<string, EncounterDifficulty> = {
   trivial: "trivial",
@@ -47,6 +49,10 @@ export class EncounterEndDetectorService {
     private readonly characterRepo: Repository<CharacterEntity>,
     private readonly encounterService: EncounterService,
     private readonly lootRollService: LootRollService,
+    @Optional()
+    private readonly summoningService?: SummoningService,
+    @Optional()
+    private readonly eventService?: EventService,
   ) {}
 
 
@@ -56,6 +62,24 @@ export class EncounterEndDetectorService {
         where: { id: encounterId },
       });
       if (!encounter || encounter.status !== "active") return null;
+
+      if (this.summoningService) {
+        const lifecycleEvents =
+          await this.summoningService.reconcileAarakocraRitualSummons(
+            encounterId,
+          );
+        if (
+          lifecycleEvents.length > 0 &&
+          encounter.sessionId &&
+          this.eventService
+        ) {
+          await this.eventService.emit(
+            encounter.sessionId,
+            encounterId,
+            lifecycleEvents,
+          );
+        }
+      }
 
       const soloInfo = await this.isSoloCampaign(encounter.sessionId);
       if (!soloInfo.isSolo) return null;
@@ -142,8 +166,7 @@ export class EncounterEndDetectorService {
 
     const defeatedHostiles = participants.filter(
       (p) =>
-        p.controlledBy === "ai" &&
-        p.faction === "enemy" &&
+        this.isDefeatableHostile(p) &&
         (p.isDefeated || (p.currentHp ?? 0) <= 0),
     );
 
@@ -273,18 +296,16 @@ export class EncounterEndDetectorService {
     });
     if (participants.length === 0) return null;
 
-    const dmTokens = participants.filter(
-      (p) => p.controlledBy === "ai" && p.faction === "enemy",
-    );
+    const hostiles = participants.filter((p) => this.isDefeatableHostile(p));
     const pcs = participants.filter((p) => p.type === "pc");
 
 
-    if (dmTokens.length === 0 || pcs.length === 0) return null;
+    if (hostiles.length === 0 || pcs.length === 0) return null;
 
-    const allDmTokensDown = dmTokens.every(
+    const allHostilesDown = hostiles.every(
       (m) => m.isDefeated || (m.currentHp ?? 0) <= 0,
     );
-    if (allDmTokensDown) return "victory";
+    if (allHostilesDown) return "victory";
 
 
 
@@ -292,6 +313,12 @@ export class EncounterEndDetectorService {
     if (allPcsDead) return "defeat";
 
     return null;
+  }
+
+  private isDefeatableHostile(
+    participant: EncounterParticipantEntity,
+  ): boolean {
+    return participant.faction === "enemy" && participant.type !== "pc";
   }
 
 

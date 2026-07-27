@@ -612,16 +612,109 @@ export class EncounterService {
     return saved;
   }
 
-  async removeParticipant(participantId: string): Promise<void> {
-    const participant = await this.participantRepo.findOne({
-      where: { id: participantId },
+  async removeParticipant(
+    encounterId: string,
+    participantId: string,
+  ): Promise<void> {
+    await this.encounterRepo.manager.transaction(async (manager) => {
+      const encounterRepo = manager.getRepository(EncounterEntity);
+      const participantRepo = manager.getRepository(EncounterParticipantEntity);
+      const encounter = await encounterRepo.findOne({
+        where: { id: encounterId },
+      });
+      if (!encounter) {
+        throw new NotFoundException("Encontro nao encontrado.");
+      }
+
+      const participant = await participantRepo.findOne({
+        where: { id: participantId },
+      });
+      if (participant && participant.encounterId !== encounterId) {
+        throw new NotFoundException("Participante nao encontrado no encontro.");
+      }
+
+      const participants = await participantRepo.find({
+        where: { encounterId },
+      });
+      this.reconcileTurnAfterParticipantRemoval(
+        encounter,
+        participants,
+        participantId,
+      );
+      await encounterRepo.save(encounter);
+      await participantRepo.delete(participantId);
     });
-    await this.participantRepo.delete(participantId);
-    if (participant?.encounterId) {
-      await this.refreshDifficultyFromRoster(participant.encounterId);
-    }
+
+    await this.refreshDifficultyFromRoster(encounterId);
   }
 
+  private reconcileTurnAfterParticipantRemoval(
+    encounter: EncounterEntity,
+    participants: EncounterParticipantEntity[],
+    removedParticipantId: string,
+  ): void {
+    const originalOrder = Array.isArray(encounter.turnOrder)
+      ? encounter.turnOrder
+      : [];
+    const validParticipantIds = new Set(
+      participants
+        .filter((participant) => participant.id !== removedParticipantId)
+        .map((participant) => participant.id),
+    );
+    const seenParticipantIds = new Set<string>();
+    const remainingOrder = originalOrder.filter((id) => {
+      if (!validParticipantIds.has(id) || seenParticipantIds.has(id)) {
+        return false;
+      }
+      seenParticipantIds.add(id);
+      return true;
+    });
+
+    if (originalOrder.length === 0 || remainingOrder.length === 0) {
+      encounter.turnOrder = remainingOrder;
+      encounter.currentTurnIndex = 0;
+      return;
+    }
+
+    const rawCurrentIndex = Number.isInteger(encounter.currentTurnIndex)
+      ? encounter.currentTurnIndex
+      : 0;
+    const currentIndex =
+      ((rawCurrentIndex % originalOrder.length) + originalOrder.length) %
+      originalOrder.length;
+    const currentParticipantId = originalOrder[currentIndex];
+    const preservedCurrentIndex =
+      currentParticipantId !== removedParticipantId
+        ? remainingOrder.indexOf(currentParticipantId)
+        : -1;
+
+    if (preservedCurrentIndex >= 0) {
+      encounter.turnOrder = remainingOrder;
+      encounter.currentTurnIndex = preservedCurrentIndex;
+      return;
+    }
+
+    let nextParticipantId: string | undefined;
+    let wrappedRound = false;
+    for (let offset = 1; offset <= originalOrder.length; offset += 1) {
+      const absoluteIndex = currentIndex + offset;
+      const candidateId = originalOrder[absoluteIndex % originalOrder.length];
+      if (!validParticipantIds.has(candidateId)) {
+        continue;
+      }
+      nextParticipantId = candidateId;
+      wrappedRound = absoluteIndex >= originalOrder.length;
+      break;
+    }
+
+    encounter.turnOrder = remainingOrder;
+    encounter.currentTurnIndex = nextParticipantId
+      ? remainingOrder.indexOf(nextParticipantId)
+      : 0;
+    if (nextParticipantId && wrappedRound && encounter.status === "active") {
+      encounter.currentRound = (encounter.currentRound ?? 1) + 1;
+    }
+  }
 
   async lateJoinCharacter(
     encounterId: string,
