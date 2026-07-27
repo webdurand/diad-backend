@@ -109,6 +109,7 @@ export enum GameErrorCode {
   ACTION_ALREADY_USED = "ACTION_ALREADY_USED",
   BONUS_ACTION_ALREADY_USED = "BONUS_ACTION_ALREADY_USED",
   REACTION_ALREADY_USED = "REACTION_ALREADY_USED",
+  ACTION_IN_PROGRESS = "ACTION_IN_PROGRESS",
   NOT_EQUIPPED = "NOT_EQUIPPED",
   SPELL_NOT_REACTION = "SPELL_NOT_REACTION",
   MISSING_TRIGGER_EVENT = "MISSING_TRIGGER_EVENT",
@@ -232,6 +233,8 @@ const ERROR_MESSAGES_PT_BR: Record<GameErrorCode, string> = {
   [GameErrorCode.BONUS_ACTION_ALREADY_USED]:
     "Acao bonus ja utilizada neste turno.",
   [GameErrorCode.REACTION_ALREADY_USED]: "Reacao ja utilizada neste round.",
+  [GameErrorCode.ACTION_IN_PROGRESS]:
+    "Ja existe uma acao deste participante em andamento.",
   [GameErrorCode.NOT_EQUIPPED]:
     "A arma referenciada pela acao nao esta equipada.",
   [GameErrorCode.SPELL_NOT_REACTION]:
