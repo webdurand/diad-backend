@@ -9,6 +9,9 @@ import {
 import { GameSessionEntity } from "./game-session.entity";
 
 @Entity("game_events")
+// MAX(sequence) por sessão no emit (event.service) roda dentro da transação
+// que segura o advisory lock da sessão — precisa ser index-only.
+@Index("IDX_game_events_session_sequence", ["sessionId", "sequence"])
 export class GameEventEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;
@@ -21,6 +24,7 @@ export class GameEventEntity {
   @JoinColumn({ name: "session_id" })
   session: GameSessionEntity;
 
+  @Index("IDX_game_events_encounter_id")
   @Column({ name: "encounter_id", type: "uuid", nullable: true })
   encounterId?: string;
 
