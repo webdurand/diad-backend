@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
+import { forwardRef, Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { CharacterEntity } from "src/entities/character.entity";
@@ -16,16 +16,12 @@ import type {
   SnapshotParticipant,
   TileEffectSnapshot,
 } from "../interfaces/encounter-snapshot.interface";
-import { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 import { CombatService } from "./combat.service";
 import { PersistentAreaService } from "./persistent-area.service";
 import type { TurnActionBlock } from "../interfaces/combat.interfaces";
 
-
 @Injectable()
 export class EncounterSnapshotService {
-  private readonly logger = new Logger(EncounterSnapshotService.name);
-
   constructor(
     @InjectRepository(EncounterEntity)
     private readonly encounterRepo: Repository<EncounterEntity>,
@@ -38,146 +34,117 @@ export class EncounterSnapshotService {
     @Inject(forwardRef(() => CombatService))
     private readonly combatService: CombatService,
     private readonly persistentArea: PersistentAreaService,
-    private readonly sheetService: CharacterSheetService,
   ) {}
 
   async build(
     encounterId: string,
     authUserId: string,
+    actionParticipantId?: string | null,
   ): Promise<GameResult<EncounterSnapshot>> {
     const encounter = await this.encounterRepo.findOne({
       where: { id: encounterId },
     });
     if (!encounter) return failure(GameErrorCode.ENCOUNTER_NOT_FOUND);
 
-    const participants = await this.participantRepo.find({
-      where: { encounterId: encounter.id },
-      relations: ["monster"],
-    });
-
-
-
-
-
-
-
-
-    const pcOverlay = await this.buildPcSheetOverlay(participants);
-    const companionMeta = await this.buildPcCompanionMeta(participants);
+    const [participants, areas] = await Promise.all([
+      this.participantRepo.find({
+        where: { encounterId: encounter.id },
+        relations: ["monster"],
+      }),
+      this.areaRepo.find({
+        where: { encounterId: encounter.id },
+      }),
+    ]);
 
     const currentTurnParticipantId =
       encounter.turnOrder[encounter.currentTurnIndex] ?? "";
+    const actionsOwnerId =
+      actionParticipantId === undefined
+        ? currentTurnParticipantId
+        : actionParticipantId;
+    const [companionMeta, actorActions] = await Promise.all([
+      this.buildPcCompanionMeta(participants),
+      this.loadAvailableActions(encounter.id, actionsOwnerId, authUserId),
+    ]);
 
-    const snapParticipants: SnapshotParticipant[] = await Promise.all(
-      participants.map(async (p) => {
+    const snapParticipants: SnapshotParticipant[] = participants.map((p) => {
+      const hp = resolveSnapshotHp(p);
+      return {
+        id: p.id,
+        type: p.type,
+        creatureType: p.monster?.type ?? null,
+        isCompanion: companionMeta.get(p.id)?.isCompanion,
+        companionTemplateId: companionMeta.get(p.id)?.companionTemplateId,
+        faction: p.faction,
+        displayName: p.displayName,
+        controlledBy: p.controlledBy ?? "pc",
+        position: {
+          x: p.positionX ?? 0,
+          y: p.positionY ?? 0,
+        },
+        positionX: p.positionX ?? 0,
+        positionY: p.positionY ?? 0,
+        hp: {
+          current: hp.current,
+          max: hp.max,
+          tempHp: hp.tempHp,
+        },
+        dyingState: p.dyingState,
+        conditions: p.conditions ?? [],
+        actionEconomy: {
+          actionUsed: p.actionUsed,
+          bonusUsed: p.bonusActionUsed,
+          movementRemaining: p.movementRemaining ?? 0,
+          movementMax: p.movementRemaining ?? 30,
+          reactionUsed: p.reactionsUsed > 0,
+        },
+        dodgingUntilTurnOfParticipantId: p.dodgingUntilTurnOfParticipantId,
+        helpingAllyParticipantId: p.helpingAllyParticipantId,
+        helpingTargetParticipantId: p.helpingTargetParticipantId,
+        readiedAction: p.readiedAction,
+        hidden: (p.conditions ?? []).includes("hidden"),
+        isConcentrating: p.isConcentrating ?? false,
+        concentratingOn: p.concentratingOn ?? null,
 
-
-        let availableActions: TurnActionBlock[] = [];
-        try {
-          const turnRes = await this.combatService.getTurnActions(
-            encounter.id,
-            p.id,
-            authUserId,
-          );
-          if (turnRes.ok) {
-            availableActions = [
-              ...turnRes.value.actions,
-              ...turnRes.value.bonusActions,
-              ...turnRes.value.reactions,
-            ];
-          }
-        } catch {
-
-        }
-
-        return {
-          id: p.id,
-          type: p.type,
-          creatureType: p.monster?.type ?? null,
-          isCompanion: companionMeta.get(p.id)?.isCompanion,
-          companionTemplateId: companionMeta.get(p.id)?.companionTemplateId,
-          faction: p.faction,
-          displayName: p.displayName,
-          controlledBy: p.controlledBy ?? "pc",
-          position: {
-            x: p.positionX ?? 0,
-            y: p.positionY ?? 0,
-          },
-          positionX: p.positionX ?? 0,
-          positionY: p.positionY ?? 0,
-          hp: {
-            current: pcOverlay.get(p.id)?.currentHp ?? p.currentHp ?? 0,
-            max: pcOverlay.get(p.id)?.maxHp ?? p.maxHp ?? 0,
-            tempHp: pcOverlay.get(p.id)?.tempHp ?? p.tempHp,
-          },
-          dyingState: p.dyingState,
-          conditions: p.conditions ?? [],
-          actionEconomy: {
-            actionUsed: p.actionUsed,
-            bonusUsed: p.bonusActionUsed,
-            movementRemaining: p.movementRemaining ?? 0,
-            movementMax: p.movementRemaining ?? 30,
-            reactionUsed: p.reactionsUsed > 0,
-          },
-          dodgingUntilTurnOfParticipantId: p.dodgingUntilTurnOfParticipantId,
-          helpingAllyParticipantId: p.helpingAllyParticipantId,
-          helpingTargetParticipantId: p.helpingTargetParticipantId,
-          readiedAction: p.readiedAction,
-          hidden: (p.conditions ?? []).includes("hidden"),
-          isConcentrating: p.isConcentrating ?? false,
-          concentratingOn: p.concentratingOn ?? null,
-
-
-
-
-
-
-
-
-          statblockRef:
-            (p.type === "monster" || p.type === "npc") && p.monster
-              ? {
-                  monsterSlug: p.monster.slug ?? p.monster.name ?? "",
-                  actions: Array.isArray(p.monster.actions)
-                    ? p.monster.actions
-                    : [],
-                  intelligence: p.monster.intelligence ?? 10,
-                  wisdom: p.monster.wisdom ?? 10,
-                  speed: parseMonsterSpeedFt(p.monster.speed),
-                  multiattack: p.monster.multiattack ?? null,
-                  spellcasting: buildSpellcastingSnapshot(
-                    p.monster.spellcasting ?? null,
-                    (p.spellSlotsUsed ?? {}) as {
-                      byLevel?: Record<number, number>;
-                      innateUses?: Record<string, number>;
-                    },
-                  ),
-                  bonusActions: extractBonusActions(
-                    p.monster.actions,
-                    p.monster.special_abilities,
-                  ),
-                  reactions: extractReactions(p.monster.reactions),
-                  legendaryActions: buildLegendaryActions(
-                    p.monster.legendary_actions,
-                    p.monster.legendary_action_cost_map ?? null,
-                  ),
-                  legendaryActionPointsRemaining:
-                    p.legendaryPointsAvailable ?? undefined,
-                  legendaryActionPointsMax: p.legendaryPointsMax ?? undefined,
-                  lairActions: p.monster.lair_actions ?? [],
-                }
-              : undefined,
-          availableActions,
-          distances: computeDistances(p, participants),
-          canSee: computeVisibility(p, participants),
-        } as SnapshotParticipant;
-      }),
-    );
-
-
-    const areas = await this.areaRepo.find({
-      where: { encounterId: encounter.id },
+        statblockRef:
+          (p.type === "monster" || p.type === "npc") && p.monster
+            ? {
+                monsterSlug: p.monster.slug ?? p.monster.name ?? "",
+                actions: Array.isArray(p.monster.actions)
+                  ? p.monster.actions
+                  : [],
+                intelligence: p.monster.intelligence ?? 10,
+                wisdom: p.monster.wisdom ?? 10,
+                speed: parseMonsterSpeedFt(p.monster.speed),
+                multiattack: p.monster.multiattack ?? null,
+                spellcasting: buildSpellcastingSnapshot(
+                  p.monster.spellcasting ?? null,
+                  (p.spellSlotsUsed ?? {}) as {
+                    byLevel?: Record<number, number>;
+                    innateUses?: Record<string, number>;
+                  },
+                ),
+                bonusActions: extractBonusActions(
+                  p.monster.actions,
+                  p.monster.special_abilities,
+                ),
+                reactions: extractReactions(p.monster.reactions),
+                legendaryActions: buildLegendaryActions(
+                  p.monster.legendary_actions,
+                  p.monster.legendary_action_cost_map ?? null,
+                ),
+                legendaryActionPointsRemaining:
+                  p.legendaryPointsAvailable ?? undefined,
+                legendaryActionPointsMax: p.legendaryPointsMax ?? undefined,
+                lairActions: p.monster.lair_actions ?? [],
+              }
+            : undefined,
+        availableActions: p.id === actionsOwnerId ? actorActions : [],
+        distances: computeDistances(p, participants),
+        canSee: computeVisibility(p, participants),
+      } as SnapshotParticipant;
     });
+
     const tileEffects: TileEffectSnapshot[] = areas.map((a) => {
       const cells: Array<{ x: number; y: number }> = [];
       const r = a.radiusCells;
@@ -245,72 +212,27 @@ export class EncounterSnapshotService {
     });
   }
 
-
-  private async buildPcSheetOverlay(
-    participants: EncounterParticipantEntity[],
-  ): Promise<
-    Map<string, { currentHp: number; maxHp: number; tempHp: number }>
-  > {
-    const overlay = new Map<
-      string,
-      { currentHp: number; maxHp: number; tempHp: number }
-    >();
-    const pcs = participants.filter((p) => p.type === "pc" && p.characterId);
-    if (pcs.length === 0) return overlay;
-
-    const charIds = pcs.map((p) => p.characterId!);
-    const characters = await this.characterRepo
-      .createQueryBuilder("c")
-      .select(["c.id", "c.userId"])
-      .where("c.id IN (:...ids)", { ids: charIds })
-      .getMany();
-    const ownerMap = new Map<string, string>();
-    for (const c of characters) {
-      if (c.userId) ownerMap.set(c.id, c.userId);
+  private async loadAvailableActions(
+    encounterId: string,
+    participantId: string | null,
+    authUserId: string,
+  ): Promise<TurnActionBlock[]> {
+    if (!participantId) return [];
+    try {
+      const turnRes = await this.combatService.getTurnActions(
+        encounterId,
+        participantId,
+        authUserId,
+      );
+      if (!turnRes.ok) return [];
+      return [
+        ...turnRes.value.actions,
+        ...turnRes.value.bonusActions,
+        ...turnRes.value.reactions,
+      ];
+    } catch {
+      return [];
     }
-
-    await Promise.all(
-      pcs.map(async (p) => {
-        const ownerId = ownerMap.get(p.characterId!);
-        if (!ownerId) {
-          this.logger.warn(
-            `[SNAPSHOT-OVERLAY] missing_owner participant=${p.id} ` +
-              `character=${p.characterId} — PC ficará com hp=${p.currentHp}/${p.maxHp} ` +
-              `(persisted entity values, provavelmente 0/0).`,
-          );
-          return;
-        }
-        try {
-          const sheet = await this.sheetService.computeSheet(
-            ownerId,
-            p.characterId!,
-          );
-
-
-          if (p.transformationState) {
-            const form = p.transformationState.form;
-            overlay.set(p.id, {
-              currentHp: form.currentHp,
-              maxHp: form.maxHp,
-              tempHp: sheet.tempHp ?? 0,
-            });
-          } else {
-            overlay.set(p.id, {
-              currentHp: sheet.currentHp,
-              maxHp: sheet.maxHp,
-              tempHp: sheet.tempHp ?? 0,
-            });
-          }
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.logger.warn(
-            `[SNAPSHOT-OVERLAY] computeSheet_failed participant=${p.id} ` +
-              `character=${p.characterId}: ${msg}`,
-          );
-        }
-      }),
-    );
-    return overlay;
   }
 
   private async buildPcCompanionMeta(
@@ -342,6 +264,28 @@ export class EncounterSnapshotService {
   }
 }
 
+function resolveSnapshotHp(participant: EncounterParticipantEntity): {
+  current: number;
+  max: number;
+  tempHp: number;
+} {
+  const transformation = participant.transformationState;
+  const usesFormHp =
+    transformation != null && transformation.rulesMode !== "xphb-wild-shape";
+  if (usesFormHp) {
+    return {
+      current: transformation.form.currentHp,
+      max: transformation.form.maxHp,
+      tempHp: transformation.form.tempHp ?? participant.tempHp ?? 0,
+    };
+  }
+  return {
+    current: participant.currentHp ?? 0,
+    max: participant.maxHp ?? 0,
+    tempHp: participant.tempHp ?? 0,
+  };
+}
+
 function computeDistances(
   self: EncounterParticipantEntity,
   all: EncounterParticipantEntity[],
@@ -362,7 +306,6 @@ function computeVisibility(
 ): Record<string, boolean> {
   const out: Record<string, boolean> = {};
 
-
   for (const other of all) {
     if (other.id === self.id) continue;
     const otherHidden = (other.conditions ?? []).includes("hidden");
@@ -371,7 +314,6 @@ function computeVisibility(
   }
   return out;
 }
-
 
 function parseMonsterSpeedFt(
   speed: Record<string, unknown> | null | undefined,

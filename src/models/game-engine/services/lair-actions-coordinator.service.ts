@@ -5,7 +5,6 @@ import { EncounterSnapshotService } from "./encounter-snapshot.service";
 import { AiProxyService } from "src/models/ai-proxy/ai-proxy.service";
 import type { GameEventData } from "../interfaces/result.type";
 
-
 @Injectable()
 export class LairActionsCoordinator {
   private readonly logger = new Logger(LairActionsCoordinator.name);
@@ -31,6 +30,7 @@ export class LairActionsCoordinator {
       const snapshotRes = await this.snapshotService.build(
         encounter.id,
         "system",
+        null,
       );
       if (snapshotRes.ok) snapshot = snapshotRes.value;
     } catch (err) {

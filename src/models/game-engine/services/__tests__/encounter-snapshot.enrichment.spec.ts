@@ -6,7 +6,6 @@ import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.
 import { CharacterEntity } from "src/entities/character.entity";
 import type { CombatService } from "../combat.service";
 import type { PersistentAreaService } from "../persistent-area.service";
-import type { CharacterSheetService } from "src/models/characters/services/character-sheet.service";
 
 const ENCOUNTER_ID = "11111111-1111-4111-8111-111111111111";
 const MONSTER_PART_ID = "22222222-2222-4222-8222-222222222222";
@@ -30,17 +29,14 @@ function makeService(
     })),
   };
   const combatService = {
-    getAvailableActions: jest.fn(async () => ({ ok: true, value: [] })),
-    getCurrentTurnInfo: jest.fn(async () => ({
+    getTurnActions: jest.fn(async () => ({
       ok: true,
-      value: { participantId: MONSTER_PART_ID },
+      value: { actions: [], bonusActions: [], reactions: [] },
     })),
   } as unknown as CombatService;
   const persistentArea = {
     cellInArea: jest.fn(() => false),
   } as unknown as PersistentAreaService;
-  const sheetService = {} as unknown as CharacterSheetService;
-
   return new EncounterSnapshotService(
     encounterRepo as unknown as Repository<EncounterEntity>,
     participantRepo as unknown as Repository<EncounterParticipantEntity>,
@@ -48,7 +44,6 @@ function makeService(
     characterRepo as unknown as Repository<CharacterEntity>,
     combatService,
     persistentArea,
-    sheetService,
   );
 }
 
@@ -249,5 +244,53 @@ describe("EncounterSnapshotService — A0 statblock enrichment", () => {
     expect(sb?.lairActions).toEqual([]);
     expect(sb?.bonusActions).toEqual([]);
     expect(sb?.reactions).toEqual([]);
+  });
+
+  it("carrega ações somente para o participante solicitado", async () => {
+    const secondParticipant = {
+      ...baseMonsterParticipant(),
+      id: "33333333-3333-4333-8333-333333333333",
+      displayName: "Orc",
+    };
+    const svc = makeService(baseEncounter, [
+      baseMonsterParticipant(),
+      secondParticipant,
+    ]);
+    const getTurnActions = (svc as any).combatService
+      .getTurnActions as jest.Mock;
+
+    const result = await svc.build(ENCOUNTER_ID, "user-1", MONSTER_PART_ID);
+
+    expect(result.ok).toBe(true);
+    expect(getTurnActions).toHaveBeenCalledTimes(1);
+    expect(getTurnActions).toHaveBeenCalledWith(
+      ENCOUNTER_ID,
+      MONSTER_PART_ID,
+      "user-1",
+    );
+  });
+
+  it("usa o HP persistido do combate sem recalcular a ficha do PC", async () => {
+    const pc = {
+      ...baseMonsterParticipant(),
+      id: "44444444-4444-4444-8444-444444444444",
+      type: "pc",
+      characterId: "55555555-5555-4555-8555-555555555555",
+      monster: null,
+      currentHp: 23,
+      maxHp: 31,
+      tempHp: 4,
+    } as Partial<EncounterParticipantEntity>;
+    const svc = makeService(baseEncounter, [pc]);
+
+    const result = await svc.build(ENCOUNTER_ID, "user-1", null);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.participants[0]?.hp).toEqual({
+      current: 23,
+      max: 31,
+      tempHp: 4,
+    });
   });
 });

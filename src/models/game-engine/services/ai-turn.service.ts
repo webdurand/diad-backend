@@ -25,7 +25,6 @@ import { ReadyActionService } from "./ready-action.service";
 import type { GenericActionDto } from "../dto/generic-action.dto";
 import { EventService } from "./event.service";
 
-
 @Injectable()
 export class AiTurnService {
   private readonly inFlightTurns = new Map<
@@ -116,11 +115,6 @@ export class AiTurnService {
       return failure(GameErrorCode.PARTICIPANT_NOT_FOUND);
     }
 
-
-
-
-
-
     if (
       participant.lastAiTurnRound === encounter.currentRound &&
       participant.lastAiTurnResult
@@ -206,8 +200,11 @@ export class AiTurnService {
       }
     }
 
-
-    const snapRes = await this.snapshotService.build(encounterId, authUserId);
+    const snapRes = await this.snapshotService.build(
+      encounterId,
+      authUserId,
+      participant.id,
+    );
     if (!snapRes.ok) {
       this.logger.warn("ai.turn.fail", {
         "fail.reason": "snapshot_build_failed",
@@ -216,10 +213,6 @@ export class AiTurnService {
       });
       return snapRes;
     }
-
-
-
-
 
     const monsterPart = snapRes.value.participants.find(
       (p) => p.id === participantId,
@@ -257,7 +250,6 @@ export class AiTurnService {
       })),
     });
 
-
     const planRes = await this.executor.executeTurn(
       snapRes.value,
       participantId,
@@ -279,7 +271,6 @@ export class AiTurnService {
       }
       return planRes;
     }
-
 
     this.logger.info("ai.turn.steps_planned", {
       "participant.id": participantId,
@@ -312,7 +303,6 @@ export class AiTurnService {
         "step.error.code": executed.result.error?.code ?? null,
       });
 
-
       if (!executed.result.ok && step.kind !== "end-turn") {
         this.logger.warn("ai.turn.step_failed", {
           "step.kind": step.kind,
@@ -324,9 +314,7 @@ export class AiTurnService {
       if (
         step.kind === "attack" &&
         executed.result.ok &&
-        executed.result.events.some(
-          (event) => event.targetDefeated === true,
-        )
+        executed.result.events.some((event) => event.targetDefeated === true)
       ) {
         break;
       }
@@ -388,7 +376,6 @@ export class AiTurnService {
       }
     }
 
-
     if (!executedSteps.some((s) => s.kind === "end-turn")) {
       const endRes = await this.combatService.endTurn(encounter.id);
       executedSteps.push({
@@ -426,7 +413,6 @@ export class AiTurnService {
       rationale: planRes.value.rationale,
       llmCostUsd: planRes.value.llmCostUsd,
     };
-
 
     if (finalParticipant) {
       finalParticipant.lastAiTurnRound = encounter.currentRound;
@@ -467,7 +453,8 @@ export class AiTurnService {
               ok: res.ok,
               summary: res.ok
                 ? `Levantou-se (${res.value.movementSpent}ft de movimento)`
-                : ((res as { error?: string }).error ?? "Não conseguiu levantar"),
+                : ((res as { error?: string }).error ??
+                  "Não conseguiu levantar"),
               events: res.ok
                 ? (res.events ?? []).map((event) => ({
                     type: event.event_type,
@@ -554,10 +541,6 @@ export class AiTurnService {
             ownerUserId: authUserId,
             ...(isSubAttack ? { _isSubAttack: true } : {}),
           } as Parameters<typeof this.combatService.resolveAttack>[1]);
-
-
-
-
 
           const attackEvents: Array<{
             type: string;

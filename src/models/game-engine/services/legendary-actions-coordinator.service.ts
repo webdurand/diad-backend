@@ -8,7 +8,6 @@ import { EncounterSnapshotService } from "./encounter-snapshot.service";
 import { AiProxyService } from "src/models/ai-proxy/ai-proxy.service";
 import type { GameEventData } from "../interfaces/result.type";
 
-
 @Injectable()
 export class LegendaryActionsCoordinator {
   private readonly logger = new Logger(LegendaryActionsCoordinator.name);
@@ -47,6 +46,7 @@ export class LegendaryActionsCoordinator {
       const snapshotRes = await this.snapshotService.build(
         encounter.id,
         "system",
+        null,
       );
       if (snapshotRes.ok) snapshot = snapshotRes.value;
     } catch (err) {
@@ -85,8 +85,6 @@ export class LegendaryActionsCoordinator {
           decision.actionName,
         );
         events.push(...spendRes.events);
-
-
       } catch (err) {
         this.logger.warn(
           `legendary.process_failed monsterId=${monster.id}: ${(err as Error).message}`,
