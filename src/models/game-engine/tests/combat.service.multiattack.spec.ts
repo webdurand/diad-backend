@@ -2,6 +2,9 @@ import { CombatService, AttackDto } from "../services/combat.service";
 import { DiceService } from "../services/dice.service";
 import { ConditionEffectsService } from "../services/condition-effects.service";
 import { MonsterActionResolver } from "../services/monster-action-resolver.service";
+import { BardFeaturesService } from "../services/bard-features.service";
+import { RequestCache } from "src/common/request-cache/request-cache.service";
+import { createActiveRequestCache } from "src/common/request-cache/__tests__/fake-cls";
 
 
 
@@ -30,7 +33,16 @@ function makeParticipant(overrides: Record<string, any> = {}): any {
   };
 }
 
-function createHarness() {
+/**
+ * `useRealBardFeatures` troca o stub de bardo pelo service real ligado a um
+ * repositório que devolve uma NOVA instância a cada `findOne` — exatamente como
+ * o TypeORM faz. Sem esse clone a regressão de ressurreição do dado de
+ * Inspiração Bárdica é invisível, porque o Map do harness devolveria o mesmo
+ * objeto que o CombatService já mutou.
+ */
+function createHarness(
+  opts: { requestCache?: RequestCache; useRealBardFeatures?: boolean } = {},
+) {
   const participants = new Map<string, any>();
   const encounter = {
     id: "enc-1",
@@ -178,6 +190,34 @@ function createHarness() {
     })),
   };
 
+  const bardParticipantRepo: any = {
+    findOne: jest.fn(async ({ where: { id } }: any) => {
+      const found = participants.get(id);
+      if (!found) return null;
+      return { ...found, effectInstances: [...(found.effectInstances ?? [])] };
+    }),
+    save: jest.fn(async (p: any) => {
+      participants.set(p.id, p);
+      return p;
+    }),
+  };
+  const bardStub: any = {
+    consumeBardicInspirationIfPresent: async () => ({
+      consumed: false,
+      bonus: 0,
+      events: [],
+    }),
+    grantBardicInspiration: async () => ({ events: [], dieSize: 6 }),
+    getBardicInspirationDie: () => 6,
+  };
+  const bardService: any = opts.useRealBardFeatures
+    ? new BardFeaturesService(
+        bardParticipantRepo,
+        sheetService,
+        effectInstanceService,
+      )
+    : bardStub;
+
   const combat = new CombatService(
     encounterRepo,
     participantRepo,
@@ -248,15 +288,7 @@ function createHarness() {
       getEffectiveAc: () => null,
       getEffectiveActions: () => null,
     } as any,
-    {
-      consumeBardicInspirationIfPresent: async () => ({
-        consumed: false,
-        bonus: 0,
-        events: [],
-      }),
-      grantBardicInspiration: async () => ({ events: [], dieSize: 6 }),
-      getBardicInspirationDie: () => 6,
-    } as any,
+    bardService,
     {
       getModifiers: () => ({
         disadvAbility: false,
@@ -289,6 +321,13 @@ function createHarness() {
     { processAfterPcTurn: async () => [] } as any,
     { tryParryAfterAttackRoll: async () => null } as any,
     { run: async () => ({ events: [] }) } as any,
+    // persistentArea, paladinAuras, ashPuff e summoning seguem omitidos; o
+    // RequestCache e o ultimo parametro posicional do CombatService.
+    undefined as any,
+    undefined,
+    undefined,
+    undefined,
+    opts.requestCache,
   );
 
   return {
@@ -300,6 +339,11 @@ function createHarness() {
     sheetService,
     actionsService,
     effectInstanceService,
+    encounterRepo,
+    participantRepo,
+    encounterService,
+    sessionService,
+    bardParticipantRepo,
   };
 }
 
@@ -1812,5 +1856,264 @@ describe("CombatService — Ranger Hunter PHB passives", () => {
           effect.kind === "colossus_slayer_used_this_turn",
       ),
     ).toBe(false);
+  });
+});
+
+/**
+ * Cenário compartilhado pelos blocos de regressão do B2: um PC atacante com
+ * `characterId` (para exercitar `resolveParticipantOwner`/`computeSheet`) e um
+ * monstro alvo com AC baixa, de modo que o ataque sempre acerte.
+ */
+function configurePcAttackHarness(
+  h: ReturnType<typeof createHarness>,
+  options: { attackerEffectInstances?: any[] } = {},
+) {
+  const attacker = makeParticipant({
+    id: "b2-bard",
+    characterId: "char-b2-bard",
+    displayName: "Lira",
+    currentHp: 30,
+    maxHp: 30,
+    attacksMaxThisTurn: 1,
+    attacksUsedThisTurn: 0,
+    faction: "ally",
+    effectInstances: options.attackerEffectInstances ?? [],
+  });
+  const target = makeParticipant({
+    id: "b2-target",
+    type: "monster",
+    characterId: undefined,
+    monster: {
+      name: "Ogre",
+      armor_class: [{ value: 10 }],
+      hit_points: 59,
+      damage_immunities: [],
+      damage_resistances: [],
+      damage_vulnerabilities: [],
+    },
+    displayName: "Ogre",
+    currentHp: 59,
+    maxHp: 59,
+    faction: "enemy",
+  });
+  h.participants.set(attacker.id, attacker);
+  h.participants.set(target.id, target);
+  h.encounter.turnOrder = [attacker.id, target.id];
+  h.encounter.currentTurnIndex = 0;
+  h.sheetService.computeSheet.mockResolvedValue({
+    armorClass: 14,
+    currentHp: 30,
+    maxHp: 30,
+    tempHp: 0,
+    proficiencyBonus: 3,
+    abilityScores: [
+      { slug: "dex", modifier: 3 },
+      { slug: "cha", modifier: 4 },
+    ],
+    classes: [{ slug: "bard-phb", level: 5 }],
+    features: [],
+    equipment: [
+      {
+        id: "rapier",
+        slug: "rapier",
+        name: "Rapier",
+        mainHand: true,
+        offHand: false,
+        damage: { dice: "1d8", type: "piercing" },
+      },
+    ],
+    spellSlots: [],
+    source: { code: "PHB" },
+  });
+  h.actionsService.getActions.mockResolvedValue({
+    actions: [
+      {
+        id: "weapon-rapier",
+        name: "Rapier",
+        source: "weapon",
+        attackBonus: 6,
+        damage: { dice: "1d8", type: "piercing", bonus: 3 },
+        range: "5 ft.",
+        properties: ["finesse"],
+      },
+    ],
+    bonusActions: [],
+  });
+  jest
+    .spyOn(h.diceService, "roll")
+    .mockImplementation((sides: number) => (sides === 20 ? 12 : 3));
+  return { attacker, target };
+}
+
+function bardicInspirationEffect() {
+  return {
+    id: "effect-bardic-inspiration-1",
+    kind: "bardic_inspiration",
+    sourceCasterParticipantId: "b2-bard",
+    sourceFeatureSlug: "bardic-inspiration",
+    payload: { dieSize: 8, dieFormula: "1d8", bardLevel: 5 },
+    requiresConcentration: false,
+    expiresAt: { kind: "until_consumed" },
+  };
+}
+
+const B2_ATTACK: Omit<
+  AttackDto,
+  "attackerParticipantId" | "targetParticipantId"
+> = {
+  actionName: "Rapier",
+  actionSlug: "weapon-rapier",
+  ownerUserId: "bard-owner",
+};
+
+describe("CombatService — B2.3 consumo de Inspiração Bárdica", () => {
+  it("não ressuscita o dado de Inspiração Bárdica gasto durante o ataque", async () => {
+    const h = createHarness({ useRealBardFeatures: true });
+    const { attacker, target } = configurePcAttackHarness(h, {
+      attackerEffectInstances: [bardicInspirationEffect()],
+    });
+
+    const result = await h.combat.resolveAttack(h.encounter.id, {
+      ...B2_ATTACK,
+      attackerParticipantId: attacker.id,
+      targetParticipantId: target.id,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(
+      result.events.some(
+        (event) => event.event_type === "bardic_inspiration_consumed",
+      ),
+    ).toBe(true);
+    const persisted = h.participants.get(attacker.id);
+    expect(
+      (persisted.effectInstances ?? []).some(
+        (effect: any) => effect.kind === "bardic_inspiration",
+      ),
+    ).toBe(false);
+    expect(
+      (attacker.effectInstances ?? []).some(
+        (effect: any) => effect.kind === "bardic_inspiration",
+      ),
+    ).toBe(false);
+  });
+
+  it("não recarrega nem grava o atacante uma segunda vez para consumir o dado", async () => {
+    const h = createHarness({ useRealBardFeatures: true });
+    const { attacker, target } = configurePcAttackHarness(h, {
+      attackerEffectInstances: [bardicInspirationEffect()],
+    });
+
+    await h.combat.resolveAttack(h.encounter.id, {
+      ...B2_ATTACK,
+      attackerParticipantId: attacker.id,
+      targetParticipantId: target.id,
+    });
+
+    expect(h.bardParticipantRepo.findOne).not.toHaveBeenCalled();
+    expect(h.bardParticipantRepo.save).not.toHaveBeenCalled();
+  });
+
+  it("persiste o consumo tambem em sub-ataque, onde o save do fim nao roda", async () => {
+    // Regressão da revisão: o único save incondicional de `attacker` vive dentro
+    // de `if (!dto._isSubAttack)`. Em ataque de oportunidade / multiataque /
+    // reação o dado gasto sobrevivia no banco e o jogador ganhava o +1dX de
+    // novo — recurso once-per-rest virando infinito.
+    const h = createHarness({ useRealBardFeatures: true });
+    const { attacker, target } = configurePcAttackHarness(h, {
+      attackerEffectInstances: [bardicInspirationEffect()],
+    });
+
+    const result = await h.combat.resolveAttack(h.encounter.id, {
+      ...B2_ATTACK,
+      attackerParticipantId: attacker.id,
+      targetParticipantId: target.id,
+      _isSubAttack: true,
+    });
+
+    expect(result.ok).toBe(true);
+    const persisted = h.participants.get(attacker.id);
+    expect(
+      (persisted.effectInstances ?? []).some(
+        (effect: any) => effect.kind === "bardic_inspiration",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("CombatService — B2.1/B2.2 orçamento de queries", () => {
+  async function runAttack(h: ReturnType<typeof createHarness>) {
+    const { attacker, target } = configurePcAttackHarness(h);
+    const translated = await h.combat.translateSlugToActionName(
+      h.encounter.id,
+      attacker.id,
+      "weapon-rapier",
+      "bard-owner",
+    );
+    expect(translated.ok).toBe(true);
+    const result = await h.combat.resolveAttack(h.encounter.id, {
+      ...B2_ATTACK,
+      attackerParticipantId: attacker.id,
+      targetParticipantId: target.id,
+    });
+    expect(result.ok).toBe(true);
+    return { attacker, target };
+  }
+
+  it("resolve o dono do participante uma única vez por comando com o memo ativo", async () => {
+    const { cache } = createActiveRequestCache();
+    const cached = createHarness({ requestCache: cache });
+    await runAttack(cached);
+
+    const plain = createHarness();
+    await runAttack(plain);
+
+    // `sessionService.getById` só é chamado por `resolveParticipantOwner`, logo
+    // serve de contador exato de resoluções de dono não memoizadas.
+    expect(cached.sessionService.getById).toHaveBeenCalledTimes(1);
+    expect(cached.encounterService.resolveCharacterOwner).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(plain.sessionService.getById.mock.calls.length).toBeGreaterThan(
+      cached.sessionService.getById.mock.calls.length,
+    );
+    expect(cached.encounterRepo.findOne.mock.calls.length).toBeLessThan(
+      plain.encounterRepo.findOne.mock.calls.length,
+    );
+  });
+
+  it("reaproveita a leitura de pré-voo do atacante entre translateSlug e resolveAttack", async () => {
+    const { cache } = createActiveRequestCache();
+    const cached = createHarness({ requestCache: cache });
+    const { attacker } = await runAttack(cached);
+
+    const plain = createHarness();
+    await runAttack(plain);
+
+    const countAttackerReads = (h: ReturnType<typeof createHarness>) =>
+      h.encounterService.getParticipant.mock.calls.filter(
+        (call: unknown[]) => call[0] === attacker.id,
+      ).length;
+
+    expect(countAttackerReads(cached)).toBeLessThan(countAttackerReads(plain));
+  });
+
+  it("mantém o orçamento de round-trips de um ataque simples", async () => {
+    const { cache } = createActiveRequestCache();
+    const cached = createHarness({ requestCache: cache });
+    await runAttack(cached);
+
+    // 1 leitura do encontro no topo de resolveAttack + 1 do
+    // resolveParticipantOwner memoizado (antes eram 1 + 9).
+    expect(cached.encounterRepo.findOne).toHaveBeenCalledTimes(2);
+    // 1 leitura de pré-voo do atacante (compartilhada com
+    // translateSlugToActionName) + 1 do alvo, que fica deliberadamente fora do
+    // memo porque outros services releem essa linha já persistida.
+    expect(cached.encounterService.getParticipant).toHaveBeenCalledTimes(2);
+    // O fan-out de computeSheet fica pinado aqui como orçamento: quem colapsa o
+    // custo dessas 9 chamadas é o memo interno do CharacterSheetService, não o
+    // CombatService. Se este número subir, alguém adicionou fan-out novo.
+    expect(cached.sheetService.computeSheet).toHaveBeenCalledTimes(9);
   });
 });

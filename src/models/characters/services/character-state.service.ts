@@ -2,9 +2,11 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
+import { RequestCache } from "src/common/request-cache/request-cache.service";
 import {
   CharacterEntity,
   CharacterStateEntity,
@@ -114,6 +116,10 @@ export class CharacterStateService {
     private readonly charLevelUpRepo: Repository<CharacterLevelUpEntity>,
     @InjectRepository(CampaignPartyMemberEntity)
     private readonly partyMemberRepo: Repository<CampaignPartyMemberEntity>,
+    // Último parâmetro e @Optional() de propósito: os specs constroem este
+    // service passando apenas os repositórios posicionalmente.
+    @Optional()
+    private readonly requestCache?: RequestCache,
   ) {}
 
   private async ensureOwnership(
@@ -257,6 +263,10 @@ export class CharacterStateService {
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new NotFoundException("Estado do personagem nao encontrado.");
     }
+    // O subscriber que derruba o memo por request escuta eventos do ORM e NÃO
+    // dispara para SQL cru; sem esta invalidação manual a ficha memoizada no
+    // mesmo comando continuaria mostrando o uso de feature antigo.
+    this.requestCache?.invalidateCharacter(characterId);
     return Number(rows[0].next);
   }
 

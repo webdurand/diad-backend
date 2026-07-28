@@ -1,6 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
+import { RequestCache } from "src/common/request-cache/request-cache.service";
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -171,9 +172,35 @@ export class ActionsService {
     private readonly classProfRepo: Repository<ClassProficiencyEntity>,
     @InjectRepository(SpellEntity)
     private readonly spellRepo: Repository<SpellEntity>,
+    // Último parâmetro e @Optional() de propósito: vários specs constroem este
+    // service passando apenas os repositórios posicionalmente.
+    @Optional()
+    private readonly requestCache?: RequestCache,
   ) {}
 
-  async getActions(
+  // Sem `RequestCache` (specs, ou contexto fora de request) o memo degrada
+  // para chamada direta, mantendo o comportamento atual.
+  private memo<T>(key: string, loader: () => Promise<T>): Promise<T> {
+    return this.requestCache
+      ? this.requestCache.getOrLoad(key, loader)
+      : loader();
+  }
+
+  /**
+   * Ações disponíveis do personagem, memoizadas por request.
+   *
+   * Motivação (perf 2026-07-27): este método re-buscava 7 das mesmas tabelas
+   * filhas que `computeSheet` já havia carregado, e o mesmo comando de combate
+   * o chamava mais de uma vez para o mesmo personagem. A chave inclui o userId
+   * porque o guard de leitura é por usuário.
+   */
+  getActions(userId: string, characterId: string): Promise<ActionsResponse> {
+    return this.memo(`actions|${characterId}|${userId}`, () =>
+      this.getActionsUncached(userId, characterId),
+    );
+  }
+
+  private async getActionsUncached(
     userId: string,
     characterId: string,
   ): Promise<ActionsResponse> {

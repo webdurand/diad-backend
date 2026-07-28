@@ -117,6 +117,12 @@ import { RoomAuthorizerRegistry } from "src/realtime/room-authorizer.registry";
 import { EncounterRoomAuthorizer } from "./authorizers/encounter-room.authorizer";
 import { JoinRequestService } from "./services/join-request.service";
 
+import { CommandSnapshotService } from "./services/command-snapshot.service";
+import { CommandSnapshotInterceptor } from "./interceptors/command-snapshot.interceptor";
+import { EncounterCommandLockInterceptor } from "src/common/concurrency/encounter-command-lock.interceptor";
+import { GameResultStatusInterceptor } from "src/common/http/game-result-status.interceptor";
+import { ClientIdContext } from "src/common/http/client-id.context";
+
 import { CombatActionsModule } from "../combat-actions/combat-actions.module";
 import { ClassFeatureExecutorService } from "./services/class-feature-executor.service";
 
@@ -225,6 +231,11 @@ import { AshPuffService } from "./services/ash-puff.service";
   ],
   controllers: [GameEngineController, RandomEncounterController],
   providers: [
+    ClientIdContext,
+    CommandSnapshotService,
+    CommandSnapshotInterceptor,
+    EncounterCommandLockInterceptor,
+    GameResultStatusInterceptor,
     DiceService,
     ConditionEffectsService,
     EventService,

@@ -9,6 +9,36 @@ import { ProblemFactory } from "./common/observability/errors/problem.factory";
 import { ValidationException } from "./common/observability/errors/diad-exception";
 import { ErrorCode } from "./common/observability/errors/error-codes.catalog";
 
+/**
+ * `EncounterCommandLockInterceptor` serializa comandos de combate com um Map em
+ * memória. Isso é correto porque o backend roda como UM processo. Se algum dia
+ * subir com PM2/cluster/réplicas, o lock deixa silenciosamente de proteger e o
+ * lost update de duplo-submit volta. Este aviso existe para que a mudança de
+ * topologia não passe despercebida.
+ */
+function assertSingleProcessInvariant(): void {
+  const multiInstanceVars = [
+    "WEB_CONCURRENCY",
+    "NODE_APP_INSTANCE",
+    "PM2_HOME",
+    "PM2_INSTANCE_ID",
+  ].filter((name) => process.env[name] !== undefined);
+
+  if (multiInstanceVars.length > 0) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        event: "startup.single_process_invariant_violated",
+        "service.name": "diad-backend",
+        attributes: {
+          detected: multiInstanceVars,
+          hint: "O lock de comando por encontro é em processo. Com mais de uma instância ele não protege — migre para advisory lock no Postgres ou Redis antes de escalar horizontalmente.",
+        },
+      }),
+    );
+  }
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
@@ -36,9 +66,15 @@ async function bootstrap() {
     },
     credentials: true,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    allowedHeaders: "Content-Type,Authorization,traceparent,x-diad-domain",
+    // x-client-id identifica a ABA que originou o comando e permite suprimir o
+    // invalidate legado da própria origem. O snapshot continua sendo entregue
+    // como fallback e é deduplicado no cliente pela versão monotônica.
+    allowedHeaders:
+      "Content-Type,Authorization,traceparent,x-diad-domain,x-client-id",
     exposedHeaders: "traceparent",
   });
+
+  assertSingleProcessInvariant();
 
   app.get(ProblemFactory);
 

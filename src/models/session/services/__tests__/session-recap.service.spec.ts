@@ -9,29 +9,6 @@ import { SessionRecapService } from "../session-recap.service";
 
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
-interface MockQueryRunner {
-  connect: jest.Mock;
-  release: jest.Mock;
-  query: jest.Mock;
-}
-
-function buildLockMock(opts: { acquired: boolean }): MockQueryRunner {
-  const queryRunner: MockQueryRunner = {
-    connect: jest.fn().mockResolvedValue(undefined),
-    release: jest.fn().mockResolvedValue(undefined),
-    query: jest.fn(async (sql: string) => {
-      if (sql.includes("pg_try_advisory_lock")) {
-        return [{ got: opts.acquired }];
-      }
-      if (sql.includes("pg_advisory_unlock")) {
-        return [{ unlocked: true }];
-      }
-      return [];
-    }),
-  };
-  return queryRunner;
-}
-
 function buildService(opts: {
   session?: Partial<GameSessionEntity> | null;
   messageCount?: number;
@@ -44,6 +21,9 @@ function buildService(opts: {
   sessionRepo: { findOne: jest.Mock; update: jest.Mock };
   messageRepo: { count: jest.Mock };
   outbound: { request: jest.Mock };
+  queries: string[];
+  transactionFn: jest.Mock;
+  createQueryRunner: jest.Mock;
 } {
   const sessionRepo = {
     findOne: jest.fn().mockResolvedValue(opts.session ?? null),
@@ -68,9 +48,21 @@ function buildService(opts: {
     }),
   };
   const lockAcquired = opts.lockAcquired ?? true;
-  const queryRunner = buildLockMock({ acquired: lockAcquired });
+  const queries: string[] = [];
+  const txManager = {
+    query: jest.fn((sql: string) => {
+      queries.push(sql);
+      if (sql.includes("advisory")) {
+        return Promise.resolve([{ got: lockAcquired }]);
+      }
+      return Promise.resolve([]);
+    }),
+  };
+  const transactionFn = jest.fn((cb: (m: unknown) => unknown) => cb(txManager));
+  const createQueryRunner = jest.fn();
   const dataSource: any = {
-    createQueryRunner: jest.fn(() => queryRunner),
+    transaction: transactionFn,
+    createQueryRunner,
   };
   const logger = {
     setContext: jest.fn(),
@@ -94,7 +86,15 @@ function buildService(opts: {
     logger,
     config,
   );
-  return { service, sessionRepo, messageRepo, outbound };
+  return {
+    service,
+    sessionRepo,
+    messageRepo,
+    outbound,
+    queries,
+    transactionFn,
+    createQueryRunner,
+  };
 }
 
 describe("SessionRecapService", () => {
@@ -129,6 +129,39 @@ describe("SessionRecapService", () => {
       messageCount: 5,
     });
     expect(outbound.request).not.toHaveBeenCalled();
+  });
+
+  it("segura o lock como xact dentro de dataSource.transaction, sem unlock manual", async () => {
+    const ctx = buildService({
+      session: {
+        id: SESSION_ID,
+        campaignId: "c-1",
+        summaryText: "Resumo já cacheado",
+      },
+    });
+
+    await ctx.service.ensureRecap(SESSION_ID);
+
+    // O pooler PgBouncer da Neon é transaction-mode: statements soltos podem cair
+    // em backends diferentes, então o lock só é confiável se for xact-scoped e
+    // liberado pelo COMMIT — nunca por um pg_advisory_unlock em outro statement.
+    expect(ctx.transactionFn).toHaveBeenCalledTimes(1);
+    expect(ctx.createQueryRunner).not.toHaveBeenCalled();
+    expect(ctx.queries[0]).toContain("pg_try_advisory_xact_lock");
+    expect(ctx.queries.some((sql) => sql.includes("pg_advisory_unlock"))).toBe(
+      false,
+    );
+  });
+
+  it("continua sem bloquear quando o lock está tomado (try, não wait)", async () => {
+    const { service, queries } = buildService({ lockAcquired: false });
+
+    await service.ensureRecap(SESSION_ID);
+
+    // ensureRecap roda dentro do request de narração: esperar pelo lock somaria a
+    // latência do summarize alheio à resposta do jogador.
+    expect(queries[0]).not.toMatch(/pg_advisory_xact_lock\s*\(/);
+    expect(queries[0]).toContain("pg_try_advisory_xact_lock");
   });
 
   it("retorna skipped_locked quando outro processo segura o lock", async () => {

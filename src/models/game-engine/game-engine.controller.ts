@@ -11,6 +11,7 @@ import {
   UseGuards,
   UnauthorizedException,
   UseInterceptors,
+  Optional,
   UploadedFile,
   HttpCode,
   HttpStatus,
@@ -18,6 +19,10 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
+import { EncounterCommandLockInterceptor } from "src/common/concurrency/encounter-command-lock.interceptor";
+import { GameResultStatusInterceptor } from "src/common/http/game-result-status.interceptor";
+import { ClientIdContext } from "src/common/http/client-id.context";
+import { CommandSnapshotInterceptor } from "./interceptors/command-snapshot.interceptor";
 import { CloudinaryService } from "src/shared/cloudinary.service";
 import { QuestService } from "../world/services/quest.service";
 import { CharacterStateService } from "../characters/services/character-state.service";
@@ -131,7 +136,10 @@ import {
   type GameResult,
 } from "./interfaces/result.type";
 
-import { toEnrichedEncounterResponse } from "./dto/encounter-response.dto";
+import {
+  toEnrichedEncounterResponse,
+  toTileEffectResponses,
+} from "./dto/encounter-response.dto";
 import {
   toEventResponseDto,
   buildParticipantsMap,
@@ -159,6 +167,14 @@ function getUserId(req: AuthRequest): string {
 
 @Controller("game")
 @UseGuards(AuthGuard)
+// Ordem importa: o lock precisa envolver a execução inteira; o snapshot só é
+// montado depois que o comando terminou; o status HTTP é o último a tocar a
+// resposta.
+@UseInterceptors(
+  EncounterCommandLockInterceptor,
+  CommandSnapshotInterceptor,
+  GameResultStatusInterceptor,
+)
 export class GameEngineController {
   constructor(
     private readonly sessionService: SessionService,
@@ -229,15 +245,38 @@ export class GameEngineController {
 
 
     private readonly realtime: RealtimeService,
+    // @Optional(): specs constroem este controller posicionalmente; a marca da
+    // aba de origem é otimização e não pode ser requisito de construção.
+    @Optional()
+    private readonly clientIdContext?: ClientIdContext,
   ) {}
 
 
   private emitEncounterInvalidate(encounterId: string, reason: string): void {
+    // Resolvido FORA do emit e tolerante a ausência: marcar a aba de origem é
+    // otimização, perder o invalidate é bug de estado. O `?.` também mantém o
+    // controller construível posicionalmente nos specs.
+    let originClientId: string | null = null;
+    try {
+      originClientId = this.clientIdContext?.current() ?? null;
+    } catch {
+
+    }
+
     try {
       this.realtime.emitToRoom(
         `encounter:${encounterId}`,
         "encounter:invalidate",
-        { encounterId, reason, at: new Date().toISOString() },
+        {
+          encounterId,
+          reason,
+          at: new Date().toISOString(),
+          // Sem isto o invalidate voltava para a própria aba que agiu (socket.io
+          // entrega para o emissor também) e ela refazia os 3 GETs que o
+          // `snapshot` da resposta acabou de tornar desnecessários — o waterfall
+          // ressuscitava em ~25 rotas.
+          originClientId,
+        },
       );
     } catch {
 
@@ -641,29 +680,11 @@ export class GameEngineController {
     const areas = await this.persistentArea.listByEncounter(id);
     return {
       ok: true as const,
+      // Mesmo mapper usado por CommandSnapshotService: leitura e resposta de
+      // comando precisam produzir shape idêntico, senão aplicar o snapshot no
+      // cliente divergiria do refetch.
       value: toEnrichedEncounterResponse(encounter, {
-        tileEffects: areas.map((area) => ({
-          id: area.id,
-          encounterId: area.encounterId,
-          sourceSpellSlug: area.sourceSpell,
-          sourceParticipantId: area.casterParticipantId,
-          effectKind: area.effectKind,
-          shapeKind: area.shapeKind,
-          originCell: area.originCell,
-          radiusCells: area.radiusCells,
-          damageDice: area.damageDice,
-          damageType: area.damageType,
-          durationRoundsRemaining: area.durationRoundsRemaining,
-          slotLevel: area.slotLevel,
-          saveDc: area.saveDc,
-          saveAbility: area.saveAbility,
-          isDifficultTerrain: area.isDifficultTerrain,
-          speedMultiplier: area.speedMultiplier,
-          sourceConcentration: area.sourceConcentration,
-          auraFollowsCaster: area.auraFollowsCaster ?? false,
-          narrativeDescriptor: area.narrativeDescriptor,
-          tactical: area.tacticalMetadata,
-        })),
+        tileEffects: toTileEffectResponses(areas),
       }),
       events: [],
     };

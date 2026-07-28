@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { RequestCache } from "src/common/request-cache/request-cache.service";
 import {
   CharacterEntity,
   CharacterClassEntity,
@@ -681,7 +682,19 @@ export class CharacterSheetService {
     private readonly equipCatItemRepo: Repository<EquipmentCategoryItemEntity>,
     @InjectRepository(SkillEntity)
     private readonly skillRepo: Repository<SkillEntity>,
+    // Último parâmetro e @Optional() de propósito: vários specs constroem este
+    // service passando apenas os repositórios posicionalmente.
+    @Optional()
+    private readonly requestCache?: RequestCache,
   ) {}
+
+  // Sem `RequestCache` (specs, ou contexto fora de request) o memo degrada
+  // para chamada direta, mantendo o comportamento atual.
+  private memo<T>(key: string, loader: () => Promise<T>): Promise<T> {
+    return this.requestCache
+      ? this.requestCache.getOrLoad(key, loader)
+      : loader();
+  }
 
   private resolveElementalFuryChoice(
     characterFeatures: CharacterFeatureEntity[],
@@ -710,7 +723,24 @@ export class CharacterSheetService {
     return "primal-strike";
   }
 
-  async computeSheet(
+  /**
+   * Ficha completa do personagem, memoizada por request.
+   *
+   * Motivação (perf 2026-07-27): um único POST /encounters/:id/attack pedia a
+   * MESMA ficha 6-10x, e cada recomputação são 17 statements contra o Neon
+   * (~11ms de RTT cada). A chave inclui o userId porque o guard de leitura é
+   * por usuário — o memo não pode servir a ficha de outro dono.
+   *
+   * A invalidação vem do `RequestCacheSubscriber` (qualquer escrita via ORM em
+   * tabela do personagem) e das invalidações manuais nos writers em SQL cru.
+   */
+  computeSheet(userId: string, characterId: string): Promise<CharacterSheet> {
+    return this.memo(`sheet|${characterId}|${userId}`, () =>
+      this.computeSheetUncached(userId, characterId),
+    );
+  }
+
+  private async computeSheetUncached(
     userId: string,
     characterId: string,
   ): Promise<CharacterSheet> {
