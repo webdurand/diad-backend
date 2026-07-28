@@ -7,8 +7,8 @@ import {
 } from "@nestjs/common";
 import { createHash } from "crypto";
 import type { Request } from "express";
-import { Observable, of } from "rxjs";
-import { finalize } from "rxjs/operators";
+import { Observable } from "rxjs";
+import { finalize, mergeMap } from "rxjs/operators";
 
 /**
  * Serializa comandos de mutação por encontro (single-writer).
@@ -23,9 +23,9 @@ import { finalize } from "rxjs/operators";
  * combate:
  * - duplo-clique idêntico (mesmo corpo) é DEDUPLICADO: a segunda chamada
  *   recebe a resposta canônica de "já em andamento" em vez de executar de novo;
- * - comando DIFERENTE concorrente no mesmo encontro é rejeitado com 409, em vez
- *   de enfileirado — com ataque a ~2s, enfileirar transformaria duplo-submit em
- *   4s de espera.
+ * - comandos DIFERENTES concorrentes no mesmo encontro aguardam em FIFO. Isso
+ *   preserva a intenção de jogadores/DMs distintos sem reabrir o lost update e
+ *   sem obrigar cada cliente a disputar o lock por retry.
  *
  * INVARIANTE: o lock é em processo. Ele é correto porque o backend roda como um
  * único processo `node dist/main` (sem PM2, sem cluster, sem réplicas). Se um
@@ -44,19 +44,45 @@ import { finalize } from "rxjs/operators";
  */
 const COMMAND_LOCK_TTL_MS = 120_000;
 
-type LockEntry = {
+/**
+ * Uma ação que esperou mais que isso provavelmente já nasceu de uma tela
+ * desatualizada. O domínio ainda revalida turno/economia quando ela começa, mas
+ * limitar a espera evita requests e cerimônias otimistas pendurados para sempre
+ * caso um handler externo trave.
+ */
+export const ENCOUNTER_COMMAND_QUEUE_WAIT_TIMEOUT_MS = 15_000;
+
+/** Proteção de memória e de latência para encontros sob rajada anormal. */
+export const ENCOUNTER_COMMAND_QUEUE_MAX_PENDING = 16;
+
+type ActiveCommand = {
   expiresAt: number;
   fingerprint: string;
+  token: symbol;
 };
 
-const activeCommands = new Map<string, LockEntry>();
+type CommandLease = {
+  encounterId: string;
+  token: symbol;
+};
 
-function sweep(now: number): void {
-  if (activeCommands.size <= 128) return;
-  for (const [key, entry] of activeCommands) {
-    if (entry.expiresAt <= now) activeCommands.delete(key);
-  }
-}
+type QueuedCommand = {
+  fingerprint: string;
+  token: symbol;
+  timer: ReturnType<typeof setTimeout>;
+  isClosed: () => boolean;
+  grant: (lease: CommandLease) => void;
+  fail: (error: ConflictException) => void;
+};
+
+type EncounterCommandQueue = {
+  active: ActiveCommand | null;
+  /** Inclui o ativo e os waiters para deduplicar também dentro da fila. */
+  fingerprints: Set<string>;
+  waiters: QueuedCommand[];
+};
+
+const encounterCommandQueues = new Map<string, EncounterCommandQueue>();
 
 /**
  * O alvo tem de ser a URL CONCRETA, nunca o padrão da rota. Com o padrão
@@ -84,15 +110,15 @@ export function buildCommandFingerprint(
 }
 
 export function __resetEncounterCommandLockForTests(): void {
-  activeCommands.clear();
+  for (const queue of encounterCommandQueues.values()) {
+    for (const waiter of queue.waiters) clearTimeout(waiter.timer);
+  }
+  encounterCommandQueues.clear();
 }
 
 @Injectable()
 export class EncounterCommandLockInterceptor implements NestInterceptor {
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler,
-  ): Observable<unknown> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (context.getType() !== "http") return next.handle();
 
     const req = context.switchToHttp().getRequest<Request>();
@@ -104,62 +130,231 @@ export class EncounterCommandLockInterceptor implements NestInterceptor {
       concreteTarget(req),
       req.body,
     );
-    const now = Date.now();
-    const current = activeCommands.get(encounterId);
 
-    if (current && current.expiresAt > now) {
-      // Os dois casos precisam ser ERRO HTTP, não corpo 2xx.
-      //
-      // Devolver `{ok:false}` com 200/201 fazia o cliente tratar o envelope
-      // como se fosse o recurso: `handleResponse` não lança, e um call site que
-      // tipa a resposta como `Encounter` gravava `{ok:false, code, error}` no
-      // estado da página — o encontro ficava sem `id`, o socket caía e a tela
-      // se desmontava. Como este é o interceptor mais externo, o
-      // GameResultStatusInterceptor nem veria esse corpo para corrigir o status.
-      const duplicate = current.fingerprint === fingerprint;
-      throw new ConflictException(
-        duplicate
-          ? {
-              ok: false,
-              code: "COMMAND_IN_PROGRESS",
-              error: "Esta ação já está sendo processada.",
-              hint: "Aguarde a resolução da ação anterior antes de repetir.",
-            }
-          : {
-              ok: false,
-              code: "ENCOUNTER_BUSY",
-              error: "Outra ação deste encontro ainda está sendo resolvida.",
-              hint: "Aguarde a ação em andamento terminar.",
-            },
-      );
-    }
-
-    sweep(now);
-    activeCommands.set(encounterId, {
-      expiresAt: now + COMMAND_LOCK_TTL_MS,
-      fingerprint,
-    });
-
-    let released = false;
-    const release = (): void => {
-      if (released) return;
-      released = true;
-      const entry = activeCommands.get(encounterId);
-      if (entry?.fingerprint === fingerprint) {
-        activeCommands.delete(encounterId);
-      }
-    };
-
-    try {
-      // `finalize` cobre sucesso, erro e unsubscribe do observable. O try/catch
-      // cobre o caso em que o handler estoura ANTES de virar observable — sem
-      // ele o lock ficaria preso até o TTL de 30s e o encontro travaria.
-      return next.handle().pipe(finalize(release));
-    } catch (err) {
-      release();
-      throw err;
-    }
+    return acquireCommand(encounterId, fingerprint).pipe(
+      mergeMap((lease) => {
+        const release = once(() => releaseCommand(lease));
+        try {
+          // Este interceptor continua externo ao CommandSnapshotInterceptor.
+          // Portanto o `finalize` só libera depois que mutação, snapshot e
+          // publicação realtime terminaram — a fila muda a política de espera,
+          // não a fronteira de consistência.
+          return next.handle().pipe(finalize(release));
+        } catch (err) {
+          // `next.handle()` também pode falhar antes de produzir Observable.
+          release();
+          throw err;
+        }
+      }),
+    );
   }
+}
+
+function acquireCommand(
+  encounterId: string,
+  fingerprint: string,
+): Observable<CommandLease> {
+  return new Observable<CommandLease>((subscriber) => {
+    const queue = getOrCreateQueue(encounterId);
+    expireStaleActiveCommand(encounterId, queue, Date.now());
+    // Sem waiter, a expiração limpa a entrada ociosa. Esta aquisição ainda usa
+    // o mesmo objeto e precisa recolocá-lo antes de registrar o novo holder.
+    if (encounterCommandQueues.get(encounterId) !== queue) {
+      encounterCommandQueues.set(encounterId, queue);
+    }
+
+    // Precisa continuar sendo ERRO HTTP, não corpo 2xx. Além do ativo, a busca
+    // cobre a fila: dois cliques idênticos antes de chegar a vez não podem virar
+    // duas mutações futuras.
+    if (queue.fingerprints.has(fingerprint)) {
+      subscriber.error(commandInProgressException());
+      return;
+    }
+
+    queue.fingerprints.add(fingerprint);
+
+    if (!queue.active && queue.waiters.length === 0) {
+      subscriber.next(activateCommand(encounterId, queue, fingerprint));
+      subscriber.complete();
+      return;
+    }
+
+    if (queue.waiters.length >= ENCOUNTER_COMMAND_QUEUE_MAX_PENDING) {
+      queue.fingerprints.delete(fingerprint);
+      subscriber.error(queueUnavailableException("full"));
+      cleanupQueueIfIdle(encounterId, queue);
+      return;
+    }
+
+    const waiterToken = Symbol(`encounter-command-waiter:${encounterId}`);
+    let settled = false;
+    const waiter = {
+      fingerprint,
+      token: waiterToken,
+      timer: undefined as unknown as ReturnType<typeof setTimeout>,
+      isClosed: () => subscriber.closed,
+      grant: (lease: CommandLease) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(waiter.timer);
+        subscriber.next(lease);
+        subscriber.complete();
+      },
+      fail: (error: ConflictException) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(waiter.timer);
+        subscriber.error(error);
+      },
+    } satisfies QueuedCommand;
+
+    waiter.timer = setTimeout(() => {
+      if (settled) return;
+      removeWaiter(queue, waiterToken);
+      queue.fingerprints.delete(fingerprint);
+      waiter.fail(queueUnavailableException("timeout"));
+      cleanupQueueIfIdle(encounterId, queue);
+    }, ENCOUNTER_COMMAND_QUEUE_WAIT_TIMEOUT_MS);
+    queue.waiters.push(waiter);
+
+    // Se o cliente fechou a conexão enquanto esperava, sua intenção deixa de
+    // existir. Remover o ticket impede um "comando fantasma" depois do turno
+    // avançar e também libera o fingerprint para uma nova tentativa explícita.
+    return () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(waiter.timer);
+      if (removeWaiter(queue, waiterToken)) {
+        queue.fingerprints.delete(fingerprint);
+      }
+      cleanupQueueIfIdle(encounterId, queue);
+    };
+  });
+}
+
+function getOrCreateQueue(encounterId: string): EncounterCommandQueue {
+  const existing = encounterCommandQueues.get(encounterId);
+  if (existing) return existing;
+  const created: EncounterCommandQueue = {
+    active: null,
+    fingerprints: new Set<string>(),
+    waiters: [],
+  };
+  encounterCommandQueues.set(encounterId, created);
+  return created;
+}
+
+function activateCommand(
+  encounterId: string,
+  queue: EncounterCommandQueue,
+  fingerprint: string,
+): CommandLease {
+  const token = Symbol(`encounter-command-active:${encounterId}`);
+  queue.active = {
+    expiresAt: Date.now() + COMMAND_LOCK_TTL_MS,
+    fingerprint,
+    token,
+  };
+  return { encounterId, token };
+}
+
+function releaseCommand(lease: CommandLease): void {
+  const queue = encounterCommandQueues.get(lease.encounterId);
+  if (!queue || queue.active?.token !== lease.token) return;
+
+  queue.fingerprints.delete(queue.active.fingerprint);
+  queue.active = null;
+  promoteNextWaiter(lease.encounterId, queue);
+}
+
+function promoteNextWaiter(
+  encounterId: string,
+  queue: EncounterCommandQueue,
+): void {
+  if (queue.active) return;
+
+  while (queue.waiters.length > 0) {
+    const waiter = queue.waiters.shift()!;
+    if (waiter.isClosed()) {
+      clearTimeout(waiter.timer);
+      queue.fingerprints.delete(waiter.fingerprint);
+      continue;
+    }
+
+    const lease = activateCommand(encounterId, queue, waiter.fingerprint);
+    waiter.grant(lease);
+    return;
+  }
+
+  cleanupQueueIfIdle(encounterId, queue);
+}
+
+function expireStaleActiveCommand(
+  encounterId: string,
+  queue: EncounterCommandQueue,
+  now: number,
+): void {
+  const active = queue.active;
+  if (!active || active.expiresAt > now) return;
+
+  // O token impede que o finalize tardio do comando expirado remova o novo
+  // holder. Expirar continua sendo apenas a rede de segurança histórica; no
+  // caminho normal toda liberação vem de `finalize`.
+  queue.fingerprints.delete(active.fingerprint);
+  queue.active = null;
+  promoteNextWaiter(encounterId, queue);
+}
+
+function removeWaiter(queue: EncounterCommandQueue, token: symbol): boolean {
+  const index = queue.waiters.findIndex((waiter) => waiter.token === token);
+  if (index < 0) return false;
+  queue.waiters.splice(index, 1);
+  return true;
+}
+
+function cleanupQueueIfIdle(
+  encounterId: string,
+  queue: EncounterCommandQueue,
+): void {
+  if (queue.active || queue.waiters.length > 0) return;
+  if (encounterCommandQueues.get(encounterId) === queue) {
+    encounterCommandQueues.delete(encounterId);
+  }
+}
+
+function commandInProgressException(): ConflictException {
+  return new ConflictException({
+    ok: false,
+    code: "COMMAND_IN_PROGRESS",
+    error: "Esta ação já está sendo processada.",
+    hint: "Aguarde a resolução da ação anterior antes de repetir.",
+  });
+}
+
+function queueUnavailableException(
+  reason: "full" | "timeout",
+): ConflictException {
+  return new ConflictException({
+    ok: false,
+    code: "ENCOUNTER_BUSY",
+    error:
+      reason === "full"
+        ? "Há muitas ações deste encontro aguardando resolução."
+        : "O encontro continuou ocupado por muito tempo; esta ação não foi executada.",
+    hint:
+      reason === "full"
+        ? "Aguarde as ações em andamento terminarem antes de tentar novamente."
+        : "Confira o estado atualizado do encontro antes de repetir a ação.",
+  });
+}
+
+function once(callback: () => void): () => void {
+  let called = false;
+  return () => {
+    if (called) return;
+    called = true;
+    callback();
+  };
 }
 
 /** URL sem query string. `originalUrl` inclui o prefixo global e os params. */
@@ -174,8 +369,17 @@ function concreteTarget(req: Request): string {
  */
 function resolveEncounterId(req: Request): string | null {
   if (req.method === "GET" || req.method === "HEAD") return null;
-  const path = req.route?.path ?? req.path ?? "";
-  if (!path.includes("encounters/:id")) return null;
+  const routePath = (req.route as { path?: unknown } | undefined)?.path;
+  const paths = Array.isArray(routePath)
+    ? routePath
+    : [routePath ?? req.path ?? ""];
+  if (
+    !paths.some(
+      (path) => typeof path === "string" && path.includes("encounters/:id"),
+    )
+  ) {
+    return null;
+  }
   const id = (req.params as Record<string, string> | undefined)?.id;
   return typeof id === "string" && id.length > 0 ? id : null;
 }
