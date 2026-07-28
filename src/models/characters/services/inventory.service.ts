@@ -2,9 +2,12 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { ClsService } from "nestjs-cls";
 import { Repository } from "typeorm";
+import { recordDiceRollTrace } from "src/common/dice/dice-roll-trace.context";
 import {
   CharacterEntity,
   CharacterEquipmentEntity,
@@ -166,6 +169,7 @@ export class InventoryService {
     @InjectRepository(MagicItemEntity)
     private readonly magicItemRepo: Repository<MagicItemEntity>,
     private readonly stateService: CharacterStateService,
+    @Optional() private readonly cls?: ClsService,
   ) {}
 
 
@@ -711,10 +715,17 @@ export class InventoryService {
     const count = parseInt(match[1], 10);
     const sides = parseInt(match[2], 10);
     const bonus = match[3] ? parseInt(match[3], 10) : 0;
-    let total = bonus;
+    const rolls: number[] = [];
     for (let i = 0; i < count; i++) {
-      total += Math.floor(Math.random() * sides) + 1;
+      rolls.push(Math.floor(Math.random() * sides) + 1);
     }
+    const total = rolls.reduce((sum, value) => sum + value, bonus);
+    recordDiceRollTrace(this.cls, {
+      expression,
+      rolls,
+      modifier: bonus,
+      total,
+    });
     return total;
   }
 

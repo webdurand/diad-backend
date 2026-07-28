@@ -49,14 +49,13 @@ export class CommandSnapshotService {
 
   async build(encounterId: string): Promise<CommandSnapshot | null> {
     try {
-      const [encounter, areas, timeline] = await Promise.all([
+      const [encounter, areas, events] = await Promise.all([
         this.encounterService.getById(encounterId, { withMonsters: true }),
         this.persistentArea.listByEncounter(encounterId),
-        this.eventService.getEncounterTimelineFiltered(encounterId, {
-          limit: SNAPSHOT_EVENT_LIMIT,
-          offset: 0,
-          latest: true,
-        }),
+        this.eventService.getLatestEncounterEvents(
+          encounterId,
+          SNAPSHOT_EVENT_LIMIT,
+        ),
       ]);
 
       const participants = encounter.participants ?? [];
@@ -67,7 +66,7 @@ export class CommandSnapshotService {
           tileEffects: toTileEffectResponses(areas),
         }),
         turn: buildTurnInfo(encounterId, encounter, participants),
-        events: timeline.events.map((event) =>
+        events: events.map((event) =>
           toEventResponseDto(event, participantsMap),
         ),
         at: this.nextSnapshotAt(),

@@ -70,7 +70,7 @@ async function bootstrap() {
     // invalidate legado da própria origem. O snapshot continua sendo entregue
     // como fallback e é deduplicado no cliente pela versão monotônica.
     allowedHeaders:
-      "Content-Type,Authorization,traceparent,x-diad-domain,x-client-id",
+      "Content-Type,Authorization,traceparent,x-diad-domain,x-client-id,x-dice-command-id",
     exposedHeaders: "traceparent",
   });
 

@@ -23,6 +23,7 @@ import { EncounterCommandLockInterceptor } from "src/common/concurrency/encounte
 import { GameResultStatusInterceptor } from "src/common/http/game-result-status.interceptor";
 import { ClientIdContext } from "src/common/http/client-id.context";
 import { CommandSnapshotInterceptor } from "./interceptors/command-snapshot.interceptor";
+import { CommandSnapshotService } from "./services/command-snapshot.service";
 import { CloudinaryService } from "src/shared/cloudinary.service";
 import { QuestService } from "../world/services/quest.service";
 import { CharacterStateService } from "../characters/services/character-state.service";
@@ -211,6 +212,7 @@ export class GameEngineController {
     private readonly capstonesService: CapstonesService,
     private readonly aiTurnService: AiTurnService,
     private readonly snapshotService: EncounterSnapshotService,
+    private readonly commandSnapshotService: CommandSnapshotService,
 
     private readonly persistentArea: PersistentAreaService,
 
@@ -688,6 +690,12 @@ export class GameEngineController {
       }),
       events: [],
     };
+  }
+
+  @Get("encounters/:id/command-snapshot")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
+  async getCommandSnapshot(@Param("id") id: string) {
+    return this.commandSnapshotService.build(id);
   }
 
   @Get("campaigns/:campaignId/encounters")
@@ -2947,18 +2955,24 @@ export class GameEngineController {
       eventTypes = normalizedTypes.map(camelToSnakeCase);
     }
 
-    const { events, total } =
-      await this.eventService.getEncounterTimelineFiltered(id, {
+    const [timeline, eventParticipants] = await Promise.all([
+      this.eventService.getEncounterTimelineFiltered(id, {
         since: query.since,
         eventTypes,
         limit: query.limit ?? 50,
         offset: query.offset ?? 0,
         latest: query.latest ?? false,
-      });
+      }),
+      // O timeline só precisa de id + nome. Carregar o encontro enriquecido aqui
+      // recomputava a ficha inteira de cada PC (~70 queries numa party cheia).
+      this.participantRepo.find({
+        where: { encounterId: id },
+      }),
+    ]);
+    const { events, total } = timeline;
 
 
-    const encounter = await this.encounterService.getById(id);
-    const participantsMap = buildParticipantsMap(encounter.participants ?? []);
+    const participantsMap = buildParticipantsMap(eventParticipants);
 
     const limit = query.limit ?? 50;
     const offset = query.offset ?? 0;

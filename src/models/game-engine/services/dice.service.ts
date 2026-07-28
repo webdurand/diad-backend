@@ -1,6 +1,11 @@
 import { randomUUID } from "crypto";
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { ClsService } from "nestjs-cls";
+import {
+  recordDiceRollTrace,
+  withoutNestedDiceRollTrace,
+} from "src/common/dice/dice-roll-trace.context";
 import {
   AdvantageResult,
   DiceModifierBreakdown,
@@ -18,6 +23,7 @@ import {
 export class DiceService {
   private seededRng: (() => number) | null = null;
 
+  constructor(@Optional() private readonly cls?: ClsService) {}
 
   setSeed(seed: number): void {
     this.seededRng = this.mulberry32(seed);
@@ -31,14 +37,34 @@ export class DiceService {
 
   roll(sides: number): number {
     if (sides < 1) return 0;
-    return Math.floor(this.random() * sides) + 1;
+    const result = Math.floor(this.random() * sides) + 1;
+    if (sides > 1) {
+      recordDiceRollTrace(this.cls, {
+        expression: `1d${sides}`,
+        rolls: [result],
+        modifier: 0,
+        total: result,
+      });
+    }
+    return result;
   }
 
 
   rollMultiple(count: number, sides: number): number[] {
-    const results: number[] = [];
-    for (let i = 0; i < count; i++) {
-      results.push(this.roll(sides));
+    const results = withoutNestedDiceRollTrace(this.cls, () => {
+      const values: number[] = [];
+      for (let i = 0; i < count; i++) {
+        values.push(this.roll(sides));
+      }
+      return values;
+    });
+    if (results.length > 0 && sides > 1) {
+      recordDiceRollTrace(this.cls, {
+        expression: `${count}d${sides}`,
+        rolls: results,
+        modifier: 0,
+        total: results.reduce((sum, value) => sum + value, 0),
+      });
     }
     return results;
   }
@@ -75,7 +101,9 @@ export class DiceService {
     const keepCount = match[4] ? parseInt(match[4], 10) : undefined;
     const modifier = match[5] ? parseInt(match[5], 10) : 0;
 
-    const allRolls = this.rollMultiple(count, sides);
+    const allRolls = withoutNestedDiceRollTrace(this.cls, () =>
+      this.rollMultiple(count, sides),
+    );
 
     let kept: number[];
     let dropped: number[] | undefined;
@@ -95,30 +123,58 @@ export class DiceService {
 
     const sum = kept.reduce((a, b) => a + b, 0);
 
-    return {
+    const result = {
       expression: expr,
       rolls: allRolls,
       modifier,
       total: sum + modifier,
       dropped,
     };
+    if (sides > 1) {
+      recordDiceRollTrace(this.cls, {
+        expression: expr,
+        rolls: allRolls,
+        modifier,
+        total: result.total,
+        dropped,
+      });
+    }
+    return result;
   }
 
 
   rollWithAdvantage(): AdvantageResult {
-    const roll1 = this.roll(20);
-    const roll2 = this.roll(20);
+    const [roll1, roll2] = withoutNestedDiceRollTrace(this.cls, () => [
+      this.roll(20),
+      this.roll(20),
+    ]);
     const chosen = Math.max(roll1, roll2);
     const discarded = Math.min(roll1, roll2);
+    recordDiceRollTrace(this.cls, {
+      expression: "2d20kh1",
+      rolls: [roll1, roll2],
+      modifier: 0,
+      total: chosen,
+      dropped: [discarded],
+    });
     return { roll1, roll2, chosen, discarded };
   }
 
 
   rollWithDisadvantage(): AdvantageResult {
-    const roll1 = this.roll(20);
-    const roll2 = this.roll(20);
+    const [roll1, roll2] = withoutNestedDiceRollTrace(this.cls, () => [
+      this.roll(20),
+      this.roll(20),
+    ]);
     const chosen = Math.min(roll1, roll2);
     const discarded = Math.max(roll1, roll2);
+    recordDiceRollTrace(this.cls, {
+      expression: "2d20kl1",
+      rolls: [roll1, roll2],
+      modifier: 0,
+      total: chosen,
+      dropped: [discarded],
+    });
     return { roll1, roll2, chosen, discarded };
   }
 
@@ -127,17 +183,28 @@ export class DiceService {
     modifier: number,
     options?: { advantage?: boolean },
   ): InitiativeResult {
-    let roll = this.roll(20);
-
-    if (options?.advantage) {
-      const second = this.roll(20);
-      if (second > roll) roll = second;
-    }
-    return {
+    const rolls = withoutNestedDiceRollTrace(this.cls, () => {
+      const values = [this.roll(20)];
+      if (options?.advantage) values.push(this.roll(20));
+      return values;
+    });
+    const roll = Math.max(...rolls);
+    const result = {
       roll,
       modifier,
       total: roll + modifier,
     };
+    recordDiceRollTrace(this.cls, {
+      expression: options?.advantage ? "2d20kh1" : "1d20",
+      rolls,
+      modifier,
+      total: result.total,
+      dropped:
+        options?.advantage && rolls.length > 1
+          ? [Math.min(...rolls)]
+          : undefined,
+    });
+    return result;
   }
 
 

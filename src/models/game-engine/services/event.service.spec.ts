@@ -296,3 +296,26 @@ describe("EventService.emit — participantes consultados no manager da transaç
     );
   });
 });
+
+describe("EventService.getLatestEncounterEvents", () => {
+  it("busca só o limite mais recente e devolve em ordem cronológica", async () => {
+    const newestFirst = [
+      { id: "event-3", sequence: 3 },
+      { id: "event-2", sequence: 2 },
+    ] as GameEventEntity[];
+    const find = jest.fn().mockResolvedValue(newestFirst);
+    const service = new EventService(
+      { find } as unknown as Repository<GameEventEntity>,
+      {} as DataSource,
+    );
+
+    const result = await service.getLatestEncounterEvents(ENCOUNTER_ID, 2);
+
+    expect(find).toHaveBeenCalledWith({
+      where: { encounterId: ENCOUNTER_ID },
+      order: { sequence: "DESC" },
+      take: 2,
+    });
+    expect(result.map((item) => item.sequence)).toEqual([2, 3]);
+  });
+});

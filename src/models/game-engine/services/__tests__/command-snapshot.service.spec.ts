@@ -41,14 +41,12 @@ function build(enc: EncounterEntity = encounter()): {
   service: CommandSnapshotService;
   encounterService: { getById: jest.Mock };
   persistentArea: { listByEncounter: jest.Mock };
-  eventService: { getEncounterTimelineFiltered: jest.Mock };
+  eventService: { getLatestEncounterEvents: jest.Mock };
 } {
   const encounterService = { getById: jest.fn().mockResolvedValue(enc) };
   const persistentArea = { listByEncounter: jest.fn().mockResolvedValue([]) };
   const eventService = {
-    getEncounterTimelineFiltered: jest
-      .fn()
-      .mockResolvedValue({ events: [], total: 0 }),
+    getLatestEncounterEvents: jest.fn().mockResolvedValue([]),
   };
 
   return {
@@ -80,7 +78,7 @@ describe("CommandSnapshotService", () => {
       withMonsters: true,
     });
     expect(persistentArea.listByEncounter).toHaveBeenCalledTimes(1);
-    expect(eventService.getEncounterTimelineFiltered).toHaveBeenCalledTimes(1);
+    expect(eventService.getLatestEncounterEvents).toHaveBeenCalledTimes(1);
   });
 
   it("emite currentTurnIndex e currentRound, que o frontend lê e antes vinham undefined", async () => {

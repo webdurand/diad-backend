@@ -122,6 +122,19 @@ export class EventService {
     });
   }
 
+  async getLatestEncounterEvents(
+    encounterId: string,
+    limit: number,
+  ): Promise<GameEventEntity[]> {
+    const events = await this.eventRepo.find({
+      where: { encounterId },
+      order: { sequence: "DESC" },
+      take: limit,
+    });
+    events.reverse();
+    return events;
+  }
+
 
   async getEncounterTimelineFiltered(
     encounterId: string,
@@ -149,8 +162,10 @@ export class EventService {
       qb.andWhere("e.event_type IN (:...types)", { types: options.eventTypes });
     }
 
-    const total = await qb.getCount();
-    const events = await qb.skip(offset).take(limit).getMany();
+    const [total, events] = await Promise.all([
+      qb.clone().getCount(),
+      qb.skip(offset).take(limit).getMany(),
+    ]);
     if (options.latest) events.reverse();
 
     return { events, total };
