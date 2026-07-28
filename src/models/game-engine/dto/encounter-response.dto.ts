@@ -1,5 +1,6 @@
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
+import { PersistentAreaEffectEntity } from "src/entities/persistent-area-effect.entity";
 import {
   getSummonMetadata,
   getSummonStatBlock,
@@ -117,6 +118,15 @@ export interface EnrichedEncounterResponse {
   turnNumber: number;
   currentTurnParticipantId: string | null;
   turnOrder: string[];
+
+  /**
+   * O frontend lê `currentTurnIndex`/`currentRound` (page.tsx:382, 6087-6088,
+   * 6170-6171) para destacar o token do turno e mostrar o contador de rodada.
+   * Este mapper nunca os emitia, então `turnOrder[undefined]` nunca casava e o
+   * destaque de turno ficava permanentemente errado.
+   */
+  currentTurnIndex: number;
+  currentRound: number;
 
   inLair: boolean;
   difficulty: unknown | null;
@@ -474,6 +484,9 @@ export function toEnrichedEncounterResponse(
       : null,
     turnOrder,
 
+    currentTurnIndex,
+    currentRound: encounter.currentRound ?? 1,
+
     inLair: encounter.inLair ?? false,
     difficulty: encounter.difficulty ?? null,
     mapData: encounter.mapData ?? {},
@@ -490,4 +503,38 @@ export function toEnrichedEncounterResponse(
         ? encounter.updatedAt.toISOString()
         : String(encounter.updatedAt ?? ""),
   };
+}
+
+/**
+ * Mapper único para efeitos de área. Antes esse `map` vivia inline no
+ * controller (`GET /encounters/:id`); extraído para que a resposta de comando
+ * e a de leitura sejam byte-a-byte iguais — o frontend passa a poder aplicar o
+ * snapshot da mutação sem refetch, e qualquer divergência aqui viraria bug de
+ * estado silencioso.
+ */
+export function toTileEffectResponses(
+  areas: PersistentAreaEffectEntity[],
+): EnrichedTileEffectResponse[] {
+  return areas.map((area) => ({
+    id: area.id,
+    encounterId: area.encounterId,
+    sourceSpellSlug: area.sourceSpell,
+    sourceParticipantId: area.casterParticipantId,
+    effectKind: area.effectKind,
+    shapeKind: area.shapeKind,
+    originCell: area.originCell,
+    radiusCells: area.radiusCells,
+    damageDice: area.damageDice,
+    damageType: area.damageType,
+    durationRoundsRemaining: area.durationRoundsRemaining,
+    slotLevel: area.slotLevel,
+    saveDc: area.saveDc,
+    saveAbility: area.saveAbility,
+    isDifficultTerrain: area.isDifficultTerrain,
+    speedMultiplier: area.speedMultiplier,
+    sourceConcentration: area.sourceConcentration,
+    auraFollowsCaster: area.auraFollowsCaster ?? false,
+    narrativeDescriptor: area.narrativeDescriptor,
+    tactical: area.tacticalMetadata,
+  }));
 }

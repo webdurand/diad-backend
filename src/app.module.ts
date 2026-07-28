@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TypeOrmConfig } from "./config/typeorm.config";
 import { ObservabilityModule } from "./common/observability/observability.module";
+import { RequestCacheModule } from "./common/request-cache/request-cache.module";
 import { EventBusModule } from "./common/event-bus/event-bus.module";
 import { AdminModule } from "./models/admin/admin.module";
 import { LibraryModule } from "./models/library/library.module";
@@ -27,6 +28,7 @@ import { EventBusHttpModule } from "./models/event-bus/event-bus.module";
     }),
     ObservabilityModule,
     TypeOrmModule.forRootAsync(TypeOrmConfig),
+    RequestCacheModule,
     EventBusModule,
     AdminModule,
     LibraryModule,

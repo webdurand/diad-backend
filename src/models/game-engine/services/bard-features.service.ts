@@ -85,19 +85,30 @@ export class BardFeaturesService {
   }
 
 
+  /**
+   * `preloaded` corrige uma ressurreicao do dado gasto: sem ele este metodo
+   * carregava uma SEGUNDA copia da linha do participante, removia o efeito e
+   * gravava — e em seguida o CombatService gravava a copia dele, que ainda
+   * continha o `bardic_inspiration`, desfazendo o consumo. Com a entidade do
+   * caller a mutacao cai no mesmo objeto que ele ja vai persistir, entao aqui
+   * nao lemos nem gravamos nada.
+   */
   async consumeBardicInspirationIfPresent(
     targetParticipantId: string,
     context: "attack_roll" | "saving_throw" | "ability_check",
     diceRoller: (sides: number) => number,
+    preloaded?: EncounterParticipantEntity,
   ): Promise<{
     consumed: boolean;
     bonus: number;
     dieSize?: number;
     events: GameEventData[];
   }> {
-    const target = await this.participantRepo.findOne({
-      where: { id: targetParticipantId },
-    });
+    const target =
+      preloaded ??
+      (await this.participantRepo.findOne({
+        where: { id: targetParticipantId },
+      }));
     if (!target) return { consumed: false, bonus: 0, events: [] };
     const biEffect = (target.effectInstances ?? []).find(
       (e) => (e as unknown as { kind?: string }).kind === "bardic_inspiration",
@@ -113,10 +124,12 @@ export class BardFeaturesService {
     target.effectInstances = (target.effectInstances ?? []).filter(
       (e) => (e as unknown as { id: string }).id !== effectId,
     );
-    try {
-      await this.participantRepo.save(target);
-    } catch {
+    if (!preloaded) {
+      try {
+        await this.participantRepo.save(target);
+      } catch {
 
+      }
     }
 
     return {

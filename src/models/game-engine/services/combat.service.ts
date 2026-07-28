@@ -2,6 +2,7 @@ import { Injectable, Optional } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { randomUUID } from "crypto";
+import { RequestCache } from "src/common/request-cache/request-cache.service";
 import { EncounterEntity } from "src/entities/encounter.entity";
 import { EncounterParticipantEntity } from "src/entities/encounter-participant.entity";
 import { CharacterStateService } from "src/models/characters/services/character-state.service";
@@ -157,6 +158,14 @@ export interface AttackDto {
 
   /** Internal: the enclosing sequence performs the final encounter-end check. */
   _deferAutoEnd?: boolean;
+
+  /**
+   * Internal: row do atacante já carregado antes da primeira escrita do comando
+   * (controller/permission resolver). Evita reler a MESMA linha. Nunca deve ser
+   * propagado para sub-ataques: cada sub-ataque precisa do estado persistido
+   * pelo anterior.
+   */
+  _attacker?: EncounterParticipantEntity;
 }
 
 export interface SubAttackResult {
@@ -337,7 +346,55 @@ export class CombatService {
     private readonly ashPuff?: AshPuffService,
     @Optional()
     private readonly summoning?: SummoningService,
+    // Último parâmetro e @Optional() de propósito: três specs constroem este
+    // service passando as ~35 dependências posicionalmente.
+    @Optional()
+    private readonly requestCache?: RequestCache,
   ) {}
+
+  // Sem `RequestCache` (specs, ou contexto fora de request) o memo degrada para
+  // chamada direta, mantendo o comportamento atual.
+  private memo<T>(key: string, loader: () => Promise<T>): Promise<T> {
+    return this.requestCache
+      ? this.requestCache.getOrLoad(key, loader)
+      : loader();
+  }
+
+  private participantPreflightKey(participantId: string): string {
+    return `participant|${participantId}`;
+  }
+
+  /**
+   * Memoiza a leitura de pré-voo do atacante. Só `translateSlugToActionName`
+   * publica nesta chave: ela roda antes de qualquer escrita do comando, então o
+   * row lido é idêntico ao que `resolveAttack`/`resolveMultiattack` releriam.
+   */
+  private memoizeParticipantPreflight(
+    participantId: string,
+  ): Promise<EncounterParticipantEntity> {
+    return this.memo(this.participantPreflightKey(participantId), () =>
+      this.encounterService.getParticipant(participantId),
+    );
+  }
+
+  /**
+   * Consome a leitura de pré-voo e descarta a entrada imediatamente. Descartar
+   * é obrigatório: a partir da primeira escrita do comando, várias releituras
+   * (applyDamageToMonster, ConcentrationService, EncounterEndDetectorService)
+   * dependem de ver o row já persistido, e um memo vivo devolveria estado
+   * anterior. `invalidatePrefix` — e não `invalidateParticipant` — porque este
+   * último também derrubaria o memo de dono (`owner|<pid>|<uid>`), que continua
+   * válido durante todo o comando.
+   */
+  private async takeParticipantPreflight(
+    participantId: string,
+  ): Promise<EncounterParticipantEntity> {
+    const participant = await this.memoizeParticipantPreflight(participantId);
+    this.requestCache?.invalidatePrefix(
+      this.participantPreflightKey(participantId),
+    );
+    return participant;
+  }
 
   private async resolveEvasionForDamage(
     target: EncounterParticipantEntity,
@@ -602,15 +659,24 @@ export class CombatService {
   }
 
 
+  /**
+   * `preloadedAttacker` existe para o controller poder reaproveitar o row que
+   * `resolveMutationOwner` já carregou. Quando não vem, a leitura é memoizada
+   * na request para que o `resolveAttack`/`resolveMultiattack` imediatamente
+   * seguinte não repita a mesma query.
+   */
   async translateSlugToActionName(
     encounterId: string,
     attackerParticipantId: string,
     slug: string,
     ownerUserId: string,
+    preloadedAttacker?: EncounterParticipantEntity,
   ): Promise<GameResult<string>> {
-    const attacker = await this.encounterService
-      .getParticipant(attackerParticipantId)
-      .catch(() => null);
+    const attacker =
+      preloadedAttacker ??
+      (await this.memoizeParticipantPreflight(attackerParticipantId).catch(
+        () => null,
+      ));
     if (!attacker) {
       return failure("Participante nao encontrado.", "PARTICIPANT_NOT_FOUND");
     }
@@ -1892,12 +1958,34 @@ export class CombatService {
     );
   }
 
+  /**
+   * Um único POST /attack chamava isto 8-12x para o MESMO participante, e cada
+   * chamada custa 4 round-trips (encounter completo + sessão + players da
+   * campanha). Memoizar é seguro porque as duas entradas da resolução —
+   * `encounter.sessionId` e a associação personagem↔jogador da campanha — são
+   * imutáveis dentro de um comando de combate: nenhum caminho de ataque troca a
+   * sessão do encontro nem mexe na tabela de players.
+   */
   private async resolveParticipantOwner(
     participant: EncounterParticipantEntity,
     requesterUserId: string,
   ): Promise<string> {
     if (participant.type !== "pc" || !participant.characterId)
       return requesterUserId;
+    // `requesterUserId` entra na chave porque é o fallback devolvido quando a
+    // resolução falha, e os call sites passam ora o dono, ora string vazia.
+    return this.memo(`owner|${participant.id}|${requesterUserId}`, () =>
+      this.resolveParticipantOwnerUncached(participant, requesterUserId),
+    );
+  }
+
+  private async resolveParticipantOwnerUncached(
+    participant: EncounterParticipantEntity,
+    requesterUserId: string,
+  ): Promise<string> {
+    // O wrapper já barrou participante sem ficha; repetimos aqui apenas porque
+    // a narrowing dele não atravessa o closure do memo.
+    if (!participant.characterId) return requesterUserId;
     const encounter = await this.encounterRepo.findOne({
       where: { id: participant.encounterId },
     });
@@ -2379,10 +2467,13 @@ export class CombatService {
       (effect) => effect.kind === "bardic_inspiration",
     );
     if (hasBardicInspiration) {
+      // Passamos a entidade: este metodo salva `attacker` logo abaixo, e sem o
+      // preload o consumo caia numa segunda copia e seria desfeito.
       const result = await this.bard.consumeBardicInspirationIfPresent(
         attacker.id,
         "attack_roll",
         (sides) => this.diceService.roll(sides),
+        attacker,
       );
       bardicBonus = result.consumed ? result.bonus : 0;
       bardicEvents = result.events;
@@ -2554,6 +2645,7 @@ export class CombatService {
       const result = await this.inspirationService.consumeIfArmed(
         attacker.id,
         "attack_roll",
+        attacker,
       );
       if (result.consumed && result.eventData) {
         attacker.inspirationArmed = false;
@@ -4512,9 +4604,12 @@ export class CombatService {
       dto.attackerParticipantId,
     );
 
-    const attacker = await this.encounterService.getParticipant(
-      dto.attackerParticipantId,
-    );
+    const attacker =
+      dto._attacker ??
+      (await this.takeParticipantPreflight(dto.attackerParticipantId));
+    // O alvo NÃO entra no memo: applyDamageToMonster, AshPuffService,
+    // ConcentrationService e EncounterEndDetectorService releem esta linha no
+    // meio da request e dependem do estado já gravado.
     const target = await this.encounterService.getParticipant(
       dto.targetParticipantId,
     );
@@ -5534,13 +5629,24 @@ export class CombatService {
     );
     if (hasBardicInspirationEffect) {
       try {
+        // Passamos a entidade: resolveAttack salva `attacker` mais adiante, e
+        // sem o preload o dado gasto ressuscitava nesse save.
         const biResult = await this.bard.consumeBardicInspirationIfPresent(
           attacker.id,
           "attack_roll",
           (sides) => this.diceService.roll(sides),
+          attacker,
         );
         biBonus = biResult.consumed ? biResult.bonus : 0;
         biEvents = biResult.events;
+        if (biResult.consumed) {
+          // Persistência imediata, e não "o caller salva depois": o único save
+          // incondicional de `attacker` vive dentro de `if (!dto._isSubAttack)`,
+          // então em ataque de oportunidade / multiataque / reação o dado gasto
+          // sobrevivia no banco e o jogador ganhava o +1dX de novo — recurso
+          // once-per-rest virando infinito.
+          await this.participantRepo.save(attacker);
+        }
       } catch {
 
       }
@@ -7066,6 +7172,7 @@ export class CombatService {
         const inspResult = await this.inspirationService.consumeIfArmed(
           attacker.id,
           "attack_roll",
+          attacker,
         );
         if (inspResult.consumed && inspResult.eventData) {
 
@@ -8176,9 +8283,9 @@ export class CombatService {
     if (!encounter || encounter.status !== "active")
       return failure("Encontro nao esta ativo.", "ENCOUNTER_NOT_ACTIVE");
 
-    const attacker = await this.encounterService.getParticipant(
-      dto.attackerParticipantId,
-    );
+    const attacker =
+      dto._attacker ??
+      (await this.takeParticipantPreflight(dto.attackerParticipantId));
 
     if (attacker.isDefeated)
       return failure("Atacante esta derrotado.", "CONDITION_PREVENTS_ACTION");
@@ -8290,6 +8397,9 @@ export class CombatService {
           targetParticipantId: tid,
           actionName: sub.actionName,
           _isSubAttack: true,
+          // Cada sub-ataque relê o atacante: o anterior já gravou economia de
+          // ação, efeitos consumidos e condições nessa mesma linha.
+          _attacker: undefined,
         };
         const res = await this.resolveAttack(encounterId, subDto);
         if (!res.ok) {

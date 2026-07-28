@@ -24,17 +24,26 @@ export class InspirationService {
   }
 
 
+  /**
+   * `preloaded` evita a mesma classe de bug do `consumeBardicInspirationIfPresent`:
+   * carregar uma SEGUNDA copia da linha e grava-la faz o save posterior do
+   * caller (que ainda detem `inspirationArmed = true`) desfazer o consumo. Com a
+   * entidade do caller a mutacao cai no objeto que ele ja vai persistir.
+   */
   async consumeIfArmed(
     participantId: string,
     context: "attack_roll" | "saving_throw" | "ability_check",
+    preloaded?: EncounterParticipantEntity,
   ): Promise<{ consumed: boolean; eventData?: GameEventData }> {
-    const p = await this.participantRepo.findOne({
-      where: { id: participantId },
-    });
+    const p =
+      preloaded ??
+      (await this.participantRepo.findOne({
+        where: { id: participantId },
+      }));
     if (!p || !p.inspirationArmed) return { consumed: false };
 
     p.inspirationArmed = false;
-    await this.participantRepo.save(p);
+    if (!preloaded) await this.participantRepo.save(p);
 
     if (p.type === "pc" && p.characterId) {
       await this.stateService

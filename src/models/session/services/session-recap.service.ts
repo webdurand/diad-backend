@@ -77,30 +77,34 @@ export class SessionRecapService {
     }
 
     const lockKey = this.lockKey(sessionId);
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
 
-    try {
-      const lockRow = await queryRunner.query(
-        `SELECT pg_try_advisory_lock($1) AS got`,
-        [lockKey],
-      );
-      const got = lockRow?.[0]?.got === true || lockRow?.[0]?.got === "t";
-      if (!got) {
-        this.logger.info("session.recap.skipped_locked", {
-          "session.id": sessionId,
-        });
-        return { status: "skipped_locked" };
-      }
+    // DATABASE_URL aponta para o pooler PgBouncer (transaction mode) da Neon:
+    // statements fora de transação podem cair em backends diferentes, então o
+    // pg_advisory_unlock que existia aqui errava o backend dono do lock e todo
+    // recap posterior daquela sessão voltava skipped_locked para sempre. Um lock
+    // xact-scoped é liberado pelo COMMIT/ROLLBACK e a transação garante backend
+    // único — mesmo padrão já usado em event.service/session-message.service.
+    // A transação fica aberta durante o summarize de propósito: a exclusão mútua
+    // tem que valer por toda a geração, senão dois requests chamam o agent em
+    // paralelo e pagam o LLM duas vezes.
+    return this.dataSource.transaction(
+      async (manager): Promise<RecapStatus> => {
+        // try_ e não a variante que espera: ensureRecap roda dentro do request de
+        // narração, e bloquear somaria o summarize alheio à latência do jogador.
+        const lockRow: unknown = await manager.query(
+          `SELECT pg_try_advisory_xact_lock($1) AS got`,
+          [lockKey],
+        );
+        if (!this.isLockAcquired(lockRow)) {
+          this.logger.info("session.recap.skipped_locked", {
+            "session.id": sessionId,
+          });
+          return { status: "skipped_locked" };
+        }
 
-      try {
-        return await this.doEnsure(sessionId);
-      } finally {
-        await queryRunner.query(`SELECT pg_advisory_unlock($1)`, [lockKey]);
-      }
-    } finally {
-      await queryRunner.release();
-    }
+        return this.doEnsure(sessionId);
+      },
+    );
   }
 
   private async doEnsure(sessionId: string): Promise<RecapStatus> {
@@ -269,6 +273,16 @@ export class SessionRecapService {
     return "system";
   }
 
+
+  // O driver pode devolver o boolean do Postgres como `true` ou como `'t'`
+  // dependendo do parser, e tratar o segundo caso como "não peguei o lock"
+  // faria todo recap virar skipped_locked.
+  private isLockAcquired(row: unknown): boolean {
+    const first = Array.isArray(row)
+      ? (row[0] as { got?: unknown } | undefined)
+      : undefined;
+    return first?.got === true || first?.got === "t";
+  }
 
   private lockKey(sessionId: string): number {
     let h = 0;
