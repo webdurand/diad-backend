@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Header,
   Param,
   Query,
 } from "@nestjs/common";
@@ -20,7 +21,6 @@ import {
 @Controller("library")
 export class LibraryController {
   constructor(private readonly libraryService: LibraryService) {}
-
 
   @Get("beasts")
   async getBeasts(
@@ -79,12 +79,26 @@ export class LibraryController {
         uniqueByName.set(key, beast);
       }
     }
-    const filtered = [...uniqueByName.values()]
-      .sort((a, b) => a.cr - b.cr || a.name.localeCompare(b.name));
+    const filtered = [...uniqueByName.values()].sort(
+      (a, b) => a.cr - b.cr || a.name.localeCompare(b.name),
+    );
 
     return { beasts: filtered, total: filtered.length };
   }
 
+  @Get("monster-summaries")
+  @Header(
+    "Cache-Control",
+    "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+  )
+  @Header(
+    "Vercel-CDN-Cache-Control",
+    "public, s-maxage=3600, stale-while-revalidate=86400",
+  )
+  @Header("Vercel-Cache-Tag", "monster-catalog")
+  async getMonsterSummaries(@Query() query: LibraryQueryDto) {
+    return this.libraryService.findMonsterSummaries(query);
+  }
 
   @Get(":entity")
   async get(@Param("entity") entity: string, @Query() query: LibraryQueryDto) {
