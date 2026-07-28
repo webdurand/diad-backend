@@ -74,14 +74,35 @@ export class RequestCache {
     }
   }
 
-  /** Invalida tudo que deriva de um participante do encontro. */
+  /**
+   * Invalida somente leituras mutáveis da row do participante.
+   *
+   * O memo `owner|<participantId>|<requesterId>` não entra aqui: a associação
+   * participante -> personagem -> jogador é imutável durante um comando, e
+   * derrubá-la a cada `participantRepo.save()` reabria exatamente os 4
+   * round-trips que a memoização de owner existe para eliminar.
+   */
   invalidateParticipant(participantId: string): void {
     if (!participantId) return;
     const store = this.store();
     if (!store) return;
-    const needle = `|${participantId}`;
+    const prefix = `participant|${participantId}`;
     for (const key of [...store.keys()]) {
-      if (key.includes(needle)) store.delete(key);
+      if (key === prefix || key.startsWith(`${prefix}|`)) store.delete(key);
+    }
+  }
+
+  /**
+   * Invalida a resolução de proprietário quando a identidade estrutural do
+   * participante muda (troca de personagem/encontro/tipo ou remoção).
+   */
+  invalidateParticipantOwner(participantId: string): void {
+    if (!participantId) return;
+    const store = this.store();
+    if (!store) return;
+    const prefix = `owner|${participantId}|`;
+    for (const key of [...store.keys()]) {
+      if (key.startsWith(prefix)) store.delete(key);
     }
   }
 

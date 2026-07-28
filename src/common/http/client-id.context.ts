@@ -10,8 +10,9 @@ const CLIENT_ID_KEY = "diad:client-id";
  * Existe para que qualquer emissão de evento em tempo real possa marcar a aba de
  * origem SEM ter de propagar `@Req()` por dezenas de handlers. Sem essa marca,
  * `encounter:invalidate` volta para a própria aba que agiu (socket.io
- * `server.to(room)` inclui o emissor) e ela refaz os 3 GETs que o snapshot na
- * resposta acabou de tornar desnecessários.
+ * `server.to(room)` inclui o emissor) e ela refaz os 3 GETs que o snapshot já
+ * tornou desnecessários. O snapshot não é descartado: ele é fallback de entrega
+ * e é deduplicado no cliente pela versão `at`.
  */
 @Injectable()
 export class ClientIdContext {

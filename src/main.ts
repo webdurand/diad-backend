@@ -66,9 +66,9 @@ async function bootstrap() {
     },
     credentials: true,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    // x-client-id identifica a ABA que originou o comando: o broadcast de
-    // snapshot volta para a sala inteira (socket.io inclui o emissor), e sem
-    // esse header a aba que agiu aplicaria o próprio eco duas vezes.
+    // x-client-id identifica a ABA que originou o comando e permite suprimir o
+    // invalidate legado da própria origem. O snapshot continua sendo entregue
+    // como fallback e é deduplicado no cliente pela versão monotônica.
     allowedHeaders:
       "Content-Type,Authorization,traceparent,x-diad-domain,x-client-id",
     exposedHeaders: "traceparent",

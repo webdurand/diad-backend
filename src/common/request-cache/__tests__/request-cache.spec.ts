@@ -140,20 +140,34 @@ describe("RequestCache", () => {
   });
 
   describe("invalidateParticipant", () => {
-    it("derruba somente as chaves que contêm |<participantId>", async () => {
+    it("derruba o row mutável sem apagar o owner imutável", async () => {
+      const participant = jest.fn().mockResolvedValue("row");
       const owner = jest.fn().mockResolvedValue("dono");
       const other = jest.fn().mockResolvedValue("outro");
 
-      await cache.getOrLoad("owner|part-1", owner);
-      await cache.getOrLoad("owner|part-2", other);
+      await cache.getOrLoad("participant|part-1", participant);
+      await cache.getOrLoad("owner|part-1|user-1", owner);
+      await cache.getOrLoad("owner|part-2|user-1", other);
 
       cache.invalidateParticipant("part-1");
 
-      await cache.getOrLoad("owner|part-1", owner);
-      await cache.getOrLoad("owner|part-2", other);
+      await cache.getOrLoad("participant|part-1", participant);
+      await cache.getOrLoad("owner|part-1|user-1", owner);
+      await cache.getOrLoad("owner|part-2|user-1", other);
 
-      expect(owner).toHaveBeenCalledTimes(2);
+      expect(participant).toHaveBeenCalledTimes(2);
+      expect(owner).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(1);
+    });
+
+    it("permite invalidar owner explicitamente quando a identidade muda", async () => {
+      const owner = jest.fn().mockResolvedValue("dono");
+      await cache.getOrLoad("owner|part-1|user-1", owner);
+
+      cache.invalidateParticipantOwner("part-1");
+
+      await cache.getOrLoad("owner|part-1|user-1", owner);
+      expect(owner).toHaveBeenCalledTimes(2);
     });
   });
 

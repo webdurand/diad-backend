@@ -21,9 +21,9 @@ import { CommandSnapshotService } from "../services/command-snapshot.service";
  * `encounter:invalidate`).
  *
  * Depois: 1 clique = 1 POST que já volta com `snapshot`, e os demais clientes
- * recebem `encounter:snapshot` com o mesmo payload. `originClientId` deixa a aba
- * que agiu descartar o próprio eco (socket.io `server.to(room)` inclui o
- * emissor).
+ * recebem `encounter:snapshot` com o mesmo payload. `originClientId` identifica
+ * a origem para os eventos legados; o snapshot é entregue também à própria aba
+ * como fallback e deduplicado pelo `at` monotônico.
  *
  * Aditivo por construção: cliente antigo ignora o campo novo e continua
  * refetchando. Por isso backend e frontend podem subir em qualquer ordem.

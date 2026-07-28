@@ -129,6 +129,22 @@ describe("CommandSnapshotService", () => {
     expect(snapshot!.turn).toBeNull();
   });
 
+  it("gera versões at estritamente crescentes mesmo no mesmo milissegundo", async () => {
+    jest.useFakeTimers().setSystemTime(
+      new Date("2026-07-27T12:00:00.000Z"),
+    );
+    try {
+      const { service } = build();
+
+      const first = await service.build("enc-1");
+      const second = await service.build("enc-1");
+
+      expect(Date.parse(second!.at)).toBeGreaterThan(Date.parse(first!.at));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("degrada para null quando a leitura falha, em vez de derrubar o comando", async () => {
     const { service, encounterService } = build();
     encounterService.getById.mockRejectedValue(new Error("db caiu"));

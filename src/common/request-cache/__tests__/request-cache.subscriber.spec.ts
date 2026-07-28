@@ -105,6 +105,7 @@ describe("RequestCacheSubscriber", () => {
     const { subscriber, cache } = build();
     await cache.getOrLoad("participant|p-1", loader("antigo"));
     await cache.getOrLoad("participant|p-2", loader("outro"));
+    await cache.getOrLoad("owner|p-1|user-1", loader("dono"));
 
     const participant = Object.assign(new EncounterParticipantEntity(), {
       id: "p-1",
@@ -119,6 +120,30 @@ describe("RequestCacheSubscriber", () => {
     );
     expect(await cache.getOrLoad("participant|p-2", loader("novo"))).toBe(
       "outro",
+    );
+    expect(await cache.getOrLoad("owner|p-1|user-1", loader("outro-dono"))).toBe(
+      "dono",
+    );
+  });
+
+  it("invalida owner quando a identidade estrutural do participante muda", async () => {
+    const { subscriber, cache } = build();
+    await cache.getOrLoad("owner|p-1|user-1", loader("dono-antigo"));
+
+    const participant = Object.assign(new EncounterParticipantEntity(), {
+      id: "p-1",
+      characterId: "char-2",
+    });
+    subscriber.afterUpdate({
+      entity: participant,
+      databaseEntity: participant,
+      updatedColumns: [
+        { propertyName: "characterId", databaseName: "character_id" },
+      ],
+    } as unknown as UpdateEvent<unknown>);
+
+    expect(await cache.getOrLoad("owner|p-1|user-1", loader("dono-novo"))).toBe(
+      "dono-novo",
     );
   });
 

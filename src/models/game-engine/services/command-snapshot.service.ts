@@ -16,7 +16,7 @@ export interface CommandSnapshot {
   encounter: EnrichedEncounterResponse;
   turn: TurnInfo | null;
   events: unknown[];
-  /** Marca de origem para o cliente descartar o próprio eco via WebSocket. */
+  /** Versão monotônica usada para ordenar e deduplicar HTTP × WebSocket. */
   at: string;
 }
 
@@ -39,6 +39,7 @@ const SNAPSHOT_EVENT_LIMIT = 200;
 @Injectable()
 export class CommandSnapshotService {
   private readonly logger = new Logger(CommandSnapshotService.name);
+  private lastSnapshotAtMs = 0;
 
   constructor(
     private readonly encounterService: EncounterService,
@@ -69,7 +70,7 @@ export class CommandSnapshotService {
         events: timeline.events.map((event) =>
           toEventResponseDto(event, participantsMap),
         ),
-        at: new Date().toISOString(),
+        at: this.nextSnapshotAt(),
       };
     } catch (err) {
       // Snapshot é otimização: se falhar, o cliente cai no refetch de sempre.
@@ -79,6 +80,19 @@ export class CommandSnapshotService {
       });
       return null;
     }
+  }
+
+  /**
+   * O `at` também é a versão do snapshot no cliente. Date.now() sozinho pode
+   * repetir o mesmo milissegundo em dois comandos consecutivos; avançar pelo
+   * menos 1 ms torna a versão estritamente monotônica dentro deste processo.
+   * O lock de comando já exige processo único, então a mesma invariante vale
+   * para a ordenação dos snapshots.
+   */
+  private nextSnapshotAt(): string {
+    const next = Math.max(Date.now(), this.lastSnapshotAtMs + 1);
+    this.lastSnapshotAtMs = next;
+    return new Date(next).toISOString();
   }
 }
 
